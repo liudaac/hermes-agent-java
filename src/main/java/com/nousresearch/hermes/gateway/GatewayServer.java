@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.gateway;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.AIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import io.javalin.Javalin;
@@ -18,7 +18,6 @@ import java.util.concurrent.*;
  */
 public class GatewayServer {
     private static final Logger logger = LoggerFactory.getLogger(GatewayServer.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     
     private final int port;
     private final HermesConfig config;
@@ -110,7 +109,7 @@ public class GatewayServer {
         
         try {
             String body = ctx.body();
-            JsonNode payload = mapper.readTree(body);
+            JSONObject payload = JSON.parseObject(body);
             
             // Parse message from webhook payload
             IncomingMessage message = adapter.parseWebhook(payload);
@@ -134,10 +133,10 @@ public class GatewayServer {
      */
     private void handleMessage(Context ctx) {
         try {
-            JsonNode body = mapper.readTree(ctx.body());
-            String platform = body.path("platform").asText();
-            String channel = body.path("channel").asText();
-            String content = body.path("content").asText();
+            JSONObject body = JSON.parseObject(ctx.body());
+            String platform = body.getString("platform");
+            String channel = body.getString("channel");
+            String content = body.getString("content");
             
             PlatformAdapter adapter = adapters.get(platform);
             if (adapter == null) {
@@ -156,7 +155,7 @@ public class GatewayServer {
             
             executor.submit(() -> processMessage(message, adapter));
             
-            ctx.status(200).json(Map.of("status", "queued", "message_id", message.id));
+            ctx.json(Map.of("status", "queued", "message_id", message.id));
         } catch (Exception e) {
             ctx.status(500).result("Error: " + e.getMessage());
         }
@@ -228,7 +227,7 @@ public class GatewayServer {
      */
     private void handleUpdateConfig(Context ctx) {
         try {
-            JsonNode body = mapper.readTree(ctx.body());
+            JSONObject body = JSON.parseObject(ctx.body());
             // In real implementation, update config file
             ctx.json(Map.of("status", "updated"));
         } catch (Exception e) {
@@ -308,7 +307,7 @@ public class GatewayServer {
      */
     public interface PlatformAdapter {
         String getPlatformName();
-        IncomingMessage parseWebhook(JsonNode payload);
+        IncomingMessage parseWebhook(JSONObject payload);
         void sendMessage(String channel, String content) throws Exception;
         void sendReply(String channel, String messageId, String content) throws Exception;
     }
