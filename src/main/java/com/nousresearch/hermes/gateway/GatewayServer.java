@@ -67,6 +67,17 @@ public class GatewayServer {
         // Status API
         app.get("/api/status", this::handleStatus);
         
+        // Tools API
+        app.get("/api/tools", this::handleTools);
+        
+        // Config API
+        app.get("/api/config", this::handleGetConfig);
+        app.post("/api/config", this::handleUpdateConfig);
+        
+        // Sessions API
+        app.get("/api/sessions", this::handleGetSessions);
+        app.get("/api/sessions/{id}/messages", this::handleGetSessionMessages);
+        
         app.start(port);
         running = true;
         
@@ -160,8 +171,100 @@ public class GatewayServer {
         status.put("port", port);
         status.put("adapters", adapters.keySet());
         status.put("active_threads", Thread.activeCount());
+        status.put("version", "0.1.0");
+        status.put("uptime", System.currentTimeMillis() / 1000);
+        status.put("connected", running);
         
         ctx.json(status);
+    }
+    
+    /**
+     * Get available tools.
+     */
+    private void handleTools(Context ctx) {
+        List<Map<String, Object>> tools = new ArrayList<>();
+        
+        tools.add(createTool("terminal", "Execute terminal commands", "💻"));
+        tools.add(createTool("web_search", "Search the web", "🔍"));
+        tools.add(createTool("file_operations", "Read and write files", "📁"));
+        tools.add(createTool("browser", "Browse websites", "🌐"));
+        tools.add(createTool("image_generation", "Generate images", "🎨"));
+        tools.add(createTool("code_execution", "Execute code", "⚡"));
+        tools.add(createTool("memory", "Store and retrieve memories", "🧠"));
+        tools.add(createTool("sub_agent", "Spawn sub-agents", "🤖"));
+        
+        ctx.json(tools);
+    }
+    
+    private Map<String, Object> createTool(String name, String description, String emoji) {
+        Map<String, Object> tool = new HashMap<>();
+        tool.put("name", name);
+        tool.put("description", description);
+        tool.put("emoji", emoji);
+        return tool;
+    }
+    
+    /**
+     * Get configuration.
+     */
+    private void handleGetConfig(Context ctx) {
+        Map<String, Object> config = new HashMap<>();
+        config.put("model", Map.of(
+            "provider", "openrouter",
+            "model", "anthropic/claude-3.5-sonnet"
+        ));
+        config.put("display", Map.of(
+            "personality", "kawaii"
+        ));
+        config.put("tools", Map.of(
+            "enabled", List.of("terminal", "web_search", "file_operations", "browser")
+        ));
+        
+        ctx.json(config);
+    }
+    
+    /**
+     * Update configuration.
+     */
+    private void handleUpdateConfig(Context ctx) {
+        try {
+            JsonNode body = mapper.readTree(ctx.body());
+            // In real implementation, update config file
+            ctx.json(Map.of("status", "updated"));
+        } catch (Exception e) {
+            ctx.status(400).result("Invalid config: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Get active sessions.
+     */
+    private void handleGetSessions(Context ctx) {
+        List<Map<String, Object>> sessions = new ArrayList<>();
+        // In real implementation, get from session manager
+        sessions.add(Map.of(
+            "id", "session-1",
+            "platform", "web",
+            "user", "anonymous",
+            "lastActivity", System.currentTimeMillis(),
+            "messageCount", 0
+        ));
+        
+        ctx.json(sessions);
+    }
+    
+    /**
+     * Get session messages.
+     */
+    private void handleGetSessionMessages(Context ctx) {
+        String sessionId = ctx.pathParam("id");
+        List<Map<String, Object>> messages = new ArrayList<>();
+        // In real implementation, get from session manager
+        
+        ctx.json(Map.of(
+            "sessionId", sessionId,
+            "messages", messages
+        ));
     }
     
     /**

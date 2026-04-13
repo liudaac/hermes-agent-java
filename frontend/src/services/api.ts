@@ -10,7 +10,10 @@ const api = axios.create({
 });
 
 export interface AgentStatus {
-  status: string;
+  running: boolean;
+  port: number;
+  adapters: string[];
+  active_threads: number;
   version: string;
   uptime: number;
   connected: boolean;
@@ -20,18 +23,40 @@ export interface MessageRequest {
   content: string;
   sessionId?: string;
   platform?: string;
+  channel?: string;
 }
 
 export interface MessageResponse {
-  messageId: string;
-  content: string;
   status: string;
+  message_id?: string;
+  content?: string;
 }
 
 export interface ToolInfo {
   name: string;
   description: string;
   emoji: string;
+}
+
+export interface Session {
+  id: string;
+  platform: string;
+  user: string;
+  lastActivity: number;
+  messageCount: number;
+}
+
+export interface Config {
+  model: {
+    provider: string;
+    model: string;
+  };
+  display: {
+    personality: string;
+  };
+  tools: {
+    enabled: string[];
+  };
 }
 
 export const agentApi = {
@@ -47,6 +72,20 @@ export const agentApi = {
 
   // Get available tools
   getTools: () => api.get<ToolInfo[]>('/api/tools'),
+
+  // Get configuration
+  getConfig: () => api.get<Config>('/api/config'),
+
+  // Update configuration
+  updateConfig: (data: Partial<Config>) => 
+    api.post('/api/config', data),
+
+  // Get active sessions
+  getSessions: () => api.get<Session[]>('/api/sessions'),
+
+  // Get session messages
+  getSessionMessages: (sessionId: string) => 
+    api.get(`/api/sessions/${sessionId}/messages`),
 
   // Webhook for platforms
   sendWebhook: (platform: string, data: unknown) =>

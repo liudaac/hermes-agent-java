@@ -57,24 +57,42 @@ export function StatusCard() {
       {error ? (
         <div className="text-red-500 text-sm">{error}</div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center gap-3">
-            <Server className="w-5 h-5 text-gray-400" />
-            <div>
-              <p className="text-xs text-gray-500">Version</p>
-              <p className="text-sm font-medium text-gray-900">{status?.version || 'Unknown'}</p>
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-3">
+              <Server className="w-5 h-5 text-gray-400" />
+              <div>
+                <p className="text-xs text-gray-500">Version</p>
+                <p className="text-sm font-medium text-gray-900">{status?.version || 'Unknown'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Clock className="w-5 h-5 text-gray-400" />
+              <div>
+                <p className="text-xs text-gray-500">Uptime</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {status?.uptime ? formatUptime(status.uptime) : 'N/A'}
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-gray-400" />
-            <div>
-              <p className="text-xs text-gray-500">Uptime</p>
-              <p className="text-sm font-medium text-gray-900">
-                {status?.uptime ? formatUptime(status.uptime) : 'N/A'}
-              </p>
+          
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500 mb-2">Active Adapters</p>
+            <div className="flex flex-wrap gap-2">
+              {status?.adapters?.map((adapter) => (
+                <span
+                  key={adapter}
+                  className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
+                >
+                  {adapter}
+                </span>
+              )) || (
+                <span className="text-xs text-gray-400">No adapters</span>
+              )}
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

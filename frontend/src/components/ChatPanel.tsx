@@ -60,7 +60,7 @@ export function ChatPanel() {
       setMessages(prev =>
         prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: response.data.content, status: 'sent' }
+            ? { ...msg, content: response.data.content || '', status: 'sent' as const }
             : msg
         )
       );
@@ -68,7 +68,7 @@ export function ChatPanel() {
       setMessages(prev =>
         prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: 'Sorry, I encountered an error. Please try again.', status: 'error' }
+            ? { ...msg, content: 'Sorry, I encountered an error. Please try again.', status: 'error' as const }
             : msg
         )
       );
