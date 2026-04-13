@@ -4,252 +4,190 @@ import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.io.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
- * Git version control tools.
+ * Git version control tool.
+ * Mirrors Python's git tool functionality.
  */
 public class GitTool {
     private static final Logger logger = LoggerFactory.getLogger(GitTool.class);
+    private static final int DEFAULT_TIMEOUT = 30;
     
-    /**
-     * Register Git tools.
-     */
-    public static void register(ToolRegistry registry) {
-        // git_status
+    public void register(ToolRegistry registry) {
         registry.register(new ToolRegistry.Builder()
             .name("git_status")
             .toolset("git")
-            .schema(Map.of(
-                "description", "Check git repository status",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "path", Map.of(
-                            "type", "string",
-                            "description", "Repository path (default: current)"
-                        )
-                    )
-                )
-            ))
-            .handler(GitTool::gitStatus)
-            .emoji("📊")
-            .build());
+            .schema(Map.of("description", "Get git status",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string", "description", "Repository path")),
+                    "required", List.of("path"))))
+            .handler(this::gitStatus).emoji("📊").build());
         
-        // git_log
         registry.register(new ToolRegistry.Builder()
-            .name("git_log")
+            .name("git_add")
             .toolset("git")
-            .schema(Map.of(
-                "description", "View git commit history",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "path", Map.of(
-                            "type", "string",
-                            "description", "Repository path"
-                        ),
-                        "limit", Map.of(
-                            "type", "integer",
-                            "description", "Number of commits",
-                            "default", 10
-                        )
-                    )
-                )
-            ))
-            .handler(GitTool::gitLog)
-            .emoji("📜")
-            .build());
+            .schema(Map.of("description", "Stage files",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string"), "files", Map.of("type", "string")),
+                    "required", List.of("path", "files"))))
+            .handler(this::gitAdd).emoji("➕").build());
         
-        // git_diff
-        registry.register(new ToolRegistry.Builder()
-            .name("git_diff")
-            .toolset("git")
-            .schema(Map.of(
-                "description", "Show git diff",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "path", Map.of(
-                            "type", "string",
-                            "description", "Repository path"
-                        ),
-                        "file", Map.of(
-                            "type", "string",
-                            "description", "Specific file to diff"
-                        )
-                    )
-                )
-            ))
-            .handler(GitTool::gitDiff)
-            .emoji("📋")
-            .build());
-        
-        // git_commit
         registry.register(new ToolRegistry.Builder()
             .name("git_commit")
             .toolset("git")
-            .schema(Map.of(
-                "description", "Commit changes",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "path", Map.of(
-                            "type", "string",
-                            "description", "Repository path"
-                        ),
-                        "message", Map.of(
-                            "type", "string",
-                            "description", "Commit message"
-                        ),
-                        "files", Map.of(
-                            "type", "array",
-                            "items", Map.of("type", "string"),
-                            "description", "Files to commit (default: all)"
-                        )
-                    ),
-                    "required", List.of("message")
-                )
-            ))
-            .handler(GitTool::gitCommit)
-            .emoji("💾")
-            .build());
+            .schema(Map.of("description", "Commit changes",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string"), "message", Map.of("type", "string")),
+                    "required", List.of("path", "message"))))
+            .handler(this::gitCommit).emoji("💾").build());
         
-        // git_branch
+        registry.register(new ToolRegistry.Builder()
+            .name("git_push")
+            .toolset("git")
+            .schema(Map.of("description", "Push to remote",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string"), "remote", Map.of("type", "string", "default", "origin"), "branch", Map.of("type", "string")),
+                    "required", List.of("path"))))
+            .handler(this::gitPush).emoji("🚀").build());
+        
+        registry.register(new ToolRegistry.Builder()
+            .name("git_pull")
+            .toolset("git")
+            .schema(Map.of("description", "Pull from remote",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string")),
+                    "required", List.of("path"))))
+            .handler(this::gitPull).emoji("⬇️").build());
+        
+        registry.register(new ToolRegistry.Builder()
+            .name("git_log")
+            .toolset("git")
+            .schema(Map.of("description", "View commit history",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string"), "limit", Map.of("type", "integer", "default", 10)),
+                    "required", List.of("path"))))
+            .handler(this::gitLog).emoji("📜").build());
+        
         registry.register(new ToolRegistry.Builder()
             .name("git_branch")
             .toolset("git")
-            .schema(Map.of(
-                "description", "List or create branches",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "path", Map.of(
-                            "type", "string",
-                            "description", "Repository path"
-                        ),
-                        "create", Map.of(
-                            "type", "string",
-                            "description", "Create new branch with this name"
-                        ),
-                        "switch", Map.of(
-                            "type", "string",
-                            "description", "Switch to branch"
-                        )
-                    )
-                )
-            ))
-            .handler(GitTool::gitBranch)
-            .emoji("🌿")
-            .build());
+            .schema(Map.of("description", "List or create branches",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("path", Map.of("type", "string"), "create", Map.of("type", "string"), "switch", Map.of("type", "string")),
+                    "required", List.of("path"))))
+            .handler(this::gitBranch).emoji("🌿").build());
+        
+        registry.register(new ToolRegistry.Builder()
+            .name("git_clone")
+            .toolset("git")
+            .schema(Map.of("description", "Clone a repository",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("url", Map.of("type", "string"), "path", Map.of("type", "string")),
+                    "required", List.of("url", "path"))))
+            .handler(this::gitClone).emoji("📥").build());
     }
     
-    private static String gitStatus(Map<String, Object> args) {
-        String path = (String) args.getOrDefault("path", ".");
-        return runGitCommand(path, "status");
+    private String gitStatus(Map<String, Object> args) {
+        return runGit((String) args.get("path"), "status", "-sb");
     }
     
-    private static String gitLog(Map<String, Object> args) {
-        String path = (String) args.getOrDefault("path", ".");
+    private String gitAdd(Map<String, Object> args) {
+        return runGit((String) args.get("path"), "add", (String) args.get("files"));
+    }
+    
+    private String gitCommit(Map<String, Object> args) {
+        return runGit((String) args.get("path"), "commit", "-m", (String) args.get("message"));
+    }
+    
+    private String gitPush(Map<String, Object> args) {
+        String remote = (String) args.getOrDefault("remote", "origin");
+        String branch = (String) args.get("branch");
+        if (branch != null) {
+            return runGit((String) args.get("path"), "push", remote, branch);
+        }
+        return runGit((String) args.get("path"), "push", remote);
+    }
+    
+    private String gitPull(Map<String, Object> args) {
+        return runGit((String) args.get("path"), "pull");
+    }
+    
+    private String gitLog(Map<String, Object> args) {
         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 10;
-        return runGitCommand(path, "log", "--oneline", "-" + limit);
+        return runGit((String) args.get("path"), "log", "--oneline", "-" + limit);
     }
     
-    private static String gitDiff(Map<String, Object> args) {
-        String path = (String) args.getOrDefault("path", ".");
-        String file = (String) args.get("file");
-        
-        if (file != null && !file.isEmpty()) {
-            return runGitCommand(path, "diff", file);
-        }
-        return runGitCommand(path, "diff");
-    }
-    
-    @SuppressWarnings("unchecked")
-    private static String gitCommit(Map<String, Object> args) {
-        String path = (String) args.getOrDefault("path", ".");
-        String message = (String) args.get("message");
-        List<String> files = (List<String>) args.get("files");
-        
-        if (message == null || message.isEmpty()) {
-            return ToolRegistry.toolError("Commit message is required");
-        }
-        
-        try {
-            // Add files
-            if (files != null && !files.isEmpty()) {
-                for (String file : files) {
-                    runGitCommand(path, "add", file);
-                }
-            } else {
-                runGitCommand(path, "add", ".");
-            }
-            
-            // Commit
-            return runGitCommand(path, "commit", "-m", message);
-            
-        } catch (Exception e) {
-            return ToolRegistry.toolError("Commit failed: " + e.getMessage());
-        }
-    }
-    
-    private static String gitBranch(Map<String, Object> args) {
-        String path = (String) args.getOrDefault("path", ".");
+    private String gitBranch(Map<String, Object> args) {
+        String path = (String) args.get("path");
         String create = (String) args.get("create");
         String switchBranch = (String) args.get("switch");
         
-        if (create != null && !create.isEmpty()) {
-            return runGitCommand(path, "checkout", "-b", create);
+        if (create != null) {
+            return runGit(path, "checkout", "-b", create);
         }
-        
-        if (switchBranch != null && !switchBranch.isEmpty()) {
-            return runGitCommand(path, "checkout", switchBranch);
+        if (switchBranch != null) {
+            return runGit(path, "checkout", switchBranch);
         }
-        
-        return runGitCommand(path, "branch", "-a");
+        return runGit(path, "branch", "-a");
     }
     
-    private static String runGitCommand(String path, String... args) {
+    private String gitClone(Map<String, Object> args) {
+        String url = (String) args.get("url");
+        String path = (String) args.get("path");
+        return runGit(null, "clone", url, path);
+    }
+    
+    private String runGit(String cwd, String... args) {
         try {
-            List<String> command = new ArrayList<>();
-            command.add("git");
-            command.addAll(List.of(args));
+            List<String> cmd = new ArrayList<>();
+            cmd.add("git");
+            cmd.addAll(Arrays.asList(args));
             
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.directory(new File(path));
-            pb.redirectErrorStream(true);
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            if (cwd != null) {
+                pb.directory(new File(cwd));
+            }
             
             Process process = pb.start();
             
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            Future<String> stdout = executor.submit(() -> readStream(process.getInputStream()));
+            Future<String> stderr = executor.submit(() -> readStream(process.getErrorStream()));
+            
+            boolean finished = process.waitFor(DEFAULT_TIMEOUT, TimeUnit.SECONDS);
+            executor.shutdownNow();
+            
+            if (!finished) {
+                process.destroyForcibly();
+                return ToolRegistry.toolError("Git command timed out");
             }
             
-            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
-            int exitCode = finished ? process.exitValue() : -1;
+            int exitCode = process.exitValue();
+            String out = stdout.get();
+            String err = stderr.get();
             
-            return ToolRegistry.toolResult(Map.of(
-                "command", String.join(" ", args),
-                "output", output.toString(),
-                "exit_code", exitCode,
-                "success", exitCode == 0
-            ));
+            if (exitCode != 0) {
+                return ToolRegistry.toolError(err + "\n" + out);
+            }
             
+            return ToolRegistry.toolResult(Map.of("output", out, "stderr", err));
         } catch (Exception e) {
-            logger.error("Git command failed: {}", e.getMessage(), e);
-            return ToolRegistry.toolError("Git command failed: " + e.getMessage());
+            return ToolRegistry.toolError("Git error: " + e.getMessage());
         }
+    }
+    
+    private String readStream(InputStream stream) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+        }
+        return sb.toString();
     }
 }

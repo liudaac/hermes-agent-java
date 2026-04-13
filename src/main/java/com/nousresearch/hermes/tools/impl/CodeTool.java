@@ -1,397 +1,160 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.approval.ApprovalResult;
+import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
- * Code execution and analysis tools.
- * Run Python, JavaScript, Java code and analyze code quality.
+ * Code execution tool supporting multiple languages.
  */
 public class CodeTool {
     private static final Logger logger = LoggerFactory.getLogger(CodeTool.class);
-    private static final long MAX_OUTPUT_CHARS = 10000;
-    private static final long EXECUTION_TIMEOUT_MS = 30000;
+    private static final int DEFAULT_TIMEOUT = 60;
     
-    /**
-     * Register code tools.
-     */
-    public static void register(ToolRegistry registry) {
-        // python
-        registry.register(new ToolRegistry.Builder()
-            .name("python")
-            .toolset("code_execution")
-            .schema(Map.of(
-                "description", "Execute Python code",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "code", Map.of(
-                            "type", "string",
-                            "description", "Python code to execute"
-                        ),
-                        "packages", Map.of(
-                            "type", "array",
-                            "items", Map.of("type", "string"),
-                            "description", "Required packages (will try to install)"
-                        )
-                    ),
-                    "required", List.of("code")
-                )
-            ))
-            .handler(CodeTool::executePython)
-            .emoji("🐍")
-            .build());
-        
-        // javascript
-        registry.register(new ToolRegistry.Builder()
-            .name("javascript")
-            .toolset("code_execution")
-            .schema(Map.of(
-                "description", "Execute JavaScript/Node.js code",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "code", Map.of(
-                            "type", "string",
-                            "description", "JavaScript code to execute"
-                        )
-                    ),
-                    "required", List.of("code")
-                )
-            ))
-            .handler(CodeTool::executeJavaScript)
-            .emoji("📜")
-            .build());
-        
-        // java_compile
-        registry.register(new ToolRegistry.Builder()
-            .name("java_compile")
-            .toolset("code_execution")
-            .schema(Map.of(
-                "description", "Compile and run Java code",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "code", Map.of(
-                            "type", "string",
-                            "description", "Java code to compile and run"
-                        ),
-                        "className", Map.of(
-                            "type", "string",
-                            "description", "Class name (optional, auto-detected)"
-                        )
-                    ),
-                    "required", List.of("code")
-                )
-            ))
-            .handler(CodeTool::executeJava)
-            .emoji("☕")
-            .build());
-        
-        // code_review
-        registry.register(new ToolRegistry.Builder()
-            .name("code_review")
-            .toolset("code_execution")
-            .schema(Map.of(
-                "description", "Review code for issues and improvements",
-                "parameters", Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                        "code", Map.of(
-                            "type", "string",
-                            "description", "Code to review"
-                        ),
-                        "language", Map.of(
-                            "type", "string",
-                            "description", "Programming language"
-                        )
-                    ),
-                    "required", List.of("code", "language")
-                )
-            ))
-            .handler(CodeTool::reviewCode)
-            .emoji("🔍")
-            .build());
+    private final ApprovalSystem approvalSystem;
+    private final Path tempDir;
+    
+    public CodeTool(ApprovalSystem approvalSystem) {
+        this.approvalSystem = approvalSystem;
+        this.tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "hermes-code");
+        try {
+            Files.createDirectories(tempDir);
+        } catch (IOException e) {
+            logger.error("Failed to create temp dir: {}", e.getMessage());
+        }
     }
     
-    /**
-     * Execute Python code.
-     */
-    private static String executePython(Map<String, Object> args) {
-        String code = (String) args.get("code");
-        @SuppressWarnings("unchecked")
-        List<String> packages = (List<String>) args.getOrDefault("packages", List.of());
+    public void register(ToolRegistry registry) {
+        registry.register(new ToolRegistry.Builder()
+            .name("execute_python")
+            .toolset("code")
+            .schema(Map.of("description", "Execute Python code",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("code", Map.of("type", "string"), "timeout", Map.of("type", "integer", "default", 60)),
+                    "required", List.of("code"))))
+            .handler(this::executePython).emoji("🐍").build());
         
-        if (code == null || code.trim().isEmpty()) {
-            return ToolRegistry.toolError("Code is required");
-        }
+        registry.register(new ToolRegistry.Builder()
+            .name("execute_javascript")
+            .toolset("code")
+            .schema(Map.of("description", "Execute JavaScript",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("code", Map.of("type", "string"), "timeout", Map.of("type", "integer", "default", 60)),
+                    "required", List.of("code"))))
+            .handler(this::executeJavaScript).emoji("📜").build());
+        
+        registry.register(new ToolRegistry.Builder()
+            .name("execute_bash")
+            .toolset("code")
+            .schema(Map.of("description", "Execute Bash",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("code", Map.of("type", "string"), "timeout", Map.of("type", "integer", "default", 60)),
+                    "required", List.of("code"))))
+            .handler(this::executeBash).emoji("🐚").build());
+    }
+    
+    private String executePython(Map<String, Object> args) {
+        String code = (String) args.get("code");
+        int timeout = args.containsKey("timeout") ? ((Number) args.get("timeout")).intValue() : DEFAULT_TIMEOUT;
+        
+        ApprovalResult approval = approvalSystem.requestApproval(
+            ApprovalSystem.ApprovalType.CODE_EXECUTION,
+            "python: " + code.substring(0, Math.min(100, code.length())), null);
+        if (!approval.isApproved()) return ToolRegistry.toolError("Approval denied");
         
         try {
-            // Create temp file
-            Path tempDir = Files.createTempDirectory("hermes_python_");
-            Path scriptFile = tempDir.resolve("script.py");
-            Files.writeString(scriptFile, code, StandardCharsets.UTF_8);
-            
-            // Install packages if specified
-            if (!packages.isEmpty()) {
-                for (String pkg : packages) {
-                    installPythonPackage(pkg);
-                }
-            }
-            
-            // Execute
+            Path scriptFile = tempDir.resolve("script_" + System.currentTimeMillis() + ".py");
+            Files.writeString(scriptFile, code);
             ProcessBuilder pb = new ProcessBuilder("python3", scriptFile.toString());
-            pb.directory(tempDir.toFile());
-            pb.redirectErrorStream(true);
-            
-            Process process = pb.start();
-            
-            // Read output with timeout
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                long startTime = System.currentTimeMillis();
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    if (output.length() > MAX_OUTPUT_CHARS || 
-                        System.currentTimeMillis() - startTime > EXECUTION_TIMEOUT_MS) {
-                        output.append("\n... [truncated or timed out]");
-                        process.destroyForcibly();
-                        break;
-                    }
-                }
-            }
-            
-            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
-            int exitCode = finished ? process.exitValue() : -1;
-            
-            // Cleanup
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(p -> {
-                    try { Files.delete(p); } catch (Exception e) {}
-                });
-            
-            return ToolRegistry.toolResult(Map.of(
-                "language", "python",
-                "exit_code", exitCode,
-                "output", output.toString(),
-                "success", exitCode == 0
-            ));
-            
+            return executeProcess(pb, timeout);
         } catch (Exception e) {
-            logger.error("Python execution failed: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Execution failed: " + e.getMessage());
         }
     }
     
-    /**
-     * Execute JavaScript code.
-     */
-    private static String executeJavaScript(Map<String, Object> args) {
+    private String executeJavaScript(Map<String, Object> args) {
         String code = (String) args.get("code");
+        int timeout = args.containsKey("timeout") ? ((Number) args.get("timeout")).intValue() : DEFAULT_TIMEOUT;
         
-        if (code == null || code.trim().isEmpty()) {
-            return ToolRegistry.toolError("Code is required");
-        }
-        
+        ApprovalResult approval = approvalSystem.requestApproval(
+            ApprovalSystem.ApprovalType.CODE_EXECUTION,
+            "javascript: " + code.substring(0, Math.min(100, code.length())), null);
+        if (!approval.isApproved()) return ToolRegistry.toolError("Approval denied");
         
         try {
-            // Create temp file
-            Path tempDir = Files.createTempDirectory("hermes_js_");
-            Path scriptFile = tempDir.resolve("script.js");
-            Files.writeString(scriptFile, code, StandardCharsets.UTF_8);
-            
-            // Execute with node
+            Path scriptFile = tempDir.resolve("script_" + System.currentTimeMillis() + ".js");
+            Files.writeString(scriptFile, code);
             ProcessBuilder pb = new ProcessBuilder("node", scriptFile.toString());
-            pb.directory(tempDir.toFile());
-            pb.redirectErrorStream(true);
-            
-            Process process = pb.start();
-            
-            // Read output
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    if (output.length() > MAX_OUTPUT_CHARS) {
-                        output.append("\n... [truncated]");
-                        process.destroyForcibly();
-                        break;
-                    }
-                }
-            }
-            
-            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
-            int exitCode = finished ? process.exitValue() : -1;
-            
-            // Cleanup
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(p -> {
-                    try { Files.delete(p); } catch (Exception e) {}
-                });
-            
-            return ToolRegistry.toolResult(Map.of(
-                "language", "javascript",
-                "exit_code", exitCode,
-                "output", output.toString(),
-                "success", exitCode == 0
-            ));
-            
+            return executeProcess(pb, timeout);
         } catch (Exception e) {
-            logger.error("JavaScript execution failed: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Execution failed: " + e.getMessage());
         }
     }
     
-    /**
-     * Execute Java code.
-     */
-    private static String executeJava(Map<String, Object> args) {
+    private String executeBash(Map<String, Object> args) {
         String code = (String) args.get("code");
-        String className = (String) args.get("className");
+        int timeout = args.containsKey("timeout") ? ((Number) args.get("timeout")).intValue() : DEFAULT_TIMEOUT;
         
-        if (code == null || code.trim().isEmpty()) {
-            return ToolRegistry.toolError("Code is required");
-        }
+        ApprovalResult approval = approvalSystem.requestApproval(
+            ApprovalSystem.ApprovalType.TERMINAL_COMMAND, code, null);
+        if (!approval.isApproved()) return ToolRegistry.toolError("Approval denied");
         
         try {
-            // Auto-detect class name
-            if (className == null || className.isEmpty()) {
-                className = extractClassName(code);
-                if (className == null) {
-                    className = "Main";
-                    if (!code.contains("class ")) {
-                        code = "public class Main {\n" + code + "\n}";
-                    }
-                }
-            }
-            
-            Path tempDir = Files.createTempDirectory("hermes_java_");
-            Path sourceFile = tempDir.resolve(className + ".java");
-            Files.writeString(sourceFile, code, StandardCharsets.UTF_8);
-            
-            // Compile
-            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-            if (compiler == null) {
-                return ToolRegistry.toolError("Java compiler not available");
-            }
-            
-            int compileResult = compiler.run(null, null, null, sourceFile.toString());
-            if (compileResult != 0) {
-                return ToolRegistry.toolResult(Map.of(
-                    "language", "java",
-                    "exit_code", compileResult,
-                    "output", "Compilation failed",
-                    "success", false
-                ));
-            }
-            
-            // Run
-            ProcessBuilder pb = new ProcessBuilder("java", "-cp", tempDir.toString(), className);
-            pb.directory(tempDir.toFile());
-            pb.redirectErrorStream(true);
-            
-            Process process = pb.start();
-            
-            StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    if (output.length() > MAX_OUTPUT_CHARS) {
-                        output.append("\n... [truncated]");
-                        process.destroyForcibly();
-                        break;
-                    }
-                }
-            }
-            
-            boolean finished = process.waitFor(5, TimeUnit.SECONDS);
-            int exitCode = finished ? process.exitValue() : -1;
-            
-            // Cleanup
-            Files.walk(tempDir)
-                .sorted(Comparator.reverseOrder())
-                .forEach(p -> {
-                    try { Files.delete(p); } catch (Exception e) {}
-                });
-            
-            return ToolRegistry.toolResult(Map.of(
-                "language", "java",
-                "exit_code", exitCode,
-                "output", output.toString(),
-                "success", exitCode == 0
-            ));
-            
+            ProcessBuilder pb = new ProcessBuilder("/bin/bash", "-c", code);
+            return executeProcess(pb, timeout);
         } catch (Exception e) {
-            logger.error("Java execution failed: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Execution failed: " + e.getMessage());
         }
     }
     
-    /**
-     * Review code.
-     */
-    private static String reviewCode(Map<String, Object> args) {
-        String code = (String) args.get("code");
-        String language = (String) args.get("language");
+    private String executeProcess(ProcessBuilder pb, int timeout) throws Exception {
+        pb.redirectErrorStream(false);
+        Process process = pb.start();
         
-        if (code == null || code.trim().isEmpty()) {
-            return ToolRegistry.toolError("Code is required");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Future<String> stdoutFuture = executor.submit(() -> readStream(process.getInputStream()));
+        Future<String> stderrFuture = executor.submit(() -> readStream(process.getErrorStream()));
+        
+        boolean finished = process.waitFor(timeout, TimeUnit.SECONDS);
+        
+        String stdout = stdoutFuture.get(5, TimeUnit.SECONDS);
+        String stderr = stderrFuture.get(5, TimeUnit.SECONDS);
+        
+        executor.shutdownNow();
+        
+        if (!finished) {
+            process.destroyForcibly();
+            return ToolRegistry.toolError("Timeout after " + timeout + " seconds\n" + stdout);
         }
         
-        List<Map<String, Object>> issues = new ArrayList<>();
-        List<Map<String, Object>> suggestions = new ArrayList<>();
-        
-        if (code.length() > 1000) {
-            suggestions.add(Map.of(
-                "type", "style",
-                "message", "Consider breaking into smaller functions",
-                "severity", "info"
-            ));
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            return ToolRegistry.toolError("Exit code " + exitCode + "\n" + stderr + "\n" + stdout);
         }
         
-        return ToolRegistry.toolResult(Map.of(
-            "language", language,
-            "issues", issues,
-            "suggestions", suggestions,
-            "lines", code.split("\\n").length
-        ));
+        return ToolRegistry.toolResult(Map.of("stdout", stdout, "stderr", stderr, "exit_code", exitCode));
     }
     
-    // Helper methods
-    private static void installPythonPackage(String pkg) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("pip3", "install", "-q", pkg);
-            pb.inheritIO();
-            Process process = pb.start();
-            process.waitFor(30, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            logger.debug("Failed to install package {}: {}", pkg, e.getMessage());
+    private String readStream(InputStream stream) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+                if (sb.length() > 50000) {
+                    sb.append("... [truncated]\n");
+                    break;
+                }
+            }
         }
-    }
-    
-    private static String extractClassName(String code) {
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("public\\s+class\\s+(\\w+)");
-        java.util.regex.Matcher matcher = pattern.matcher(code);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        return null;
+        return sb.toString();
     }
 }
