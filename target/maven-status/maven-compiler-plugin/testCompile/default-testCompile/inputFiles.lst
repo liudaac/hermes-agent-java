@@ -1,0 +1,6 @@
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/ConfigTest.java
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/IterationBudgetTest.java
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/SimpleTest.java
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/ToolRegistryTest.java
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/config/ConfigManagerTest.java
+/root/hermes-agent-java/src/test/java/com/nousresearch/hermes/tools/FileToolTest.java

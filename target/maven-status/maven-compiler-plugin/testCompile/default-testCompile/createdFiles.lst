@@ -1,0 +1,6 @@
+com/nousresearch/hermes/SimpleTest.class
+com/nousresearch/hermes/ToolRegistryTest.class
+com/nousresearch/hermes/ConfigTest.class
+com/nousresearch/hermes/config/ConfigManagerTest.class
+com/nousresearch/hermes/tools/FileToolTest.class
+com/nousresearch/hermes/IterationBudgetTest.class
