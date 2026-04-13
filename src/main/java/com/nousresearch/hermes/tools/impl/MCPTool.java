@@ -2,6 +2,7 @@ package com.nousresearch.hermes.tools.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -44,13 +45,13 @@ public class MCPTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("mcp_list_servers")
             .toolset("mcp")
             .schema(Map.of("description", "List configured MCP servers"))
             .handler(args -> listServers()).emoji("🖥️").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("mcp_list_tools")
             .toolset("mcp")
             .schema(Map.of("description", "List tools from an MCP server",
@@ -59,7 +60,7 @@ public class MCPTool {
                     "required", List.of("server"))))
             .handler(this::listTools).emoji("🔧").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("mcp_call")
             .toolset("mcp")
             .schema(Map.of("description", "Call an MCP tool",
@@ -71,7 +72,7 @@ public class MCPTool {
                     "required", List.of("server", "tool"))))
             .handler(this::callTool).emoji("⚡").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("mcp_add_server")
             .toolset("mcp")
             .schema(Map.of("description", "Add an MCP server",

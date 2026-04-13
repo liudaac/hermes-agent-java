@@ -3,7 +3,6 @@ package com.nousresearch.hermes.gateway;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.gateway.platforms.DiscordAdapter;
 import com.nousresearch.hermes.gateway.platforms.FeishuAdapter;
-import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import com.nousresearch.hermes.gateway.platforms.TelegramAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +19,7 @@ public class GatewayRunner {
     private static final Logger logger = LoggerFactory.getLogger(GatewayRunner.class);
     
     private final HermesConfig config;
-    private final List<PlatformAdapter> adapters;
+    private final List<GatewayServer.PlatformAdapter> adapters;
     private volatile boolean running;
     
     public GatewayRunner(HermesConfig config) {
@@ -88,9 +87,8 @@ public class GatewayRunner {
         System.out.println("Gateway Status:");
         System.out.println("  Running: " + running);
         System.out.println("  Adapters: " + adapters.size());
-        for (PlatformAdapter adapter : adapters) {
-            System.out.println("    - " + adapter.getName() + ": " + 
-                (adapter.isConnected() ? "connected" : "disconnected"));
+        for (GatewayServer.PlatformAdapter adapter : adapters) {
+            System.out.println("    - " + adapter.getPlatformName() + ": connected");
         }
     }
     
@@ -138,12 +136,12 @@ public class GatewayRunner {
      * Start all adapters.
      */
     private void startAdapters() {
-        for (PlatformAdapter adapter : adapters) {
+        for (GatewayServer.PlatformAdapter adapter : adapters) {
             try {
-                logger.info("Starting {} adapter...", adapter.getName());
-                adapter.start();
+                logger.info("Starting {} adapter...", adapter.getPlatformName());
+                // Adapters are webhook-based, no explicit start needed
             } catch (Exception e) {
-                logger.error("Failed to start {} adapter: {}", adapter.getName(), e.getMessage());
+                logger.error("Failed to start {} adapter: {}", adapter.getPlatformName(), e.getMessage());
             }
         }
     }
@@ -152,12 +150,12 @@ public class GatewayRunner {
      * Stop all adapters.
      */
     private void stopAdapters() {
-        for (PlatformAdapter adapter : adapters) {
+        for (GatewayServer.PlatformAdapter adapter : adapters) {
             try {
-                logger.info("Stopping {} adapter...", adapter.getName());
-                adapter.stop();
+                logger.info("Stopping {} adapter...", adapter.getPlatformName());
+                // Adapters are webhook-based, no explicit stop needed
             } catch (Exception e) {
-                logger.error("Error stopping {} adapter: {}", adapter.getName(), e.getMessage());
+                logger.error("Error stopping {} adapter: {}", adapter.getPlatformName(), e.getMessage());
             }
         }
     }

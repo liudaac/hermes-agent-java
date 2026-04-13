@@ -110,14 +110,8 @@ public class SubAgent implements Callable<SubAgentResult> {
             
             long duration = System.currentTimeMillis() - startTime;
             
-            result = new SubAgentResult();
-            result.id = id;
-            result.task = task;
-            result.output = output.toString();
-            result.success = completed;
-            result.iterationsUsed = budget.getUsed();
-            result.durationMs = duration;
-            result.completed = completed;
+            result = new SubAgentResult(id, task, output.toString(), completed, 
+                completed, null, budget.getUsed(), duration);
             
             logger.info("[SubAgent {}] Completed in {}ms ({} iterations)", 
                 id, duration, budget.getUsed());
@@ -127,14 +121,9 @@ public class SubAgent implements Callable<SubAgentResult> {
         } catch (Exception e) {
             logger.error("[SubAgent {}] Failed: {}", id, e.getMessage(), e);
             
-            result = new SubAgentResult();
-            result.id = id;
-            result.task = task;
-            result.output = "Error: " + e.getMessage();
-            result.success = false;
-            result.error = e.getMessage();
-            result.iterationsUsed = budget.getUsed();
-            result.durationMs = System.currentTimeMillis() - startTime;
+            result = new SubAgentResult(id, task, "Error: " + e.getMessage(), 
+                false, false, e.getMessage(), budget.getUsed(), 
+                System.currentTimeMillis() - startTime);
             
             return result;
         } finally {
@@ -163,14 +152,12 @@ public class SubAgent implements Callable<SubAgentResult> {
                 results.add(result);
             } catch (TimeoutException e) {
                 future.cancel(true);
-                SubAgentResult timeoutResult = new SubAgentResult();
-                timeoutResult.success = false;
-                timeoutResult.error = "Timeout after " + timeoutMs + "ms";
+                SubAgentResult timeoutResult = new SubAgentResult("timeout", "", "", 
+                    false, false, "Timeout after " + timeoutMs + "ms", 0, timeoutMs);
                 results.add(timeoutResult);
             } catch (Exception e) {
-                SubAgentResult errorResult = new SubAgentResult();
-                errorResult.success = false;
-                errorResult.error = e.getMessage();
+                SubAgentResult errorResult = new SubAgentResult("error", "", "", 
+                    false, false, e.getMessage(), 0, 0);
                 results.add(errorResult);
             }
         }
@@ -215,19 +202,5 @@ public class SubAgent implements Callable<SubAgentResult> {
         } catch (Exception e) {
             return ToolRegistry.toolError("Failed to execute tool: " + e.getMessage());
         }
-    }
-    
-    /**
-     * Result of sub-agent execution.
-     */
-    public static class SubAgentResult {
-        public String id;
-        public String task;
-        public String output;
-        public boolean success;
-        public boolean completed;
-        public String error;
-        public int iterationsUsed;
-        public long durationMs;
     }
 }

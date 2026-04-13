@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,7 +32,7 @@ public class TerminalTool {
      * Register terminal tools.
      */
     public static void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("execute_command")
             .toolset("terminal")
             .schema(Map.of(
@@ -106,8 +107,8 @@ public class TerminalTool {
             // Read output with timeout
             ExecutorService executor = Executors.newFixedThreadPool(2);
             
-            Future<String> stdoutFuture = executor.submit(() -> readStream(process.inputStream()));
-            Future<String> stderrFuture = executor.submit(() -> readStream(process.errorStream()));
+            Future<String> stdoutFuture = executor.submit(() -> readStream(process.getInputStream()));
+            Future<String> stderrFuture = executor.submit(() -> readStream(process.getErrorStream()));
             
             // Wait for completion
             boolean finished = process.waitFor(timeout, TimeUnit.SECONDS);

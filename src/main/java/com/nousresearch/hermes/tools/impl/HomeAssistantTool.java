@@ -2,6 +2,7 @@ package com.nousresearch.hermes.tools.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -33,7 +34,7 @@ public class HomeAssistantTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("ha_state")
             .toolset("homeassistant")
             .schema(Map.of("description", "Get entity state",
@@ -42,7 +43,7 @@ public class HomeAssistantTool {
                     "required", List.of("entity_id"))))
             .handler(this::getState).emoji("📊").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("ha_turn_on")
             .toolset("homeassistant")
             .schema(Map.of("description", "Turn on an entity",
@@ -51,7 +52,7 @@ public class HomeAssistantTool {
                     "required", List.of("entity_id"))))
             .handler(args -> callService("turn_on", args)).emoji("💡").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("ha_turn_off")
             .toolset("homeassistant")
             .schema(Map.of("description", "Turn off an entity",
@@ -60,7 +61,7 @@ public class HomeAssistantTool {
                     "required", List.of("entity_id"))))
             .handler(args -> callService("turn_off", args)).emoji("🌑").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("ha_set_temperature")
             .toolset("homeassistant")
             .schema(Map.of("description", "Set climate temperature",
@@ -71,7 +72,7 @@ public class HomeAssistantTool {
                     "required", List.of("entity_id", "temperature"))))
             .handler(this::setTemperature).emoji("🌡️").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("ha_states")
             .toolset("homeassistant")
             .schema(Map.of("description", "List all entity states"))

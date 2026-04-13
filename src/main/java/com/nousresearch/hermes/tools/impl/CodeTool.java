@@ -2,6 +2,7 @@ package com.nousresearch.hermes.tools.impl;
 
 import com.nousresearch.hermes.approval.ApprovalResult;
 import com.nousresearch.hermes.approval.ApprovalSystem;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,16 @@ public class CodeTool {
     private final ApprovalSystem approvalSystem;
     private final Path tempDir;
     
+    public CodeTool() {
+        this.approvalSystem = new ApprovalSystem();
+        this.tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "hermes-code");
+        try {
+            Files.createDirectories(tempDir);
+        } catch (IOException e) {
+            logger.error("Failed to create temp dir: {}", e.getMessage());
+        }
+    }
+    
     public CodeTool(ApprovalSystem approvalSystem) {
         this.approvalSystem = approvalSystem;
         this.tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "hermes-code");
@@ -32,8 +43,13 @@ public class CodeTool {
         }
     }
     
-    public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+    public static void register(ToolRegistry registry) {
+        CodeTool instance = new CodeTool();
+        instance.registerInstance(registry);
+    }
+    
+    public void registerInstance(ToolRegistry registry) {
+        registry.register(new ToolEntry.Builder()
             .name("execute_python")
             .toolset("code")
             .schema(Map.of("description", "Execute Python code",
@@ -42,7 +58,7 @@ public class CodeTool {
                     "required", List.of("code"))))
             .handler(this::executePython).emoji("🐍").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("execute_javascript")
             .toolset("code")
             .schema(Map.of("description", "Execute JavaScript",
@@ -51,7 +67,7 @@ public class CodeTool {
                     "required", List.of("code"))))
             .handler(this::executeJavaScript).emoji("📜").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("execute_bash")
             .toolset("code")
             .schema(Map.of("description", "Execute Bash",

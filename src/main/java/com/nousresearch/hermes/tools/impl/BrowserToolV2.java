@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.LoadState;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +27,13 @@ public class BrowserToolV2 {
         }
     }
     
-    public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+    public static void register(ToolRegistry registry) {
+        BrowserToolV2 instance = new BrowserToolV2();
+        instance.registerInstance(registry);
+    }
+    
+    public void registerInstance(ToolRegistry registry) {
+        registry.register(new ToolEntry.Builder()
             .name("browser_open")
             .toolset("browser")
             .schema(Map.of("description", "Open a URL in a browser",
@@ -37,7 +44,7 @@ public class BrowserToolV2 {
                     "required", List.of("url"))))
             .handler(this::openUrl).emoji("🌐").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_click").toolset("browser")
             .schema(Map.of("description", "Click an element",
                 "parameters", Map.of("type", "object",
@@ -45,7 +52,7 @@ public class BrowserToolV2 {
                     "required", List.of("session_id", "selector"))))
             .handler(this::clickElement).emoji("🖱️").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_type").toolset("browser")
             .schema(Map.of("description", "Type text",
                 "parameters", Map.of("type", "object",
@@ -53,7 +60,7 @@ public class BrowserToolV2 {
                     "required", List.of("session_id", "selector", "text"))))
             .handler(this::typeText).emoji("⌨️").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_get_content").toolset("browser")
             .schema(Map.of("description", "Get page content",
                 "parameters", Map.of("type", "object",
@@ -61,7 +68,7 @@ public class BrowserToolV2 {
                     "required", List.of("session_id"))))
             .handler(this::getContent).emoji("📄").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_close").toolset("browser")
             .schema(Map.of("description", "Close browser",
                 "parameters", Map.of("type", "object",

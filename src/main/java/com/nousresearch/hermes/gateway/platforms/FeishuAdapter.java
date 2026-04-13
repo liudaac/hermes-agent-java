@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
@@ -19,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  * Feishu (Lark) platform adapter.
  * Handles Feishu bot messages.
  */
-public class FeishuAdapter implements PlatformAdapter {
+public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(FeishuAdapter.class);
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
@@ -246,5 +247,51 @@ public class FeishuAdapter implements PlatformAdapter {
         if (System.currentTimeMillis() > tokenExpiry) {
             refreshToken();
         }
+    }
+    
+    // ==================== GatewayServer.PlatformAdapter Methods ====================
+    
+    @Override
+    public String getPlatformName() {
+        return "feishu";
+    }
+    
+    @Override
+    public com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage parseWebhook(JsonNode payload) {
+        try {
+            JsonNode event = payload.path("event");
+            if (event.isMissingNode()) {
+                return null;
+            }
+            
+            String eventType = event.path("type").asText();
+            if (!"im.message.receive_v1".equals(eventType)) {
+                return null;
+            }
+            
+            JsonNode message = event.path("message");
+            String messageId = message.path("message_id").asText();
+            String chatId = message.path("chat_id").asText();
+            String sender = message.path("sender").path("sender_id").path("open_id").asText();
+            String content = message.path("content").asText();
+            
+            // Parse content (it's a JSON string)
+            JsonNode contentNode = mapper.readTree(content);
+            String text = contentNode.path("text").asText();
+            
+            return new com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage(
+                messageId, chatId, sender, text, System.currentTimeMillis(), false
+            );
+            
+        } catch (Exception e) {
+            logger.error("Parse error: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    @Override
+    public void sendReply(String channel, String messageId, String content) throws Exception {
+        // Feishu doesn't have a direct reply API, use sendMessage
+        sendMessage(channel, content);
     }
 }

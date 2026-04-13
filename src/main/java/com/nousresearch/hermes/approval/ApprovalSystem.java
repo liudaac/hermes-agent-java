@@ -205,4 +205,76 @@ public class ApprovalSystem {
         // Build approval prompt
         StringBuilder prompt = new StringBuilder();
         prompt.append("\n");
-        prompt.append("╔════════════════════════════════════════════════════════════
+        prompt.append("╔════════════════════════════════════════════════════════════╗\n");
+        prompt.append("║  APPROVAL REQUIRED                                         ║\n");
+        prompt.append("╠════════════════════════════════════════════════════════════╣\n");
+        prompt.append("║  Type: ").append(type).append("\n");
+        prompt.append("║  Operation: ").append(operation).append("\n");
+        if (details != null && !details.isEmpty()) {
+            prompt.append("║  Details: ").append(details).append("\n");
+        }
+        if (isDangerous) {
+            prompt.append("║  ⚠️  This operation is flagged as dangerous!\n");
+        }
+        prompt.append("╠════════════════════════════════════════════════════════════╣\n");
+        prompt.append("║  Options:                                                  ║\n");
+        prompt.append("║    (y) yes     - Approve this operation                    ║\n");
+        prompt.append("║    (n) no      - Deny this operation                       ║\n");
+        prompt.append("║    (a) always  - Approve and remember for this session     ║\n");
+        prompt.append("║    (d) deny    - Deny and remember for this session        ║\n");
+        prompt.append("╚════════════════════════════════════════════════════════════╝\n");
+        prompt.append("Your choice: ");
+        
+        System.out.print(prompt.toString());
+        
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+            String input = reader.readLine();
+            
+            if (input == null) {
+                return ApprovalResult.denied("No input provided");
+            }
+            
+            String choice = input.trim().toLowerCase();
+            
+            return switch (choice) {
+                case "y", "yes" -> ApprovalResult.approved();
+                case "n", "no" -> ApprovalResult.denied("User denied");
+                case "a", "always" -> {
+                    addSessionApproval(sessionKey);
+                    yield ApprovalResult.approved();
+                }
+                case "d", "deny" -> {
+                    preDeny(operation);
+                    yield ApprovalResult.denied("User denied and remembered");
+                }
+                default -> {
+                    System.out.println("Invalid choice, defaulting to deny.");
+                    yield ApprovalResult.denied("Invalid choice");
+                }
+            };
+            
+        } catch (Exception e) {
+            logger.error("Error reading approval input: {}", e.getMessage());
+            return ApprovalResult.denied("Error: " + e.getMessage());
+        }
+    }
+    
+    private boolean matchesPattern(String operation, String pattern) {
+        return operation.toLowerCase().contains(pattern.toLowerCase());
+    }
+    
+    // ==================== Inner Classes ====================
+    
+    public static class DangerPattern {
+        public final ApprovalType type;
+        public final String pattern;
+        public final ApprovalMode mode;
+        
+        public DangerPattern(ApprovalType type, String pattern, ApprovalMode mode) {
+            this.type = type;
+            this.pattern = pattern;
+            this.mode = mode;
+        }
+    }
+}

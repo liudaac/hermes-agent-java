@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.nousresearch.hermes.config.ConfigManager;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tools.impl.web.*;
 import org.slf4j.Logger;
@@ -46,7 +47,7 @@ public class WebSearchToolV2 {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("web_search")
             .toolset("web_search")
             .schema(Map.of(
@@ -65,7 +66,7 @@ public class WebSearchToolV2 {
             .emoji("🔍")
             .build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(

@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +24,7 @@ public class CronjobTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("cronjob_add")
             .toolset("cronjob")
             .schema(Map.of("description", "Add a scheduled job",
@@ -36,13 +37,13 @@ public class CronjobTool {
                     "required", List.of("name", "schedule", "command"))))
             .handler(this::addJob).emoji("⏰").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("cronjob_list")
             .toolset("cronjob")
             .schema(Map.of("description", "List scheduled jobs"))
             .handler(args -> listJobs()).emoji("📋").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("cronjob_remove")
             .toolset("cronjob")
             .schema(Map.of("description", "Remove a scheduled job",

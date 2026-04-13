@@ -30,6 +30,24 @@ public class HermesConfig {
         this.configPath = configPath;
         this.config = new HashMap<>();
     }
+    
+    /**
+     * Create config with explicit values (for programmatic use).
+     */
+    public HermesConfig(String apiKey, String baseUrl, String model) {
+        this.configPath = null;
+        this.config = new HashMap<>();
+        
+        Map<String, Object> modelConfig = new HashMap<>();
+        modelConfig.put("api_key", apiKey);
+        modelConfig.put("base_url", baseUrl);
+        modelConfig.put("model", model);
+        this.config.put("model", modelConfig);
+        
+        Map<String, Object> agentConfig = new HashMap<>();
+        agentConfig.put("max_turns", 90);
+        this.config.put("agent", agentConfig);
+    }
 
     /**
      * Load configuration from default location.

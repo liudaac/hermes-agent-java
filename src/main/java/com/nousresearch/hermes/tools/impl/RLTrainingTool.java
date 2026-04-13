@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,7 @@ public class RLTrainingTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("rl_create_env")
             .toolset("rl_training")
             .schema(Map.of("description", "Create RL environment",
@@ -43,7 +44,7 @@ public class RLTrainingTool {
                     "required", List.of("name", "type"))))
             .handler(this::createEnvironment).emoji("🌍").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("rl_train")
             .toolset("rl_training")
             .schema(Map.of("description", "Train RL model",
@@ -52,7 +53,7 @@ public class RLTrainingTool {
                     "required", List.of("session_id"))))
             .handler(this::trainModel).emoji("🎓").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("rl_evaluate")
             .toolset("rl_training")
             .schema(Map.of("description", "Evaluate model",

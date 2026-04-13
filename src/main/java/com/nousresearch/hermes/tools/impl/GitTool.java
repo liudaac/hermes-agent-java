@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,8 +18,13 @@ public class GitTool {
     private static final Logger logger = LoggerFactory.getLogger(GitTool.class);
     private static final int DEFAULT_TIMEOUT = 30;
     
-    public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+    public static void register(ToolRegistry registry) {
+        GitTool instance = new GitTool();
+        instance.registerInstance(registry);
+    }
+    
+    public void registerInstance(ToolRegistry registry) {
+        registry.register(new ToolEntry.Builder()
             .name("git_status")
             .toolset("git")
             .schema(Map.of("description", "Get git status",
@@ -27,7 +33,7 @@ public class GitTool {
                     "required", List.of("path"))))
             .handler(this::gitStatus).emoji("📊").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_add")
             .toolset("git")
             .schema(Map.of("description", "Stage files",
@@ -36,7 +42,7 @@ public class GitTool {
                     "required", List.of("path", "files"))))
             .handler(this::gitAdd).emoji("➕").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_commit")
             .toolset("git")
             .schema(Map.of("description", "Commit changes",
@@ -45,7 +51,7 @@ public class GitTool {
                     "required", List.of("path", "message"))))
             .handler(this::gitCommit).emoji("💾").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_push")
             .toolset("git")
             .schema(Map.of("description", "Push to remote",
@@ -54,7 +60,7 @@ public class GitTool {
                     "required", List.of("path"))))
             .handler(this::gitPush).emoji("🚀").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_pull")
             .toolset("git")
             .schema(Map.of("description", "Pull from remote",
@@ -63,7 +69,7 @@ public class GitTool {
                     "required", List.of("path"))))
             .handler(this::gitPull).emoji("⬇️").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_log")
             .toolset("git")
             .schema(Map.of("description", "View commit history",
@@ -72,7 +78,7 @@ public class GitTool {
                     "required", List.of("path"))))
             .handler(this::gitLog).emoji("📜").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_branch")
             .toolset("git")
             .schema(Map.of("description", "List or create branches",
@@ -81,7 +87,7 @@ public class GitTool {
                     "required", List.of("path"))))
             .handler(this::gitBranch).emoji("🌿").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("git_clone")
             .toolset("git")
             .schema(Map.of("description", "Clone a repository",

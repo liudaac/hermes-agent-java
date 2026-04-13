@@ -104,11 +104,12 @@ public class SSHEnvironment implements TerminalEnvironment {
             channel.setErrStream(stderr);
             
             channel.connect();
+            final ChannelExec finalChannel = channel;
             
             // Wait with timeout
             ExecutorService executor = Executors.newSingleThreadExecutor();
             Future<Integer> future = executor.submit(() -> {
-                while (!channel.isClosed()) {
+                while (!finalChannel.isClosed()) {
                     try {
                         Thread.sleep(100);
                     } catch (InterruptedException e) {
@@ -116,7 +117,7 @@ public class SSHEnvironment implements TerminalEnvironment {
                         return -1;
                     }
                 }
-                return channel.getExitStatus();
+                return finalChannel.getExitStatus();
             });
             
             Integer exitCode;
@@ -124,7 +125,7 @@ public class SSHEnvironment implements TerminalEnvironment {
                 exitCode = future.get(timeoutSeconds, TimeUnit.SECONDS);
             } catch (TimeoutException e) {
                 future.cancel(true);
-                channel.disconnect();
+                finalChannel.disconnect();
                 long duration = System.currentTimeMillis() - startTime;
                 return new ExecutionResult(-1, truncate(stdout.toString()), 
                     truncate(stderr.toString()), true, duration);

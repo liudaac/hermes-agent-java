@@ -2,6 +2,7 @@ package com.nousresearch.hermes.gateway.platforms;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import okhttp3.*;
@@ -13,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Discord platform adapter.
  */
-public class DiscordAdapter implements GatewayServer.PlatformAdapter {
+public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(DiscordAdapter.class);
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String API_BASE = "https://discord.com/api/v10";
@@ -29,6 +30,10 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
+    }
+    
+    public DiscordAdapter(com.nousresearch.hermes.config.HermesConfig config) {
+        this(); // Delegate to default constructor
     }
     
     @Override
@@ -171,5 +176,32 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter {
                 throw new Exception("Response failed: " + response.code());
             }
         }
+    }
+    
+    // ==================== PlatformAdapter Interface Methods ====================
+    
+    @Override
+    public String getName() {
+        return getPlatformName();
+    }
+    
+    @Override
+    public void start() throws Exception {
+        // Webhook is set externally
+    }
+    
+    @Override
+    public void stop() throws Exception {
+        // Cleanup if needed
+    }
+    
+    @Override
+    public boolean isConnected() {
+        return botToken != null && !botToken.isEmpty();
+    }
+    
+    @Override
+    public void setAgent(com.nousresearch.hermes.agent.AIAgent agent) {
+        // Agent is set externally
     }
 }

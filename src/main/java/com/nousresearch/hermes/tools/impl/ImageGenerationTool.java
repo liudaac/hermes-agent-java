@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -35,7 +36,7 @@ public class ImageGenerationTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("image_generate")
             .toolset("image")
             .schema(Map.of("description", "Generate image from text prompt",
@@ -49,7 +50,7 @@ public class ImageGenerationTool {
                     "required", List.of("prompt"))))
             .handler(this::generateImage).emoji("🎨").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("image_edit")
             .toolset("image")
             .schema(Map.of("description", "Edit an image with a prompt",

@@ -2,6 +2,7 @@ package com.nousresearch.hermes.tools.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -37,7 +38,7 @@ public class TTSTool {
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("tts_speak")
             .toolset("tts")
             .schema(Map.of("description", "Convert text to speech",
@@ -50,7 +51,7 @@ public class TTSTool {
                     "required", List.of("text"))))
             .handler(this::speak).emoji("🔊").build());
         
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("tts_voices")
             .toolset("tts")
             .schema(Map.of("description", "List available voices"))

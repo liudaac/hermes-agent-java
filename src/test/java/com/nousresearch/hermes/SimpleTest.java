@@ -17,4 +17,10 @@ public class SimpleTest {
         registry.register(new ToolEntry.Builder()
             .name("test")
             .toolset("test")
-            .schema(Map.of("description", "Test tool: "
+            .schema(Map.of("description", "Test tool", "parameters", Map.of("type", "object")))
+            .handler(args -> "test result")
+            .build());
+        
+        assertTrue(registry.getAllToolNames().contains("test"));
+    }
+}

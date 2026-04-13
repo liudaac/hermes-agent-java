@@ -196,4 +196,25 @@ public class DockerEnvironment implements TerminalEnvironment {
         try {
             dockerClient.close();
         } catch (Exception e) {
-            logger.warn("Error closing Docker client: {}", e.get
+            logger.warn("Error closing Docker client: {}", e.getMessage());
+        }
+    }
+    
+    private String truncate(String output) {
+        if (output.length() > MAX_OUTPUT_CHARS) {
+            return output.substring(0, (int) MAX_OUTPUT_CHARS) + 
+                   "\n... [truncated, total: " + output.length() + " chars]";
+        }
+        return output;
+    }
+    
+    @Override
+    public Path getWorkingDirectory() {
+        return workingDirectory;
+    }
+    
+    @Override
+    public void setWorkingDirectory(Path cwd) {
+        this.workingDirectory = cwd;
+    }
+}

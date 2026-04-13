@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.nousresearch.hermes.skills.SkillManager;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,7 @@ public class SkillTool {
      */
     public static void register(ToolRegistry registry) {
         // skill_create
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_create")
             .toolset("skills")
             .schema(Map.of(
@@ -56,7 +57,7 @@ public class SkillTool {
             .build());
         
         // skill_search
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_search")
             .toolset("skills")
             .schema(Map.of(
@@ -82,7 +83,7 @@ public class SkillTool {
             .build());
         
         // skill_get
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_get")
             .toolset("skills")
             .schema(Map.of(
@@ -103,7 +104,7 @@ public class SkillTool {
             .build());
         
         // skill_update
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_update")
             .toolset("skills")
             .schema(Map.of(
@@ -132,7 +133,7 @@ public class SkillTool {
             .build());
         
         // skill_delete
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_delete")
             .toolset("skills")
             .schema(Map.of(
@@ -153,7 +154,7 @@ public class SkillTool {
             .build());
         
         // skill_list
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("skill_list")
             .toolset("skills")
             .schema(Map.of(

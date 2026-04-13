@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
  * Telegram platform adapter.
  * Supports: messages, replies, markdown, inline keyboards.
  */
-public class TelegramAdapter implements GatewayServer.PlatformAdapter {
+public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(TelegramAdapter.class);
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String API_BASE = "https://api.telegram.org/bot";
@@ -32,6 +32,10 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
+    }
+    
+    public TelegramAdapter(com.nousresearch.hermes.config.HermesConfig config) {
+        this(); // Delegate to default constructor
     }
     
     @Override
@@ -189,5 +193,32 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter {
             JsonNode result = mapper.readTree(response.body().string());
             return result.path("ok").asBoolean();
         }
+    }
+    
+    // ==================== PlatformAdapter Interface Methods ====================
+    
+    @Override
+    public String getName() {
+        return getPlatformName();
+    }
+    
+    @Override
+    public void start() throws Exception {
+        // Webhook is set externally
+    }
+    
+    @Override
+    public void stop() throws Exception {
+        // Cleanup if needed
+    }
+    
+    @Override
+    public boolean isConnected() {
+        return botToken != null && !botToken.isEmpty();
+    }
+    
+    @Override
+    public void setAgent(com.nousresearch.hermes.agent.AIAgent agent) {
+        // Agent is set externally
     }
 }

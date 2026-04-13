@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nousresearch.hermes.config.ConfigManager;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -35,9 +36,9 @@ public class VisionTool {
             .build();
         
         ConfigManager config = ConfigManager.getInstance();
-        this.provider = config.getString("auxiliary.vision.provider", "auto");
+        String providerConfig = config.getString("auxiliary.vision.provider", "auto");
         
-        if ("auto".equals(provider)) {
+        if ("auto".equals(providerConfig)) {
             if (System.getenv("OPENAI_API_KEY") != null) {
                 this.provider = "openai";
                 this.apiKey = System.getenv("OPENAI_API_KEY");
@@ -48,13 +49,14 @@ public class VisionTool {
                 this.baseUrl = config.getBaseUrl();
             }
         } else {
+            this.provider = providerConfig;
             this.apiKey = System.getenv("OPENAI_API_KEY");
             this.baseUrl = "https://api.openai.com/v1";
         }
     }
     
     public void register(ToolRegistry registry) {
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("vision_analyze")
             .toolset("vision")
             .schema(Map.of("description", "Analyze an image",
@@ -77,8 +79,17 @@ public class VisionTool {
             message.put("role", "user");
             
             var content = mapper.createArrayNode();
-            content.add(Map.of("type", "text", "text", prompt));
-            content.add(Map.of("type", "image_url", "image_url", Map.of("url", imageUrl)));
+            var textPart = mapper.createObjectNode();
+            textPart.put("type", "text");
+            textPart.put("text", prompt);
+            content.add(textPart);
+            
+            var imageUrlObj = mapper.createObjectNode();
+            imageUrlObj.put("url", imageUrl);
+            var imagePart = mapper.createObjectNode();
+            imagePart.put("type", "image_url");
+            imagePart.set("image_url", imageUrlObj);
+            content.add(imagePart);
             
             message.set("content", content);
             messages.add(message);

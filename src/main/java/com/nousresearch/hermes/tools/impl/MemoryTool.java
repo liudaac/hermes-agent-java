@@ -1,10 +1,13 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.nousresearch.hermes.memory.MemoryManager;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,7 +24,7 @@ public class MemoryTool {
      */
     public static void register(ToolRegistry registry) {
         // memory_save
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("memory_save")
             .toolset("memory")
             .schema(Map.of(
@@ -46,7 +49,7 @@ public class MemoryTool {
             .build());
         
         // memory_search
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("memory_search")
             .toolset("memory")
             .schema(Map.of(
@@ -72,7 +75,7 @@ public class MemoryTool {
             .build());
         
         // session_search
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("session_search")
             .toolset("memory")
             .schema(Map.of(
@@ -98,7 +101,7 @@ public class MemoryTool {
             .build());
         
         // memory_delete
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("memory_delete")
             .toolset("memory")
             .schema(Map.of(
@@ -163,14 +166,15 @@ public class MemoryTool {
         try {
             List<MemoryManager.MemoryEntry> results = memoryManager.search(query, limit);
             
-            List<Map<String, Object>> formatted = results.stream()
-                .map(m -> Map.of(
-                    "id", m.id,
-                    "category", m.category,
-                    "content", m.content,
-                    "timestamp", m.timestamp.toString()
-                ))
-                .toList();
+            List<Map<String, Object>> formatted = new ArrayList<>();
+            for (MemoryManager.MemoryEntry m : results) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", m.id);
+                map.put("category", m.category);
+                map.put("content", m.content);
+                map.put("timestamp", m.timestamp.toString());
+                formatted.add(map);
+            }
             
             return ToolRegistry.toolResult(Map.of(
                 "query", query,
@@ -198,14 +202,15 @@ public class MemoryTool {
         try {
             List<MemoryManager.SessionSearchResult> results = memoryManager.searchSessions(query, limit);
             
-            List<Map<String, Object>> formatted = results.stream()
-                .map(r -> Map.of(
-                    "session_id", r.sessionId,
-                    "role", r.role,
-                    "content_preview", r.content.substring(0, Math.min(200, r.content.length())),
-                    "timestamp", r.timestamp.toString()
-                ))
-                .toList();
+            List<Map<String, Object>> formatted = new ArrayList<>();
+            for (MemoryManager.SessionSearchResult r : results) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("session_id", r.sessionId);
+                map.put("role", r.role);
+                map.put("content_preview", r.content.substring(0, Math.min(200, r.content.length())));
+                map.put("timestamp", r.timestamp.toString());
+                formatted.add(map);
+            }
             
             return ToolRegistry.toolResult(Map.of(
                 "query", query,

@@ -347,4 +347,28 @@ public class AIAgent {
     public void interrupt() {
         interrupted.set(true);
     }
+    
+    /**
+     * Process a single message and return the response.
+     * Used by gateway for webhook processing.
+     */
+    public String processMessage(String message) {
+        // Add system message if not present
+        if (conversationHistory.isEmpty()) {
+            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
+        }
+        
+        // Process the message
+        processUserMessage(message);
+        
+        // Return the last assistant message
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            ModelMessage msg = conversationHistory.get(i);
+            if ("assistant".equals(msg.getRole())) {
+                return msg.getContent();
+            }
+        }
+        
+        return "No response generated";
+    }
 }

@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -39,7 +40,7 @@ public class BrowserTool {
      */
     public static void register(ToolRegistry registry) {
         // browser_open
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_open")
             .toolset("browser")
             .schema(Map.of(
@@ -60,7 +61,7 @@ public class BrowserTool {
             .build());
         
         // browser_find
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_find")
             .toolset("browser")
             .schema(Map.of(
@@ -85,7 +86,7 @@ public class BrowserTool {
             .build());
         
         // browser_click
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_click")
             .toolset("browser")
             .schema(Map.of(
@@ -110,7 +111,7 @@ public class BrowserTool {
             .build());
         
         // browser_scroll
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("browser_scroll")
             .toolset("browser")
             .schema(Map.of(

@@ -143,6 +143,13 @@ public class ToolRegistry {
     }
     
     /**
+     * Get all registered tool entries.
+     */
+    public List<ToolEntry> getAllTools() {
+        return tools.values().stream().toList();
+    }
+    
+    /**
      * Get tool schema.
      */
     public Map<String, Object> getSchema(String name) {

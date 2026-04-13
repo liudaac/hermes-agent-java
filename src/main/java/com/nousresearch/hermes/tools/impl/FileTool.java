@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +27,7 @@ public class FileTool {
      */
     public static void register(ToolRegistry registry) {
         // read_file
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("read_file")
             .toolset("file_operations")
             .schema(Map.of(
@@ -55,7 +56,7 @@ public class FileTool {
             .build());
         
         // write_file
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("write_file")
             .toolset("file_operations")
             .schema(Map.of(
@@ -84,7 +85,7 @@ public class FileTool {
             .build());
         
         // search_files
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("search_files")
             .toolset("file_operations")
             .schema(Map.of(
@@ -109,7 +110,7 @@ public class FileTool {
             .build());
         
         // grep_files
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("grep_files")
             .toolset("file_operations")
             .schema(Map.of(

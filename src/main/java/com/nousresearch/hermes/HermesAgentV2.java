@@ -35,7 +35,7 @@ public class HermesAgentV2 {
         this.approvalSystem = new ApprovalSystem();
         
         // Initialize tool registry
-        this.toolRegistry = new ToolRegistry();
+        this.toolRegistry = ToolRegistry.getInstance();
         ToolInitializerV2.initializeAll(toolRegistry, approvalSystem);
         
         // Initialize session manager
@@ -147,7 +147,7 @@ public class HermesAgentV2 {
     private void listTools() {
         System.out.println("Available tools:");
         for (var tool : toolRegistry.getAllTools()) {
-            System.out.println("  " + tool.emoji() + " " + tool.name() + " - " + tool.description());
+            System.out.println("  " + tool.getEmoji() + " " + tool.getName() + " - " + tool.getDescription());
         }
     }
     

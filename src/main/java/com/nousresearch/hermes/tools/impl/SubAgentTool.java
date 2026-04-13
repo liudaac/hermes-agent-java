@@ -1,14 +1,17 @@
 package com.nousresearch.hermes.tools.impl;
 
 import com.nousresearch.hermes.agent.SubAgent;
+import com.nousresearch.hermes.agent.SubAgentResult;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Sub-agent delegation tools.
@@ -22,7 +25,7 @@ public class SubAgentTool {
      */
     public static void register(ToolRegistry registry) {
         // subagent_spawn
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("subagent_spawn")
             .toolset("subagents")
             .schema(Map.of(
@@ -47,7 +50,7 @@ public class SubAgentTool {
             .build());
         
         // subagent_spawn_parallel
-        registry.register(new ToolRegistry.Builder()
+        registry.register(new ToolEntry.Builder()
             .name("subagent_spawn_parallel")
             .toolset("subagents")
             .schema(Map.of(
@@ -95,7 +98,7 @@ public class SubAgentTool {
             // Create and run sub-agent
             HermesConfig config = HermesConfig.load();
             SubAgent agent = new SubAgent(task, context, config);
-            SubAgent.SubAgentResult result = agent.call();
+            SubAgentResult result = agent.call();
             
             return ToolRegistry.toolResult(Map.of(
                 "id", result.id,
@@ -137,20 +140,21 @@ public class SubAgentTool {
             HermesConfig config = HermesConfig.load();
             long timeoutMs = timeout * 1000L;
             
-            List<SubAgent.SubAgentResult> results = SubAgent.spawnParallel(tasks, context, config, timeoutMs);
+            List<SubAgentResult> results = SubAgent.spawnParallel(tasks, context, config, timeoutMs);
             
-            List<Map<String, Object>> formatted = results.stream()
-                .map(r -> Map.of(
-                    "id", r.id != null ? r.id : "unknown",
-                    "task", r.task != null ? r.task : "",
-                    "output", r.output != null ? r.output : "",
-                    "success", r.success,
-                    "completed", r.completed,
-                    "iterations", r.iterationsUsed,
-                    "duration_ms", r.durationMs,
-                    "error", r.error != null ? r.error : ""
-                ))
-                .collect(Collectors.toList());
+            List<Map<String, Object>> formatted = new ArrayList<>();
+            for (SubAgentResult r : results) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("id", r.id != null ? r.id : "unknown");
+                map.put("task", r.task != null ? r.task : "");
+                map.put("output", r.output != null ? r.output : "");
+                map.put("success", r.success);
+                map.put("completed", r.completed);
+                map.put("iterations", r.iterationsUsed);
+                map.put("duration_ms", r.durationMs);
+                map.put("error", r.error != null ? r.error : "");
+                formatted.add(map);
+            }
             
             long successCount = results.stream().filter(r -> r.success).count();
             
