@@ -60,7 +60,7 @@ public class JsonUtils {
      * Convert object to pretty JSON string.
      */
     public static String toJSONStringPretty(Object obj) {
-        return JSON.toJSONString(obj, true);
+        return JSON.toJSONString(obj, com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat);
     }
 
     /**
