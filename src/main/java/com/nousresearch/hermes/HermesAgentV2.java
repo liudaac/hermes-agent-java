@@ -1,5 +1,6 @@
 package com.nousresearch.hermes;
 
+import com.nousresearch.hermes.agent.AIAgent;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.config.ConfigManager;
 import com.nousresearch.hermes.config.HermesConfig;
@@ -167,8 +168,27 @@ public class HermesAgentV2 {
     }
     
     private void processMessage(String message) {
-        // This would integrate with AIAgent for processing
-        System.out.println("Processing: " + message);
+        try {
+            logger.info("Processing message: {}", message.substring(0, Math.min(50, message.length())));
+            
+            // Create AIAgent with current config
+            HermesConfig agentConfig = new HermesConfig(
+                config.getApiKey(),
+                config.getBaseUrl(),
+                config.getModelName()
+            );
+            AIAgent agent = new AIAgent(agentConfig);
+            
+            // Process the message and get response
+            String response = agent.processMessage(message);
+            
+            // Display the response
+            System.out.println("\n🤖 " + response + "\n");
+            
+        } catch (Exception e) {
+            logger.error("Failed to process message: {}", e.getMessage(), e);
+            System.out.println("❌ Error: " + e.getMessage());
+        }
     }
     
     public static void main(String[] args) {
