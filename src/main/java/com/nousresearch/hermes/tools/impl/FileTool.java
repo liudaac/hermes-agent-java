@@ -142,7 +142,7 @@ public class FileTool {
     /**
      * Read file contents.
      */
-    private static String readFile(Map<String, Object> args) {
+    public static String readFile(Map<String, Object> args) {
         String pathStr = (String) args.get("path");
         int offset = args.containsKey("offset") ? ((Number) args.get("offset")).intValue() : 1;
         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 1000;
@@ -186,7 +186,7 @@ public class FileTool {
     /**
      * Write file contents.
      */
-    private static String writeFile(Map<String, Object> args) {
+    public static String writeFile(Map<String, Object> args) {
         String pathStr = (String) args.get("path");
         String content = (String) args.get("content");
         boolean append = args.containsKey("append") && (Boolean) args.get("append");
@@ -227,7 +227,7 @@ public class FileTool {
     /**
      * Search files by pattern.
      */
-    private static String searchFiles(Map<String, Object> args) {
+    public static String searchFiles(Map<String, Object> args) {
         String pattern = (String) args.get("pattern");
         String pathStr = (String) args.getOrDefault("path", ".");
         
@@ -273,7 +273,7 @@ public class FileTool {
     /**
      * Grep files for pattern.
      */
-    private static String grepFiles(Map<String, Object> args) {
+    public static String grepFiles(Map<String, Object> args) {
         String pattern = (String) args.get("pattern");
         String pathStr = (String) args.get("path");
         String filePattern = (String) args.getOrDefault("file_pattern", "*");
@@ -346,6 +346,58 @@ public class FileTool {
         }
     }
     
+    /**
+     * List directory contents.
+     */
+    public static String listDirectory(Map<String, Object> args) {
+        String pathStr = (String) args.get("path");
+        
+        try {
+            Path dir = Paths.get(pathStr).toAbsolutePath().normalize();
+            
+            if (!isPathAllowed(dir)) {
+                return ToolRegistry.toolError("Access denied: " + dir);
+            }
+            
+            if (!Files.exists(dir)) {
+                return ToolRegistry.toolError("Directory not found: " + pathStr);
+            }
+            
+            if (!Files.isDirectory(dir)) {
+                return ToolRegistry.toolError("Not a directory: " + pathStr);
+            }
+            
+            List<Map<String, Object>> entries = new ArrayList<>();
+            
+            try (var stream = Files.list(dir)) {
+                stream.forEach(path -> {
+                    try {
+                        Map<String, Object> entry = new java.util.HashMap<>();
+                        entry.put("name", path.getFileName().toString());
+                        entry.put("path", path.toString());
+                        entry.put("is_directory", Files.isDirectory(path));
+                        entry.put("is_file", Files.isRegularFile(path));
+                        entry.put("size", Files.size(path));
+                        entry.put("last_modified", Files.getLastModifiedTime(path).toString());
+                        entries.add(entry);
+                    } catch (IOException e) {
+                        logger.debug("Could not read entry: {}", path);
+                    }
+                });
+            }
+            
+            return ToolRegistry.toolResult(Map.of(
+                "path", dir.toString(),
+                "entries", entries,
+                "count", entries.size()
+            ));
+            
+        } catch (Exception e) {
+            logger.error("List directory failed: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("List failed: " + e.getMessage());
+        }
+    }
+
     /**
      * Check if path is allowed.
      */
