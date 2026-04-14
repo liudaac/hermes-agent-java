@@ -4,10 +4,14 @@ import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.LoadState;
 import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,14 +20,25 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Browser automation tool with Playwright integration.
+ * Supports Chrome DevTools Protocol (CDP) for connecting to existing Chrome instances.
  */
 public class BrowserToolV2 {
     private static final Logger logger = LoggerFactory.getLogger(BrowserToolV2.class);
     private final Map<String, BrowserSession> sessions = new ConcurrentHashMap<>();
     private Playwright playwright;
+    private final OkHttpClient httpClient = new OkHttpClient.Builder()
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .build();
     
     // Screenshot storage directory
     private static final Path SCREENSHOTS_DIR = Paths.get(System.getProperty("user.home"), ".hermes", "cache", "screenshots");
+    
+    // Default CDP endpoint
+    private static final String DEFAULT_CDP_URL = "http://localhost:9222";
+    
+    // Environment variable for CDP URL override
+    private static final String BROWSER_CDP_URL_ENV = "BROWSER_CDP_URL";
     
     public BrowserToolV2() {
         try {
@@ -119,6 +134,25 @@ public class BrowserToolV2 {
                         "full", Map.of("type", "boolean", "default", false, "description", "Full snapshot or compact view")),
                     "required", List.of("session_id"))))
             .handler(this::getSnapshot).emoji("📋").build());
+        
+        // CDP Connect tool - connect to existing Chrome via CDP
+        registry.register(new ToolEntry.Builder()
+            .name("browser_cdp_connect").toolset("browser")
+            .schema(Map.of("description", "Connect to an existing Chrome instance via Chrome DevTools Protocol (CDP). Use this to control your local Chrome browser.",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of(
+                        "cdp_url", Map.of("type", "string", "description", "CDP endpoint URL (e.g., http://localhost:9222 or ws://host:port)", "default", "http://localhost:9222"),
+                        "headless", Map.of("type", "boolean", "default", false, "description", "Whether to run in headless mode")),
+                    "required", List.of()))) 
+            .handler(this::connectCDP).emoji("🔌").build());
+        
+        // CDP Status tool - check CDP connection status
+        registry.register(new ToolEntry.Builder()
+            .name("browser_cdp_status").toolset("browser")
+            .schema(Map.of("description", "Check Chrome DevTools Protocol connection status",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of())))
+            .handler(this::getCDPStatus).emoji("📡").build());
     }
     
     private String openUrl(Map<String, Object> args) {
@@ -170,6 +204,140 @@ public class BrowserToolV2 {
         BrowserSession session = sessions.remove(args.get("session_id"));
         if (session != null) session.close();
         return ToolRegistry.toolResult(Map.of("closed", true));
+    }
+    
+    /**
+     * Connect to Chrome via CDP (Chrome DevTools Protocol).
+     * Aligned with Python Hermes BROWSER_CDP_URL support.
+     */
+    private String connectCDP(Map<String, Object> args) {
+        if (playwright == null) return ToolRegistry.toolError("Playwright not available");
+        
+        String cdpUrl = args.containsKey("cdp_url") ? (String) args.get("cdp_url") : DEFAULT_CDP_URL;
+        
+        // Check environment variable override
+        String envCdpUrl = System.getenv(BROWSER_CDP_URL_ENV);
+        if (envCdpUrl != null && !envCdpUrl.isEmpty()) {
+            cdpUrl = envCdpUrl;
+            logger.info("Using CDP URL from environment: {}", cdpUrl);
+        }
+        
+        try {
+            // Resolve CDP endpoint (normalize ws:// to http:// for discovery)
+            String resolvedUrl = resolveCDPEndpoint(cdpUrl);
+            
+            // Connect via CDP
+            Browser browser = playwright.chromium().connectOverCDP(resolvedUrl);
+            BrowserContext context = browser.contexts().isEmpty() 
+                ? browser.newContext() 
+                : browser.contexts().get(0);
+            Page page = context.pages().isEmpty() 
+                ? context.newPage() 
+                : context.pages().get(0);
+            
+            String sessionId = UUID.randomUUID().toString();
+            BrowserSession session = new BrowserSession(sessionId, browser, page, true); // isCDP = true
+            sessions.put(sessionId, session);
+            
+            logger.info("Connected to Chrome via CDP: {}", resolvedUrl);
+            
+            return ToolRegistry.toolResult(Map.of(
+                "success", true,
+                "session_id", sessionId,
+                "cdp_url", resolvedUrl,
+                "url", page.url(),
+                "title", page.title(),
+                "message", "Connected to live Chrome via CDP. Use browser_navigate, browser_snapshot, browser_click as normal."
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Failed to connect via CDP: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Failed to connect via CDP: " + e.getMessage() + 
+                ". Make sure Chrome is running with --remote-debugging-port=9222");
+        }
+    }
+    
+    /**
+     * Get CDP connection status.
+     */
+    private String getCDPStatus(Map<String, Object> args) {
+        String envCdpUrl = System.getenv(BROWSER_CDP_URL_ENV);
+        
+        // Count CDP sessions
+        long cdpSessions = sessions.values().stream()
+            .filter(s -> s.isCDP)
+            .count();
+        
+        return ToolRegistry.toolResult(Map.of(
+            "cdp_available", playwright != null,
+            "environment_cdp_url", envCdpUrl != null ? envCdpUrl : "not set",
+            "default_cdp_url", DEFAULT_CDP_URL,
+            "active_cdp_sessions", cdpSessions,
+            "total_sessions", sessions.size()
+        ));
+    }
+    
+    /**
+     * Resolve CDP endpoint URL.
+     * Handles ws:// -> http:// conversion for discovery, and fetches webSocketDebuggerUrl.
+     */
+    private String resolveCDPEndpoint(String cdpUrl) {
+        if (cdpUrl == null || cdpUrl.isEmpty()) {
+            return DEFAULT_CDP_URL;
+        }
+        
+        String raw = cdpUrl.trim();
+        String lowered = raw.toLowerCase();
+        
+        // Already a WebSocket endpoint
+        if (lowered.contains("/devtools/browser/")) {
+            return raw;
+        }
+        
+        // Convert ws:// to http:// for discovery
+        String discoveryUrl = raw;
+        if (lowered.startsWith("ws://")) {
+            discoveryUrl = "http://" + raw.substring(5);
+        } else if (lowered.startsWith("wss://")) {
+            discoveryUrl = "https://" + raw.substring(6);
+        }
+        
+        // Add /json/version if not present
+        String versionUrl;
+        if (discoveryUrl.toLowerCase().endsWith("/json/version")) {
+            versionUrl = discoveryUrl;
+        } else {
+            versionUrl = discoveryUrl.replaceAll("/$", "") + "/json/version";
+        }
+        
+        // Try to discover WebSocket URL
+        try {
+            Request request = new Request.Builder()
+                .url(versionUrl)
+                .get()
+                .build();
+            
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String body = response.body().string();
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = 
+                        new com.fasterxml.jackson.databind.ObjectMapper();
+                    Map<String, Object> payload = mapper.readValue(body, Map.class);
+                    
+                    String wsUrl = (String) payload.get("webSocketDebuggerUrl");
+                    if (wsUrl != null && !wsUrl.isEmpty()) {
+                        logger.info("Resolved CDP endpoint {} -> {}", raw, wsUrl);
+                        return wsUrl;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to resolve CDP endpoint {} via {}: {}", raw, versionUrl, e.getMessage());
+        }
+        
+        // Fallback to raw URL
+        logger.warn("CDP discovery failed; using raw endpoint: {}", raw);
+        return raw;
     }
     
     /**
@@ -402,12 +570,30 @@ public class BrowserToolV2 {
         Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(headless));
         Page page = browser.newPage();
         page.navigate(url);
-        return new BrowserSession(UUID.randomUUID().toString(), browser, page);
+        return new BrowserSession(UUID.randomUUID().toString(), browser, page, false);
     }
     
-    record BrowserSession(String id, Browser browser, Page page) {
+    /**
+     * Browser session record.
+     * @param id Session ID
+     * @param browser Playwright Browser instance
+     * @param page Playwright Page instance
+     * @param isCDP Whether this session is connected via CDP (don't close browser on session close)
+     */
+    record BrowserSession(String id, Browser browser, Page page, boolean isCDP) {
         void close() {
-            browser.close();
+            if (isCDP) {
+                // For CDP sessions, only close the page/context, not the browser
+                // The browser is managed externally (user's Chrome)
+                try {
+                    page.close();
+                } catch (Exception e) {
+                    // Ignore
+                }
+            } else {
+                // For normal sessions, close the browser
+                browser.close();
+            }
         }
     }
 }
