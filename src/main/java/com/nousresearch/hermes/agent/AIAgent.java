@@ -379,92 +379,29 @@ public class AIAgent {
             case "/quit":
             case "/exit":
             case "exit":
-                return true;
-            case "/help":
-                printHelp();
-                break;
-            case "/clear":
-                conversationHistory.clear();
-                conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
-                System.out.println("[Conversation cleared]");
-                break;
-            case "/history":
-                printHistory();
-                break;
-            case "/tools":
-                printTools();
-                break;
-            default:
-                System.out.println("Unknown command: " + command);
-                System.out.println("Type /help for available commands");
-        }
+    private void buildToolDefinitions() {
+        toolDefinitions = new ArrayList<>();
         
-        return false;
-    }
-    
-    private void printHelp() {
-        System.out.println("\nAvailable commands:");
-        System.out.println("  /help     - Show this help");
-        System.out.println("  /clear    - Clear conversation history");
-        System.out.println("  /history  - Show conversation history");
-        System.out.println("  /tools    - List available tools");
-        System.out.println("  /quit     - Exit");
-        System.out.println();
-    }
-    
-    private void printHistory() {
-        System.out.println("\n--- Conversation History ---");
-        for (int i = 0; i < conversationHistory.size(); i++) {
-            ModelMessage msg = conversationHistory.get(i);
-            String content = msg.getContent();
-            if (content != null && !content.isEmpty()) {
-                System.out.println(i + ". [" + msg.getRole() + "]: " + 
-                    content.substring(0, Math.min(content.length(), 100)) + 
-                    (content.length() > 100 ? "..." : ""));
+        // Get all registered tools from ToolRegistry
+        Set<String> allToolNames = toolRegistry.getAllToolNames();
+        
+        for (String toolName : allToolNames) {
+            ToolEntry entry = toolRegistry.getTool(toolName);
+            if (entry != null) {
+                Map<String, Object> toolDef = Map.of(
+                    "type", "function",
+                    "function", Map.of(
+                        "name", entry.getName(),
+                        "description", entry.getDescription(),
+                        "parameters", entry.getParametersSchema()
+                    )
+                );
+                toolDefinitions.add(toolDef);
             }
         }
-        System.out.println("--- End of History ---\n");
-    }
-    
-    private void printTools() {
-        System.out.println("\n--- Available Tools ---");
-        for (Map<String, Object> tool : toolDefinitions) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> function = (Map<String, Object>) tool.get("function");
-            if (function != null) {
-                System.out.println("  - " + function.get("name"));
-            }
-        }
-        System.out.println("--- End of Tools ---\n");
-    }
-    
-    /**
-     * Interrupt the agent.
-     */
-    public void interrupt() {
-        interrupted.set(true);
-    }
-    
-    /**
-     * Process a single message and return the response.
-     * Used by gateway for webhook processing.
-     */
-    public String processMessage(String message) {
-        // Add system message if not present
-        if (conversationHistory.isEmpty()) {
-            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
-        }
         
-        // Process the message
-        processUserMessage(message);
-        
-        // Return the last assistant message
-        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
-            ModelMessage msg = conversationHistory.get(i);
-            if ("assistant".equals(msg.getRole())) {
-                return msg.getContent();
-            }
-        }
+        logger.debug("Initialized with {} tools from ToolRegistry", toolDefinitions.size());
+    }
         
         return "No response generated";
     }
