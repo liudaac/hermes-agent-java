@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.tools;
 
-import com.nousresearch.hermes.tools.impl.BrowserTool;
+import com.nousresearch.hermes.tools.impl.BrowserToolV2;
 import com.nousresearch.hermes.tools.impl.CodeTool;
 import com.nousresearch.hermes.tools.impl.FileTool;
 import com.nousresearch.hermes.tools.impl.GitTool;
@@ -62,7 +62,7 @@ public class ToolInitializer {
         
         // Register browser tools
         try {
-            BrowserTool.register(registry);
+            BrowserToolV2.register(registry);
             logger.debug("Registered browser tools");
         } catch (Exception e) {
             logger.warn("Failed to register browser tools: {}", e.getMessage());
