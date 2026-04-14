@@ -26,6 +26,7 @@ public class HermesAgentV2 {
     private final ToolRegistry toolRegistry;
     private final SessionManager sessionManager;
     private final GatewayServer gatewayServer;
+    private AIAgent interactiveAgent;  // Persistent agent for interactive mode
     
     public HermesAgentV2() throws Exception {
         // Load configuration
@@ -171,16 +172,19 @@ public class HermesAgentV2 {
         try {
             logger.info("Processing message: {}", message.substring(0, Math.min(50, message.length())));
             
-            // Create AIAgent with current config
-            HermesConfig agentConfig = new HermesConfig(
-                config.getApiKey(),
-                config.getBaseUrl(),
-                config.getModelName()
-            );
-            AIAgent agent = new AIAgent(agentConfig);
+            // Initialize persistent agent on first message
+            if (interactiveAgent == null) {
+                HermesConfig agentConfig = new HermesConfig(
+                    config.getApiKey(),
+                    config.getBaseUrl(),
+                    config.getModelName()
+                );
+                interactiveAgent = new AIAgent(agentConfig);
+                logger.info("Created persistent AIAgent for interactive mode");
+            }
             
             // Process the message and get response
-            String response = agent.processMessage(message);
+            String response = interactiveAgent.processMessage(message);
             
             // Display the response
             System.out.println("\n🤖 " + response + "\n");
