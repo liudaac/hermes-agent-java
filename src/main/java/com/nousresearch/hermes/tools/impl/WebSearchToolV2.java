@@ -51,7 +51,7 @@ public class WebSearchToolV2 {
             .name("web_search")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Search the web for information",
+                "description", "Search the web for information. Returns search results with titles, URLs, and snippets. Use this when you need to find information but don't have a specific URL. For extracting content from a known URL, prefer web_extract (faster, more detailed).",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
@@ -70,11 +70,11 @@ public class WebSearchToolV2 {
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Extract content from a web page",
+                "description", "Extract content from a web page. Returns the full text content of a webpage. This is the PREFERRED tool for simple information retrieval from a known URL - it's faster and cheaper than browser tools. Use browser tools (browser_navigate) only when you need to interact with a page (click, fill forms, dynamic content) or when web_extract fails to get the content.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
-                        "url", Map.of("type", "string", "description", "URL to extract"),
+                        "url", Map.of("type", "string", "description", "URL to extract content from"),
                         "backend", Map.of("type", "string", "enum", List.of("tavily", "exa", "firecrawl"))
                     ),
                     "required", List.of("url")

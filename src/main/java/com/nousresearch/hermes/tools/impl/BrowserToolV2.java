@@ -70,7 +70,7 @@ public class BrowserToolV2 {
         
         registry.register(new ToolEntry.Builder()
             .name("browser_click").toolset("browser")
-            .schema(Map.of("description", "Click an element",
+            .schema(Map.of("description", "Click on an element identified by its ref ID from the snapshot (e.g., '@e5'). The ref IDs are shown in square brackets in the snapshot output. Requires browser_navigate and browser_snapshot to be called first.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("session_id", Map.of("type", "string"), "selector", Map.of("type", "string")),
                     "required", List.of("session_id", "selector"))))
@@ -78,7 +78,7 @@ public class BrowserToolV2 {
         
         registry.register(new ToolEntry.Builder()
             .name("browser_type").toolset("browser")
-            .schema(Map.of("description", "Type text",
+            .schema(Map.of("description", "Type text into an input field identified by its ref ID. Clears the field first, then types the new text. Requires browser_navigate and browser_snapshot to be called first.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("session_id", Map.of("type", "string"), "selector", Map.of("type", "string"), "text", Map.of("type", "string")),
                     "required", List.of("session_id", "selector", "text"))))
@@ -103,7 +103,7 @@ public class BrowserToolV2 {
         // Screenshot tool - aligned with original Hermes browser_vision
         registry.register(new ToolEntry.Builder()
             .name("browser_screenshot").toolset("browser")
-            .schema(Map.of("description", "Take a screenshot of the current page",
+            .schema(Map.of("description", "Take a screenshot of the current page and save it to disk. Use this when you need to visually capture what's on the page - especially useful for CAPTCHAs, visual verification challenges, complex layouts, or when the text snapshot doesn't capture important visual information. Returns the screenshot_path that you can reference. Requires browser_navigate to be called first.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "session_id", Map.of("type", "string", "description", "Browser session ID"),
@@ -116,7 +116,7 @@ public class BrowserToolV2 {
         // Navigate tool - aligned with original Hermes browser_navigate
         registry.register(new ToolEntry.Builder()
             .name("browser_navigate").toolset("browser")
-            .schema(Map.of("description", "Navigate to a URL and return page snapshot with interactive elements",
+            .schema(Map.of("description", "Navigate to a URL in the browser. Initializes the session and loads the page. Must be called before other browser tools. IMPORTANT: For simple information retrieval, prefer web_search or web_extract (faster, cheaper). Use browser tools only when you need to interact with a page (click, fill forms, dynamic content) or when web_extract fails. Returns a compact page snapshot with interactive elements and ref IDs — no need to call browser_snapshot separately after navigating.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "url", Map.of("type", "string", "description", "URL to navigate to"),
@@ -127,7 +127,7 @@ public class BrowserToolV2 {
         // Snapshot tool - aligned with original Hermes browser_snapshot
         registry.register(new ToolEntry.Builder()
             .name("browser_snapshot").toolset("browser")
-            .schema(Map.of("description", "Get accessibility tree snapshot of current page with element refs",
+            .schema(Map.of("description", "Get a text-based snapshot of the current page's accessibility tree. Returns interactive elements with ref IDs (like @e1, @e2) for browser_click and browser_type. full=false (default): compact view with interactive elements. full=true: complete page content. Snapshots over 8000 chars are truncated. Requires browser_navigate first. Note: browser_navigate already returns a compact snapshot — use this to refresh after interactions that change the page, or with full=true for complete content.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "session_id", Map.of("type", "string", "description", "Browser session ID"),
