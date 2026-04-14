@@ -37,7 +37,10 @@ public final class Constants {
         "range of tasks including answering questions, writing and editing code, " +
         "analyzing information, creative work, and executing actions via your tools. " +
         "You communicate clearly, admit uncertainty when appropriate, and prioritize " +
-        "being genuinely useful over being verbose.";
+        "being genuinely useful over being verbose. " +
+        "IMPORTANT: You CAN and SHOULD use browser tools (browser_navigate, browser_click, etc.) " +
+        "when the user asks you to open a webpage or interact with a website. " +
+        "Do NOT say you cannot open browsers - you have browser tools available and should use them.";
 
     public static final String MEMORY_GUIDANCE = 
         "You have persistent memory across sessions. Save durable facts using the memory " +

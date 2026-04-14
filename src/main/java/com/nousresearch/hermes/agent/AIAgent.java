@@ -233,6 +233,8 @@ public class AIAgent {
                     String content = assistantMessage.getContent();
                     if (content != null && !content.isEmpty()) {
                         System.out.println("\nAssistant: " + content);
+                    } else if (content == null) {
+                        System.out.println("\n[Assistant returned empty response]");
                     }
                     continueLoop = false;
                 }
