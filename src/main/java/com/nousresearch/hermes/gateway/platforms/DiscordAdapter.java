@@ -1,9 +1,8 @@
 package com.nousresearch.hermes.gateway.platforms;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -16,9 +15,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(DiscordAdapter.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     private static final String API_BASE = "https://discord.com/api/v10";
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
     private final OkHttpClient httpClient;
     private final String botToken;
@@ -42,39 +40,38 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JsonNode payload) {
+    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
         try {
             // Handle ping
-            if (payload.path("type").asInt() == 1) {
+            if (payload.getIntValue("type") == 1) {
                 return null;
             }
             
             // Handle application commands
-            if (payload.path("type").asInt() == 2) {
-                JsonNode data = payload.path("data");
-                String content = "/" + data.path("name").asText();
+            if (payload.getIntValue("type") == 2) {
+                JSONObject data = payload.getJSONObject("data");
+                String content = "/" + data.getString("name");
                 
                 return new GatewayServer.IncomingMessage(
-                    payload.path("id").asText(),
-                    payload.path("channel_id").asText(),
-                    payload.path("member").path("user").path("id").asText(),
+                    payload.getString("id"),
+                    payload.getString("channel_id"),
+                    payload.getJSONObject("member").getJSONObject("user").getString("id"),
                     content,
                     System.currentTimeMillis(),
-                    payload.has("guild_id")
+                    payload.containsKey("guild_id")
                 );
             }
             
             // Handle messages
-            JsonNode message = payload;
-            String content = message.path("content").asText();
+            String content = payload.getString("content");
             
             return new GatewayServer.IncomingMessage(
-                message.path("id").asText(),
-                message.path("channel_id").asText(),
-                message.path("author").path("id").asText(),
+                payload.getString("id"),
+                payload.getString("channel_id"),
+                payload.getJSONObject("author").getString("id"),
                 content,
                 System.currentTimeMillis(),
-                message.has("guild_id")
+                payload.containsKey("guild_id")
             );
             
         } catch (Exception e) {
@@ -85,12 +82,12 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
     
     @Override
     public void sendMessage(String channel, String content) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("content", content);
         
         Request request = new Request.Builder()
             .url(API_BASE + "/channels/" + channel + "/messages")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Authorization", "Bot " + botToken)
             .header("Content-Type", "application/json")
             .build();
@@ -104,16 +101,16 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
     
     @Override
     public void sendReply(String channel, String messageId, String content) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("content", content);
         
-        ObjectNode reference = mapper.createObjectNode();
+        JSONObject reference = new JSONObject();
         reference.put("message_id", messageId);
-        body.set("message_reference", reference);
+        body.put("message_reference", reference);
         
         Request request = new Request.Builder()
             .url(API_BASE + "/channels/" + channel + "/messages")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Authorization", "Bot " + botToken)
             .header("Content-Type", "application/json")
             .build();
@@ -129,20 +126,20 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
      * Send embed message.
      */
     public void sendEmbed(String channel, String title, String description, int color) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         
-        ObjectNode embed = mapper.createObjectNode();
+        JSONObject embed = new JSONObject();
         embed.put("title", title);
         embed.put("description", description);
         embed.put("color", color);
         
-        ArrayNode embeds = mapper.createArrayNode();
+        JSONArray embeds = new JSONArray();
         embeds.add(embed);
-        body.set("embeds", embeds);
+        body.put("embeds", embeds);
         
         Request request = new Request.Builder()
             .url(API_BASE + "/channels/" + channel + "/messages")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Authorization", "Bot " + botToken)
             .build();
         
@@ -158,16 +155,16 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
      */
     public void createInteractionResponse(String interactionId, String interactionToken, 
                                          String content) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("type", 4); // Channel message with source
         
-        ObjectNode data = mapper.createObjectNode();
+        JSONObject data = new JSONObject();
         data.put("content", content);
-        body.set("data", data);
+        body.put("data", data);
         
         Request request = new Request.Builder()
             .url(API_BASE + "/interactions/" + interactionId + "/" + interactionToken + "/callback")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Content-Type", "application/json")
             .build();
         

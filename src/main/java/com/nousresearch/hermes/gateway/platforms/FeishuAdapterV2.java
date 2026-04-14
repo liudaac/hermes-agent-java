@@ -1,8 +1,7 @@
 package com.nousresearch.hermes.gateway.platforms;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSON;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -15,9 +14,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(FeishuAdapterV2.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     private static final String API_BASE = "https://open.feishu.cn/open-apis";
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
     private final OkHttpClient httpClient;
     private final String appId;
@@ -41,30 +39,35 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JsonNode payload) {
+    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
         try {
-            if (payload.has("challenge")) {
+            if (payload.containsKey("challenge")) {
                 return null;
             }
             
-            JsonNode event = payload.path("event");
-            if (event.isMissingNode()) return null;
+            JSONObject event = payload.getJSONObject("event");
+            if (event == null) return null;
             
-            String messageType = event.path("message_type").asText();
-            String content = event.path("content").asText();
+            String messageType = event.getString("message_type");
+            String content = event.getString("content");
             
             if ("text".equals(messageType)) {
-                JsonNode contentNode = mapper.readTree(content);
-                content = contentNode.path("text").asText();
+                JSONObject contentNode = JSON.parseObject(content);
+                content = contentNode.getString("text");
             }
             
+            JSONObject sender = event.getJSONObject("sender");
+            String senderId = sender != null && sender.getJSONObject("sender_id") != null 
+                ? sender.getJSONObject("sender_id").getString("open_id") 
+                : "";
+            
             return new GatewayServer.IncomingMessage(
-                event.path("message_id").asText(),
-                event.path("chat_id").asText(),
-                event.path("sender").path("sender_id").path("open_id").asText(),
+                event.getString("message_id"),
+                event.getString("chat_id"),
+                senderId,
                 content,
                 System.currentTimeMillis(),
-                "group".equals(event.path("chat_type").asText())
+                "group".equals(event.getString("chat_type"))
             );
         } catch (Exception e) {
             logger.error("Parse error: {}", e.getMessage());
@@ -76,17 +79,17 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
     public void sendMessage(String channel, String content) throws Exception {
         ensureToken();
         
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("receive_id", channel);
         
-        ObjectNode contentNode = mapper.createObjectNode();
+        JSONObject contentNode = new JSONObject();
         contentNode.put("text", content);
         body.put("content", contentNode.toString());
         body.put("msg_type", "text");
         
         Request request = new Request.Builder()
             .url(API_BASE + "/im/v1/messages?receive_id_type=chat_id")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Authorization", "Bearer " + accessToken)
             .build();
         
@@ -101,15 +104,15 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
     public void sendReply(String channel, String messageId, String content) throws Exception {
         ensureToken();
         
-        ObjectNode body = mapper.createObjectNode();
-        ObjectNode contentNode = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
+        JSONObject contentNode = new JSONObject();
         contentNode.put("text", content);
         body.put("content", contentNode.toString());
         body.put("msg_type", "text");
         
         Request request = new Request.Builder()
             .url(API_BASE + "/im/v1/messages/" + messageId + "/reply")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .header("Authorization", "Bearer " + accessToken)
             .build();
         
@@ -125,19 +128,19 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
             return;
         }
         
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("app_id", appId);
         body.put("app_secret", appSecret);
         
         Request request = new Request.Builder()
             .url(API_BASE + "/auth/v3/tenant_access_token/internal")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
-            JsonNode result = mapper.readTree(response.body().string());
-            accessToken = result.path("tenant_access_token").asText();
-            tokenExpiry = System.currentTimeMillis() + (result.path("expire").asInt(7200) * 1000L);
+            JSONObject result = JSON.parseObject(response.body().string());
+            accessToken = result.getString("tenant_access_token");
+            tokenExpiry = System.currentTimeMillis() + (result.getIntValue("expire", 7200) * 1000L);
         }
     }
 }

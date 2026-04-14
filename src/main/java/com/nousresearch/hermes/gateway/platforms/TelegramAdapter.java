@@ -1,8 +1,6 @@
 package com.nousresearch.hermes.gateway.platforms;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -16,9 +14,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(TelegramAdapter.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     private static final String API_BASE = "https://api.telegram.org/bot";
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
     private final OkHttpClient httpClient;
     private final String botToken;
@@ -44,32 +41,33 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JsonNode payload) {
+    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
         try {
-            JsonNode message = payload.path("message");
-            if (message.isMissingNode()) {
-                message = payload.path("edited_message");
+            JSONObject message = payload.getJSONObject("message");
+            if (message == null) {
+                message = payload.getJSONObject("edited_message");
             }
-            if (message.isMissingNode()) {
+            if (message == null) {
                 return null;
             }
             
-            String text = message.path("text").asText();
-            if (text.isEmpty()) {
-                text = message.path("caption").asText();
+            String text = message.getString("text");
+            if (text == null || text.isEmpty()) {
+                text = message.getString("caption");
             }
             
-            JsonNode chat = message.path("chat");
-            JsonNode from = message.path("from");
+            JSONObject chat = message.getJSONObject("chat");
+            JSONObject from = message.getJSONObject("from");
+            
+            String chatType = chat != null ? chat.getString("type") : "";
             
             return new GatewayServer.IncomingMessage(
-                String.valueOf(message.path("message_id").asLong()),
-                String.valueOf(chat.path("id").asLong()),
-                String.valueOf(from.path("id").asLong()),
+                String.valueOf(message.getLongValue("message_id")),
+                String.valueOf(chat != null ? chat.getLongValue("id") : 0),
+                String.valueOf(from != null ? from.getLongValue("id") : 0),
                 text,
                 System.currentTimeMillis(),
-                "group".equals(chat.path("type").asText()) || 
-                "supergroup".equals(chat.path("type").asText())
+                "group".equals(chatType) || "supergroup".equals(chatType)
             );
             
         } catch (Exception e) {
@@ -80,7 +78,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     
     @Override
     public void sendMessage(String channel, String content) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("chat_id", channel);
         body.put("text", content);
         body.put("parse_mode", "Markdown");
@@ -88,7 +86,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
         
         Request request = new Request.Builder()
             .url(apiUrl + "/sendMessage")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
@@ -100,7 +98,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     
     @Override
     public void sendReply(String channel, String messageId, String content) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("chat_id", channel);
         body.put("text", content);
         body.put("reply_to_message_id", Integer.parseInt(messageId));
@@ -108,7 +106,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
         
         Request request = new Request.Builder()
             .url(apiUrl + "/sendMessage")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
@@ -121,16 +119,16 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     /**
      * Send message with inline keyboard.
      */
-    public void sendMessageWithButtons(String channel, String text, JsonNode buttons) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+    public void sendMessageWithButtons(String channel, String text, JSONObject buttons) throws Exception {
+        JSONObject body = new JSONObject();
         body.put("chat_id", channel);
         body.put("text", text);
         body.put("parse_mode", "Markdown");
-        body.set("reply_markup", buttons);
+        body.put("reply_markup", buttons);
         
         Request request = new Request.Builder()
             .url(apiUrl + "/sendMessage")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
@@ -144,7 +142,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
      * Edit message.
      */
     public void editMessage(String channel, String messageId, String newText) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("chat_id", channel);
         body.put("message_id", Integer.parseInt(messageId));
         body.put("text", newText);
@@ -152,7 +150,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
         
         Request request = new Request.Builder()
             .url(apiUrl + "/editMessageText")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
@@ -166,17 +164,17 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
      * Set webhook.
      */
     public boolean setWebhook(String webhookUrl) throws Exception {
-        ObjectNode body = mapper.createObjectNode();
+        JSONObject body = new JSONObject();
         body.put("url", webhookUrl);
         
         Request request = new Request.Builder()
             .url(apiUrl + "/setWebhook")
-            .post(RequestBody.create(body.toString(), JSON))
+            .post(RequestBody.create(body.toString(), JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
-            JsonNode result = mapper.readTree(response.body().string());
-            return result.path("ok").asBoolean();
+            JSONObject result = com.alibaba.fastjson2.JSON.parseObject(response.body().string());
+            return result.getBooleanValue("ok");
         }
     }
     
@@ -186,12 +184,12 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     public boolean deleteWebhook() throws Exception {
         Request request = new Request.Builder()
             .url(apiUrl + "/deleteWebhook")
-            .post(RequestBody.create("{}", JSON))
+            .post(RequestBody.create("{}", JSON_MEDIA_TYPE))
             .build();
         
         try (Response response = httpClient.newCall(request).execute()) {
-            JsonNode result = mapper.readTree(response.body().string());
-            return result.path("ok").asBoolean();
+            JSONObject result = com.alibaba.fastjson2.JSON.parseObject(response.body().string());
+            return result.getBooleanValue("ok");
         }
     }
     

@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.gateway.platforms;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.AIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import okhttp3.*;
@@ -22,8 +22,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(FeishuAdapter.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     private static final String BASE_URL = "https://open.feishu.cn/open-apis";
     
     private final HermesConfig config;
@@ -92,14 +91,14 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     public void sendMessage(String chatId, String message) throws Exception {
         ensureTokenValid();
         
-        Map<String, Object> requestBody = Map.of(
-            "receive_id", chatId,
-            "content", Map.of("text", message),
-            "msg_type", "text"
-        );
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("receive_id", chatId);
+        JSONObject content = new JSONObject();
+        content.put("text", message);
+        requestBody.put("content", content.toString());
+        requestBody.put("msg_type", "text");
         
-        String json = mapper.writeValueAsString(requestBody);
-        RequestBody body = RequestBody.create(json, JSON);
+        RequestBody body = RequestBody.create(requestBody.toString(), JSON_MEDIA_TYPE);
         
         Request request = new Request.Builder()
             .url(BASE_URL + "/im/v1/messages?receive_id_type=chat_id")
@@ -129,12 +128,12 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
      */
     public void handleEvent(String eventData) {
         try {
-            JsonNode event = mapper.readTree(eventData);
-            String eventType = event.path("header").path("event_type").asText();
+            JSONObject event = JSON.parseObject(eventData);
+            String eventType = event.getJSONObject("header").getString("event_type");
             
             switch (eventType) {
                 case "im.message.receive_v1":
-                    handleMessage(event.path("event"));
+                    handleMessage(event.getJSONObject("event"));
                     break;
                 case "url_verification":
                     // Handle challenge
@@ -151,22 +150,22 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     /**
      * Handle incoming message.
      */
-    private void handleMessage(JsonNode event) {
+    private void handleMessage(JSONObject event) {
         try {
-            String messageType = event.path("message").path("message_type").asText();
+            String messageType = event.getJSONObject("message").getString("message_type");
             
             if (!"text".equals(messageType)) {
                 logger.debug("Ignoring non-text message");
                 return;
             }
             
-            String chatId = event.path("message").path("chat_id").asText();
-            String sender = event.path("sender").path("sender_id").path("open_id").asText();
-            String content = event.path("message").path("content").asText();
+            String chatId = event.getJSONObject("message").getString("chat_id");
+            String sender = event.getJSONObject("sender").getJSONObject("sender_id").getString("open_id");
+            String content = event.getJSONObject("message").getString("content");
             
             // Parse content JSON
-            JsonNode contentNode = mapper.readTree(content);
-            String text = contentNode.path("text").asText();
+            JSONObject contentNode = JSON.parseObject(content);
+            String text = contentNode.getString("text");
             
             logger.info("Received message from {}: {}", sender, text);
             
@@ -215,13 +214,11 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
      * Refresh tenant access token.
      */
     private void refreshToken() throws Exception {
-        Map<String, Object> requestBody = Map.of(
-            "app_id", appId,
-            "app_secret", appSecret
-        );
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("app_id", appId);
+        requestBody.put("app_secret", appSecret);
         
-        String json = mapper.writeValueAsString(requestBody);
-        RequestBody body = RequestBody.create(json, JSON);
+        RequestBody body = RequestBody.create(requestBody.toString(), JSON_MEDIA_TYPE);
         
         Request request = new Request.Builder()
             .url(BASE_URL + "/auth/v3/tenant_access_token/internal")
@@ -234,9 +231,9 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
                 throw new IOException("Failed to get token: " + response.code());
             }
             
-            JsonNode result = mapper.readTree(response.body().string());
-            tenantAccessToken = result.path("tenant_access_token").asText();
-            int expire = result.path("expire").asInt(7200);
+            JSONObject result = JSON.parseObject(response.body().string());
+            tenantAccessToken = result.getString("tenant_access_token");
+            int expire = result.getIntValue("expire", 7200);
             tokenExpiry = System.currentTimeMillis() + (expire - 300) * 1000L;
             
             logger.debug("Token refreshed, expires in {} seconds", expire);
@@ -257,27 +254,27 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     }
     
     @Override
-    public com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage parseWebhook(JsonNode payload) {
+    public com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
         try {
-            JsonNode event = payload.path("event");
-            if (event.isMissingNode()) {
+            JSONObject event = payload.getJSONObject("event");
+            if (event == null) {
                 return null;
             }
             
-            String eventType = event.path("type").asText();
+            String eventType = event.getString("type");
             if (!"im.message.receive_v1".equals(eventType)) {
                 return null;
             }
             
-            JsonNode message = event.path("message");
-            String messageId = message.path("message_id").asText();
-            String chatId = message.path("chat_id").asText();
-            String sender = message.path("sender").path("sender_id").path("open_id").asText();
-            String content = message.path("content").asText();
+            JSONObject message = event.getJSONObject("message");
+            String messageId = message.getString("message_id");
+            String chatId = message.getString("chat_id");
+            String sender = message.getJSONObject("sender").getJSONObject("sender_id").getString("open_id");
+            String content = message.getString("content");
             
             // Parse content (it's a JSON string)
-            JsonNode contentNode = mapper.readTree(content);
-            String text = contentNode.path("text").asText();
+            JSONObject contentNode = JSON.parseObject(content);
+            String text = contentNode.getString("text");
             
             return new com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage(
                 messageId, chatId, sender, text, System.currentTimeMillis(), false
