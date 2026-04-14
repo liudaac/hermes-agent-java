@@ -1,13 +1,15 @@
 package com.nousresearch.hermes.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.config.HermesConfig;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -18,8 +20,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class ModelClient {
     private static final Logger logger = LoggerFactory.getLogger(ModelClient.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
     private final HermesConfig config;
     private final OkHttpClient httpClient;
@@ -46,17 +47,15 @@ public class ModelClient {
         String model = config.getCurrentModel();
         
         // Build request body
-        Map<String, Object> requestBody = Map.of(
-            "model", model,
-            "messages", messages,
-            "tools", tools != null ? tools : List.of(),
-            "stream", stream,
-            "temperature", 0.7,
-            "max_tokens", 4096
-        );
+        JSONObject requestBody = new JSONObject();
+        requestBody.put("model", model);
+        requestBody.put("messages", messages);
+        requestBody.put("tools", tools != null ? tools : List.of());
+        requestBody.put("stream", stream);
+        requestBody.put("temperature", 0.7);
+        requestBody.put("max_tokens", 4096);
         
-        String json = mapper.writeValueAsString(requestBody);
-        RequestBody body = RequestBody.create(json, JSON);
+        RequestBody body = RequestBody.create(requestBody.toString(), JSON_MEDIA_TYPE);
         
         Request.Builder requestBuilder = new Request.Builder()
             .url(baseUrl + "/chat/completions")
@@ -83,7 +82,7 @@ public class ModelClient {
             }
             
             String responseBody = response.body().string();
-            JsonNode root = mapper.readTree(responseBody);
+            JSONObject root = JSON.parseObject(responseBody);
             
             return parseCompletionResponse(root);
         }
@@ -92,43 +91,57 @@ public class ModelClient {
     /**
      * Parse the completion response.
      */
-    private ChatCompletionResponse parseCompletionResponse(JsonNode root) {
+    private ChatCompletionResponse parseCompletionResponse(JSONObject root) {
         ChatCompletionResponse result = new ChatCompletionResponse();
         
-        JsonNode choices = root.get("choices");
-        if (choices != null && choices.isArray() && choices.size() > 0) {
-            JsonNode firstChoice = choices.get(0);
-            JsonNode message = firstChoice.get("message");
+        JSONArray choices = root.getJSONArray("choices");
+        if (choices != null && choices.size() > 0) {
+            JSONObject firstChoice = choices.getJSONObject(0);
+            JSONObject message = firstChoice.getJSONObject("message");
             
             if (message != null) {
                 ModelMessage msg = new ModelMessage();
-                msg.setRole(message.get("role").asText());
+                msg.setRole(message.getString("role"));
                 
-                if (message.has("content") && !message.get("content").isNull()) {
-                    msg.setContent(message.get("content").asText());
+                if (message.containsKey("content") && message.get("content") != null) {
+                    msg.setContent(message.getString("content"));
                 }
                 
                 // Parse tool calls
-                if (message.has("tool_calls") && message.get("tool_calls").isArray()) {
-                    List<ToolCall> toolCalls = mapper.convertValue(
-                        message.get("tool_calls"),
-                        mapper.getTypeFactory().constructCollectionType(List.class, ToolCall.class)
-                    );
-                    msg.setToolCalls(toolCalls);
+                if (message.containsKey("tool_calls")) {
+                    JSONArray toolCallsArray = message.getJSONArray("tool_calls");
+                    if (toolCallsArray != null) {
+                        List<ToolCall> toolCalls = new ArrayList<>();
+                        for (int i = 0; i < toolCallsArray.size(); i++) {
+                            JSONObject tc = toolCallsArray.getJSONObject(i);
+                            ToolCall toolCall = new ToolCall();
+                            toolCall.setId(tc.getString("id"));
+                            toolCall.setType(tc.getString("type"));
+                            JSONObject functionObj = tc.getJSONObject("function");
+                            if (functionObj != null) {
+                                ToolCall.Function function = new ToolCall.Function();
+                                function.setName(functionObj.getString("name"));
+                                function.setArguments(functionObj.getString("arguments"));
+                                toolCall.setFunction(function);
+                            }
+                            toolCalls.add(toolCall);
+                        }
+                        msg.setToolCalls(toolCalls);
+                    }
                 }
                 
                 result.setMessage(msg);
-                result.setFinishReason(firstChoice.get("finish_reason").asText());
+                result.setFinishReason(firstChoice.getString("finish_reason"));
             }
         }
         
         // Parse usage
-        if (root.has("usage")) {
-            JsonNode usage = root.get("usage");
+        if (root.containsKey("usage")) {
+            JSONObject usage = root.getJSONObject("usage");
             Usage usageInfo = new Usage();
-            usageInfo.setPromptTokens(usage.get("prompt_tokens").asInt());
-            usageInfo.setCompletionTokens(usage.get("completion_tokens").asInt());
-            usageInfo.setTotalTokens(usage.get("total_tokens").asInt());
+            usageInfo.setPromptTokens(usage.getIntValue("prompt_tokens"));
+            usageInfo.setCompletionTokens(usage.getIntValue("completion_tokens"));
+            usageInfo.setTotalTokens(usage.getIntValue("total_tokens"));
             result.setUsage(usageInfo);
         }
         
