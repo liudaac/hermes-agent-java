@@ -315,14 +315,35 @@ public class AIAgent {
      */
     private String buildSystemPrompt() {
         StringBuilder prompt = new StringBuilder();
+        
+        // Agent identity
         prompt.append(Constants.DEFAULT_AGENT_IDENTITY).append("\n\n");
+        
+        // Memory guidance
         prompt.append(Constants.MEMORY_GUIDANCE).append("\n\n");
+        
+        // Tool enforcement - CRITICAL for proper tool usage
         prompt.append(Constants.TOOL_USE_ENFORCEMENT_GUIDANCE).append("\n\n");
+        
+        // Execution discipline - CRITICAL for correct behavior
+        prompt.append(Constants.EXECUTION_DISCIPLINE_GUIDANCE).append("\n\n");
+        
+        // Session search guidance
+        prompt.append(Constants.SESSION_SEARCH_GUIDANCE).append("\n\n");
+        
+        // Skills guidance
+        prompt.append(Constants.SKILLS_GUIDANCE).append("\n\n");
+        
+        // Platform hint (CLI mode)
+        String platformHint = Constants.PLATFORM_HINTS.get("cli");
+        if (platformHint != null) {
+            prompt.append(platformHint).append("\n\n");
+        }
         
         // Add memory context
         String memoryContext = memoryManager.getSystemPromptSnapshot();
         if (!memoryContext.isEmpty()) {
-            prompt.append(memoryContext).append("\n");
+            prompt.append(memoryContext).append("\n\n");
         }
         
         // Add available tools info
@@ -333,7 +354,12 @@ public class AIAgent {
             if (function != null) {
                 prompt.append("- ").append(function.get("name"));
                 if (function.containsKey("description")) {
-                    prompt.append(": ").append(function.get("description"));
+                    String desc = (String) function.get("description");
+                    // Truncate long descriptions
+                    if (desc.length() > 200) {
+                        desc = desc.substring(0, 200) + "...";
+                    }
+                    prompt.append(": ").append(desc);
                 }
                 prompt.append("\n");
             }
