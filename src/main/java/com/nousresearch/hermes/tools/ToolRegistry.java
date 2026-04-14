@@ -53,6 +53,13 @@ public class ToolRegistry {
 
     /**
      * Get all registered tools.
+    /**
+     * Get all registered tools.
+     */
+    public Map<String, ToolEntry> getAllTools() {
+        return new HashMap<>(tools);
+    }
+
      */
     public Map<String, ToolEntry> getAllTools() {
         return new HashMap<>(tools);
