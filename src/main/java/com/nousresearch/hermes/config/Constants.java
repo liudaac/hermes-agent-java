@@ -134,7 +134,6 @@ public final class Constants {
     // Session and Skills Guidance
     // =========================================================================
     
-    public static final String
     public static final String SESSION_SEARCH_GUIDANCE = 
         "When the user references something from a past conversation or you suspect " +
         "relevant cross-session context exists, use session_search to recall it before " +
