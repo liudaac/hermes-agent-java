@@ -70,7 +70,7 @@ public class WebSearchToolV2 {
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Extract content from web page URLs. Returns page content in markdown format. Also works with PDF URLs (arxiv papers, documents, etc.) — pass the PDF link directly and it converts to markdown text. Pages under 5000 chars return full markdown; larger pages are LLM-summarized and capped at ~5000 chars per page. Pages over 2M chars are refused. If a URL fails or times out, use the browser tool to access it instead.",
+                "description", "Extract content from web page URLs. Returns page content in markdown format. For simple information retrieval from a known URL, this is the PREFERRED tool - it's faster and cheaper than browser tools. Also works with PDF URLs. If extraction fails or the page requires interaction, use browser_navigate instead.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
