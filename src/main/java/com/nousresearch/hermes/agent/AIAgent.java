@@ -31,9 +31,14 @@ public class AIAgent {
     private final MemoryManager memoryManager;
     private final List<ModelMessage> conversationHistory;
     private final AtomicBoolean interrupted;
+    private final com.nousresearch.hermes.gateway.SessionManager sessionManager;
+    private final String sessionId;
     
     // Tool definitions cache
     private List<Map<String, Object>> toolDefinitions;
+    
+    // Auto-save settings
+    private static final int AUTO_SAVE_INTERVAL = 5; // Save every 5 messages
     
     public AIAgent(HermesConfig config) {
         this.config = config;
@@ -43,6 +48,30 @@ public class AIAgent {
         this.memoryManager = new MemoryManager();
         this.conversationHistory = new ArrayList<>();
         this.interrupted = new AtomicBoolean(false);
+        this.sessionManager = new com.nousresearch.hermes.gateway.SessionManager(
+            Constants.getHermesHome().resolve("memory")
+        );
+        this.sessionId = "cli_" + UUID.randomUUID().toString().substring(0, 8);
+        
+        // Initialize tools
+        initializeTools();
+    }
+    
+    /**
+     * Constructor with session ID for gateway mode.
+     */
+    public AIAgent(HermesConfig config, String sessionId) {
+        this.config = config;
+        this.modelClient = new ModelClient(config);
+        this.toolRegistry = ToolRegistry.getInstance();
+        this.iterationBudget = new IterationBudget(config.getMaxTurns());
+        this.memoryManager = new MemoryManager();
+        this.conversationHistory = new ArrayList<>();
+        this.interrupted = new AtomicBoolean(false);
+        this.sessionManager = new com.nousresearch.hermes.gateway.SessionManager(
+            Constants.getHermesHome().resolve("memory")
+        );
+        this.sessionId = sessionId;
         
         // Initialize tools
         initializeTools();
@@ -150,6 +179,9 @@ public class AIAgent {
         // Add user message to history
         conversationHistory.add(ModelMessage.user(userInput));
         
+        // Auto-save session periodically
+        autoSaveSession();
+        
         // Conversation loop
         boolean continueLoop = true;
         while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
@@ -174,6 +206,9 @@ public class AIAgent {
                 
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
+                
+                // Auto-save after each assistant response
+                autoSaveSession();
                 
                 // Check for tool calls
                 if (response.hasToolCalls()) {
@@ -213,6 +248,40 @@ public class AIAgent {
                 break;
             }
         }
+        
+        // Final save after conversation
+        persistSession();
+    }
+    
+    /**
+     * Auto-save session periodically.
+     */
+    private void autoSaveSession() {
+        if (conversationHistory.size() % AUTO_SAVE_INTERVAL == 0) {
+            persistSession();
+        }
+    }
+    
+    /**
+     * Persist session to disk.
+     */
+    private void persistSession() {
+        try {
+            com.nousresearch.hermes.gateway.SessionManager.Session session = 
+                sessionManager.getSession(sessionId);
+            
+            // Copy conversation history to session
+            for (ModelMessage msg : conversationHistory) {
+                if (msg.getRole() != null && msg.getContent() != null) {
+                    session.addMessage(msg.getRole(), msg.getContent());
+                }
+            }
+            
+            sessionManager.saveSession(session);
+            logger.debug("Session saved: {}", sessionId);
+        } catch (Exception e) {
+            logger.warn("Failed to save session: {}", e.getMessage());
+        }
     }
     
     /**
@@ -249,7 +318,7 @@ public class AIAgent {
         prompt.append(Constants.TOOL_USE_ENFORCEMENT_GUIDANCE).append("\n\n");
         
         // Add memory context
-        String memoryContext = memoryManager.buildMemoryContext();
+        String memoryContext = memoryManager.getSystemPromptSnapshot();
         if (!memoryContext.isEmpty()) {
             prompt.append(memoryContext).append("\n");
         }

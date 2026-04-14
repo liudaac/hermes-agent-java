@@ -12,8 +12,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Memory management tools.
- * Save, search, and manage persistent memory.
+ * Memory management tools - aligned with Python Hermes.
+ * 
+ * Two parallel memory systems:
+ * - MEMORY.md: Environment, system state, learned patterns
+ * - USER.md: User preferences, personal info
+ * 
+ * Entry delimiter: § (section sign)
  */
 public class MemoryTool {
     private static final Logger logger = LoggerFactory.getLogger(MemoryTool.class);
@@ -23,18 +28,19 @@ public class MemoryTool {
      * Register memory tools.
      */
     public static void register(ToolRegistry registry) {
-        // memory_save
+        // memory_save - save to MEMORY.md or USER.md
         registry.register(new ToolEntry.Builder()
             .name("memory_save")
             .toolset("memory")
             .schema(Map.of(
-                "description", "Save a durable fact to memory",
+                "description", "Save a durable fact to memory. Use category='memory' for environment/learned info, 'user' for user preferences.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
                         "category", Map.of(
                             "type", "string",
-                            "description", "Memory category (e.g., user_preferences, environment, learned)"
+                            "enum", List.of("memory", "user"),
+                            "description", "Memory category: 'memory' for environment/learned info, 'user' for user preferences"
                         ),
                         "content", Map.of(
                             "type", "string",
@@ -48,7 +54,7 @@ public class MemoryTool {
             .emoji("🧠")
             .build());
         
-        // memory_search
+        // memory_search - search both MEMORY.md and USER.md
         registry.register(new ToolEntry.Builder()
             .name("memory_search")
             .toolset("memory")
@@ -74,63 +80,99 @@ public class MemoryTool {
             .emoji("🔍")
             .build());
         
-        // session_search
+        // memory_get - get memories by category
         registry.register(new ToolEntry.Builder()
-            .name("session_search")
+            .name("memory_get")
             .toolset("memory")
             .schema(Map.of(
-                "description", "Search past conversation sessions",
+                "description", "Get memories by category",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
-                        "query", Map.of(
+                        "category", Map.of(
                             "type", "string",
-                            "description", "Search query"
+                            "enum", List.of("memory", "user"),
+                            "description", "Category to retrieve"
                         ),
                         "limit", Map.of(
                             "type", "integer",
                             "description", "Max results",
-                            "default", 5
+                            "default", 10
                         )
                     ),
-                    "required", List.of("query")
+                    "required", List.of("category")
                 )
             ))
-            .handler(MemoryTool::searchSessions)
-            .emoji("📜")
+            .handler(MemoryTool::getMemory)
+            .emoji("📋")
             .build());
         
-        // memory_delete
+        // memory_delete - delete by substring match
         registry.register(new ToolEntry.Builder()
             .name("memory_delete")
             .toolset("memory")
             .schema(Map.of(
-                "description", "Delete a memory entry",
+                "description", "Delete a memory entry by substring match",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
-                        "id", Map.of(
+                        "category", Map.of(
                             "type", "string",
-                            "description", "Memory ID to delete"
+                            "enum", List.of("memory", "user"),
+                            "description", "Category to delete from"
+                        ),
+                        "substring", Map.of(
+                            "type", "string",
+                            "description", "Substring to match for deletion"
                         )
                     ),
-                    "required", List.of("id")
+                    "required", List.of("category", "substring")
                 )
             ))
             .handler(MemoryTool::deleteMemory)
             .emoji("🗑️")
             .build());
+        
+        // memory_replace - replace by substring match
+        registry.register(new ToolEntry.Builder()
+            .name("memory_replace")
+            .toolset("memory")
+            .schema(Map.of(
+                "description", "Replace a memory entry by substring match",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "category", Map.of(
+                            "type", "string",
+                            "enum", List.of("memory", "user"),
+                            "description", "Category to replace in"
+                        ),
+                        "old_substring", Map.of(
+                            "type", "string",
+                            "description", "Substring to match for replacement"
+                        ),
+                        "new_content", Map.of(
+                            "type", "string",
+                            "description", "New content to replace with"
+                        )
+                    ),
+                    "required", List.of("category", "old_substring", "new_content")
+                )
+            ))
+            .handler(MemoryTool::replaceMemory)
+            .emoji("✏️")
+            .build());
     }
     
     /**
-     * Save memory.
+     * Save memory to MEMORY.md or USER.md.
      */
     private static String saveMemory(Map<String, Object> args) {
         String category = (String) args.get("category");
         String content = (String) args.get("content");
         
         if (category == null || category.trim().isEmpty()) {
-            return ToolRegistry.toolError("Category is required");
+            return ToolRegistry.toolError("Category is required (memory or user)");
         }
         
         if (content == null || content.trim().isEmpty()) {
@@ -138,7 +180,16 @@ public class MemoryTool {
         }
         
         try {
-            memoryManager.save(category, content, Map.of("source", "tool"));
+            boolean success;
+            if ("user".equals(category)) {
+                success = memoryManager.addUser(content);
+            } else {
+                success = memoryManager.addMemory(content);
+            }
+            
+            if (!success) {
+                return ToolRegistry.toolError("Failed to save memory (security check may have blocked it)");
+            }
             
             return ToolRegistry.toolResult(Map.of(
                 "success", true,
@@ -164,22 +215,12 @@ public class MemoryTool {
         }
         
         try {
-            List<MemoryManager.MemoryEntry> results = memoryManager.search(query, limit);
-            
-            List<Map<String, Object>> formatted = new ArrayList<>();
-            for (MemoryManager.MemoryEntry m : results) {
-                Map<String, Object> map = new HashMap<>();
-                map.put("id", m.id);
-                map.put("category", m.category);
-                map.put("content", m.content);
-                map.put("timestamp", m.timestamp.toString());
-                formatted.add(map);
-            }
+            List<String> results = memoryManager.search(query, limit);
             
             return ToolRegistry.toolResult(Map.of(
                 "query", query,
-                "results", formatted,
-                "count", formatted.size()
+                "results", results,
+                "count", results.size()
             ));
             
         } catch (Exception e) {
@@ -189,62 +230,93 @@ public class MemoryTool {
     }
     
     /**
-     * Search sessions.
+     * Get memories by category.
      */
-    private static String searchSessions(Map<String, Object> args) {
-        String query = (String) args.get("query");
-        int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 5;
+    private static String getMemory(Map<String, Object> args) {
+        String category = (String) args.get("category");
+        int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 10;
         
-        if (query == null || query.trim().isEmpty()) {
-            return ToolRegistry.toolError("Query is required");
+        if (category == null || category.trim().isEmpty()) {
+            return ToolRegistry.toolError("Category is required");
         }
         
         try {
-            List<MemoryManager.SessionSearchResult> results = memoryManager.searchSessions(query, limit);
-            
-            List<Map<String, Object>> formatted = new ArrayList<>();
-            for (MemoryManager.SessionSearchResult r : results) {
-                Map<String, Object> map = new HashMap<>();
-                map.put("session_id", r.sessionId);
-                map.put("role", r.role);
-                map.put("content_preview", r.content.substring(0, Math.min(200, r.content.length())));
-                map.put("timestamp", r.timestamp.toString());
-                formatted.add(map);
-            }
+            List<String> results = memoryManager.getByCategory(category, limit);
             
             return ToolRegistry.toolResult(Map.of(
-                "query", query,
-                "results", formatted,
-                "count", formatted.size()
+                "category", category,
+                "results", results,
+                "count", results.size()
             ));
             
         } catch (Exception e) {
-            logger.error("Failed to search sessions: {}", e.getMessage(), e);
-            return ToolRegistry.toolError("Search failed: " + e.getMessage());
+            logger.error("Failed to get memory: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Get failed: " + e.getMessage());
         }
     }
     
     /**
-     * Delete memory.
+     * Delete memory by substring match.
      */
     private static String deleteMemory(Map<String, Object> args) {
-        String id = (String) args.get("id");
+        String category = (String) args.get("category");
+        String substring = (String) args.get("substring");
         
-        if (id == null || id.trim().isEmpty()) {
-            return ToolRegistry.toolError("ID is required");
+        if (category == null || category.trim().isEmpty()) {
+            return ToolRegistry.toolError("Category is required");
+        }
+        
+        if (substring == null || substring.trim().isEmpty()) {
+            return ToolRegistry.toolError("Substring is required");
         }
         
         try {
-            boolean deleted = memoryManager.delete(id);
+            boolean deleted = memoryManager.delete(category, substring);
             
             return ToolRegistry.toolResult(Map.of(
                 "success", deleted,
-                "id", id
+                "category", category,
+                "substring", substring
             ));
             
         } catch (Exception e) {
             logger.error("Failed to delete memory: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Delete failed: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Replace memory by substring match.
+     */
+    private static String replaceMemory(Map<String, Object> args) {
+        String category = (String) args.get("category");
+        String oldSubstring = (String) args.get("old_substring");
+        String newContent = (String) args.get("new_content");
+        
+        if (category == null || category.trim().isEmpty()) {
+            return ToolRegistry.toolError("Category is required");
+        }
+        
+        if (oldSubstring == null || oldSubstring.trim().isEmpty()) {
+            return ToolRegistry.toolError("Old substring is required");
+        }
+        
+        if (newContent == null || newContent.trim().isEmpty()) {
+            return ToolRegistry.toolError("New content is required");
+        }
+        
+        try {
+            boolean replaced = memoryManager.replace(category, oldSubstring, newContent);
+            
+            return ToolRegistry.toolResult(Map.of(
+                "success", replaced,
+                "category", category,
+                "old_substring", oldSubstring
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Failed to replace memory: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Replace failed: " + e.getMessage());
         }
     }
 }

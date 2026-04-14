@@ -7,12 +7,19 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Session manager for persistent conversation state.
- * Mirrors Python's gateway/session.py functionality.
+ * Aligned with Python Hermes gateway/session.py
+ * 
+ * Features:
+ * - PII redaction (hashed IDs)
+ * - Session persistence to disk
+ * - Automatic session cleanup
  */
 public class SessionManager {
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
@@ -22,7 +29,7 @@ public class SessionManager {
     private final Map<String, Session> activeSessions;
     
     public SessionManager(Path dataDir) {
-        this.sessionsDir = dataDir.resolve("sessions");
+        this.sessionsDir = dataDir.resolve("memory").resolve("sessions");
         this.activeSessions = new ConcurrentHashMap<>();
         
         try {
@@ -49,7 +56,7 @@ public class SessionManager {
      * Get session by channel (for gateway integration).
      */
     public Session getSessionByChannel(String platform, String channelId) {
-        String sessionId = platform + ":" + channelId;
+        String sessionId = platform + ":" + hashChatId(channelId);
         return getSession(sessionId);
     }
     
@@ -137,6 +144,46 @@ public class SessionManager {
         }
     }
     
+    // PII redaction helpers - aligned with Python version
+    
+    /**
+     * Hash an identifier to 12-char hex.
+     */
+    private String hashId(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes());
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 6; i++) {
+                hex.append(String.format("%02x", hash[i]));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // Fallback to simple hash
+            return String.format("%012x", value.hashCode());
+        }
+    }
+    
+    /**
+     * Hash a sender ID to user_<12hex>.
+     */
+    private String hashSenderId(String value) {
+        return "user_" + hashId(value);
+    }
+    
+    /**
+     * Hash the numeric portion of a chat ID, preserving platform prefix.
+     * e.g., "telegram:12345" -> "telegram:<hash>"
+     */
+    private String hashChatId(String value) {
+        int colon = value.indexOf(':');
+        if (colon > 0) {
+            String prefix = value.substring(0, colon);
+            return prefix + ":" + hashId(value.substring(colon + 1));
+        }
+        return hashId(value);
+    }
+    
     // ==================== Session Class ====================
     
     public static class Session {
@@ -145,11 +192,21 @@ public class SessionManager {
         public final Map<String, Object> metadata;
         public long lastActivity;
         
+        // Session source info (for context)
+        public String platform;
+        public String chatId;
+        public String chatName;
+        public String chatType; // "dm", "group", "channel", "thread"
+        public String userId;
+        public String userName;
+        public String threadId;
+        
         public Session(String id) {
             this.id = id;
             this.messages = new ArrayList<>();
             this.metadata = new HashMap<>();
             this.lastActivity = System.currentTimeMillis();
+            this.chatType = "dm";
         }
         
         public void addMessage(String role, String content) {
@@ -175,6 +232,15 @@ public class SessionManager {
             json.put("id", id);
             json.put("lastActivity", lastActivity);
             
+            // Source info
+            if (platform != null) json.put("platform", platform);
+            if (chatId != null) json.put("chat_id", chatId);
+            if (chatName != null) json.put("chat_name", chatName);
+            if (chatType != null) json.put("chat_type", chatType);
+            if (userId != null) json.put("user_id", userId);
+            if (userName != null) json.put("user_name", userName);
+            if (threadId != null) json.put("thread_id", threadId);
+            
             var messagesArray = json.putArray("messages");
             for (Message msg : messages) {
                 ObjectNode msgJson = messagesArray.addObject();
@@ -190,6 +256,15 @@ public class SessionManager {
         public static Session fromJson(String id, ObjectNode json) {
             Session session = new Session(id);
             session.lastActivity = json.path("lastActivity").asLong();
+            
+            // Source info
+            session.platform = json.path("platform").asText(null);
+            session.chatId = json.path("chat_id").asText(null);
+            session.chatName = json.path("chat_name").asText(null);
+            session.chatType = json.path("chat_type").asText("dm");
+            session.userId = json.path("user_id").asText(null);
+            session.userName = json.path("user_name").asText(null);
+            session.threadId = json.path("thread_id").asText(null);
             
             var messagesNode = json.path("messages");
             for (var msgNode : messagesNode) {

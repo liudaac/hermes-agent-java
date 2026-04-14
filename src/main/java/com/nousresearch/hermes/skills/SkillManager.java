@@ -17,13 +17,40 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Skill management system.
- * Self-evolving skills created from experience and improved over time.
+ * Skill management system - aligned with Python Hermes.
+ * 
+ * Directory Structure:
+ * ~/.hermes/skills/
+ * ├── my-skill/
+ * │   ├── SKILL.md           # Main instructions (required)
+ * │   ├── references/        # Supporting documentation
+ * │   │   ├── api.md
+ * │   │   └── examples.md
+ * │   ├── templates/         # Templates for output
+ * │   │   └── template.md
+ * │   └── assets/            # Supplementary files
+ * └── category/
+ *     └── another-skill/
+ *         └── SKILL.md
+ * 
+ * SKILL.md Format (YAML Frontmatter, agentskills.io compatible):
+ * ---
+ * name: skill-name
+ * description: Brief description
+ * version: 1.0.0
+ * tags: [tag1, tag2]
+ * ---
+ * 
+ * # Skill Title
+ * Full instructions here...
  */
 public class SkillManager {
     private static final Logger logger = LoggerFactory.getLogger(SkillManager.class);
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private static final ObjectMapper jsonMapper = new ObjectMapper();
+    
+    // Excluded directories
+    private static final Set<String> EXCLUDED_DIRS = Set.of(".git", ".github", ".hub");
     
     private final Path skillsDir;
     private final Path builtinSkillsDir;
@@ -41,6 +68,7 @@ public class SkillManager {
     
     /**
      * Create a new skill from a successful workflow.
+     * Creates directory structure: ~/.hermes/skills/{name}/SKILL.md
      */
     public Skill createSkill(String name, String description, String content, 
                             List<String> tags, Map<String, Object> metadata) {
@@ -59,11 +87,20 @@ public class SkillManager {
             skill.version = 1;
             skill.usageCount = 0;
             
-            // Save skill
-            Path skillFile = skillsDir.resolve(safeName + ".md");
+            // Create skill directory
+            Path skillDir = skillsDir.resolve(safeName);
+            Files.createDirectories(skillDir);
+            
+            // Create subdirectories
+            Files.createDirectories(skillDir.resolve("references"));
+            Files.createDirectories(skillDir.resolve("templates"));
+            Files.createDirectories(skillDir.resolve("assets"));
+            
+            // Save main SKILL.md
+            Path skillFile = skillDir.resolve("SKILL.md");
             saveSkillToFile(skill, skillFile);
             
-            logger.info("Created skill: {}", safeName);
+            logger.info("Created skill: {} at {}", safeName, skillDir);
             return skill;
             
         } catch (Exception e) {
@@ -74,20 +111,23 @@ public class SkillManager {
     
     /**
      * Load a skill by name.
+     * Searches ~/.hermes/skills/{name}/SKILL.md
      */
     public Skill loadSkill(String name) {
         String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
         
         // Check user skills first
-        Path userSkill = skillsDir.resolve(safeName + ".md");
-        if (Files.exists(userSkill)) {
-            return loadSkillFromFile(userSkill);
+        Path userSkillDir = skillsDir.resolve(safeName);
+        Path userSkillFile = userSkillDir.resolve("SKILL.md");
+        if (Files.exists(userSkillFile)) {
+            return loadSkillFromFile(userSkillFile);
         }
         
         // Check builtin skills
-        Path builtinSkill = builtinSkillsDir.resolve(safeName + ".md");
-        if (Files.exists(builtinSkill)) {
-            return loadSkillFromFile(builtinSkill);
+        Path builtinSkillDir = builtinSkillsDir.resolve(safeName);
+        Path builtinSkillFile = builtinSkillDir.resolve("SKILL.md");
+        if (Files.exists(builtinSkillFile)) {
+            return loadSkillFromFile(builtinSkillFile);
         }
         
         return null;
@@ -98,28 +138,40 @@ public class SkillManager {
      */
     public List<Skill> listSkills() {
         List<Skill> skills = new ArrayList<>();
+        Set<String> seenNames = new HashSet<>();
         
         // Load user skills
-        try (Stream<Path> paths = Files.list(skillsDir)) {
-            paths.filter(p -> p.toString().endsWith(".md"))
-                .forEach(p -> {
-                    Skill skill = loadSkillFromFile(p);
-                    if (skill != null) {
-                        skills.add(skill);
-                    }
-                });
-        } catch (Exception e) {
-            logger.debug("Failed to list user skills: {}", e.getMessage());
+        if (Files.exists(skillsDir)) {
+            try (Stream<Path> paths = Files.list(skillsDir)) {
+                paths.filter(p -> Files.isDirectory(p))
+                    .filter(p -> !EXCLUDED_DIRS.contains(p.getFileName().toString()))
+                    .forEach(p -> {
+                        Path skillFile = p.resolve("SKILL.md");
+                        if (Files.exists(skillFile)) {
+                            Skill skill = loadSkillFromFile(skillFile);
+                            if (skill != null) {
+                                skills.add(skill);
+                                seenNames.add(skill.name);
+                            }
+                        }
+                    });
+            } catch (Exception e) {
+                logger.debug("Failed to list user skills: {}", e.getMessage());
+            }
         }
         
         // Load builtin skills
         if (Files.exists(builtinSkillsDir)) {
             try (Stream<Path> paths = Files.list(builtinSkillsDir)) {
-                paths.filter(p -> p.toString().endsWith(".md"))
+                paths.filter(p -> Files.isDirectory(p))
+                    .filter(p -> !EXCLUDED_DIRS.contains(p.getFileName().toString()))
                     .forEach(p -> {
-                        Skill skill = loadSkillFromFile(p);
-                        if (skill != null && !skills.stream().anyMatch(s -> s.name.equals(skill.name))) {
-                            skills.add(skill);
+                        Path skillFile = p.resolve("SKILL.md");
+                        if (Files.exists(skillFile)) {
+                            Skill skill = loadSkillFromFile(skillFile);
+                            if (skill != null && !seenNames.contains(skill.name)) {
+                                skills.add(skill);
+                            }
                         }
                     });
             } catch (Exception e) {
@@ -152,7 +204,8 @@ public class SkillManager {
             skill.metadata.put("last_patch_reason", reason);
             skill.metadata.put("last_patch_time", Instant.now().toString());
             
-            Path skillFile = skillsDir.resolve(skill.name + ".md");
+            Path skillDir = skillsDir.resolve(skill.name);
+            Path skillFile = skillDir.resolve("SKILL.md");
             saveSkillToFile(skill, skillFile);
             
             logger.info("Updated skill: {} (v{})", skill.name, skill.version);
@@ -169,10 +222,11 @@ public class SkillManager {
      */
     public boolean deleteSkill(String name) {
         try {
-            Path skillFile = skillsDir.resolve(name + ".md");
-            if (Files.exists(skillFile)) {
-                Files.delete(skillFile);
-                logger.info("Deleted skill: {}", name);
+            String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+            Path skillDir = skillsDir.resolve(safeName);
+            if (Files.exists(skillDir)) {
+                deleteDirectory(skillDir);
+                logger.info("Deleted skill: {}", safeName);
                 return true;
             }
             return false;
@@ -191,7 +245,7 @@ public class SkillManager {
         return listSkills().stream()
             .filter(s -> 
                 s.name.toLowerCase().contains(lowerQuery) ||
-                s.description.toLowerCase().contains(lowerQuery) ||
+                (s.description != null && s.description.toLowerCase().contains(lowerQuery)) ||
                 s.tags.stream().anyMatch(t -> t.toLowerCase().contains(lowerQuery)) ||
                 s.content.toLowerCase().contains(lowerQuery)
             )
@@ -206,7 +260,6 @@ public class SkillManager {
         
         return listSkills().stream()
             .sorted((a, b) -> {
-                // Score based on relevance
                 int scoreA = scoreRelevance(a, lowerTask);
                 int scoreB = scoreRelevance(b, lowerTask);
                 return Integer.compare(scoreB, scoreA);
@@ -225,7 +278,8 @@ public class SkillManager {
             skill.metadata.put("last_used", Instant.now().toString());
             
             try {
-                Path skillFile = skillsDir.resolve(skill.name + ".md");
+                Path skillDir = skillsDir.resolve(skill.name);
+                Path skillFile = skillDir.resolve("SKILL.md");
                 saveSkillToFile(skill, skillFile);
             } catch (Exception e) {
                 logger.debug("Failed to update usage count: {}", e.getMessage());
@@ -234,6 +288,7 @@ public class SkillManager {
     }
     
     // Helper methods
+    
     private void saveSkillToFile(Skill skill, Path file) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("---\n");
@@ -242,7 +297,7 @@ public class SkillManager {
         sb.append("version: ").append(skill.version).append("\n");
         sb.append("created_at: ").append(skill.createdAt).append("\n");
         sb.append("updated_at: ").append(skill.updatedAt).append("\n");
-        sb.append("tags: ").append(String.join(", ", skill.tags)).append("\n");
+        sb.append("tags: [").append(String.join(", ", skill.tags)).append("]\n");
         sb.append("usage_count: ").append(skill.usageCount).append("\n");
         if (skill.metadata != null && !skill.metadata.isEmpty()) {
             sb.append("metadata:\n");
@@ -267,7 +322,7 @@ public class SkillManager {
             if (!matcher.find()) {
                 // No frontmatter, treat entire content as skill content
                 Skill skill = new Skill();
-                skill.name = file.getFileName().toString().replace(".md", "");
+                skill.name = file.getParent().getFileName().toString();
                 skill.content = content;
                 skill.createdAt = Files.getLastModifiedTime(file).toInstant();
                 skill.updatedAt = skill.createdAt;
@@ -293,7 +348,9 @@ public class SkillManager {
                         case "version": skill.version = Integer.parseInt(value); break;
                         case "created_at": skill.createdAt = Instant.parse(value); break;
                         case "updated_at": skill.updatedAt = Instant.parse(value); break;
-                        case "tags": skill.tags = Arrays.asList(value.split(",\\s*")); break;
+                        case "tags": 
+                            skill.tags = Arrays.asList(value.replace("[", "").replace("]", "").split(",\\s*"));
+                            break;
                         case "usage_count": skill.usageCount = Integer.parseInt(value); break;
                     }
                 }
@@ -336,6 +393,19 @@ public class SkillManager {
         score += Math.min(skill.usageCount / 10, 5);
         
         return score;
+    }
+    
+    private void deleteDirectory(Path dir) throws IOException {
+        try (Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder())
+                 .forEach(p -> {
+                     try {
+                         Files.delete(p);
+                     } catch (IOException e) {
+                         logger.warn("Failed to delete: {}", p);
+                     }
+                 });
+        }
     }
     
     // Data class
