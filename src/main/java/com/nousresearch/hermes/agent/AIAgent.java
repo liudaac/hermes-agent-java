@@ -380,7 +380,6 @@ public class AIAgent {
             case "/exit":
             case "exit":
     private void buildToolDefinitions() {
-        toolDefinitions = new ArrayList<>();
         
         // Get all registered tools from ToolRegistry
         Set<String> allToolNames = toolRegistry.getAllToolNames();
@@ -402,7 +401,3 @@ public class AIAgent {
         
         logger.debug("Initialized with {} tools from ToolRegistry", toolDefinitions.size());
     }
-        
-        return "No response generated";
-    }
-}
