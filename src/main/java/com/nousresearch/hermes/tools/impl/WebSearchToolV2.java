@@ -70,7 +70,7 @@ public class WebSearchToolV2 {
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Extract content from a web page. Returns the full text content of a webpage. This is the PREFERRED tool for simple information retrieval from a known URL - it's faster and cheaper than browser tools. Use browser tools (browser_navigate) only when you need to interact with a page (click, fill forms, dynamic content) or when web_extract fails to get the content.",
+                "description", "Extract content from a web page. Returns the full text content of a webpage. Use this tool when you have a specific URL and need to extract its content. For interactive tasks (clicking, form filling), use browser_navigate instead. If web_extract fails to get content, try browser_navigate.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(

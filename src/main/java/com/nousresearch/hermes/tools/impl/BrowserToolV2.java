@@ -60,7 +60,7 @@ public class BrowserToolV2 {
         registry.register(new ToolEntry.Builder()
             .name("browser_open")
             .toolset("browser")
-            .schema(Map.of("description", "Open a URL in a browser",
+            .schema(Map.of("description", "Open a URL in a browser. This is an alias for browser_navigate - use browser_navigate instead for better functionality with page snapshots.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "url", Map.of("type", "string"),
@@ -116,7 +116,7 @@ public class BrowserToolV2 {
         // Navigate tool - aligned with original Hermes browser_navigate
         registry.register(new ToolEntry.Builder()
             .name("browser_navigate").toolset("browser")
-            .schema(Map.of("description", "Navigate to a URL in the browser. Initializes the session and loads the page. Must be called before other browser tools. IMPORTANT: For simple information retrieval, prefer web_search or web_extract (faster, cheaper). Use browser tools only when you need to interact with a page (click, fill forms, dynamic content) or when web_extract fails. Returns a compact page snapshot with interactive elements and ref IDs — no need to call browser_snapshot separately after navigating.",
+            .schema(Map.of("description", "Navigate to a URL in the browser and load the page. This is the main browser tool - use it when you need to: (1) interact with a webpage (click buttons, fill forms), (2) access content that requires JavaScript rendering, (3) web_extract failed to get the content. For simple static page extraction, web_extract may be faster. Returns a page snapshot with interactive elements marked with ref IDs like @e1, @e2 for browser_click.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "url", Map.of("type", "string", "description", "URL to navigate to"),
