@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.alibaba.fastjson2.annotation.JSONField;
 
 /**
  * Represents a tool call from the LLM.

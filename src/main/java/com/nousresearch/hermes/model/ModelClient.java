@@ -46,10 +46,10 @@ public class ModelClient {
         String apiKey = config.getApiKey();
         String model = config.getCurrentModel();
         
-        // Build request body
+        // Build request body - convert messages to proper JSON format
         JSONObject requestBody = new JSONObject();
         requestBody.put("model", model);
-        requestBody.put("messages", messages);
+        requestBody.put("messages", ModelMessage.toJsonObjectList(messages));
         requestBody.put("tools", tools != null ? tools : List.of());
         requestBody.put("stream", stream);
         requestBody.put("temperature", 0.7);

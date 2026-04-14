@@ -1,26 +1,26 @@
 package com.nousresearch.hermes.model;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.annotation.JSONField;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Message types for LLM API communication.
  * Compatible with OpenAI-style chat completions API.
  */
-@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ModelMessage {
     
     private String role;
     private String content;
     private String name;
     
-    @JsonProperty("tool_calls")
+    @JSONField(name = "tool_calls")
     private List<ToolCall> toolCalls;
     
-    @JsonProperty("tool_call_id")
+    @JSONField(name = "tool_call_id")
     private String toolCallId;
     
     // For multimodal content
@@ -71,9 +71,41 @@ public class ModelMessage {
     public void setContentParts(List<ContentPart> contentParts) { this.contentParts = contentParts; }
     
     /**
+     * Convert this message to a Fastjson2 JSONObject for API serialization.
+     * This ensures proper field naming and null handling.
+     */
+    public JSONObject toJsonObject() {
+        JSONObject json = new JSONObject();
+        json.put("role", role);
+        if (content != null) {
+            json.put("content", content);
+        }
+        if (name != null) {
+            json.put("name", name);
+        }
+        if (toolCalls != null && !toolCalls.isEmpty()) {
+            json.put("tool_calls", toolCalls);
+        }
+        if (toolCallId != null) {
+            json.put("tool_call_id", toolCallId);
+        }
+        return json;
+    }
+    
+    /**
+     * Convert a list of ModelMessages to a list of JSONObjects.
+     */
+    public static List<JSONObject> toJsonObjectList(List<ModelMessage> messages) {
+        List<JSONObject> result = new ArrayList<>();
+        for (ModelMessage msg : messages) {
+            result.add(msg.toJsonObject());
+        }
+        return result;
+    }
+    
+    /**
      * Content part for multimodal messages.
      */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ContentPart {
         private String type;
         private String text;
@@ -108,7 +140,6 @@ public class ModelMessage {
     /**
      * Image URL structure.
      */
-    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ImageUrl {
         private String url;
         private String detail;
