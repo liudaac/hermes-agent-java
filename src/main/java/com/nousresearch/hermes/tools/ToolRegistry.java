@@ -36,6 +36,13 @@ public class ToolRegistry {
     public ToolEntry getTool(String name) {
         return tools.get(name);
     }
+
+    /**
+     * Get all registered tools.
+     */
+    public Map<String, ToolEntry> getAllTools() {
+        return new HashMap<>(tools);
+    }
     
     /**
      * Get all registered tools.
