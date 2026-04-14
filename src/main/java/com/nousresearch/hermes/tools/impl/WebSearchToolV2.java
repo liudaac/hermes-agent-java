@@ -70,7 +70,7 @@ public class WebSearchToolV2 {
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Extract content from web page URLs. Returns page content in markdown format. For simple information retrieval from a known URL, this is the PREFERRED tool - it's faster and cheaper than browser tools. Also works with PDF URLs. If extraction fails or the page requires interaction, use browser_navigate instead.",
+                "description", "Extract content from web page URLs. Returns page content in markdown format. Use this for simple information retrieval from a known URL when the user does NOT explicitly ask to open a browser. If the user says 'open browser', 'visit page', or 'go to URL', use browser_navigate instead. Also works with PDF URLs. If extraction fails or the page requires interaction, use browser_navigate.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(

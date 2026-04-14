@@ -149,7 +149,7 @@ public class BrowserToolV2 {
         // Navigate tool - aligned with original Hermes browser_navigate
         registry.register(new ToolEntry.Builder()
             .name("browser_navigate").toolset("browser")
-            .schema(Map.of("description", "Navigate to a URL and return a compact accessibility snapshot of the page. For simple information retrieval, prefer web_search or web_extract (faster, cheaper). Use browser tools when you need to interact with a page (click, fill forms, dynamic content). Must be called before other browser tools. Returns interactive elements with ref IDs like @e1, @e2.",
+            .schema(Map.of("description", "Navigate to a URL and return a compact accessibility snapshot of the page. Use this tool when: (1) the user explicitly asks to open a browser or visit a webpage, (2) you need to interact with a page (click, fill forms, dynamic content), (3) web_extract fails to get the content. For simple information retrieval without interaction needs, web_extract may be faster. Must be called before other browser tools. Returns interactive elements with ref IDs like @e1, @e2.",
                 "parameters", Map.of("type", "object",
                     "properties", Map.of(
                         "url", Map.of("type", "string", "description", "URL to navigate to"),
