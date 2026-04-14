@@ -379,6 +379,19 @@ public class AIAgent {
             case "/quit":
             case "/exit":
             case "exit":
+                return true;
+            case "/help":
+                System.out.println("Available commands:");
+                System.out.println("  /quit, /exit, exit - Exit the program");
+                System.out.println("  /help - Show this help");
+                break;
+            default:
+                System.out.println("Unknown command: " + cmd);
+                break;
+        }
+        
+        return false;
+    }
     private void buildToolDefinitions() {
         
         // Get all registered tools from ToolRegistry
