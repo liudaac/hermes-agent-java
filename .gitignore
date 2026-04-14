@@ -1,0 +1,38 @@
+# Maven
+/target/
+/target/**
+/target/classes/
+/target/test-classes/
+/target/surefire-reports/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test output
+/test-output/
+
+# Local configuration
+application-local.properties
+application-local.yml
+
+# Playwright
+/playwright/.cache/
