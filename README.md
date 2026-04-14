@@ -1,7 +1,7 @@
 # Hermes Agent Java
 
 Java implementation of Hermes Agent - a self-improving AI agent with tool calling capabilities.
-
+ 
 ## Project Structure
 
 ```
