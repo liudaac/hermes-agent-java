@@ -84,6 +84,39 @@ public class BrowserToolV2 {
                     "required", List.of("session_id", "selector", "text"))))
             .handler(this::typeText).emoji("⌨️").build());
         
+        // Scroll tool - aligned with original Hermes browser_scroll
+        registry.register(new ToolEntry.Builder()
+            .name("browser_scroll").toolset("browser")
+            .schema(Map.of("description", "Scroll the page in a direction. Use this to reveal more content that may be below or above the current viewport. Requires browser_navigate to be called first.",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of(
+                        "session_id", Map.of("type", "string", "description", "Browser session ID"),
+                        "direction", Map.of("type", "string", "enum", List.of("down", "up", "left", "right"), "description", "Direction to scroll", "default", "down"),
+                        "amount", Map.of("type", "integer", "description", "Pixels to scroll", "default", 500)),
+                    "required", List.of("session_id"))))
+            .handler(this::scrollPage).emoji("📜").build());
+        
+        // Back tool - aligned with original Hermes browser_back
+        registry.register(new ToolEntry.Builder()
+            .name("browser_back").toolset("browser")
+            .schema(Map.of("description", "Navigate back to the previous page in browser history. Requires browser_navigate to be called first.",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of("session_id", Map.of("type", "string", "description", "Browser session ID")),
+                    "required", List.of("session_id"))))
+            .handler(this::goBack).emoji("⬅️").build());
+        
+        // Press tool - aligned with original Hermes browser_press
+        registry.register(new ToolEntry.Builder()
+            .name("browser_press").toolset("browser")
+            .schema(Map.of("description", "Press a keyboard key. Useful for submitting forms (Enter), navigating (Tab), or keyboard shortcuts. Requires browser_navigate to be called first.",
+                "parameters", Map.of("type", "object",
+                    "properties", Map.of(
+                        "session_id", Map.of("type", "string", "description", "Browser session ID"),
+                        "key", Map.of("type", "string", "description", "Key to press (e.g., Enter, Tab, Escape, ArrowDown)"),
+                        "selector", Map.of("type", "string", "description", "Optional: element to focus before pressing key")),
+                    "required", List.of("session_id", "key"))))
+            .handler(this::pressKey).emoji("🔘").build());
+        
         registry.register(new ToolEntry.Builder()
             .name("browser_get_content").toolset("browser")
             .schema(Map.of("description", "Get page content",
@@ -594,6 +627,112 @@ public class BrowserToolV2 {
                 // For normal sessions, close the browser
                 browser.close();
             }
+        }
+    }
+    
+    /**
+     * Scroll the page - aligned with original Hermes browser_scroll.
+     */
+    private String scrollPage(Map<String, Object> args) {
+        BrowserSession session = sessions.get(args.get("session_id"));
+        if (session == null) return ToolRegistry.toolError("Session not found");
+        
+        String direction = args.containsKey("direction") ? (String) args.get("direction") : "down";
+        int amount = args.containsKey("amount") ? ((Number) args.get("amount")).intValue() : 500;
+        
+        try {
+            Page page = session.page;
+            
+            switch (direction.toLowerCase()) {
+                case "down":
+                    page.evaluate("window.scrollBy(0, " + amount + ")");
+                    break;
+                case "up":
+                    page.evaluate("window.scrollBy(0, -" + amount + ")");
+                    break;
+                case "left":
+                    page.evaluate("window.scrollBy(-" + amount + ", 0)");
+                    break;
+                case "right":
+                    page.evaluate("window.scrollBy(" + amount + ", 0)");
+                    break;
+                default:
+                    return ToolRegistry.toolError("Invalid direction: " + direction);
+            }
+            
+            return ToolRegistry.toolResult(Map.of(
+                "success", true,
+                "direction", direction,
+                "amount", amount,
+                "url", page.url()
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Scroll failed: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Failed to scroll: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Navigate back - aligned with original Hermes browser_back.
+     */
+    private String goBack(Map<String, Object> args) {
+        BrowserSession session = sessions.get(args.get("session_id"));
+        if (session == null) return ToolRegistry.toolError("Session not found");
+        
+        try {
+            Page page = session.page;
+            page.goBack();
+            
+            return ToolRegistry.toolResult(Map.of(
+                "success", true,
+                "url", page.url(),
+                "title", page.title()
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Go back failed: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Failed to go back: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Press a key - aligned with original Hermes browser_press.
+     */
+    private String pressKey(Map<String, Object> args) {
+        BrowserSession session = sessions.get(args.get("session_id"));
+        if (session == null) return ToolRegistry.toolError("Session not found");
+        
+        String key = (String) args.get("key");
+        String selector = args.containsKey("selector") ? (String) args.get("selector") : null;
+        
+        if (key == null || key.isEmpty()) {
+            return ToolRegistry.toolError("Key is required");
+        }
+        
+        try {
+            Page page = session.page;
+            
+            // Focus element if selector provided
+            if (selector != null && !selector.isEmpty()) {
+                ElementHandle element = page.querySelector(selector);
+                if (element != null) {
+                    element.focus();
+                }
+            }
+            
+            // Press the key
+            page.keyboard().press(key);
+            
+            return ToolRegistry.toolResult(Map.of(
+                "success", true,
+                "key", key,
+                "url", page.url()
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Key press failed: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Failed to press key: " + e.getMessage());
         }
     }
 }

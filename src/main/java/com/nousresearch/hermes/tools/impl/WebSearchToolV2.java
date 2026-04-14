@@ -51,7 +51,7 @@ public class WebSearchToolV2 {
             .name("web_search")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Search the web for information. Returns search results with titles, URLs, and snippets. Use this when you need to find information but don't have a specific URL. For extracting content from a known URL, prefer web_extract (faster, more detailed).",
+                "description", "Search the web for information on any topic. Returns up to 5 relevant results with titles, URLs, and descriptions.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
@@ -70,7 +70,7 @@ public class WebSearchToolV2 {
             .name("web_extract")
             .toolset("web_search")
             .schema(Map.of(
-                "description", "Extract content from a web page. Returns the full text content of a webpage. Use this tool when you have a specific URL and need to extract its content. For interactive tasks (clicking, form filling), use browser_navigate instead. If web_extract fails to get content, try browser_navigate.",
+                "description", "Extract content from web page URLs. Returns page content in markdown format. Also works with PDF URLs (arxiv papers, documents, etc.) — pass the PDF link directly and it converts to markdown text. Pages under 5000 chars return full markdown; larger pages are LLM-summarized and capped at ~5000 chars per page. Pages over 2M chars are refused. If a URL fails or times out, use the browser tool to access it instead.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
