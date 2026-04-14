@@ -50,6 +50,13 @@ public class ToolRegistry {
     public String execute(String name, Map<String, Object> args) {
         ToolEntry entry = tools.get(name);
         if (entry == null) {
+
+    /**
+     * Get all registered tools.
+     */
+    public Map<String, ToolEntry> getAllTools() {
+        return new HashMap<>(tools);
+    }
             return toolError("Tool not found: " + name);
         }
         
