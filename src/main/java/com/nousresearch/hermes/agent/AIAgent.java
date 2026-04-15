@@ -125,35 +125,16 @@ public class AIAgent {
     
     /**
      * Build tool definitions from registry.
+     * Loads all registered tools from ToolRegistry.
      */
     private List<Map<String, Object>> buildToolDefinitions() {
-        // Get enabled tools from config
-        List<String> enabledTools = config.getEnabledTools();
-        Set<String> toolNames = new HashSet<>();
+        // Get all registered tool names from the registry
+        List<String> allTools = toolRegistry.getAllToolNames();
         
-        // Map toolsets to individual tools
-        for (String toolset : enabledTools) {
-            // In real implementation, this would get tools from the toolset
-            // For now, add some default tools
-            switch (toolset) {
-                case "web_search":
-                    toolNames.add("web_search");
-                    toolNames.add("web_extract");
-                    break;
-                case "terminal":
-                    toolNames.add("execute_command");
-                    break;
-                case "file_operations":
-                    toolNames.add("read_file");
-                    toolNames.add("write_file");
-                    toolNames.add("search_files");
-                    break;
-                case "browser":
-                    toolNames.add("browser_open");
-                    toolNames.add("browser_snapshot");
-                    break;
-            }
-        }
+        // Convert to Set for getDefinitions
+        Set<String> toolNames = new HashSet<>(allTools);
+        
+        logger.debug("Building tool definitions for {} tools: {}", toolNames.size(), toolNames);
         
         return toolRegistry.getDefinitions(toolNames, false);
     }
