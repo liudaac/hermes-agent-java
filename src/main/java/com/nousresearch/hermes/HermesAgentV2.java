@@ -131,10 +131,17 @@ public class HermesAgentV2 {
             }
             
             // Process as message
-            processMessage(input);
+            if (!processMessage(input)) {
+                break; // Exit command received
+            }
         }
         
+        // Cleanup
         scanner.close();
+        if (interactiveAgent != null) {
+            interactiveAgent.endSession(true);
+        }
+        System.out.println("\nGoodbye! 👋");
     }
     
     private void printHelp() {
@@ -168,7 +175,12 @@ public class HermesAgentV2 {
         System.out.println("  Session Manager: " + (sessionManager != null ? "active" : "inactive"));
     }
     
-    private void processMessage(String message) {
+    private boolean processMessage(String message) {
+        // Check for exit command
+        if (message.equalsIgnoreCase("exit") || message.equalsIgnoreCase("quit")) {
+            return false; // Signal to exit
+        }
+        
         try {
             logger.info("Processing message: {}", message.substring(0, Math.min(50, message.length())));
             
@@ -193,6 +205,8 @@ public class HermesAgentV2 {
             logger.error("Failed to process message: {}", e.getMessage(), e);
             System.out.println("❌ Error: " + e.getMessage());
         }
+        
+        return true; // Continue running
     }
     
     public static void main(String[] args) {
