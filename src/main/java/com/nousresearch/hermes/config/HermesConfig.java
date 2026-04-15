@@ -235,6 +235,62 @@ public class HermesConfig {
             setNested("tools.enabled", enabled);
         }
     }
+    
+    // Auto-skill configuration
+    
+    /**
+     * Get auto-loaded skills for a channel/chat.
+     * @param channelId The channel/chat identifier
+     * @return List of skill names to auto-load
+     */
+    @SuppressWarnings("unchecked")
+    public List<String> getAutoSkills(String channelId) {
+        Map<String, Object> autoSkills = getNested("auto_skill", null);
+        if (autoSkills == null) {
+            return List.of();
+        }
+        
+        Object skills = autoSkills.get(channelId);
+        if (skills instanceof List) {
+            return (List<String>) skills;
+        } else if (skills instanceof String) {
+            return List.of((String) skills);
+        }
+        
+        // Check for default auto-skills
+        Object defaultSkills = autoSkills.get("default");
+        if (defaultSkills instanceof List) {
+            return (List<String>) defaultSkills;
+        } else if (defaultSkills instanceof String) {
+            return List.of((String) defaultSkills);
+        }
+        
+        return List.of();
+    }
+    
+    /**
+     * Set auto-loaded skills for a channel/chat.
+     */
+    public void setAutoSkills(String channelId, List<String> skills) {
+        setNested("auto_skill." + channelId, skills);
+    }
+    
+    /**
+     * Set auto-loaded skill for a channel/chat (single skill).
+     */
+    public void setAutoSkill(String channelId, String skill) {
+        setNested("auto_skill." + channelId, skill);
+    }
+    
+    /**
+     * Remove auto-loaded skills for a channel/chat.
+     */
+    public void removeAutoSkills(String channelId) {
+        Map<String, Object> autoSkills = getNested("auto_skill", null);
+        if (autoSkills != null) {
+            autoSkills.remove(channelId);
+        }
+    }
 
     // Generic getters/setters
     public String get(String key) {

@@ -156,6 +156,9 @@ public class AIAgent {
         // Add system message
         conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
         
+        // Auto-load skills for CLI mode
+        loadAutoSkills("cli");
+        
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         
         while (!interrupted.get()) {
@@ -473,11 +476,78 @@ public class AIAgent {
             }
         }
         
+        // Add available skills info
+        prompt.append("\n").append(buildSkillsPrompt());
+        
         return prompt.toString();
     }
     
     /**
+     * Build the skills section of the system prompt.
+     * Injects available skills list to guide the agent to use them.
+     */
+    private String buildSkillsPrompt() {
+        if (skillManager == null) {
+            return "";
+        }
+        
+        List<SkillManager.Skill> skills = skillManager.listSkills();
+        if (skills.isEmpty()) {
+            return "";
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("## Skills (mandatory)\n\n");
+        sb.append("Before replying, scan the skills below. If one clearly matches your task, ");
+        sb.append("load it with skill_get(name) and follow its instructions. ");
+        sb.append("If a skill has issues, fix it with skill_update().\n");
+        sb.append("After difficult/iterative tasks, offer to save as a skill.\n");
+        sb.append("If a skill you loaded was missing steps, had wrong commands, or needed ");
+        sb.append("pitfalls you discovered, update it before finishing.\n\n");
+        
+        sb.append("<available_skills>\n");
+        
+        // Group by category (using tags as categories)
+        Map<String, List<SkillManager.Skill>> byCategory = new HashMap<>();
+        for (SkillManager.Skill skill : skills) {
+            String category = skill.tags.isEmpty() ? "general" : skill.tags.get(0);
+            byCategory.computeIfAbsent(category, k -> new ArrayList<>()).add(skill);
+        }
+        
+        // Sort categories and skills
+        List<String> categories = new ArrayList<>(byCategory.keySet());
+        Collections.sort(categories);
+        
+        for (String category : categories) {
+            sb.append("  ").append(category).append(":\n");
+            List<SkillManager.Skill> catSkills = byCategory.get(category);
+            catSkills.sort(Comparator.comparing(s -> s.name));
+            
+            for (SkillManager.Skill skill : catSkills) {
+                sb.append("    - ").append(skill.name);
+                if (skill.description != null && !skill.description.isEmpty()) {
+                    String desc = skill.description;
+                    if (desc.length() > 80) {
+                        desc = desc.substring(0, 80) + "...";
+                    }
+                    sb.append(": ").append(desc);
+                }
+                sb.append("\n");
+            }
+        }
+        
+        sb.append("</available_skills>\n\n");
+        sb.append("If none match, proceed normally without loading a skill.");
+        
+        return sb.toString();
+    }
+    
+    /**
      * Handle slash commands.
+     * Supports:
+     * - /quit, /exit, exit - Exit the program
+     * - /help - Show help
+     * - /skill-name - Quick load and execute a skill
      * @return true if should exit
      */
     private boolean handleCommand(String command) {
@@ -489,16 +559,121 @@ public class AIAgent {
             case "exit":
                 return true;
             case "/help":
-                System.out.println("Available commands:");
-                System.out.println("  /quit, /exit, exit - Exit the program");
-                System.out.println("  /help - Show this help");
+                printHelp();
                 break;
             default:
+                // Check for skill shortcut: /skill-name
+                if (cmd.startsWith("/") && !cmd.startsWith("//")) {
+                    String skillName = cmd.substring(1).trim();
+                    if (!skillName.isEmpty()) {
+                        handleSkillShortcut(skillName);
+                        return false;
+                    }
+                }
                 System.out.println("Unknown command: " + cmd);
                 break;
         }
         
         return false;
+    }
+    
+    /**
+     * Print help information.
+     */
+    private void printHelp() {
+        System.out.println("Available commands:");
+        System.out.println("  /quit, /exit, exit - Exit the program");
+        System.out.println("  /help              - Show this help");
+        System.out.println("  /skill-name        - Quick load and execute a skill (e.g., /web-search)");
+        System.out.println();
+        System.out.println("Available skills:");
+        if (skillManager != null) {
+            List<SkillManager.Skill> skills = skillManager.listSkills();
+            if (skills.isEmpty()) {
+                System.out.println("  (No skills available)");
+            } else {
+                for (SkillManager.Skill skill : skills) {
+                    System.out.println("  /" + skill.name + " - " + 
+                        (skill.description != null ? skill.description : "No description"));
+                }
+            }
+        }
+    }
+    
+    /**
+     * Load auto-skills for a channel/session.
+     * Called during initialization to preload configured skills.
+     */
+    private void loadAutoSkills(String channelId) {
+        if (skillManager == null || config == null) {
+            return;
+        }
+        
+        List<String> autoSkills = config.getAutoSkills(channelId);
+        if (autoSkills.isEmpty()) {
+            return;
+        }
+        
+        logger.info("Auto-loading {} skills for {}", autoSkills.size(), channelId);
+        
+        for (String skillName : autoSkills) {
+            SkillManager.Skill skill = skillManager.loadSkill(skillName);
+            if (skill != null) {
+                // Build skill instruction message
+                StringBuilder skillPrompt = new StringBuilder();
+                skillPrompt.append("=== AUTO-LOADED SKILL: ").append(skill.name).append(" ===\n\n");
+                if (skill.description != null) {
+                    skillPrompt.append("Description: ").append(skill.description).append("\n\n");
+                }
+                skillPrompt.append(skill.content);
+                skillPrompt.append("\n\n=== END SKILL ===");
+                
+                // Add as system message
+                conversationHistory.add(ModelMessage.system(skillPrompt.toString()));
+                skillManager.recordUsage(skillName);
+                
+                logger.debug("Auto-loaded skill: {}", skillName);
+            } else {
+                logger.warn("Auto-skill not found: {}", skillName);
+            }
+        }
+    }
+    
+    /**
+     * Handle skill shortcut command (/skill-name).
+     * Loads the skill and injects it into the conversation.
+     */
+    private void handleSkillShortcut(String skillName) {
+        if (skillManager == null) {
+            System.out.println("Skill manager not available");
+            return;
+        }
+        
+        SkillManager.Skill skill = skillManager.loadSkill(skillName);
+        if (skill == null) {
+            System.out.println("Skill not found: " + skillName);
+            System.out.println("Use /help to see available skills");
+            return;
+        }
+        
+        System.out.println("Loading skill: " + skill.name);
+        
+        // Record usage
+        skillManager.recordUsage(skillName);
+        
+        // Build skill instruction message
+        StringBuilder skillPrompt = new StringBuilder();
+        skillPrompt.append("=== SKILL: ").append(skill.name).append(" ===\n\n");
+        if (skill.description != null) {
+            skillPrompt.append("Description: ").append(skill.description).append("\n\n");
+        }
+        skillPrompt.append(skill.content);
+        skillPrompt.append("\n\n=== END SKILL ===");
+        
+        // Add as system message
+        conversationHistory.add(ModelMessage.system(skillPrompt.toString()));
+        
+        System.out.println("Skill loaded. You can now ask me to perform tasks using this skill.");
     }
     
     /**
