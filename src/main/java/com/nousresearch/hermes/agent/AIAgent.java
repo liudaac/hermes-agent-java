@@ -8,6 +8,9 @@ import com.nousresearch.hermes.model.ToolCall;
 import com.nousresearch.hermes.memory.MemoryManager;
 import com.nousresearch.hermes.tools.ToolInitializer;
 import com.nousresearch.hermes.tools.ToolRegistry;
+import com.nousresearch.hermes.trajectory.TrajectoryCollector;
+import com.nousresearch.hermes.learning.KnowledgeExtractor;
+import com.nousresearch.hermes.skills.SkillManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +43,11 @@ public class AIAgent {
     // Auto-save settings
     private static final int AUTO_SAVE_INTERVAL = 5; // Save every 5 messages
     
+    // Learning components
+    private TrajectoryCollector trajectoryCollector;
+    private KnowledgeExtractor knowledgeExtractor;
+    private SkillManager skillManager;
+    
     public AIAgent(HermesConfig config) {
         this.config = config;
         this.modelClient = new ModelClient(config);
@@ -53,8 +61,16 @@ public class AIAgent {
         );
         this.sessionId = "cli_" + UUID.randomUUID().toString().substring(0, 8);
         
+        // Initialize learning components
+        initializeLearningComponents();
+        
         // Initialize tools
         initializeTools();
+        
+        // Start trajectory tracking
+        if (trajectoryCollector != null) {
+            trajectoryCollector.startSession(this.sessionId, config.getCurrentModel());
+        }
     }
     
     /**
@@ -73,8 +89,26 @@ public class AIAgent {
         );
         this.sessionId = sessionId;
         
+        // Initialize learning components
+        initializeLearningComponents();
+        
         // Initialize tools
         initializeTools();
+        
+        // Start trajectory tracking
+        if (trajectoryCollector != null) {
+            trajectoryCollector.startSession(this.sessionId, config.getCurrentModel());
+        }
+    }
+    
+    /**
+     * Initialize learning components for the self-improvement loop.
+     */
+    private void initializeLearningComponents() {
+        this.trajectoryCollector = new TrajectoryCollector();
+        this.skillManager = new SkillManager();
+        this.knowledgeExtractor = new KnowledgeExtractor(memoryManager, skillManager);
+        logger.debug("Initialized learning components");
     }
     
     /**
@@ -484,5 +518,69 @@ public class AIAgent {
         }
         
         return false;
+    }
+    
+    /**
+     * End the session and perform knowledge extraction.
+     * Called when the conversation ends naturally or via /exit.
+     */
+    public void endSession(boolean completed) {
+        logger.info("Ending session: {} (completed={})", sessionId, completed);
+        
+        // Save trajectory
+        if (trajectoryCollector != null) {
+            // Add all messages to trajectory
+            for (ModelMessage msg : conversationHistory) {
+                trajectoryCollector.addMessage(sessionId, msg);
+            }
+            trajectoryCollector.endSession(sessionId, completed);
+        }
+        
+        // Extract knowledge from session
+        if (knowledgeExtractor != null && completed) {
+            try {
+                KnowledgeExtractor.ExtractionResult result = 
+                    knowledgeExtractor.onSessionEnd(sessionId, conversationHistory);
+                
+                if (!result.getInsights().isEmpty()) {
+                    logger.info("Extracted {} insights from session", result.getInsights().size());
+                }
+                
+                if (!result.getMemoriesSaved().isEmpty()) {
+                    logger.info("Saved {} memories", result.getMemoriesSaved().size());
+                }
+                
+                if (result.hasSkillCandidate()) {
+                    logger.info("Skill candidate extracted (length: {} chars)", 
+                        result.getSkillCandidate().length());
+                    // TODO: Prompt user to create skill from candidate
+                }
+                
+            } catch (Exception e) {
+                logger.error("Knowledge extraction failed: {}", e.getMessage());
+            }
+        }
+        
+        // Persist session
+        persistSession();
+        
+        // Shutdown trajectory collector
+        if (trajectoryCollector != null) {
+            trajectoryCollector.shutdown();
+        }
+    }
+    
+    /**
+     * Get the trajectory collector for external access.
+     */
+    public TrajectoryCollector getTrajectoryCollector() {
+        return trajectoryCollector;
+    }
+    
+    /**
+     * Get the knowledge extractor for external access.
+     */
+    public KnowledgeExtractor getKnowledgeExtractor() {
+        return knowledgeExtractor;
     }
 }
