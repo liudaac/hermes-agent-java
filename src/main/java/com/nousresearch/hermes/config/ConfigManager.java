@@ -138,6 +138,21 @@ public class ConfigManager {
         webExtract.put("provider", "auto");
         webExtract.put("model", "");
         
+        // Memory configuration (aligned with Python Hermes)
+        ObjectNode memory = cfg.putObject("memory");
+        memory.put("memory_enabled", false);
+        memory.put("user_profile_enabled", false);
+        memory.put("nudge_interval", 10);           // Nudge every 10 user turns
+        memory.put("flush_min_turns", 6);
+        memory.put("memory_char_limit", 2200);
+        memory.put("user_char_limit", 1375);
+        memory.put("provider", "");                  // External memory provider (e.g., "honcho")
+        
+        // Skills configuration (aligned with Python Hermes)
+        ObjectNode skills = cfg.putObject("skills");
+        skills.put("creation_nudge_interval", 10);   // Nudge every 10 tool iterations
+        skills.putArray("auto_load");                // Skills to auto-load per channel
+        
         return cfg;
     }
     

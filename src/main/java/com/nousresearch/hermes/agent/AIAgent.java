@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.agent;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.model.ModelClient;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.LinkedHashSet;
 
 /**
  * Core AI Agent implementation.
@@ -31,7 +33,7 @@ public class AIAgent {
     private final ModelClient modelClient;
     private final ToolRegistry toolRegistry;
     private final IterationBudget iterationBudget;
-    private final MemoryManager memoryManager;
+    private MemoryManager memoryManager;  // Non-final for sharing with review agents
     private final List<ModelMessage> conversationHistory;
     private final AtomicBoolean interrupted;
     private final com.nousresearch.hermes.gateway.SessionManager sessionManager;
@@ -47,6 +49,46 @@ public class AIAgent {
     private TrajectoryCollector trajectoryCollector;
     private KnowledgeExtractor knowledgeExtractor;
     private SkillManager skillManager;
+    
+    // Nudge intervals for self-improvement (aligned with Python Hermes)
+    private int memoryNudgeInterval = 10;      // Nudge every 10 user turns
+    private int skillNudgeInterval = 10;       // Nudge every 10 tool iterations
+    private int turnsSinceMemory = 0;          // Counter for memory nudge
+    private int itersSinceSkill = 0;           // Counter for skill nudge
+    private int userTurnCount = 0;             // Total user turns in session
+    
+    // Background review prompts (aligned with Python Hermes)
+    private static final String MEMORY_REVIEW_PROMPT = 
+        "Review the conversation above and consider saving to memory if appropriate.\n\n" +
+        "Focus on:\n" +
+        "1. Has the user revealed things about themselves — their persona, desires, " +
+        "preferences, or personal details worth remembering?\n" +
+        "2. Has the user expressed expectations about how you should behave, their work " +
+        "style, or ways they want you to operate?\n\n" +
+        "If something stands out, save it using the memory tool. " +
+        "If nothing is worth saving, just say 'Nothing to save.' and stop.";
+    
+    private static final String SKILL_REVIEW_PROMPT = 
+        "Review the conversation above and consider saving or updating a skill if appropriate.\n\n" +
+        "Focus on: was a non-trivial approach used to complete a task that required trial " +
+        "and error, or changing course due to experiential findings along the way, or did " +
+        "the user expect or desire a different method or outcome?\n\n" +
+        "If a relevant skill already exists, update it with what you learned. " +
+        "Otherwise, create a new skill if the approach is reusable.\n" +
+        "If nothing is worth saving, just say 'Nothing to save.' and stop.";
+    
+    private static final String COMBINED_REVIEW_PROMPT = 
+        "Review the conversation above and consider two things:\n\n" +
+        "**Memory**: Has the user revealed things about themselves — their persona, " +
+        "desires, preferences, or personal details? Has the user expressed expectations " +
+        "about how you should behave, their work style, or ways they want you to operate? " +
+        "If so, save using the memory tool.\n\n" +
+        "**Skills**: Was a non-trivial approach used to complete a task that required trial " +
+        "and error, or changing course due to experiential findings along the way, or did " +
+        "the user expect or desire a different method or outcome? If a relevant skill " +
+        "already exists, update it. Otherwise, create a new one if the approach is reusable.\n\n" +
+        "Only act if there's something genuinely worth saving. " +
+        "If nothing stands out, just say 'Nothing to save.' and stop.";
     
     public AIAgent(HermesConfig config) {
         this.config = config;
@@ -108,7 +150,34 @@ public class AIAgent {
         this.trajectoryCollector = new TrajectoryCollector();
         this.skillManager = new SkillManager();
         this.knowledgeExtractor = new KnowledgeExtractor(memoryManager, skillManager);
+        
+        // Load nudge intervals from config (aligned with Python Hermes)
+        loadNudgeConfig();
+        
         logger.debug("Initialized learning components");
+    }
+    
+    /**
+     * Load nudge interval configuration from config.
+     * Mirrors Python: mem_config.get("nudge_interval", 10) and skills_config.get("creation_nudge_interval", 10)
+     */
+    private void loadNudgeConfig() {
+        try {
+            // Try to load from ConfigManager if available
+            com.nousresearch.hermes.config.ConfigManager cfgMgr = 
+                com.nousresearch.hermes.config.ConfigManager.getInstance();
+            if (cfgMgr != null) {
+                // Memory nudge interval - use getInt with path
+                this.memoryNudgeInterval = cfgMgr.getInt("memory.nudge_interval", 10);
+                
+                // Skill nudge interval - use getInt with path
+                this.skillNudgeInterval = cfgMgr.getInt("skills.creation_nudge_interval", 10);
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to load nudge config, using defaults: {}", e.getMessage());
+        }
+        
+        logger.debug("Nudge intervals: memory={}, skill={}", memoryNudgeInterval, skillNudgeInterval);
     }
     
     /**
@@ -196,6 +265,19 @@ public class AIAgent {
      * @return The assistant's response
      */
     public String processMessage(String message) {
+        // Track user turns for nudge logic (aligned with Python Hermes)
+        userTurnCount++;
+        
+        // Check memory nudge trigger (turn-based)
+        boolean shouldReviewMemory = false;
+        if (memoryNudgeInterval > 0 && hasTool("memory")) {
+            turnsSinceMemory++;
+            if (turnsSinceMemory >= memoryNudgeInterval) {
+                shouldReviewMemory = true;
+                turnsSinceMemory = 0;
+            }
+        }
+        
         // Add user message to history
         conversationHistory.add(ModelMessage.user(message));
         
@@ -251,6 +333,12 @@ public class AIAgent {
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
                     
+                    // Track tool-calling iterations for skill nudge (aligned with Python Hermes)
+                    // Counter resets when skill_manage is actually used
+                    if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
+                        itersSinceSkill++;
+                    }
+                    
                     // Continue loop for next iteration
                     continueLoop = true;
                 } else {
@@ -280,13 +368,41 @@ public class AIAgent {
         // Final save after conversation
         persistSession();
         
-        return responseBuilder.toString();
+        // Check skill trigger NOW - based on how many tool iterations THIS turn used
+        // (aligned with Python Hermes)
+        boolean shouldReviewSkills = false;
+        if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval && hasTool("skill_manage")) {
+            shouldReviewSkills = true;
+            itersSinceSkill = 0;
+        }
+        
+        // Background memory/skill review - runs AFTER the response is delivered
+        // so it never competes with the user's task for model attention
+        String finalResponse = responseBuilder.toString();
+        if (!finalResponse.isEmpty() && !interrupted.get() && (shouldReviewMemory || shouldReviewSkills)) {
+            spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
+        }
+        
+        return finalResponse;
     }
     
     /**
      * Process a user message through the conversation loop (interactive CLI mode).
      */
     private void processUserMessage(String userInput) {
+        // Track user turns for nudge logic (aligned with Python Hermes)
+        userTurnCount++;
+        
+        // Check memory nudge trigger (turn-based)
+        boolean shouldReviewMemory = false;
+        if (memoryNudgeInterval > 0 && hasTool("memory")) {
+            turnsSinceMemory++;
+            if (turnsSinceMemory >= memoryNudgeInterval) {
+                shouldReviewMemory = true;
+                turnsSinceMemory = 0;
+            }
+        }
+        
         // Add user message to history
         conversationHistory.add(ModelMessage.user(userInput));
         
@@ -337,6 +453,12 @@ public class AIAgent {
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
                     
+                    // Track tool-calling iterations for skill nudge (aligned with Python Hermes)
+                    // Counter resets when skill_manage is actually used
+                    if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
+                        itersSinceSkill++;
+                    }
+                    
                     // Continue loop for next iteration
                     continueLoop = true;
                 } else {
@@ -364,6 +486,20 @@ public class AIAgent {
         
         // Final save after conversation
         persistSession();
+        
+        // Check skill trigger NOW - based on how many tool iterations THIS turn used
+        // (aligned with Python Hermes)
+        boolean shouldReviewSkills = false;
+        if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval && hasTool("skill_manage")) {
+            shouldReviewSkills = true;
+            itersSinceSkill = 0;
+        }
+        
+        // Background memory/skill review - runs AFTER the response is delivered
+        // so it never competes with the user's task for model attention
+        if (!interrupted.get() && (shouldReviewMemory || shouldReviewSkills)) {
+            spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
+        }
     }
     
     /**
@@ -738,5 +874,160 @@ public class AIAgent {
      */
     public KnowledgeExtractor getKnowledgeExtractor() {
         return knowledgeExtractor;
+    }
+    
+    /**
+     * Check if a tool is available in the tool registry.
+     * @param toolName The name of the tool to check
+     * @return true if the tool is available
+     */
+    private boolean hasTool(String toolName) {
+        if (toolDefinitions == null || toolDefinitions.isEmpty()) {
+            return false;
+        }
+        for (Map<String, Object> tool : toolDefinitions) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> function = (Map<String, Object>) tool.get("function");
+            if (function != null && toolName.equals(function.get("name"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Spawn a background thread to review the conversation for memory/skill saves.
+     * Mirrors Python Hermes: _spawn_background_review()
+     * 
+     * Creates a forked AIAgent with the same model and context. The review prompt
+     * is appended as the next user turn. Writes directly to shared memory/skill stores.
+     * Never modifies the main conversation history or produces user-visible output.
+     * 
+     * @param messagesSnapshot Copy of conversation history to review
+     * @param reviewMemory Whether to review for memory saves
+     * @param reviewSkills Whether to review for skill saves
+     */
+    private void spawnBackgroundReview(
+        List<ModelMessage> messagesSnapshot,
+        boolean reviewMemory,
+        boolean reviewSkills
+    ) {
+        // Pick the right prompt based on which triggers fired
+        final String prompt;
+        if (reviewMemory && reviewSkills) {
+            prompt = COMBINED_REVIEW_PROMPT;
+        } else if (reviewMemory) {
+            prompt = MEMORY_REVIEW_PROMPT;
+        } else {
+            prompt = SKILL_REVIEW_PROMPT;
+        }
+        
+        // Spawn background thread
+        Thread reviewThread = new Thread(() -> {
+            try {
+                logger.debug("Starting background review (memory={}, skills={})", reviewMemory, reviewSkills);
+                
+                // Create a quiet review agent with same config but limited iterations
+                // Clone the current config and override max turns
+                HermesConfig reviewConfig = HermesConfig.load();
+                reviewConfig.setModelOverride(config.getCurrentModel());
+                // Note: max_turns is controlled by IterationBudget, not HermesConfig directly
+                
+                AIAgent reviewAgent = new AIAgent(reviewConfig, "review_" + sessionId);
+                
+                // Share memory and skill stores with main agent
+                reviewAgent.memoryManager = this.memoryManager;
+                reviewAgent.skillManager = this.skillManager;
+                reviewAgent.memoryNudgeInterval = 0; // Disable nudges in review agent
+                reviewAgent.skillNudgeInterval = 0;
+                // Override iteration budget for review agent (max 8 iterations)
+                reviewAgent.iterationBudget.setMaxIterations(8);
+                
+                // Run review conversation
+                reviewAgent.processMessage(prompt);
+                
+                // Scan review agent's messages for successful tool actions
+                List<String> actions = new ArrayList<>();
+                for (ModelMessage msg : reviewAgent.conversationHistory) {
+                    if (!"tool".equals(msg.getRole())) {
+                        continue;
+                    }
+                    String content = msg.getContent();
+                    if (content == null || content.isEmpty()) {
+                        continue;
+                    }
+                    
+                    // Check for success indicators in tool results
+                    String lowerContent = content.toLowerCase();
+                    if (lowerContent.contains("\"success\": true") || 
+                        lowerContent.contains("\"success\":true")) {
+                        
+                        // Extract action message
+                        if (lowerContent.contains("created")) {
+                            actions.add(extractActionMessage(content, "created"));
+                        } else if (lowerContent.contains("updated")) {
+                            actions.add(extractActionMessage(content, "updated"));
+                        } else if (lowerContent.contains("added")) {
+                            actions.add(extractActionMessage(content, "added"));
+                        } else if (lowerContent.contains("removed") || lowerContent.contains("replaced")) {
+                            actions.add(extractActionMessage(content, "updated"));
+                        }
+                    }
+                }
+                
+                // Surface summary to user if actions were taken
+                if (!actions.isEmpty()) {
+                    // Remove duplicates while preserving order
+                    List<String> uniqueActions = new ArrayList<>(new LinkedHashSet<>(actions));
+                    String summary = String.join(" · ", uniqueActions);
+                    System.out.println("  💾 " + summary);
+                    logger.info("Background review completed: {}", summary);
+                } else {
+                    logger.debug("Background review completed - no actions taken");
+                }
+                
+            } catch (Exception e) {
+                logger.debug("Background memory/skill review failed: {}", e.getMessage());
+            }
+        }, "bg-review");
+        
+        reviewThread.setDaemon(true);
+        reviewThread.start();
+    }
+    
+    /**
+     * Extract action message from tool result content.
+     * Helper for background review summary.
+     */
+    private String extractActionMessage(String content, String actionType) {
+        try {
+            // Try to parse JSON and extract message
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = mapper.readValue(content, Map.class);
+            
+            String message = (String) result.get("message");
+            if (message != null && !message.isEmpty()) {
+                return message;
+            }
+            
+            // Fallback: construct message from target
+            String target = (String) result.get("target");
+            if ("memory".equals(target)) {
+                return "Memory " + actionType;
+            } else if ("user".equals(target)) {
+                return "User profile " + actionType;
+            } else if (target != null) {
+                return target + " " + actionType;
+            }
+        } catch (Exception e) {
+            // Fallback to simple extraction
+            if (content.toLowerCase().contains("memory")) {
+                return "Memory " + actionType;
+            } else if (content.toLowerCase().contains("skill")) {
+                return "Skill " + actionType;
+            }
+        }
+        return "Entry " + actionType;
     }
 }

@@ -7,12 +7,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Each agent gets its own budget capped at max_iterations.
  */
 public class IterationBudget {
-    private final int maxTotal;
+    private int maxTotal;
     private final AtomicInteger used;
     
     public IterationBudget(int maxTotal) {
         this.maxTotal = maxTotal;
         this.used = new AtomicInteger(0);
+    }
+    
+    /**
+     * Set max iterations (for runtime adjustment, e.g., background review).
+     */
+    public void setMaxIterations(int maxTotal) {
+        this.maxTotal = maxTotal;
     }
     
     /**
