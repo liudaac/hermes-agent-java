@@ -2,7 +2,7 @@
 
 **同步时间**: 2026-04-22  
 **Python版Commit**: 57411fca  
-**Java版Commit**: edb0b18  
+**Java版Commit**: dfab382  
 
 ---
 
@@ -62,7 +62,22 @@ src/main/java/com/nousresearch/hermes/tools/impl/
 └── MCPOAuthManager.java            ✅ 8.9 KB (MCP OAuth管理)
 ```
 
-### 5. 依赖更新 (pom.xml)
+### 5. 前端界面 (完整复制)
+```
+ui-tui/                              ✅ 2.5 MB (TUI - React Ink)
+├── package.json
+├── src/ (TypeScript/React Ink)
+├── packages/hermes-ink/
+└── 完整TUI实现
+
+web/                                 ✅ 984 KB (Web Dashboard - React/Vite)
+├── package.json
+├── src/ (React/Vite/TypeScript)
+├── public/
+└── 完整Web Dashboard实现
+```
+
+### 6. 依赖更新 (pom.xml)
 ```xml
 <!-- 已添加 -->
 <aws.sdk.version>2.25.0</aws.sdk.version>
@@ -70,6 +85,13 @@ src/main/java/com/nousresearch/hermes/tools/impl/
 <dependency>
     <groupId>software.amazon.awssdk</groupId>
     <artifactId>bedrockruntime</artifactId>
+</dependency>
+
+<!-- WebSocket for CDP -->
+<dependency>
+    <groupId>org.java-websocket</groupId>
+    <artifactId>Java-WebSocket</artifactId>
+    <version>1.5.6</version>
 </dependency>
 ```
 
@@ -83,27 +105,33 @@ src/main/java/com/nousresearch/hermes/tools/impl/
 | ACP 适配器 | 7 | ~35 KB | ✅ 完成 |
 | 平台适配器 | 9 | ~70 KB | ✅ 完成 |
 | 新工具 | 8 | ~65 KB | ✅ 完成 |
-| **总计** | **33** | **~240 KB** | **✅ 全部完成** |
-
----
-
-## ⏳ 待后续补充
-
-以下工具/模块可根据需要后续实现：
-
-1. **BrowserCdpTool.java** - Chrome DevTools Protocol 支持
-2. **DiscordTool.java** - Discord 机器人工具
-3. **MCPOAuthManager.java** - MCP OAuth 认证管理
-4. **WeComCrypto.java** - 企业微信加密工具
+| TUI 前端 | 完整目录 | 2.5 MB | ✅ 完成 |
+| Web Dashboard | 完整目录 | 984 KB | ✅ 完成 |
+| 依赖 | 1 | - | ✅ 完成 |
+| **总计** | **34+** | **~240 KB + 3.5 MB** | **✅ 全部完成** |
 
 ---
 
 ## 🔧 使用说明
 
-### 编译项目
+### 编译后端
 ```bash
 cd /root/hermes-agent-java
 mvn clean compile
+```
+
+### 运行 TUI
+```bash
+cd /root/hermes-agent-java/ui-tui
+npm install
+npm run dev
+```
+
+### 运行 Web Dashboard
+```bash
+cd /root/hermes-agent-java/web
+npm install
+npm run dev
 ```
 
 ### 使用新的 Transport 层
@@ -171,6 +199,8 @@ String content = tool.readDocument("doc_token_here");
 - [x] Browser CDP 工具
 - [x] Discord 工具
 - [x] MCP OAuth 管理
+- [x] TUI 界面 (React Ink)
+- [x] Web Dashboard (React/Vite)
 
 ---
 
