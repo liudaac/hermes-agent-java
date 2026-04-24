@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.concurrent.TimeUnit;
@@ -230,7 +231,9 @@ public class WeComCallbackAdapter implements PlatformAdapter {
         
         if ("text".equals(msgType) && agent != null) {
             try {
-                agent.processMessage(fromUser, content);
+                // Build message with sender context
+                String fullMessage = "[From: " + fromUser + "]\n" + content;
+                agent.processMessage(fullMessage);
             } catch (Exception e) {
                 logger.error("Error processing WeCom message", e);
             }

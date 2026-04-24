@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.gateway;
 
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.dashboard.DashboardServer;
 import com.nousresearch.hermes.gateway.platforms.DiscordAdapter;
 import com.nousresearch.hermes.gateway.platforms.FeishuAdapter;
 import com.nousresearch.hermes.gateway.platforms.TelegramAdapter;
@@ -21,6 +22,7 @@ public class GatewayRunner {
     private final HermesConfig config;
     private final List<GatewayServer.PlatformAdapter> adapters;
     private volatile boolean running;
+    private DashboardServer dashboardServer;
     
     public GatewayRunner(HermesConfig config) {
         this.config = config;
@@ -35,6 +37,9 @@ public class GatewayRunner {
         logger.info("Starting Hermes Gateway...");
         
         try {
+            // Start Dashboard server
+            startDashboard();
+            
             initializeAdapters();
             startAdapters();
             
@@ -56,10 +61,42 @@ public class GatewayRunner {
             logger.error("Gateway error: {}", e.getMessage(), e);
         } finally {
             stopAdapters();
+            stopDashboard();
             running = false;
         }
         
         logger.info("Gateway stopped");
+    }
+
+    /**
+     * Start the dashboard server.
+     */
+    private void startDashboard() {
+        try {
+            int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_DASHBOARD_PORT", "9119"));
+            String host = System.getenv().getOrDefault("HERMES_DASHBOARD_HOST", "127.0.0.1");
+            
+            dashboardServer = new DashboardServer(port, host, config);
+            dashboardServer.start();
+            
+            logger.info("Dashboard server started on http://{}:{}", host, port);
+        } catch (Exception e) {
+            logger.error("Failed to start dashboard server: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Stop the dashboard server.
+     */
+    private void stopDashboard() {
+        if (dashboardServer != null) {
+            try {
+                dashboardServer.stop();
+                logger.info("Dashboard server stopped");
+            } catch (Exception e) {
+                logger.error("Error stopping dashboard server: {}", e.getMessage());
+            }
+        }
     }
     
     /**
@@ -89,6 +126,11 @@ public class GatewayRunner {
         System.out.println("  Adapters: " + adapters.size());
         for (GatewayServer.PlatformAdapter adapter : adapters) {
             System.out.println("    - " + adapter.getPlatformName() + ": connected");
+        }
+        if (dashboardServer != null) {
+            System.out.println("  Dashboard: running");
+        } else {
+            System.out.println("  Dashboard: not started");
         }
     }
     
@@ -157,6 +199,12 @@ public class GatewayRunner {
             } catch (Exception e) {
                 logger.error("Error stopping {} adapter: {}", adapter.getPlatformName(), e.getMessage());
             }
+        }
+        
+        // Stop dashboard server
+        if (dashboardServer != null) {
+            logger.info("Stopping dashboard server...");
+            dashboardServer.stop();
         }
     }
     

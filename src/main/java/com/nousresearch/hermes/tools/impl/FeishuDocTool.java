@@ -58,12 +58,24 @@ public class FeishuDocTool {
         parameters.put("properties", properties);
         parameters.put("required", new String[]{"doc_token"});
 
-        return new ToolEntry(
-            "feishu_doc_read",
-            "Read the full content of a Feishu/Lark document as plain text. " +
-            "Useful when you need more context beyond the quoted text in a comment.",
-            parameters
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_doc_read")
+            .toolset("feishu")
+            .schema(parameters)
+            .handler(args -> {
+                try {
+                    FeishuDocTool tool = new FeishuDocTool();
+                    String docToken = (String) args.get("doc_token");
+                    String content = tool.readDocument(docToken);
+                    return content != null ? content : "No content found";
+                } catch (Exception e) {
+                    return "Error: " + e.getMessage();
+                }
+            })
+            .description("Read the full content of a Feishu/Lark document as plain text. " +
+                "Useful when you need more context beyond the quoted text in a comment.")
+            .emoji("📄")
+            .build();
     }
 
     /**

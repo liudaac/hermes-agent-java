@@ -603,7 +603,10 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
-                    agent.processMessage(chatId, content);
+                    String response = agent.processMessage(content);
+                    if (response != null && !response.isEmpty()) {
+                        replyToMessage(chatId, messageId, response);
+                    }
                 } catch (Exception e) {
                     logger.error("Error processing message", e);
                     try {
@@ -624,7 +627,10 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
-                    agent.processMessage(chatId, content);
+                    String response = agent.processMessage(content);
+                    if (response != null && !response.isEmpty()) {
+                        replyToMessage(chatId, messageId, response);
+                    }
                 } catch (Exception e) {
                     logger.error("Error processing direct message", e);
                     try {
@@ -643,7 +649,10 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
-                    agent.processMessage(channelId, content);
+                    String response = agent.processMessage(content);
+                    if (response != null && !response.isEmpty()) {
+                        sendChannelMessage(channelId, response);
+                    }
                 } catch (Exception e) {
                     logger.error("Error processing channel message", e);
                 }

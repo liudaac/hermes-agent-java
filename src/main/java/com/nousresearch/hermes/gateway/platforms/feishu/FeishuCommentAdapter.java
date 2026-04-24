@@ -214,7 +214,10 @@ public class FeishuCommentAdapter implements PlatformAdapter {
             try {
                 String context = String.format("Document: %s (%s)\nComment by: %s\n\n%s", 
                     docToken, docType, creator, content);
-                agent.processMessage(chatId, context);
+                String response = agent.processMessage(context);
+                if (response != null && !response.isEmpty()) {
+                    replyToDocumentComment(docToken, commentId, response);
+                }
             } catch (Exception e) {
                 logger.error("Error processing Feishu comment", e);
             }

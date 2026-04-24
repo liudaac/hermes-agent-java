@@ -277,20 +277,21 @@ public class AcpServer {
             }
         });
         
-        ws.onMessage((ctx, message) -> {
+        ws.onMessage(ctx -> {
+            String message = ctx.message();
             String sessionId = ctx.pathParam("id");
             logger.debug("WebSocket message for session {}: {}", sessionId, message);
-            
+
             AcpSession session = sessions.get(sessionId);
             if (session != null) {
                 session.handleWebSocketMessage(message);
             }
         });
-        
-        ws.onClose((ctx, status, message) -> {
+
+        ws.onClose(ctx -> {
             String sessionId = ctx.pathParam("id");
             logger.debug("WebSocket closed for session: {}", sessionId);
-            
+
             AcpSession session = sessions.get(sessionId);
             if (session != null) {
                 session.removeWebSocketConnection(ctx);

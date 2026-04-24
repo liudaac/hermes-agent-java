@@ -68,11 +68,14 @@ public class FeishuDriveTool {
         params.put("properties", props);
         params.put("required", new String[]{"folder_token"});
 
-        return new ToolEntry(
-            "feishu_drive_list",
-            "List files in a Feishu Drive folder.",
-            params
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_drive_list")
+            .toolset("feishu")
+            .schema(params)
+            .handler(args -> "Feishu Drive list files: not yet implemented")
+            .description("List files in a Feishu Drive folder.")
+            .emoji("📁")
+            .build();
     }
 
     private static ToolEntry getUploadFileTool() {
@@ -96,11 +99,14 @@ public class FeishuDriveTool {
         params.put("properties", props);
         params.put("required", new String[]{"folder_token", "file_name", "file_path"});
 
-        return new ToolEntry(
-            "feishu_drive_upload",
-            "Upload a file to Feishu Drive.",
-            params
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_drive_upload")
+            .toolset("feishu")
+            .schema(params)
+            .handler(args -> "Feishu Drive upload: not yet implemented")
+            .description("Upload a file to Feishu Drive.")
+            .emoji("📤")
+            .build();
     }
 
     private static ToolEntry getDownloadFileTool() {
@@ -120,11 +126,14 @@ public class FeishuDriveTool {
         params.put("properties", props);
         params.put("required", new String[]{"file_token", "save_path"});
 
-        return new ToolEntry(
-            "feishu_drive_download",
-            "Download a file from Feishu Drive.",
-            params
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_drive_download")
+            .toolset("feishu")
+            .schema(params)
+            .handler(args -> "Feishu Drive download: not yet implemented")
+            .description("Download a file from Feishu Drive.")
+            .emoji("📥")
+            .build();
     }
 
     private static ToolEntry getCreateFolderTool() {
@@ -144,11 +153,14 @@ public class FeishuDriveTool {
         params.put("properties", props);
         params.put("required", new String[]{"parent_token", "folder_name"});
 
-        return new ToolEntry(
-            "feishu_drive_create_folder",
-            "Create a folder in Feishu Drive.",
-            params
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_drive_create_folder")
+            .toolset("feishu")
+            .schema(params)
+            .handler(args -> "Feishu Drive create folder: not yet implemented")
+            .description("Create a folder in Feishu Drive.")
+            .emoji("📂")
+            .build();
     }
 
     private static ToolEntry getDeleteFileTool() {
@@ -164,11 +176,14 @@ public class FeishuDriveTool {
         params.put("properties", props);
         params.put("required", new String[]{"file_token"});
 
-        return new ToolEntry(
-            "feishu_drive_delete",
-            "Delete a file or folder from Feishu Drive.",
-            params
-        );
+        return new ToolEntry.Builder()
+            .name("feishu_drive_delete")
+            .toolset("feishu")
+            .schema(params)
+            .handler(args -> "Feishu Drive delete: not yet implemented")
+            .description("Delete a file or folder from Feishu Drive.")
+            .emoji("🗑️")
+            .build();
     }
 
     /**

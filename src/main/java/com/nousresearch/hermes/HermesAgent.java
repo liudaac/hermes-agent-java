@@ -23,6 +23,7 @@ import java.util.concurrent.Callable;
     subcommands = {
         HermesAgent.ChatCommand.class,
         HermesAgent.GatewayCommand.class,
+        HermesAgent.DashboardCommand.class,
         HermesAgent.ConfigCommand.class
     }
 )
@@ -79,6 +80,61 @@ public class HermesAgent implements Callable<Integer> {
                 return 0;
             } catch (Exception e) {
                 System.err.println("Gateway error: " + e.getMessage());
+                return 1;
+            }
+        }
+    }
+
+    @Command(name = "dashboard", description = "Start Web Dashboard server")
+    static class DashboardCommand implements Callable<Integer> {
+        @Option(names = {"--port", "-p"}, description = "Dashboard server port", defaultValue = "9119")
+        private int port;
+
+        @Option(names = {"--host", "-h"}, description = "Dashboard server host", defaultValue = "127.0.0.1")
+        private String host;
+
+        @Override
+        public Integer call() {
+            try {
+                HermesConfig config = HermesConfig.load();
+                com.nousresearch.hermes.dashboard.DashboardServer server =
+                    new com.nousresearch.hermes.dashboard.DashboardServer(port, host, config);
+
+                System.out.println("╔════════════════════════════════════════════════════════╗");
+                System.out.println("║              Hermes Web Dashboard                      ║");
+                System.out.println("╚════════════════════════════════════════════════════════╝");
+                System.out.println();
+                System.out.println("Dashboard server starting...");
+                System.out.println();
+
+                server.start();
+
+                System.out.println("✓ Dashboard server is running!");
+                System.out.println();
+                System.out.println("URL: http://" + host + ":" + port);
+                System.out.println("Session Token: " + server.getSessionToken().substring(0, 16) + "...");
+                System.out.println();
+                System.out.println("Press Ctrl+C to stop the server.");
+                System.out.println();
+
+                // Wait for shutdown
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    System.out.println("\nShutting down dashboard server...");
+                    server.stop();
+                }));
+
+                // Keep running
+                Thread.currentThread().join();
+
+                return 0;
+            } catch (InterruptedException e) {
+                System.out.println("Dashboard server stopped.");
+                return 0;
+            } catch (Exception e) {
+                System.err.println("Dashboard error: " + e.getMessage());
+                if (System.getenv("HERMES_DEBUG") != null) {
+                    e.printStackTrace();
+                }
                 return 1;
             }
         }

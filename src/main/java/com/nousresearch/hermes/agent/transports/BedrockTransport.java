@@ -117,10 +117,9 @@ public class BedrockTransport implements BaseTransport {
             String modelId = resolveModelId(model);
             
             JSONObject requestBody = buildAnthropicRequestBody(messages, tools, options);
-            requestBody.put("stream", true);
             
-            InvokeModelWithResponseStreamRequest request = 
-                InvokeModelWithResponseStreamRequest.builder()
+            InvokeModelRequest request = 
+                InvokeModelRequest.builder()
                     .modelId(modelId)
                     .body(SdkBytes.fromUtf8String(requestBody.toJSONString()))
                     .contentType("application/json")
@@ -132,17 +131,31 @@ public class BedrockTransport implements BaseTransport {
             StringBuilder contentBuilder = new StringBuilder();
             List<TransportMessage.ToolCall> toolCalls = new ArrayList<>();
             
-            client.invokeModelWithResponseStream(request)
-                .body()
-                .forEach(chunk -> {
-                    String chunkJson = chunk.asUtf8String();
-                    JSONObject chunkObj = JSON.parseObject(chunkJson);
-                    
-                    if (chunkObj.containsKey("completion")) {
-                        contentBuilder.append(chunkObj.getString("completion"));
+            // Use synchronous invokeModel instead of streaming
+            InvokeModelResponse response = client.invokeModel(request);
+            String responseBody = response.body().asUtf8String();
+            JSONObject responseObj = JSON.parseObject(responseBody);
+
+            // Parse response based on model type
+            if (responseObj.containsKey("completion")) {
+                contentBuilder.append(responseObj.getString("completion"));
+            } else if (responseObj.containsKey("content")) {
+                // Claude 3 format
+                Object content = responseObj.get("content");
+                if (content instanceof List) {
+                    List<?> contentList = (List<?>) content;
+                    for (Object item : contentList) {
+                        if (item instanceof Map) {
+                            Map<?, ?> map = (Map<?, ?>) item;
+                            if ("text".equals(map.get("type"))) {
+                                contentBuilder.append(map.get("text"));
+                            }
+                        }
                     }
-                    // Handle other chunk types as needed
-                });
+                } else {
+                    contentBuilder.append(content.toString());
+                }
+            }
             
             return Stream.of(TransportResponse.success(
                 contentBuilder.toString(),
