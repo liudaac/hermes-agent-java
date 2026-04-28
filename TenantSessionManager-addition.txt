@@ -1,0 +1,12 @@
+# TenantSessionManager.java 添加内容
+
+在类末尾的最后一个方法之后，添加以下方法：
+
+```java
+    /**
+     * 获取活跃会话数量
+     */
+    public int getActiveSessionCount() {
+        return sessions.size();
+    }
+```

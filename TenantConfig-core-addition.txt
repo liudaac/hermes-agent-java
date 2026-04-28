@@ -1,0 +1,21 @@
+# TenantConfig.java (core包) 添加内容
+
+在类末尾添加以下 setter 方法：
+
+```java
+    // Setter methods for API compatibility
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public void setName(String name) { this.name = name; }
+    public void setDescription(String description) { this.description = description; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public void setQuota(TenantQuota quota) { this.quota = quota; }
+    public void setSecurityPolicy(TenantSecurityPolicy policy) { this.securityPolicy = policy; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    
+    public String getName() { return name; }
+    public String getDescription() { return description; }
+    public String getCreatedBy() { return createdBy; }
+    public TenantQuota getQuota() { return quota; }
+    public TenantSecurityPolicy getSecurityPolicy() { return securityPolicy; }
+```

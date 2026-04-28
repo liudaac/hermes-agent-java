@@ -1,0 +1,38 @@
+# TenantManager.java 修复说明
+
+## 问题：重复方法定义
+
+请删除以下重复的方法（大约在 248-275 行）：
+
+```java
+    /**
+     * 检查租户是否已注册（别名方法，供API使用）
+     */
+    public boolean isRegistered(String tenantId) {
+        return exists(tenantId);
+    }
+
+    /**
+     * 删除租户（别名方法，供API使用）
+     */
+    public void deleteTenant(String tenantId) {
+        destroyTenant(tenantId, false);
+    }
+
+    /**
+     * 暂停租户（单参数版本，供API使用）
+     */
+    public void suspendTenant(String tenantId) {
+        suspendTenant(tenantId, "api_request");
+    }
+
+    public Map<String, Object> getAllTenants() {
+        return new HashMap<>();
+    }
+
+    public String getTenantConfigPath() {
+        return "tenants/";
+    }
+```
+
+保留类中原有的 `isRegistered()`, `deleteTenant()`, `suspendTenant(String, String)` 方法。

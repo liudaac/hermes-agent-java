@@ -1,0 +1,15 @@
+# TenantController.java 导入修复
+
+将第 6-7 行：
+```java
+import com.nousresearch.hermes.tenant.TenantConfig;
+import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
+```
+
+改为：
+```java
+import com.nousresearch.hermes.tenant.core.TenantConfig;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+```
+
+注意：确保 TenantConfig 使用的是 core 包中的类，而不是 tenant 包中的类。
