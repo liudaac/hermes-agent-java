@@ -1,0 +1,109 @@
+--- a/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java
++++ b/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java
+@@ -242,30 +242,6 @@ public class TenantManager implements AutoCloseable {
+         }
+     }
+ 
+-    /**
+-     * 检查租户是否已注册（别名方法，供API使用）
+-     */
+-    public boolean isRegistered(String tenantId) {
+-        return exists(tenantId);
+-    }
+-
+-    /**
+-     * 删除租户（别名方法，供API使用）
+-     */
+-    public void deleteTenant(String tenantId) {
+-        destroyTenant(tenantId, false);
+-    }
+-
+-    /**
+-     * 暂停租户（单参数版本，供API使用）
+-     */
+-    public void suspendTenant(String tenantId) {
+-        suspendTenant(tenantId, "api_request");
+-    }
+-
+-    public Map<String, Object> getAllTenants() {
+-        return new HashMap<>();
+-    }
+-
+-    public String getTenantConfigPath() {
+-        return "tenants/";
+-    }
+ }
+
+--- a/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java
++++ b/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java
+@@ -3,8 +3,8 @@ package com.nousresearch.hermes.gateway.api;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.nousresearch.hermes.config.Config;
+ import com.nousresearch.hermes.tenant.Tenant;
+-import com.nousresearch.hermes.tenant.core.TenantConfig;
+-import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
++import com.nousresearch.hermes.tenant.TenantConfig;
++import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
+ import com.nousresearch.hermes.tenant.core.TenantContext;
+ import com.nousresearch.hermes.tenant.core.TenantManager;
+ import com.nousresearch.hermes.tenant.core.TenantSkill;
+@@ -155,30 +155,30 @@ public class TenantController {
+             return error(409, "Tenant already exists: " + tenantId);
+         }
+ 
+-        // 2. 创建租户配置
+-        TenantConfig tenantConfig = new TenantConfig();
+-        tenantConfig.setTenantId(tenantId);
+-        tenantConfig.setName(name);
+-        tenantConfig.setDescription(description);
+-        tenantConfig.setCreatedBy(currentUser);
+-
+-        // 3. 解析配额
++        // 2. 解析配额
+         TenantQuota quota = new TenantQuota();
+         if (quotaJson != null) {
+             quota = objectMapper.readValue(quotaJson, TenantQuota.class);
+         }
+-        tenantConfig.setQuota(quota);
+ 
+-        // 4. 解析安全策略
++        // 3. 解析安全策略
+         TenantSecurityPolicy securityPolicy = new TenantSecurityPolicy();
+         if (policyJson != null) {
+             securityPolicy = objectMapper.readValue(policyJson, TenantSecurityPolicy.class);
+         }
+-        tenantConfig.setSecurityPolicy(securityPolicy);
+ 
+-        // 5. 创建配置存储目录
++        // 4. 创建配置存储目录
+         Path configDir = config.getTenantsDirectory().resolve(tenantId);
+         Files.createDirectories(configDir);
+ 
+-        // 6. 创建租户
+-        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, tenantConfig.getCreatedBy())
+-            .tenantName(tenantConfig.getName())
+-            .description(tenantConfig.getDescription())
+-            .quota(tenantConfig.getQuota())
+-            .securityPolicy(tenantConfig.getSecurityPolicy())
++        // 5. 创建租户配置 (使用Map构建)
++        Map<String, Object> configData = new HashMap<>();
++        configData.put("tenantId", tenantId);
++        configData.put("name", name);
++        configData.put("description", description);
++        configData.put("createdBy", currentUser);
++        configData.put("quota", quota);
++        configData.put("securityPolicy", securityPolicy);
++        configData.put("createdAt", Instant.now().toString());
++        configData.put("updatedAt", Instant.now().toString());
++
++        TenantConfig tenantConfig = new TenantConfig(configDir.resolve("config.json"), configData);
++
++        // 6. 创建租户
++        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, currentUser)
++            .tenantName(name)
++            .description(description)
++            .quota(quota)
++            .securityPolicy(securityPolicy)
+             .build();
+ 
+         // 7. 保存配置
