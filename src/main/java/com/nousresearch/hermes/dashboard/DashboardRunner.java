@@ -28,7 +28,7 @@ public class DashboardRunner {
             config = HermesConfig.load();
         } catch (Exception e) {
             logger.warn("Could not load config, using defaults: {}", e.getMessage());
-            config = new HermesConfig();
+            config = new HermesConfig();  // Uses default config when file doesn't exist
         }
         server = new DashboardServer(port, host, config);
 

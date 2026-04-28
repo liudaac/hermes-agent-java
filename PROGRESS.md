@@ -49,6 +49,17 @@
 - [x] DiscordAdapter - Discord 适配器
 - [x] SessionManager - 会话持久化
 
+### 多租户隔离 ⭐ 新增
+- [x] TenantContext - 租户上下文
+- [x] TenantManager - 租户生命周期管理
+- [x] TenantFileSandbox - 文件沙箱隔离
+- [x] TenantAwareCodeTool - 代码执行沙箱
+- [x] TenantToolRegistry - 工具权限控制
+- [x] TenantQuotaManager - 资源配额管理
+- [x] TenantSecurityPolicy - 安全策略配置
+- [x] TenantAuditLogger - 审计日志
+- [x] TenantSkillManager - Skill 隔离机制
+
 ### 压缩系统
 - [x] CompressionService - 上下文压缩
 

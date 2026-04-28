@@ -74,10 +74,11 @@ public class SubAgent implements Callable<SubAgentResult> {
                     break;
                 }
                 
-                // Call model
+                // Call model - get tool definitions from registry
+                List<Map<String, Object>> toolDefs = buildToolDefinitions();
                 ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
                     conversationHistory,
-                    buildToolDefinitions(),
+                    toolDefs.isEmpty() ? null : toolDefs,
                     false
                 );
                 

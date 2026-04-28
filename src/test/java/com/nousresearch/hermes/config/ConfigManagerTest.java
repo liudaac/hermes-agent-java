@@ -23,13 +23,13 @@ public class ConfigManagerTest {
     @Test
     void testDefaultConfigCreation() throws Exception {
         Path configPath = tempDir.resolve("config.yaml");
-        
+
         ConfigManager config = ConfigManager.getInstance();
         config.load(configPath);
-        
+
         assertTrue(Files.exists(configPath));
         assertEquals("openrouter", config.getModelProvider());
-        assertEquals(30, config.getMaxTurns());
+        assertEquals(Constants.DEFAULT_MAX_ITERATIONS, config.getMaxTurns());
     }
     
     @Test

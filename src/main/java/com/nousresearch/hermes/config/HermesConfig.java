@@ -27,11 +27,23 @@ public class HermesConfig {
     private String baseUrlOverride;
     private String apiKeyOverride;
 
+    /**
+     * Private constructor for loading from file.
+     */
     private HermesConfig(Path configPath) {
         this.configPath = configPath;
         this.config = new HashMap<>();
     }
-    
+
+    /**
+     * Create empty config with defaults (for fallback use).
+     * Matches Python: load_config() returns DEFAULT_CONFIG when file doesn't exist.
+     */
+    public HermesConfig() {
+        this.configPath = null;
+        this.config = createDefaultConfig();
+    }
+
     /**
      * Create config with explicit values (for programmatic use).
      */
