@@ -87,6 +87,52 @@ public class TenantAuditLogger {
         }
     }
     
+    /**
+     * 获取最近的审计事件
+     */
+    public java.util.List<AuditEntry> getRecentEvents(int limit) {
+        java.util.List<AuditEntry> events = new java.util.ArrayList<>();
+        
+        if (!Files.exists(auditLogFile)) {
+            return events;
+        }
+        
+        try {
+            java.util.List<String> lines = Files.readAllLines(auditLogFile);
+            // 从后往前读取，最多 limit 条
+            int start = Math.max(0, lines.size() - limit);
+            for (int i = lines.size() - 1; i >= start && events.size() < limit; i--) {
+                String line = lines.get(i).trim();
+                if (line.isEmpty()) continue;
+                
+                // 简单解析日志行
+                try {
+                    int bracket1 = line.indexOf('[');
+                    int bracket2 = line.indexOf(']', bracket1);
+                    
+                    if (bracket1 > 0 && bracket2 > bracket1) {
+                        String timestampStr = line.substring(0, bracket1).trim();
+                        String eventStr = line.substring(bracket1 + 1, bracket2).trim();
+                        String detailsStr = line.substring(bracket2 + 1).trim();
+                        
+                        Instant timestamp = Instant.parse(timestampStr);
+                        AuditEvent event = AuditEvent.valueOf(eventStr);
+                        Map<String, Object> details = new java.util.HashMap<>();
+                        details.put("raw", detailsStr);
+                        
+                        events.add(new AuditEntry(timestamp, event, details));
+                    }
+                } catch (Exception e) {
+                    // 解析失败，跳过
+                }
+            }
+        } catch (IOException e) {
+            logger.error("Failed to read audit log", e);
+        }
+        
+        return events;
+    }
+    
     // ============ 记录类 ============
     
     public record AuditEntry(Instant timestamp, AuditEvent event, Map<String, Object> details) {}

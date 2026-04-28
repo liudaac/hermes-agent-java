@@ -174,13 +174,41 @@ public class TenantManager {
     }
     
     /**
-     * 暂停租户
+     * 删除租户（默认不保留数据）
+     */
+    public void deleteTenant(String tenantId) {
+        destroyTenant(tenantId, false);
+    }
+    
+    /**
+     * 配置/创建租户（API 兼容方法）
+     */
+    public TenantContext provisionTenant(TenantProvisioningRequest request) {
+        return createTenant(request);
+    }
+    
+    /**
+     * 检查租户是否已注册
+     */
+    public boolean isRegistered(String tenantId) {
+        return exists(tenantId);
+    }
+    
+    /**
+     * 暂停租户（带原因）
      */
     public void suspendTenant(String tenantId, String reason) {
         TenantContext context = tenants.get(tenantId);
         if (context != null) {
             context.suspend(reason);
         }
+    }
+    
+    /**
+     * 暂停租户（默认原因）
+     */
+    public void suspendTenant(String tenantId) {
+        suspendTenant(tenantId, "Suspended by administrator");
     }
     
     /**
@@ -215,9 +243,9 @@ public class TenantManager {
     }
     
     /**
-     * 检查租户是否存在
+     * 检查租户是否已注册
      */
-    public boolean exists(String tenantId) {
+    public boolean isRegistered(String tenantId) {
         if (tenants.containsKey(tenantId)) {
             return true;
         }
@@ -228,6 +256,27 @@ public class TenantManager {
         } finally {
             registryLock.readLock().unlock();
         }
+    }
+    
+    /**
+     * 删除租户
+     */
+    public void deleteTenant(String tenantId) {
+        destroyTenant(tenantId, false);
+    }
+    
+    /**
+     * 暂停租户（单参数版本）
+     */
+    public void suspendTenant(String tenantId) {
+        suspendTenant(tenantId, "api_request");
+    }
+    
+    /**
+     * 检查租户是否存在（别名方法）
+     */
+    public boolean exists(String tenantId) {
+        return isRegistered(tenantId);
     }
     
     /**

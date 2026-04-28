@@ -3,8 +3,8 @@ package com.nousresearch.hermes.gateway.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nousresearch.hermes.config.Config;
 import com.nousresearch.hermes.config.Constants;
-import com.nousresearch.hermes.tenant.TenantConfig;
-import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.core.TenantConfig;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -176,11 +177,11 @@ public class TenantController implements HttpHandler {
             tenantConfig.setSecurityPolicy(parseSecurityPolicy(securityMap));
         }
         
-        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder()
-            .tenantId(tenantId)
-            .config(tenantConfig)
+        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, tenantConfig.getCreatedBy())
+            .tenantName(tenantConfig.getName())
+            .description(tenantConfig.getDescription())
             .quota(tenantConfig.getQuota())
-            .createdBy(tenantConfig.getCreatedBy())
+            .securityPolicy(tenantConfig.getSecurityPolicy())
             .build();
         
         TenantContext context = tenantManager.provisionTenant(provisionRequest);
@@ -380,12 +381,12 @@ public class TenantController implements HttpHandler {
         }
         
         List<Map<String, Object>> events = context.getAuditLogger().getRecentEvents(limit).stream()
-            .filter(e -> eventType == null || e.type().name().equalsIgnoreCase(eventType))
+            .filter(e -> eventType == null || e.event().name().equalsIgnoreCase(eventType))
             .map(e -> {
                 Map<String, Object> map = new LinkedHashMap<>();
                 map.put("timestamp", e.timestamp().toString());
-                map.put("type", e.type().name());
-                map.put("data", e.data());
+                map.put("type", e.event().name());
+                map.put("data", e.details());
                 return map;
             })
             .collect(Collectors.toList());
@@ -407,7 +408,7 @@ public class TenantController implements HttpHandler {
             return;
         }
         
-        TenantSkillManager skillManager = new TenantSkillManager(context);
+        TenantSkillManager skillManager = context.getSkillManager();
         List<TenantSkillManager.SkillSummary> skills = skillManager.listSkills();
         
         List<Map<String, Object>> skillList = skills.stream()

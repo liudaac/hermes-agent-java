@@ -47,4 +47,13 @@ public record TenantSkill(
             readOnly, signature
         );
     }
+    
+    // Bean-style accessors for compatibility
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+    
+    public String id() {
+        return name;
+    }
 }

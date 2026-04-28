@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.tenant.core;
 
 import com.nousresearch.hermes.config.Constants;
+import com.nousresearch.hermes.tenant.core.TenantConfig;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.audit.TenantAuditLogger;
 import com.nousresearch.hermes.tenant.quota.TenantQuotaManager;

@@ -23,7 +23,8 @@ public class ApprovalSystem {
         FILE_DELETE,
         CODE_EXECUTION,
         BROWSER_ACTION,
-        SUBAGENT_SPAWN
+        SUBAGENT_SPAWN,
+        SKILL_INSTALL
     }
     
     public enum ApprovalMode {

@@ -116,6 +116,22 @@ public class TenantQuotaManager {
         return Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
     }
     
+    public long getStorageUsage() {
+        return storageUsage.get();
+    }
+    
+    /**
+     * 检查工具调用配额
+     */
+    public void checkToolCallQuota() {
+        checkAndResetDailyQuota();
+        
+        int currentCalls = dailyRequests.get();
+        if (currentCalls >= quota.getMaxToolCallsPerSession()) {
+            throw new QuotaExceededException("Tool call quota exceeded for this session");
+        }
+    }
+    
     public QuotaUsage getUsage() {
         return new QuotaUsage(
             dailyRequests.get(),

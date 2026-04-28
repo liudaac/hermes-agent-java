@@ -786,6 +786,41 @@ public class TenantSkillManager {
         });
     }
 
+    // ============ Skill 查询 ============
+
+    /**
+     * Skill 摘要信息
+     */
+    public record SkillSummary(
+        String name,
+        String description,
+        String source,
+        int version,
+        boolean readOnly
+    ) {}
+
+    /**
+     * 列出所有 Skills（摘要形式）
+     */
+    public List<SkillSummary> listSkills() {
+        return listAvailableSkills().stream()
+            .map(skill -> new SkillSummary(
+                skill.name(),
+                skill.description(),
+                skill.source() != null ? skill.source().name().toLowerCase() : "unknown",
+                skill.version(),
+                skill.readOnly()
+            ))
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取指定 Skill
+     */
+    public TenantSkill getSkill(String name) {
+        return loadSkill(name);
+    }
+
     // ============ 记录类 ============
 
     private record CachedSkill(TenantSkill skill, Instant timestamp) {}
