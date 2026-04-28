@@ -3,8 +3,8 @@ package com.nousresearch.hermes.gateway.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nousresearch.hermes.config.Config;
 import com.nousresearch.hermes.config.Constants;
-import com.nousresearch.hermes.tenant.TenantConfig;
-import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.core.TenantConfig;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
@@ -21,7 +21,10 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.*;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
