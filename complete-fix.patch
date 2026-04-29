@@ -1,0 +1,156 @@
+diff --git a/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java b/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java
+index abc123..def456 100644
+--- a/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java
++++ b/src/main/java/com/nousresearch/hermes/gateway/api/TenantController.java
+@@ -3,8 +3,8 @@ package com.nousresearch.hermes.gateway.api;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import com.nousresearch.hermes.config.Config;
+ import com.nousresearch.hermes.tenant.Tenant;
+-import com.nousresearch.hermes.tenant.TenantConfig;
+-import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
++import com.nousresearch.hermes.tenant.core.TenantConfig;
++import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+ import com.nousresearch.hermes.tenant.core.TenantContext;
+ import com.nousresearch.hermes.tenant.core.TenantManager;
+ import com.nousresearch.hermes.tenant.core.TenantSkill;
+@@ -15,7 +15,11 @@ import com.nousresearch.hermes.tenant.quota.TenantQuota;
+ import java.io.IOException;
+ import java.io.OutputStream;
+ import java.nio.charset.StandardCharsets;
+-import java.util.*;
++import java.nio.file.Path;
++import java.time.Instant;
++import java.util.HashMap;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Map;
+ import java.util.stream.Collectors;
+ 
+ /**
+@@ -155,30 +159,30 @@ public class TenantController {
+             return error(409, "Tenant already exists: " + tenantId);
+         }
+ 
+-        // 2. 创建租户配置
+-        TenantConfig tenantConfig = new TenantConfig();
+-        tenantConfig.setTenantId(tenantId);
+-        tenantConfig.setName(name);
+-        tenantConfig.setDescription(description);
+-        tenantConfig.setCreatedBy(currentUser);
+-
+-        // 3. 解析配额
++        // 2. 解析配额
+         TenantQuota quota = new TenantQuota();
+         if (quotaJson != null) {
+             quota = objectMapper.readValue(quotaJson, TenantQuota.class);
+         }
+-        tenantConfig.setQuota(quota);
+ 
+-        // 4. 解析安全策略
++        // 3. 解析安全策略
+         TenantSecurityPolicy securityPolicy = new TenantSecurityPolicy();
+         if (policyJson != null) {
+             securityPolicy = objectMapper.readValue(policyJson, TenantSecurityPolicy.class);
+         }
+-        tenantConfig.setSecurityPolicy(securityPolicy);
+ 
+-        // 5. 创建配置存储目录
++        // 4. 创建配置存储目录
+         Path configDir = config.getTenantsDirectory().resolve(tenantId);
+         Files.createDirectories(configDir);
+ 
+-        // 6. 创建租户
+-        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, tenantConfig.getCreatedBy())
+-            .tenantName(tenantConfig.getName())
+-            .description(tenantConfig.getDescription())
+-            .quota(tenantConfig.getQuota())
+-            .securityPolicy(tenantConfig.getSecurityPolicy())
++        // 5. 创建租户配置
++        TenantConfig tenantConfig = new TenantConfig();
++        tenantConfig.setTenantId(tenantId);
++        tenantConfig.setName(name);
++        tenantConfig.setDescription(description);
++        tenantConfig.setCreatedBy(currentUser);
++        tenantConfig.setQuota(quota);
++        tenantConfig.setSecurityPolicy(securityPolicy);
++
++        // 6. 创建租户配置请求
++        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, currentUser)
++            .tenantName(name)
++            .description(description)
++            .quota(quota)
++            .securityPolicy(securityPolicy)
+             .build();
+ 
+         // 7. 保存配置
+
+diff --git a/src/main/java/com/nousresearch/hermes/tenant/core/TenantConfig.java b/src/main/java/com/nousresearch/hermes/tenant/core/TenantConfig.java
+index abc123..def456 100644
+--- a/src/main/java/com/nousresearch/hermes/tenant/core/TenantConfig.java
++++ b/src/main/java/com/nousresearch/hermes/tenant/core/TenantConfig.java
+@@ -180,6 +180,26 @@ public class TenantConfig {
+     public Instant getUpdatedAt() { return updatedAt; }
+     public Path getConfigFile() { return configFile; }
+     
++    // Setters for API compatibility
++    public void setTenantId(String tenantId) { 
++        this.tenantId = tenantId; 
++        data.put("tenantId", tenantId);
++    }
++    
++    public void setName(String name) { 
++        this.name = name; 
++        data.put("name", name);
++    }
++    
++    public void setDescription(String description) { 
++        this.description = description; 
++        data.put("description", description);
++    }
++    
++    public void setCreatedBy(String createdBy) { 
++        this.createdBy = createdBy; 
++        data.put("createdBy", createdBy);
++    }
++    
+     public void setQuota(TenantQuota quota) {
+         this.quota = quota;
+         data.put("quota", quota);
+
+diff --git a/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java b/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java
+index abc123..def456 100644
+--- a/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java
++++ b/src/main/java/com/nousresearch/hermes/tenant/core/TenantManager.java
+@@ -242,30 +242,6 @@ public class TenantManager implements AutoCloseable {
+         }
+     }
+ 
+-    /**
+-     * 检查租户是否已注册（别名方法，供API使用）
+-     */
+-    public boolean isRegistered(String tenantId) {
+-        return exists(tenantId);
+-    }
+-
+-    /**
+-     * 删除租户（别名方法，供API使用）
+-     */
+-    public void deleteTenant(String tenantId) {
+-        destroyTenant(tenantId, false);
+-    }
+-
+-    /**
+-     * 暂停租户（单参数版本，供API使用）
+-     */
+-    public void suspendTenant(String tenantId) {
+-        suspendTenant(tenantId, "api_request");
+-    }
+-
+-    public Map<String, Object> getAllTenants() {
+-        return new HashMap<>();
+-    }
+-
+-    public String getTenantConfigPath() {
+-        return "tenants/";
+-    }
+ }
