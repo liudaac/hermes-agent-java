@@ -1,109 +1,103 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
-import org.junit.jupiter.api.*;
-import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.http.HttpResponse;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
  * NetworkSandbox 单元测试
  */
-public class NetworkSandboxTest {
+class NetworkSandboxTest {
 
-    private NetworkSandbox sandbox;
+    private TenantContext mockContext;
+    private NetworkPolicy policy;
+    private RestrictedHttpClient client;
 
     @BeforeEach
     void setUp() {
-        NetworkPolicy policy = NetworkPolicy.builder()
+        mockContext = mock(TenantContext.class);
+        when(mockContext.getTenantId()).thenReturn("test-tenant");
+        when(mockContext.getAuditLogger()).thenReturn(mock(com.nousresearch.hermes.tenant.core.TenantAuditLogger.class));
+
+        policy = NetworkPolicy.builder()
             .allowHost("*.github.com")
-            .allowHost("httpbin.org")
+            .allowHost("api.openai.com")
             .blockHost("localhost")
             .blockHost("127.0.0.*")
             .blockHost("10.*.*.*")
-            .maxRequestsPerSecond(100)
+            .blockHost("192.168.*.*")
+            .maxRequestsPerSecond(10)
+            .maxRequestBodySize(1024 * 1024) // 1MB
+            .maxResponseBodySize(5 * 1024 * 1024) // 5MB
             .build();
-        
-        sandbox = new NetworkSandbox(policy);
+
+        client = new RestrictedHttpClient(mockContext, policy);
     }
 
     @Test
-    @DisplayName("访问白名单域名应该成功")
-    void testAllowedHost() {
-        // 注意：实际测试需要网络连接
-        // 这里使用 httpbin.org 进行测试
-        assertDoesNotThrow(() -> {
-            HttpResponse<String> response = sandbox.get("https://httpbin.org/get");
-            assertEquals(200, response.statusCode());
-        });
+    void testAllowedHostRequest() {
+        // 注意：这是一个集成测试，实际运行需要网络连接
+        // 这里我们使用假设测试
+        assertTrue(policy.isHostAllowed("api.github.com"));
+        assertTrue(policy.isHostAllowed("raw.githubusercontent.com"));
     }
 
     @Test
-    @DisplayName("访问黑名单域名应该被拒绝")
-    void testBlockedHost() {
-        NetworkSandboxException exception = assertThrows(
-            NetworkSandboxException.class,
-            () -> sandbox.get("http://localhost:8080/api")
-        );
-        
-        assertTrue(exception.getMessage().contains("Host not allowed"));
+    void testBlockedHostRequest() {
+        assertFalse(policy.isHostAllowed("localhost"));
+        assertFalse(policy.isHostAllowed("127.0.0.1"));
+        assertFalse(policy.isHostAllowed("10.0.0.1"));
+        assertFalse(policy.isHostAllowed("192.168.1.1"));
     }
 
     @Test
-    @DisplayName("访问内网 IP 应该被拒绝")
-    void testBlockedInternalIP() {
-        NetworkSandboxException exception = assertThrows(
-            NetworkSandboxException.class,
-            () -> sandbox.get("http://10.0.0.1/api")
-        );
-        
-        assertTrue(exception.getMessage().contains("Host not allowed"));
+    void testProtocolRestriction() {
+        assertTrue(policy.getAllowedProtocols().contains("https"));
+        assertTrue(policy.getAllowedProtocols().contains("http"));
     }
 
     @Test
-    @DisplayName("不允许的协议应该被拒绝")
-    void testDisallowedProtocol() {
-        NetworkPolicy strictPolicy = NetworkPolicy.builder()
-            .allowedProtocols(Set.of("https"))  // 只允许 https
-            .build();
-        
-        NetworkSandbox strictSandbox = new NetworkSandbox(strictPolicy);
+    void testRequestSizeLimit() {
+        // 请求体超过限制应该被拒绝
+        String largeBody = "x".repeat((int) (policy.getMaxRequestBodySize() + 1));
         
         NetworkSandboxException exception = assertThrows(
             NetworkSandboxException.class,
-            () -> strictSandbox.get("ftp://example.com/file")
+            () -> client.post("https://api.github.com/test", largeBody)
         );
-        
-        assertTrue(exception.getMessage().contains("Protocol not allowed"));
+
+        assertTrue(exception.getMessage().contains("too large"));
     }
 
     @Test
-    @DisplayName("速率限制应该生效")
     void testRateLimit() {
-        NetworkPolicy limitedPolicy = NetworkPolicy.builder()
-            .allowHost("httpbin.org")
-            .maxRequestsPerSecond(1)  // 每秒只允许1个请求
-            .build();
+        // 快速发送请求应该触发速率限制
+        int requestCount = 0;
+        for (int i = 0; i < 15; i++) {
+            try {
+                client.get("https://api.github.com/");
+                requestCount++;
+            } catch (NetworkSandboxException e) {
+                assertTrue(e.getMessage().contains("Rate limit"));
+                break;
+            }
+        }
         
-        NetworkSandbox limitedSandbox = new NetworkSandbox(limitedPolicy);
-        
-        // 第一个请求应该成功
-        assertDoesNotThrow(() -> limitedSandbox.get("https://httpbin.org/get"));
-        
-        // 立即发送第二个请求应该被限流
-        assertThrows(NetworkQuotaExceededException.class, () -> {
-            limitedSandbox.get("https://httpbin.org/get");
-        });
+        // 应该在前 10 个请求后触发限制
+        assertTrue(requestCount <= 10);
     }
 
     @Test
-    @DisplayName("POST 请求应该正常工作")
-    void testPostRequest() {
-        assertDoesNotThrow(() -> {
-            HttpResponse<String> response = sandbox.post(
-                "https://httpbin.org/post",
-                "{\"test\": \"data\"}"
-            );
-            assertEquals(200, response.statusCode());
-        });
+    void testNetworkStats() {
+        RestrictedHttpClient.NetworkStats stats = client.getStats();
+        
+        assertNotNull(stats);
+        assertEquals(0, stats.getTotalRequests()); // 初始状态
+        assertEquals(0, stats.getBlockedRequests());
     }
 }

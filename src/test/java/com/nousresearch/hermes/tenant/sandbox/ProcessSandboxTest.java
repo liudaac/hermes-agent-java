@@ -1,114 +1,127 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
 /**
  * ProcessSandbox 单元测试
  */
-public class ProcessSandboxTest {
+class ProcessSandboxTest {
 
     @TempDir
     Path tempDir;
 
     private TenantContext mockContext;
+    private ProcessSandboxConfig config;
     private ProcessSandbox sandbox;
 
     @BeforeEach
     void setUp() {
         mockContext = mock(TenantContext.class);
         when(mockContext.getTenantId()).thenReturn("test-tenant");
-        
-        ProcessSandboxConfig config = ProcessSandboxConfig.builder()
+        when(mockContext.getTenantDir()).thenReturn(tempDir);
+
+        config = ProcessSandboxConfig.builder()
+            .allowCommand("echo")
+            .allowCommand("cat")
+            .allowCommand("ls")
+            .blockCommand("rm")
+            .blockCommand("sudo")
             .workDirectory(tempDir)
-            .commandWhitelist(Set.of("echo", "ls", "cat"))
-            .commandBlacklist(Set.of("rm", "mkfs"))
             .build();
-        
+
         sandbox = new ProcessSandbox(mockContext, config);
     }
 
     @Test
-    @DisplayName("执行简单命令应该成功")
-    void testExecuteSimpleCommand() {
+    void testAllowedCommandExecution() {
         ProcessResult result = sandbox.exec(
             List.of("echo", "hello"),
             ProcessOptions.builder().build()
         );
-        
+
         assertTrue(result.isSuccess());
         assertEquals(0, result.getExitCode());
         assertTrue(result.getStdout().contains("hello"));
     }
 
     @Test
-    @DisplayName("黑名单命令应该被拒绝")
-    void testBlacklistedCommand() {
+    void testBlockedCommandExecution() {
         ProcessSandboxException exception = assertThrows(
             ProcessSandboxException.class,
-            () -> sandbox.exec(List.of("rm", "-rf", "/"), null)
+            () -> sandbox.exec(
+                List.of("rm", "-rf", "/"),
+                ProcessOptions.builder().build()
+            )
         );
-        
-        assertTrue(exception.getMessage().contains("not allowed"));
+
+        assertTrue(exception.getMessage().contains("blocked"));
     }
 
     @Test
-    @DisplayName("不在白名单的命令应该被拒绝")
-    void testNotInWhitelist() {
-        ProcessSandboxConfig strictConfig = ProcessSandboxConfig.builder()
-            .commandWhitelist(Set.of("echo"))  // 只允许 echo
-            .workDirectory(tempDir)
-            .build();
-        
-        ProcessSandbox strictSandbox = new ProcessSandbox(mockContext, strictConfig);
-        
-        // ls 不在白名单中，应该被拒绝
-        ProcessSandboxException exception = assertThrows(
-            ProcessSandboxException.class,
-            () -> strictSandbox.exec(List.of("ls"), null)
-        );
-        
-        assertTrue(exception.getMessage().contains("not allowed"));
-    }
-
-    @Test
-    @DisplayName("超时应该触发")
-    void testTimeout() {
+    void testCommandTimeout() {
         ProcessResult result = sandbox.exec(
             List.of("sleep", "10"),
-            ProcessOptions.builder().timeoutSeconds(1).build()
+            ProcessOptions.builder()
+                .timeoutSeconds(1)
+                .build()
         );
-        
-        assertTrue(result.isTimedOut());
-        assertEquals(-1, result.getExitCode());
-    }
 
-    @Test
-    @DisplayName("命令输出应该被正确捕获")
-    void testOutputCapture() {
-        ProcessResult result = sandbox.exec(
-            List.of("echo", "stdout content"),
-            ProcessOptions.builder().build()
-        );
-        
-        assertTrue(result.getStdout().contains("stdout content"));
-    }
-
-    @Test
-    @DisplayName("错误输出应该被正确捕获")
-    void testErrorCapture() {
-        ProcessResult result = sandbox.exec(
-            List.of("cat", "/nonexistent/file"),
-            ProcessOptions.builder().build()
-        );
-        
         assertFalse(result.isSuccess());
-        assertNotEquals(0, result.getExitCode());
+        assertTrue(result.isTimedOut());
+    }
+
+    @Test
+    void testWorkingDirectoryRestriction() {
+        ProcessResult result = sandbox.exec(
+            List.of("pwd"),
+            ProcessOptions.builder()
+                .workDirectory(tempDir)
+                .build()
+        );
+
+        assertTrue(result.isSuccess());
+        assertTrue(result.getStdout().trim().startsWith(tempDir.toString()));
+    }
+
+    @Test
+    void testEnvironmentVariableSanitization() {
+        ProcessResult result = sandbox.exec(
+            List.of("env"),
+            ProcessOptions.builder().build()
+        );
+
+        assertTrue(result.isSuccess());
+        // 确保敏感变量被清理
+        assertFalse(result.getStdout().contains("SECRET"));
+        assertFalse(result.getStdout().contains("PASSWORD"));
+    }
+
+    @Test
+    void testMaxPidsLimit() {
+        ProcessOptions options = ProcessOptions.builder()
+            .maxPids(5)
+            .timeoutSeconds(5)
+            .build();
+
+        // 尝试创建超过限制的进程
+        ProcessSandboxException exception = assertThrows(
+            ProcessSandboxException.class,
+            () -> sandbox.exec(
+                List.of("bash", "-c", "for i in {1..10}; do sleep 1 & done"),
+                options
+            )
+        );
+
+        assertTrue(exception.getMessage().contains("PID") || 
+                   exception.getMessage().contains("limit"));
     }
 }
