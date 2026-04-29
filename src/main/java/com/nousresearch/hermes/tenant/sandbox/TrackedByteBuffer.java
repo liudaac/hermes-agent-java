@@ -1,17 +1,21 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
-import sun.misc.Cleaner;
-import sun.nio.ch.DirectBuffer;
-
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.MappedByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.DoubleBuffer;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
+import java.nio.LongBuffer;
+import java.nio.ShortBuffer;
 
 /**
  * 带追踪的 ByteBuffer 包装器
  * 
- * 自动管理内存释放，当缓冲区不再被引用时自动释放配额
+ * 包装直接内存 ByteBuffer，实现：
+ * - 自动释放追踪
+ * - 防止重复释放
+ * - 访问已释放缓冲区检测
  */
 public class TrackedByteBuffer extends ByteBuffer {
 
@@ -22,102 +26,132 @@ public class TrackedByteBuffer extends ByteBuffer {
     private volatile boolean freed = false;
 
     TrackedByteBuffer(ByteBuffer delegate, String allocationId, long size, TenantMemoryPool pool) {
-        super(-1, 0, delegate.capacity(), delegate.capacity(), null, 0);
+        super(-1, 0, 0, 0, null, 0);
         this.delegate = delegate;
         this.allocationId = allocationId;
         this.size = size;
         this.pool = pool;
     }
 
+    /**
+     * 释放内存
+     */
+    public void free() {
+        if (freed) {
+            return;
+        }
+        freed = true;
+
+        // 释放直接内存
+        try {
+            ((sun.nio.ch.DirectBuffer) delegate).cleaner().clean();
+        } catch (Exception e) {
+            // 忽略释放失败
+        }
+
+        // 更新池统计
+        pool.free(allocationId, size);
+    }
+
+    /**
+     * 检查是否已释放
+     */
+    public boolean isFreed() {
+        return freed;
+    }
+
+    /**
+     * 获取分配ID
+     */
     public String getAllocationId() {
         return allocationId;
     }
 
+    /**
+     * 获取分配大小
+     */
     public long getSize() {
         return size;
     }
 
-    /**
-     * 主动释放内存（推荐在使用完毕后调用）
-     */
-    public void free() {
-        if (!freed) {
-            freed = true;
-            // 释放直接内存
-            if (delegate instanceof DirectBuffer) {
-                Cleaner cleaner = ((DirectBuffer) delegate).cleaner();
-                if (cleaner != null) {
-                    cleaner.clean();
-                }
-            }
-            pool.free(allocationId);
+    private void checkFreed() {
+        if (freed) {
+            throw new IllegalStateException("Buffer has been freed: " + allocationId);
         }
     }
 
-    @Override
-    protected void finalize() throws Throwable {
-        try {
-            free();
-        } finally {
-            super.finalize();
-        }
-    }
-
-    // ============ ByteBuffer 委托方法 ============
+    // ============ ByteBuffer 代理方法 ============
 
     @Override
     public ByteBuffer slice() {
+        checkFreed();
         return delegate.slice();
     }
 
     @Override
     public ByteBuffer duplicate() {
+        checkFreed();
         return delegate.duplicate();
     }
 
     @Override
     public ByteBuffer asReadOnlyBuffer() {
+        checkFreed();
         return delegate.asReadOnlyBuffer();
     }
 
     @Override
     public byte get() {
+        checkFreed();
         return delegate.get();
     }
 
     @Override
     public ByteBuffer put(byte b) {
-        return delegate.put(b);
+        checkFreed();
+        delegate.put(b);
+        return this;
     }
 
     @Override
     public byte get(int index) {
+        checkFreed();
         return delegate.get(index);
     }
 
     @Override
     public ByteBuffer put(int index, byte b) {
-        return delegate.put(index, b);
+        checkFreed();
+        delegate.put(index, b);
+        return this;
     }
 
     @Override
     public ByteBuffer get(byte[] dst, int offset, int length) {
-        return delegate.get(dst, offset, length);
+        checkFreed();
+        delegate.get(dst, offset, length);
+        return this;
     }
 
     @Override
     public ByteBuffer put(ByteBuffer src) {
-        return delegate.put(src);
+        checkFreed();
+        delegate.put(src);
+        return this;
     }
 
     @Override
     public ByteBuffer put(byte[] src, int offset, int length) {
-        return delegate.put(src, offset, length);
+        checkFreed();
+        delegate.put(src, offset, length);
+        return this;
     }
 
     @Override
     public ByteBuffer compact() {
-        return delegate.compact();
+        checkFreed();
+        delegate.compact();
+        return this;
     }
 
     @Override
@@ -132,135 +166,196 @@ public class TrackedByteBuffer extends ByteBuffer {
 
     @Override
     public char getChar() {
+        checkFreed();
         return delegate.getChar();
     }
 
     @Override
     public ByteBuffer putChar(char value) {
-        return delegate.putChar(value);
+        checkFreed();
+        delegate.putChar(value);
+        return this;
     }
 
     @Override
     public char getChar(int index) {
+        checkFreed();
         return delegate.getChar(index);
     }
 
     @Override
     public ByteBuffer putChar(int index, char value) {
-        return delegate.putChar(index, value);
+        checkFreed();
+        delegate.putChar(index, value);
+        return this;
+    }
+
+    @Override
+    public CharBuffer asCharBuffer() {
+        checkFreed();
+        return delegate.asCharBuffer();
     }
 
     @Override
     public short getShort() {
+        checkFreed();
         return delegate.getShort();
     }
 
     @Override
     public ByteBuffer putShort(short value) {
-        return delegate.putShort(value);
+        checkFreed();
+        delegate.putShort(value);
+        return this;
     }
 
     @Override
     public short getShort(int index) {
+        checkFreed();
         return delegate.getShort(index);
     }
 
     @Override
     public ByteBuffer putShort(int index, short value) {
-        return delegate.putShort(index, value);
+        checkFreed();
+        delegate.putShort(index, value);
+        return this;
+    }
+
+    @Override
+    public ShortBuffer asShortBuffer() {
+        checkFreed();
+        return delegate.asShortBuffer();
     }
 
     @Override
     public int getInt() {
+        checkFreed();
         return delegate.getInt();
     }
 
     @Override
     public ByteBuffer putInt(int value) {
-        return delegate.putInt(value);
+        checkFreed();
+        delegate.putInt(value);
+        return this;
     }
 
     @Override
     public int getInt(int index) {
+        checkFreed();
         return delegate.getInt(index);
     }
 
     @Override
     public ByteBuffer putInt(int index, int value) {
-        return delegate.putInt(index, value);
+        checkFreed();
+        delegate.putInt(index, value);
+        return this;
+    }
+
+    @Override
+    public IntBuffer asIntBuffer() {
+        checkFreed();
+        return delegate.asIntBuffer();
     }
 
     @Override
     public long getLong() {
+        checkFreed();
         return delegate.getLong();
     }
 
     @Override
     public ByteBuffer putLong(long value) {
-        return delegate.putLong(value);
+        checkFreed();
+        delegate.putLong(value);
+        return this;
     }
 
     @Override
     public long getLong(int index) {
+        checkFreed();
         return delegate.getLong(index);
     }
 
     @Override
     public ByteBuffer putLong(int index, long value) {
-        return delegate.putLong(index, value);
+        checkFreed();
+        delegate.putLong(index, value);
+        return this;
+    }
+
+    @Override
+    public LongBuffer asLongBuffer() {
+        checkFreed();
+        return delegate.asLongBuffer();
     }
 
     @Override
     public float getFloat() {
+        checkFreed();
         return delegate.getFloat();
     }
 
     @Override
     public ByteBuffer putFloat(float value) {
-        return delegate.putFloat(value);
+        checkFreed();
+        delegate.putFloat(value);
+        return this;
     }
 
     @Override
     public float getFloat(int index) {
+        checkFreed();
         return delegate.getFloat(index);
     }
 
     @Override
     public ByteBuffer putFloat(int index, float value) {
-        return delegate.putFloat(index, value);
+        checkFreed();
+        delegate.putFloat(index, value);
+        return this;
+    }
+
+    @Override
+    public FloatBuffer asFloatBuffer() {
+        checkFreed();
+        return delegate.asFloatBuffer();
     }
 
     @Override
     public double getDouble() {
+        checkFreed();
         return delegate.getDouble();
     }
 
     @Override
     public ByteBuffer putDouble(double value) {
-        return delegate.putDouble(value);
+        checkFreed();
+        delegate.putDouble(value);
+        return this;
     }
 
     @Override
     public double getDouble(int index) {
+        checkFreed();
         return delegate.getDouble(index);
     }
 
     @Override
     public ByteBuffer putDouble(int index, double value) {
-        return delegate.putDouble(index, value);
+        checkFreed();
+        delegate.putDouble(index, value);
+        return this;
     }
 
     @Override
-    public ByteOrder order() {
-        return delegate.order();
+    public DoubleBuffer asDoubleBuffer() {
+        checkFreed();
+        return delegate.asDoubleBuffer();
     }
 
-    @Override
-    public ByteBuffer order(ByteOrder bo) {
-        return delegate.order(bo);
-    }
-
-    // Buffer 方法委托
     @Override
     public int capacity() {
         return delegate.capacity();
@@ -273,7 +368,9 @@ public class TrackedByteBuffer extends ByteBuffer {
 
     @Override
     public ByteBuffer position(int newPosition) {
-        return delegate.position(newPosition);
+        checkFreed();
+        delegate.position(newPosition);
+        return this;
     }
 
     @Override
@@ -283,32 +380,44 @@ public class TrackedByteBuffer extends ByteBuffer {
 
     @Override
     public ByteBuffer limit(int newLimit) {
-        return delegate.limit(newLimit);
+        checkFreed();
+        delegate.limit(newLimit);
+        return this;
     }
 
     @Override
     public ByteBuffer mark() {
-        return delegate.mark();
+        checkFreed();
+        delegate.mark();
+        return this;
     }
 
     @Override
     public ByteBuffer reset() {
-        return delegate.reset();
+        checkFreed();
+        delegate.reset();
+        return this;
     }
 
     @Override
     public ByteBuffer clear() {
-        return delegate.clear();
+        checkFreed();
+        delegate.clear();
+        return this;
     }
 
     @Override
     public ByteBuffer flip() {
-        return delegate.flip();
+        checkFreed();
+        delegate.flip();
+        return this;
     }
 
     @Override
     public ByteBuffer rewind() {
-        return delegate.rewind();
+        checkFreed();
+        delegate.rewind();
+        return this;
     }
 
     @Override
@@ -340,240 +449,6 @@ public class TrackedByteBuffer extends ByteBuffer {
     public int arrayOffset() {
         return delegate.arrayOffset();
     }
-}
-
-/**
- * 带追踪的 MappedByteBuffer 包装器
- */
-class TrackedMappedByteBuffer extends MappedByteBuffer {
-
-    private final MappedByteBuffer delegate;
-    private final String allocationId;
-    private final long size;
-    private final TenantMemoryPool pool;
-    private volatile boolean freed = false;
-
-    TrackedMappedByteBuffer(MappedByteBuffer delegate, String allocationId, long size, TenantMemoryPool pool) {
-        super(-1, 0, delegate.capacity(), delegate.capacity(), null, 0);
-        this.delegate = delegate;
-        this.allocationId = allocationId;
-        this.size = size;
-        this.pool = pool;
-    }
-
-    public void free() {
-        if (!freed) {
-            freed = true;
-            // 强制解除内存映射
-            ((sun.nio.ch.DirectBuffer) delegate).cleaner().clean();
-            pool.free(allocationId);
-        }
-    }
-
-    @Override
-    protected void finalize() throws Throwable {
-        try {
-            free();
-        } finally {
-            super.finalize();
-        }
-    }
-
-    // MappedByteBuffer 方法
-    @Override
-    public boolean isLoaded() {
-        return delegate.isLoaded();
-    }
-
-    @Override
-    public MappedByteBuffer load() {
-        return delegate.load();
-    }
-
-    @Override
-    public MappedByteBuffer force() {
-        return delegate.force();
-    }
-
-    @Override
-    public ByteBuffer slice() {
-        return delegate.slice();
-    }
-
-    @Override
-    public ByteBuffer duplicate() {
-        return delegate.duplicate();
-    }
-
-    @Override
-    public ByteBuffer asReadOnlyBuffer() {
-        return delegate.asReadOnlyBuffer();
-    }
-
-    @Override
-    public byte get() {
-        return delegate.get();
-    }
-
-    @Override
-    public ByteBuffer put(byte b) {
-        return delegate.put(b);
-    }
-
-    @Override
-    public byte get(int index) {
-        return delegate.get(index);
-    }
-
-    @Override
-    public ByteBuffer put(int index, byte b) {
-        return delegate.put(index, b);
-    }
-
-    @Override
-    public ByteBuffer get(byte[] dst, int offset, int length) {
-        return delegate.get(dst, offset, length);
-    }
-
-    @Override
-    public ByteBuffer put(ByteBuffer src) {
-        return delegate.put(src);
-    }
-
-    @Override
-    public ByteBuffer put(byte[] src, int offset, int length) {
-        return delegate.put(src, offset, length);
-    }
-
-    @Override
-    public ByteBuffer compact() {
-        return delegate.compact();
-    }
-
-    @Override
-    public boolean isDirect() {
-        return delegate.isDirect();
-    }
-
-    @Override
-    public char getChar() {
-        return delegate.getChar();
-    }
-
-    @Override
-    public ByteBuffer putChar(char value) {
-        return delegate.putChar(value);
-    }
-
-    @Override
-    public char getChar(int index) {
-        return delegate.getChar(index);
-    }
-
-    @Override
-    public ByteBuffer putChar(int index, char value) {
-        return delegate.putChar(index, value);
-    }
-
-    @Override
-    public short getShort() {
-        return delegate.getShort();
-    }
-
-    @Override
-    public ByteBuffer putShort(short value) {
-        return delegate.putShort(value);
-    }
-
-    @Override
-    public short getShort(int index) {
-        return delegate.getShort(index);
-    }
-
-    @Override
-    public ByteBuffer putShort(int index, short value) {
-        return delegate.putShort(index, value);
-    }
-
-    @Override
-    public int getInt() {
-        return delegate.getInt();
-    }
-
-    @Override
-    public ByteBuffer putInt(int value) {
-        return delegate.putInt(value);
-    }
-
-    @Override
-    public int getInt(int index) {
-        return delegate.getInt(index);
-    }
-
-    @Override
-    public ByteBuffer putInt(int index, int value) {
-        return delegate.putInt(index, value);
-    }
-
-    @Override
-    public long getLong() {
-        return delegate.getLong();
-    }
-
-    @Override
-    public ByteBuffer putLong(long value) {
-        return delegate.putLong(value);
-    }
-
-    @Override
-    public long getLong(int index) {
-        return delegate.getLong(index);
-    }
-
-    @Override
-    public ByteBuffer putLong(int index, long value) {
-        return delegate.putLong(index, value);
-    }
-
-    @Override
-    public float getFloat() {
-        return delegate.getFloat();
-    }
-
-    @Override
-    public ByteBuffer putFloat(float value) {
-        return delegate.putFloat(value);
-    }
-
-    @Override
-    public float getFloat(int index) {
-        return delegate.getFloat(index);
-    }
-
-    @Override
-    public ByteBuffer putFloat(int index, float value) {
-        return delegate.putFloat(index, value);
-    }
-
-    @Override
-    public double getDouble() {
-        return delegate.getDouble();
-    }
-
-    @Override
-    public ByteBuffer putDouble(double value) {
-        return delegate.putDouble(value);
-    }
-
-    @Override
-    public double getDouble(int index) {
-        return delegate.getDouble(index);
-    }
-
-    @Override
-    public ByteBuffer putDouble(int index, double value) {
-        return delegate.putDouble(index, value);
-    }
 
     @Override
     public ByteOrder order() {
@@ -582,86 +457,8 @@ class TrackedMappedByteBuffer extends MappedByteBuffer {
 
     @Override
     public ByteBuffer order(ByteOrder bo) {
-        return delegate.order(bo);
-    }
-
-    @Override
-    public int capacity() {
-        return delegate.capacity();
-    }
-
-    @Override
-    public int position() {
-        return delegate.position();
-    }
-
-    @Override
-    public ByteBuffer position(int newPosition) {
-        return delegate.position(newPosition);
-    }
-
-    @Override
-    public int limit() {
-        return delegate.limit();
-    }
-
-    @Override
-    public ByteBuffer limit(int newLimit) {
-        return delegate.limit(newLimit);
-    }
-
-    @Override
-    public ByteBuffer mark() {
-        return delegate.mark();
-    }
-
-    @Override
-    public ByteBuffer reset() {
-        return delegate.reset();
-    }
-
-    @Override
-    public ByteBuffer clear() {
-        return delegate.clear();
-    }
-
-    @Override
-    public ByteBuffer flip() {
-        return delegate.flip();
-    }
-
-    @Override
-    public ByteBuffer rewind() {
-        return delegate.rewind();
-    }
-
-    @Override
-    public int remaining() {
-        return delegate.remaining();
-    }
-
-    @Override
-    public boolean hasRemaining() {
-        return delegate.hasRemaining();
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return delegate.isReadOnly();
-    }
-
-    @Override
-    public boolean hasArray() {
-        return delegate.hasArray();
-    }
-
-    @Override
-    public byte[] array() {
-        return delegate.array();
-    }
-
-    @Override
-    public int arrayOffset() {
-        return delegate.arrayOffset();
+        checkFreed();
+        delegate.order(bo);
+        return this;
     }
 }

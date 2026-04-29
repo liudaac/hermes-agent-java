@@ -2,315 +2,280 @@ package com.nousresearch.hermes.tenant.sandbox;
 
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 租户内存池 - JVM内存隔离
+ * 租户级内存池 - JVM 内存隔离
  * 
- * 提供租户级别的内存配额管理：
- * - 使用堆外内存（Direct ByteBuffer）实现隔离
- * - 精确追踪每个租户内存使用量
- * - 超出配额时快速失败
- * - 自动清理和监控
+ * 提供真正的内存隔离：
+ * - 使用堆外内存（Off-Heap），绕过 JVM GC
+ * - 精确追踪每字节分配
+ * - 硬性配额限制
+ * - 自动检测内存泄漏
  */
 public class TenantMemoryPool {
 
     private static final Cleaner cleaner = Cleaner.create();
-    private static final long DEFAULT_MAX_MEMORY = 256 * 1024 * 1024L; // 256MB
+    private static final double WARNING_THRESHOLD = 0.8;  // 80% 告警阈值
 
     private final String tenantId;
     private final long maxMemoryBytes;
-    private final AtomicLong usedMemoryBytes;
-    private final Map<String, Allocation> allocations;
-    private final MemoryStats stats;
-
-    /**
-     * 内存分配记录
-     */
-    private static class Allocation {
-        final String id;
-        final long size;
-        final long timestamp;
-        final String stackTrace;
-
-        Allocation(String id, long size) {
-            this.id = id;
-            this.size = size;
-            this.timestamp = System.currentTimeMillis();
-            // 记录分配时的堆栈，便于调试内存泄漏
-            this.stackTrace = getStackTrace();
-        }
-
-        private static String getStackTrace() {
-            StringBuilder sb = new StringBuilder();
-            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            // 跳过前4个（Thread.getStackTrace, Allocation.<init>, TenantMemoryPool.allocate, 调用者）
-            for (int i = 4; i < Math.min(stack.length, 10); i++) {
-                sb.append("  at ").append(stack[i]).append("\n");
-            }
-            return sb.toString();
-        }
-    }
-
-    public TenantMemoryPool(String tenantId) {
-        this(tenantId, DEFAULT_MAX_MEMORY);
-    }
+    private final AtomicLong usedMemory = new AtomicLong(0);
+    private final Map<String, AllocationInfo> allocations = new ConcurrentHashMap<>();
+    private final AtomicReference<MemoryStats> statsCache = new AtomicReference<>();
+    private volatile long lastStatsUpdate = 0;
 
     public TenantMemoryPool(String tenantId, long maxMemoryBytes) {
         this.tenantId = tenantId;
         this.maxMemoryBytes = maxMemoryBytes;
-        this.usedMemoryBytes = new AtomicLong(0);
-        this.allocations = new ConcurrentHashMap<>();
-        this.stats = new MemoryStats();
     }
 
     /**
-     * 分配指定大小的内存
+     * 分配内存
      * 
-     * @param size 字节数
-     * @return 分配的ByteBuffer
+     * @param size 分配大小（字节）
+     * @return 分配的 ByteBuffer
      * @throws MemoryQuotaExceededException 如果超出配额
      */
     public ByteBuffer allocate(int size) throws MemoryQuotaExceededException {
-        return allocate(size, true);
-    }
-
-    /**
-     * 分配内存（是否清零）
-     */
-    public ByteBuffer allocate(int size, boolean clear) throws MemoryQuotaExceededException {
         if (size <= 0) {
             throw new IllegalArgumentException("Size must be positive: " + size);
         }
 
         // 检查配额
-        long currentUsed = usedMemoryBytes.get();
+        long currentUsed = usedMemory.get();
         if (currentUsed + size > maxMemoryBytes) {
             throw new MemoryQuotaExceededException(
-                String.format("Tenant %s memory quota exceeded: requested %d bytes, " +
-                    "available %d bytes (max: %d, used: %d)",
-                    tenantId, size, maxMemoryBytes - currentUsed, maxMemoryBytes, currentUsed)
+                String.format("Tenant %s memory quota exceeded: trying to allocate %d bytes, " +
+                    "already used %d bytes, max %d bytes",
+                    tenantId, size, currentUsed, maxMemoryBytes)
             );
         }
 
-        // 尝试分配
-        if (!usedMemoryBytes.compareAndSet(currentUsed, currentUsed + size)) {
-            // 并发冲突，重试
-            return allocate(size, clear);
-        }
-
+        // 分配直接内存
+        ByteBuffer buffer;
         try {
-            // 分配直接内存
-            ByteBuffer buffer = ByteBuffer.allocateDirect(size);
-            if (clear) {
-                buffer.clear();
-            }
-
-            // 记录分配
-            String allocationId = UUID.randomUUID().toString();
-            Allocation allocation = new Allocation(allocationId, size);
-            allocations.put(allocationId, allocation);
-
-            // 创建追踪包装器
-            TrackedByteBuffer tracked = new TrackedByteBuffer(buffer, allocationId, size, this);
-            
-            // 注册Cleaner确保释放
-            cleaner.register(tracked, new CleanupTask(allocationId, this));
-
-            // 更新统计
-            stats.recordAllocation(size);
-
-            return tracked;
-
+            buffer = ByteBuffer.allocateDirect(size);
         } catch (OutOfMemoryError e) {
-            // 回滚已增加的使用量
-            usedMemoryBytes.addAndGet(-size);
             throw new MemoryQuotaExceededException(
-                "System out of memory when allocating for tenant: " + tenantId, e
+                "System memory exhausted when allocating " + size + " bytes for tenant " + tenantId, e
             );
         }
+
+        // 更新统计
+        usedMemory.addAndGet(size);
+        String allocationId = UUID.randomUUID().toString();
+        AllocationInfo info = new AllocationInfo(allocationId, size, Thread.currentThread().getName());
+        allocations.put(allocationId, info);
+
+        // 注册清理器
+        TrackedByteBuffer tracked = new TrackedByteBuffer(buffer, allocationId, size, this);
+        cleaner.register(tracked, new CleanupAction(allocationId, size, this));
+
+        // 检查告警阈值
+        checkWarningThreshold();
+
+        return tracked;
     }
 
     /**
-     * 分配内存映射文件
+     * 分配并清零内存
      */
-    public MappedByteBuffer allocateMapped(java.io.FileChannel channel, 
-                                           java.nio.channels.FileChannel.MapMode mode,
-                                           long position, long size) throws MemoryQuotaExceededException {
-        // 检查配额
-        long currentUsed = usedMemoryBytes.get();
-        if (currentUsed + size > maxMemoryBytes) {
-            throw new MemoryQuotaExceededException(
-                String.format("Tenant %s memory quota exceeded for mapped file: " +
-                    "requested %d bytes, available %d bytes",
-                    tenantId, size, maxMemoryBytes - currentUsed)
-            );
-        }
-
-        try {
-            MappedByteBuffer buffer = channel.map(mode, position, size);
-            
-            usedMemoryBytes.addAndGet(size);
-            String allocationId = UUID.randomUUID().toString();
-            allocations.put(allocationId, new Allocation(allocationId, size));
-
-            // 内存映射文件需要特殊处理，返回包装器
-            return new TrackedMappedByteBuffer(buffer, allocationId, size, this);
-
-        } catch (java.io.IOException e) {
-            throw new RuntimeException("Failed to map file", e);
-        }
+    public ByteBuffer allocateZeroed(int size) throws MemoryQuotaExceededException {
+        ByteBuffer buffer = allocate(size);
+        buffer.put(new byte[size]);
+        buffer.flip();
+        return buffer;
     }
 
     /**
      * 释放内存
+     * 
+     * @param allocationId 分配ID
+     * @param size 分配大小
      */
-    void free(String allocationId) {
-        Allocation allocation = allocations.remove(allocationId);
-        if (allocation != null) {
-            usedMemoryBytes.addAndGet(-allocation.size);
-            stats.recordDeallocation(allocation.size);
+    void free(String allocationId, long size) {
+        AllocationInfo removed = allocations.remove(allocationId);
+        if (removed != null) {
+            usedMemory.addAndGet(-size);
+            removed.markFreed();
         }
     }
 
     /**
-     * 强制清理所有分配
+     * 手动释放 ByteBuffer
      */
-    public void clear() {
-        allocations.clear();
-        usedMemoryBytes.set(0);
-        stats.reset();
+    public void free(ByteBuffer buffer) {
+        if (buffer instanceof TrackedByteBuffer) {
+            ((TrackedByteBuffer) buffer).free();
+        } else if (buffer.isDirect()) {
+            // 对于非追踪的直接缓冲区，尝试释放
+            try {
+                ((sun.nio.ch.DirectBuffer) buffer).cleaner().clean();
+            } catch (Exception e) {
+                // 忽略释放失败
+            }
+        }
     }
 
-    // ============ 查询方法 ============
-
-    public long getMaxMemoryBytes() {
-        return maxMemoryBytes;
+    /**
+     * 检查是否有足够内存
+     */
+    public boolean canAllocate(long size) {
+        return usedMemory.get() + size <= maxMemoryBytes;
     }
 
-    public long getUsedMemoryBytes() {
-        return usedMemoryBytes.get();
+    /**
+     * 获取剩余可用内存
+     */
+    public long getAvailableMemory() {
+        return maxMemoryBytes - usedMemory.get();
     }
 
-    public long getAvailableMemoryBytes() {
-        return maxMemoryBytes - usedMemoryBytes.get();
-    }
-
-    public double getUsagePercentage() {
-        return (double) usedMemoryBytes.get() / maxMemoryBytes * 100;
-    }
-
-    public int getAllocationCount() {
-        return allocations.size();
-    }
-
+    /**
+     * 获取内存统计
+     */
     public MemoryStats getStats() {
+        // 缓存 1 秒
+        long now = System.currentTimeMillis();
+        MemoryStats cached = statsCache.get();
+        if (cached != null && now - lastStatsUpdate < 1000) {
+            return cached;
+        }
+
+        long used = usedMemory.get();
+        double usagePercent = maxMemoryBytes > 0 ? (double) used / maxMemoryBytes : 0;
+        boolean warning = usagePercent >= WARNING_THRESHOLD;
+
+        MemoryStats stats = new MemoryStats(
+            tenantId,
+            maxMemoryBytes,
+            used,
+            maxMemoryBytes - used,
+            usagePercent,
+            allocations.size(),
+            warning,
+            findPotentialLeaks()
+        );
+
+        statsCache.set(stats);
+        lastStatsUpdate = now;
         return stats;
     }
 
     /**
-     * 检查是否接近配额（默认90%）
+     * 查找潜在的内存泄漏
      */
-    public boolean isNearQuota() {
-        return getUsagePercentage() > 90;
-    }
+    private Map<String, Long> findPotentialLeaks() {
+        Map<String, Long> leaks = new ConcurrentHashMap<>();
+        long now = System.currentTimeMillis();
+        long LEAK_THRESHOLD_MS = 5 * 60 * 1000; // 5 分钟
 
-    public boolean isNearQuota(double threshold) {
-        return getUsagePercentage() > threshold;
+        for (AllocationInfo info : allocations.values()) {
+            if (!info.isFreed() && (now - info.getAllocationTime()) > LEAK_THRESHOLD_MS) {
+                leaks.put(info.getAllocationId(), now - info.getAllocationTime());
+            }
+        }
+
+        return leaks;
     }
 
     /**
-     * 获取内存使用报告（用于调试）
+     * 检查告警阈值
      */
-    public String getMemoryReport() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== Tenant Memory Report: ").append(tenantId).append(" ===\n");
-        sb.append(String.format("Max: %.2f MB\n", maxMemoryBytes / (1024.0 * 1024)));
-        sb.append(String.format("Used: %.2f MB (%.1f%%)\n", 
-            getUsedMemoryBytes() / (1024.0 * 1024), getUsagePercentage()));
-        sb.append(String.format("Available: %.2f MB\n", 
-            getAvailableMemoryBytes() / (1024.0 * 1024)));
-        sb.append(String.format("Allocations: %d\n", getAllocationCount()));
-        
-        if (!allocations.isEmpty()) {
-            sb.append("\nActive Allocations:\n");
-            allocations.values().stream()
-                .sorted((a, b) -> Long.compare(b.size, a.size))
-                .limit(10)
-                .forEach(a -> {
-                    sb.append(String.format("  %s: %.2f MB\n", 
-                        a.id.substring(0, 8), a.size / (1024.0 * 1024)));
-                });
+    private void checkWarningThreshold() {
+        double usage = (double) usedMemory.get() / maxMemoryBytes;
+        if (usage >= WARNING_THRESHOLD) {
+            // 可以在这里触发告警
+            System.err.printf("WARNING: Tenant %s memory usage %.1f%% (threshold: %.1f%%)%n",
+                tenantId, usage * 100, WARNING_THRESHOLD * 100);
         }
-        
-        sb.append(stats.toString());
-        return sb.toString();
+    }
+
+    /**
+     * 强制 GC 并释放未使用的直接内存
+     */
+    public void compact() {
+        System.gc();
+        // 触发清理器运行
+        cleaner.notify();
     }
 
     // ============ 内部类 ============
 
     /**
-     * 内存统计
+     * 分配信息
      */
-    public static class MemoryStats {
-        private final AtomicLong totalAllocated = new AtomicLong(0);
-        private final AtomicLong totalDeallocated = new AtomicLong(0);
-        private final AtomicLong peakUsage = new AtomicLong(0);
-        private final AtomicLong allocationCount = new AtomicLong(0);
+    private static class AllocationInfo {
+        private final String allocationId;
+        private final long size;
+        private final String threadName;
+        private final long allocationTime;
+        private final StackTraceElement[] stackTrace;
+        private volatile boolean freed = false;
 
-        void recordAllocation(long size) {
-            totalAllocated.addAndGet(size);
-            allocationCount.incrementAndGet();
-            // 峰值可能在并发下不准确，但可接受
+        AllocationInfo(String allocationId, long size, String threadName) {
+            this.allocationId = allocationId;
+            this.size = size;
+            this.threadName = threadName;
+            this.allocationTime = System.currentTimeMillis();
+            this.stackTrace = Thread.currentThread().getStackTrace();
         }
 
-        void recordDeallocation(long size) {
-            totalDeallocated.addAndGet(size);
-        }
+        String getAllocationId() { return allocationId; }
+        long getSize() { return size; }
+        String getThreadName() { return threadName; }
+        long getAllocationTime() { return allocationTime; }
+        StackTraceElement[] getStackTrace() { return stackTrace; }
+        boolean isFreed() { return freed; }
+        void markFreed() { this.freed = true; }
+    }
 
-        void reset() {
-            totalAllocated.set(0);
-            totalDeallocated.set(0);
-            peakUsage.set(0);
-            allocationCount.set(0);
-        }
-
-        public long getTotalAllocated() { return totalAllocated.get(); }
-        public long getTotalDeallocated() { return totalDeallocated.get(); }
-        public long getCurrentUsage() { return totalAllocated.get() - totalDeallocated.get(); }
-        public long getPeakUsage() { return peakUsage.get(); }
-        public long getAllocationCount() { return allocationCount.get(); }
-
+    /**
+     * 清理动作
+     */
+    private record CleanupAction(String allocationId, long size, TenantMemoryPool pool) implements Runnable {
         @Override
-        public String toString() {
-            return String.format("\nStats: allocated=%.2f MB, deallocated=%.2f MB, count=%d",
-                totalAllocated.get() / (1024.0 * 1024),
-                totalDeallocated.get() / (1024.0 * 1024),
-                allocationCount.get());
+        public void run() {
+            pool.free(allocationId, size);
         }
     }
 
     /**
-     * 清理任务（用于Cleaner）
+     * 内存统计
      */
-    private static class CleanupTask implements Runnable {
-        private final String allocationId;
-        private final TenantMemoryPool pool;
-
-        CleanupTask(String allocationId, TenantMemoryPool pool) {
-            this.allocationId = allocationId;
-            this.pool = pool;
-        }
-
-        @Override
-        public void run() {
-            pool.free(allocationId);
+    public record MemoryStats(
+        String tenantId,
+        long maxBytes,
+        long usedBytes,
+        long availableBytes,
+        double usagePercent,
+        int allocationCount,
+        boolean warning,
+        Map<String, Long> potentialLeaks
+    ) {
+        public String format() {
+            return String.format(
+                "Memory Stats for %s:%n" +
+                "  Max: %,d MB%n" +
+                "  Used: %,d MB (%.1f%%)%n" +
+                "  Available: %,d MB%n" +
+                "  Allocations: %d%n" +
+                "  Warning: %s%n" +
+                "  Potential Leaks: %d%n",
+                tenantId,
+                maxBytes / (1024 * 1024),
+                usedBytes / (1024 * 1024),
+                usagePercent * 100,
+                availableBytes / (1024 * 1024),
+                allocationCount,
+                warning ? "YES" : "NO",
+                potentialLeaks.size()
+            );
         }
     }
 }
