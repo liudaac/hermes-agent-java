@@ -67,6 +67,9 @@ public class TenantContext {
     private volatile RestrictedHttpClient restrictedHttpClient;
     private volatile TenantMemoryPool memoryPool;
     
+    // Phase 3: 指标监控
+    private volatile com.nousresearch.hermes.tenant.metrics.TenantMetrics metrics;
+    
     // 运行时 Agent 管理
     private final ConcurrentHashMap<String, TenantAIAgent> activeAgents = new ConcurrentHashMap<>();
     private volatile Instant lastActivity = Instant.now();
@@ -198,6 +201,10 @@ public class TenantContext {
             // Phase 2: 初始化资源隔离沙箱
             initializeResourceSandboxes(request);
             
+            // Phase 3: 初始化指标监控
+            this.metrics = new com.nousresearch.hermes.tenant.metrics.TenantMetrics(this);
+            logger.debug("Initialized metrics for tenant: {}", tenantId);
+            
             logger.debug("All tenant components initialized for: {}", tenantId);
             
         } finally {
@@ -323,6 +330,34 @@ public class TenantContext {
     public RestrictedHttpClient.NetworkStats getNetworkStats() {
         return restrictedHttpClient != null ? restrictedHttpClient.getStats() : null;
     }
+    
+    /**
+     * Phase 3: 获取指标监控
+     */
+    public com.nousresearch.hermes.tenant.metrics.TenantMetrics getMetrics() {
+        return metrics;
+    }
+    
+    /**
+     * Phase 3: 获取内存池（供 Metrics 使用）
+     */
+    public TenantMemoryPool getMemoryPool() {
+        return memoryPool;
+    }
+    
+    /**
+     * Phase 3: 获取活跃 Agent 数量
+     */
+    public int getActiveAgentCount() {
+        return activeAgents.size();
+    }
+    
+    /**
+     * Phase 3: 获取活跃会话数量
+     */
+    public int getActiveSessionCount() {
+        return sessionManager != null ? sessionManager.getActiveSessionCount() : 0;
+    }
 
     private void loadExistingComponents() {
         lifecycleLock.writeLock().lock();
@@ -381,6 +416,11 @@ public class TenantContext {
             }
             if (memoryPool != null) {
                 memoryPool.clear();
+            }
+            
+            // Phase 3: 注销 JMX MBean
+            if (metrics != null) {
+                metrics.unregister();
             }
             
             // 3. 持久化最终状态

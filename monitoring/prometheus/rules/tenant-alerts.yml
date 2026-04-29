@@ -1,0 +1,52 @@
+groups:
+  - name: tenant-alerts
+    interval: 30s
+    rules:
+      # 内存使用告警
+      - alert: TenantMemoryHigh
+        expr: hermes_tenant_memory_usage_percent > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} memory usage high"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: TenantMemoryCritical
+        expr: hermes_tenant_memory_usage_percent > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} memory usage critical"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # 存储使用告警
+      - alert: TenantStorageHigh
+        expr: hermes_tenant_storage_usage_percent > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} storage usage high"
+          description: "Storage usage is {{ $value | humanizePercentage }}"
+
+      # 内存泄漏告警
+      - alert: TenantMemoryLeak
+        expr: hermes_tenant_memory_leak_count > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} has memory leaks"
+          description: "{{ $value }} potential memory leaks detected"
+
+      # 活跃 Agent 过多告警
+      - alert: TenantTooManyAgents
+        expr: hermes_tenant_active_agents > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant }} has too many agents"
+          description: "{{ $value }} active agents"

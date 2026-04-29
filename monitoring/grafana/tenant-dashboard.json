@@ -1,0 +1,123 @@
+{
+  "dashboard": {
+    "title": "Hermes Agent - Tenant Metrics",
+    "tags": ["hermes", "tenant", "metrics"],
+    "timezone": "Asia/Shanghai",
+    "refresh": "30s",
+    "schemaVersion": 36,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Tenant Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "hermes_tenants_total",
+            "legendFormat": "Total Tenants"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Active Agents",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(hermes_tenant_active_agents)",
+            "legendFormat": "Total Agents"
+          }
+        ],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage by Tenant",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "hermes_tenant_memory_usage_percent{tenant=~\"$tenant\"}",
+            "legendFormat": "{{tenant}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 0.8},
+                {"color": "red", "value": 0.95}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 4,
+        "title": "Network Requests",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(hermes_tenant_network_requests_total{tenant=~\"$tenant\"}[5m])",
+            "legendFormat": "{{tenant}} - Requests/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 5,
+        "title": "Storage Usage",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "hermes_tenant_storage_usage_percent{tenant=~\"$tenant\"}",
+            "legendFormat": "{{tenant}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 0.85},
+                {"color": "red", "value": 0.98}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 12}
+      },
+      {
+        "id": 6,
+        "title": "Memory Leaks",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "hermes_tenant_memory_leak_count{tenant=~\"$tenant\"} > 0",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "gridPos": {"h": 6, "w": 16, "x": 8, "y": 12}
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "tenant",
+          "type": "query",
+          "query": "label_values(hermes_tenant_memory_used_bytes, tenant)",
+          "multi": true,
+          "includeAll": true
+        }
+      ]
+    }
+  }
+}
