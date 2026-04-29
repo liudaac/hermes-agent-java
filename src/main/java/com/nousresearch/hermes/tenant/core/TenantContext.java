@@ -6,10 +6,13 @@ import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.audit.TenantAuditLogger;
 import com.nousresearch.hermes.tenant.quota.TenantQuotaManager;
-import com.nousresearch.hermes.tenant.sandbox.TenantFileSandbox;
+import com.nousresearch.hermes.tenant.sandbox.*;
 import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.http.HttpResponse;
+import java.util.List;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -56,6 +59,13 @@ public class TenantContext {
     private volatile TenantAuditLogger auditLogger;
     private volatile TenantSecurityPolicy securityPolicy;
     private volatile TenantResourceMonitor resourceMonitor;
+    
+    // Phase 2: 资源隔离沙箱
+    private volatile ProcessSandbox processSandbox;
+    private volatile CgroupProcessSandbox cgroupSandbox;
+    private volatile NetworkSandbox networkSandbox;
+    private volatile RestrictedHttpClient restrictedHttpClient;
+    private volatile TenantMemoryPool memoryPool;
     
     // 运行时 Agent 管理
     private final ConcurrentHashMap<String, TenantAIAgent> activeAgents = new ConcurrentHashMap<>();
@@ -185,6 +195,9 @@ public class TenantContext {
             // 资源监控
             this.resourceMonitor = new TenantResourceMonitor(this);
             
+            // Phase 2: 初始化资源隔离沙箱
+            initializeResourceSandboxes(request);
+            
             logger.debug("All tenant components initialized for: {}", tenantId);
             
         } finally {
@@ -192,6 +205,125 @@ public class TenantContext {
         }
     }
     
+    /**
+     * Phase 2: 初始化资源隔离沙箱
+     */
+    private void initializeResourceSandboxes(TenantProvisioningRequest request) {
+        try {
+            // 1. 初始化进程沙箱
+            ProcessSandboxConfig processConfig = request.getProcessSandboxConfig();
+            if (processConfig == null) {
+                processConfig = ProcessSandboxConfig.defaultConfig();
+            }
+            
+            // 优先使用 cgroups（如果系统支持）
+            if (CgroupProcessSandbox.isCgroupV2Available()) {
+                this.cgroupSandbox = new CgroupProcessSandbox(this, processConfig);
+                this.cgroupSandbox.initialize();
+                logger.debug("Initialized cgroup sandbox for tenant: {}", tenantId);
+            } else {
+                this.processSandbox = new ProcessSandbox(this, processConfig);
+                logger.debug("Initialized process sandbox for tenant: {}", tenantId);
+            }
+            
+            // 2. 初始化网络沙箱
+            NetworkPolicy networkPolicy = request.getNetworkPolicy();
+            if (networkPolicy == null && securityPolicy != null) {
+                networkPolicy = securityPolicy.getNetworkPolicy();
+            }
+            if (networkPolicy == null) {
+                networkPolicy = NetworkPolicy.defaultPolicy();
+            }
+            this.networkSandbox = new NetworkSandbox(networkPolicy);
+            this.restrictedHttpClient = new RestrictedHttpClient(this, networkPolicy);
+            logger.debug("Initialized network sandbox for tenant: {}", tenantId);
+            
+            // 3. 初始化内存池
+            long maxMemory = request.getMaxMemoryBytes();
+            if (maxMemory <= 0 && quotaManager != null) {
+                maxMemory = quotaManager.getMaxMemoryBytes();
+            }
+            if (maxMemory <= 0) {
+                maxMemory = 256 * 1024 * 1024L; // 默认 256MB
+            }
+            this.memoryPool = new TenantMemoryPool(tenantId, maxMemory);
+            logger.debug("Initialized memory pool for tenant: {} (max: {} MB)", 
+                tenantId, maxMemory / (1024 * 1024));
+            
+            auditLogger.log(AuditEvent.TENANT_CREATED, Map.of(
+                "tenantId", tenantId,
+                "cgroupEnabled", cgroupSandbox != null,
+                "maxMemoryMB", maxMemory / (1024 * 1024)
+            ));
+            
+        } catch (Exception e) {
+            logger.error("Failed to initialize resource sandboxes for tenant: {}", tenantId, e);
+            throw new TenantCreationException("Failed to initialize resource sandboxes", e);
+        }
+    }
+    
+    /**
+     * Phase 2: 便捷方法 - 执行命令
+     */
+    public ProcessResult exec(List<String> command, ProcessOptions options) throws ProcessSandboxException {
+        checkState();
+        
+        if (cgroupSandbox != null) {
+            return cgroupSandbox.exec(command, options);
+        } else if (processSandbox != null) {
+            return processSandbox.exec(command, options);
+        } else {
+            throw new IllegalStateException("Process sandbox not initialized");
+        }
+    }
+    
+    /**
+     * Phase 2: 便捷方法 - HTTP GET
+     */
+    public HttpResponse<String> httpGet(String url) throws NetworkSandboxException {
+        checkState();
+        return restrictedHttpClient.get(url);
+    }
+    
+    /**
+     * Phase 2: 便捷方法 - HTTP POST
+     */
+    public HttpResponse<String> httpPost(String url, String body) throws NetworkSandboxException {
+        checkState();
+        return restrictedHttpClient.post(url, body);
+    }
+    
+    /**
+     * Phase 2: 便捷方法 - 分配内存
+     */
+    public java.nio.ByteBuffer allocateMemory(int size) throws MemoryQuotaExceededException {
+        checkState();
+        return memoryPool.allocate(size);
+    }
+    
+    /**
+     * Phase 2: 便捷方法 - 释放内存
+     */
+    public void freeMemory(java.nio.ByteBuffer buffer) {
+        if (buffer instanceof TrackedByteBuffer) {
+            ((TrackedByteBuffer) buffer).free();
+        }
+    }
+    
+    /**
+     * Phase 2: 获取内存池统计
+     */
+    public TenantMemoryPool.MemoryStats getMemoryStats() {
+        return memoryPool != null ? memoryPool.getStats() : null;
+    }
+    
+    /**
+     * Phase 2: 获取网络统计
+     */
+    public RestrictedHttpClient.NetworkStats getNetworkStats() {
+        return restrictedHttpClient != null ? restrictedHttpClient.getStats() : null;
+    }
+
     private void loadExistingComponents() {
         lifecycleLock.writeLock().lock();
         try {
@@ -241,6 +373,14 @@ public class TenantContext {
             // 2. 停止资源监控
             if (resourceMonitor != null) {
                 resourceMonitor.shutdown();
+            }
+            
+            // Phase 2: 清理资源沙箱
+            if (cgroupSandbox != null) {
+                cgroupSandbox.destroy();
+            }
+            if (memoryPool != null) {
+                memoryPool.clear();
             }
             
             // 3. 持久化最终状态

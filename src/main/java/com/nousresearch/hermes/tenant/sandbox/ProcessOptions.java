@@ -14,6 +14,11 @@ public class ProcessOptions {
     private boolean redirectErrorStream = true;
     private Path workDirectory;
 
+    // Phase 2: cgroups v2 资源限制
+    private double maxCpuCores = 0; // 0 = unlimited, e.g., 0.5 = half core
+    private long maxMemoryMB = 0; // 0 = unlimited
+    private long maxIoBps = 0; // 0 = unlimited, bytes per second
+
     public static Builder builder() {
         return new Builder();
     }
@@ -56,6 +61,22 @@ public class ProcessOptions {
             return this;
         }
 
+        // Phase 2: cgroups resource limits
+        public Builder maxCpuCores(double cores) {
+            options.maxCpuCores = cores;
+            return this;
+        }
+
+        public Builder maxMemoryMB(long mb) {
+            options.maxMemoryMB = mb;
+            return this;
+        }
+
+        public Builder maxIoBps(long bps) {
+            options.maxIoBps = bps;
+            return this;
+        }
+
         public ProcessOptions build() {
             return options;
         }
@@ -68,6 +89,9 @@ public class ProcessOptions {
     public int getMaxPids() { return maxPids; }
     public boolean isRedirectErrorStream() { return redirectErrorStream; }
     public Path getWorkDirectory() { return workDirectory; }
+    public double getMaxCpuCores() { return maxCpuCores; }
+    public long getMaxMemoryMB() { return maxMemoryMB; }
+    public long getMaxIoBps() { return maxIoBps; }
 
     // Setters
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
@@ -76,4 +100,7 @@ public class ProcessOptions {
     public void setMaxPids(int maxPids) { this.maxPids = maxPids; }
     public void setRedirectErrorStream(boolean redirectErrorStream) { this.redirectErrorStream = redirectErrorStream; }
     public void setWorkDirectory(Path workDirectory) { this.workDirectory = workDirectory; }
+    public void setMaxCpuCores(double maxCpuCores) { this.maxCpuCores = maxCpuCores; }
+    public void setMaxMemoryMB(long maxMemoryMB) { this.maxMemoryMB = maxMemoryMB; }
+    public void setMaxIoBps(long maxIoBps) { this.maxIoBps = maxIoBps; }
 }
