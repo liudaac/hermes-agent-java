@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hermes Agent Java - 架构可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #eaeaea;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            padding: 20px 40px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .nav {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .nav button {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #eaeaea;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+
+        .nav button:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: #00d4ff;
+        }
+
+        .nav button.active {
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            border-color: transparent;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 40px;
+        }
+
+        .diagram-section {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .diagram-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(0, 212, 255, 0.5);
+        }
+
+        .diagram-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 30px;
+            overflow-x: auto;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid #00d4ff;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .info-card h3 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .info-card ul {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+
+        .info-card li {
+            color: #ccc;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #aaa;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 36px;
+            font-weight: bold;
+            background: linear-gradient(90deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .phase-list {
+            display: grid;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .phase-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .phase-item.completed {
+            border-color: #4ade80;
+        }
+
+        .phase-item.in-progress {
+            border-color: #fbbf24;
+        }
+
+        .phase-item.pending {
+            border-color: #6b7280;
+        }
+
+        .phase-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .phase-desc {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .phase-status {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-completed {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+        }
+
+        .status-in-progress {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        .status-pending {
+            background: rgba(107, 114, 128, 0.2);
+            color: #9ca3af;
+        }
+
+        .mermaid {
+            background: transparent !important;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 212, 255, 0.8);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .header {
+                padding: 15px 20px;
+            }
+            
+            .nav button {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏛️ Hermes Agent Java 架构可视化</h1>
+        <div class="subtitle">多租户AI Agent系统 - 资源隔离与安全架构全景图</div>
+        <div class="nav">
+            <button class="active" onclick="showSection('overview')">📊 概览</button>
+            <button onclick="showSection('architecture')">🏗️ 整体架构</button>
+            <button onclick="showSection('isolation')">🔒 租户隔离</button>
+            <button onclick="showSection('sequence')">🔄 时序图</button>
+            <button onclick="showSection('roadmap')">🗺️ 迭代规划</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Overview Section -->
+        <div id="overview" class="diagram-section active">
+            <h2 class="section-title">系统概览</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">5</div>
+                    <div class="stat-label">资源隔离层</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">20+</div>
+                    <div class="stat-label">内置工具</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">消息平台</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">LLM提供商</div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>🎯 核心特性</h3>
+                <ul>
+                    <li><strong>多租户架构</strong>：每个租户拥有独立的配置、资源和安全策略</li>
+                    <li><strong>多层沙箱隔离</strong>：文件、进程、网络、存储、线程池五层隔离</li>
+                    <li><strong>细粒度权限控制</strong>：命令白名单、URL白名单、资源配额限制</li>
+                    <li><strong>完整审计追踪</strong>：所有操作记录审计日志，支持合规要求</li>
+                    <li><strong>多平台支持</strong>：Discord、Telegram、飞书、QQ等消息平台</li>
+                </ul>
+            </div>
+
+            <div class="info-card">
+                <h3>🏗️ 架构层次</h3>
+                <ul>
+                    <li><strong>接入层</strong>：GatewayServer处理HTTP/WebSocket请求，多平台Adapter统一接入</li>
+                    <li><strong>核心层</strong>：HermesAgentV2引擎，ModelClient管理LLM连接，ToolRegistry工具管理</li>
+                    <li><strong>隔离层</strong>：TenantContext封装各沙箱组件，提供统一的资源访问接口</li>
+                    <li><strong>资源层</strong>：文件系统、子进程、网络连接、数据库存储</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Architecture Section -->
+        <div id="architecture" class="diagram-section">
+            <h2 class="section-title">整体系统架构</h2>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00d4ff;"></div>
+                    <span>核心组件</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #7b2cbf;"></div>
+                    <span>租户隔离</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ade80;"></div>
+                    <span>工具系统</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fbbf24;"></div>
+                    <span>外部服务</span>
+                </div>
+            </div>
+
+            <div class="diagram-container">
+                <pre class="mermaid">
+graph TB
+    subgraph "External Layer"
+        Users[用户/客户端]
+        Platforms[消息平台<br/>Discord/Telegram/Feishu/QQ]
+        ExternalAPIs[外部API<br/>OpenAI/Anthropic/Brave]
+    end
+
+    subgraph "Gateway Layer"
+        Gateway[GatewayServer<br/>HTTP WebSocket服务]
+        AuthFilter[TenantAuthFilter<br/>租户认证过滤器]
+        RateLimiter[API Rate Limiter<br/>租户级限流]
+    end
+
+    subgraph "Core Engine"
+        Agent[HermesAgentV2<br/>核心Agent引擎]
+        ModelClient[ModelClient<br/>模型客户端]
+        Transport[TransportFactory<br/>传输层适配]
+        
+        subgraph "Transport Adapters"
+            Anthropic[AnthropicTransport]
+            Bedrock[BedrockTransport]
+            ChatGPT[ChatCompletionsTransport]
+            Codex[CodexTransport]
+        end
+    end
+
+    subgraph "Tool System"
+        ToolRegistry[ToolRegistry<br/>工具注册中心]
+        ToolInit[ToolInitializerV2<br/>工具初始化器]
+        
+        subgraph "Built-in Tools"
+            FileTool[FileTool<br/>文件操作]
+            CodeTool[CodeTool<br/>代码执行]
+            Browser[BrowserToolV2<br/>浏览器控制]
+            WebSearch[WebSearchToolV2<br/>网络搜索]
+            Terminal[TerminalTool<br/>终端执行]
+            GitTool[GitTool<br/>版本控制]
+            MCPTool[MCPTool<br/>MCP协议]
+            SubAgent[SubAgentTool<br/>子Agent]
+        end
+        
+        subgraph "Platform Tools"
+            Feishu[FeishuDocTool<br/>飞书文档]
+            Discord[DiscordTool<br/>Discord]
+            QQBot[QQBotAdapter<br/>QQ机器人]
+        end
+    end
+
+    subgraph "Multi-Tenant System"
+        TenantMgr[TenantManager<br/>租户管理器]
+        TenantCtx[TenantContext<br/>租户上下文]
+        
+        subgraph "Tenant Isolation"
+            FileSandbox[TenantFileSandbox<br/>文件沙箱]
+            ProcessSandbox[ProcessSandbox<br/>进程沙箱]
+            NetworkSandbox[NetworkSandbox<br/>网络沙箱]
+            StorageQuota[StorageQuotaEnforcer<br/>存储配额]
+            ThreadPool[TenantThreadPool<br/>线程池隔离]
+        end
+        
+        subgraph "Tenant Management"
+            Config[TenantConfig<br/>租户配置]
+            Quota[TenantQuota<br/>资源配额]
+            Security[TenantSecurityPolicy<br/>安全策略]
+            Audit[TenantAuditLogger<br/>审计日志]
+            SessionMgr[TenantSessionManager<br/>会话管理]
+            MemoryMgr[TenantMemoryManager<br/>内存管理]
+        end
+    end
+
+    subgraph "Storage Layer"
+        LocalFS[本地文件系统<br/>sandbox/{tenantId}/]
+        GitRepos[Git仓库]
+        MCPServers[MCP Servers]
+    end
+
+    Users -->|HTTP/WebSocket| Gateway
+    Platforms -->|Webhook| Gateway
+    
+    Gateway --> AuthFilter
+    AuthFilter --> RateLimiter
+    RateLimiter --> Agent
+    
+    Agent --> ModelClient
+    ModelClient --> Transport
+    Transport --> Anthropic & Bedrock & ChatGPT & Codex
+    Transport --> ExternalAPIs
+    
+    Agent --> ToolRegistry
+    ToolRegistry --> ToolInit
+    ToolInit --> FileTool & CodeTool & Browser & WebSearch & Terminal & GitTool & MCPTool & SubAgent
+    ToolInit --> Feishu & Discord & QQBot
+    
+    Agent --> TenantMgr
+    TenantMgr --> TenantCtx
+    TenantCtx --> FileSandbox & ProcessSandbox & NetworkSandbox & StorageQuota & ThreadPool
+    TenantCtx --> Config & Quota & Security & Audit & SessionMgr & MemoryMgr
+    
+    FileSandbox --> LocalFS
+    ProcessSandbox --> LocalFS
+    Terminal --> LocalFS
+    GitTool --> GitRepos
+    MCPTool --> MCPServers
+                </pre>
+            </div>
+        </div>
+
+        <!-- Isolation Section -->
+        <div id="isolation" class="diagram-section">
+            <h2 class="section-title">租户隔离架构</h2>
+            
+            <div class="diagram-container">
+                <pre class="mermaid">
+graph TB
+    subgraph "Physical Layer"
+        JVM[JVM进程]
+        OS[操作系统]
+        Hardware[硬件资源]
+    end
+
+    subgraph "Tenant Isolation Layer"
+        direction TB
+        
+        subgraph "Tenant A"
+            TA_Config[独立配置]
+            TA_FS[文件沙箱<br/>/sandbox/tenant-a/]
+            TA_Process[进程沙箱<br/>资源限制]
+            TA_Network[网络沙箱<br/>白名单控制]
+            TA_Thread[线程池<br/>10 threads max]
+            TA_Storage[存储配额<br/>1GB limit]
+            TA_Memory[内存隔离<br/>256MB limit]
+        end
+        
+        subgraph "Tenant B"
+            TB_Config[独立配置]
+            TB_FS[文件沙箱<br/>/sandbox/tenant-b/]
+            TB_Process[进程沙箱<br/>资源限制]
+            TB_Network[网络沙箱<br/>白名单控制]
+            TB_Thread[线程池<br/>10 threads max]
+            TB_Storage[存储配额<br/>1GB limit]
+            TB_Memory[内存隔离<br/>256MB limit]
+        end
+        
+        subgraph "Tenant C"
+            TC_Config[独立配置]
+            TC_FS[文件沙箱<br/>/sandbox/tenant-c/]
+            TC_Process[进程沙箱<br/>资源限制]
+            TC_Network[网络沙箱<br/>白名单控制]
+            TC_Thread[线程池<br/>10 threads max]
+            TC_Storage[存储配额<br/>1GB limit]
+            TC_Memory[内存隔离<br/>256MB limit]
+        end
+    end
+
+    subgraph "Shared Resources"
+        Shared_Model[模型客户端<br/>共享连接池]
+        Shared_Tool[工具注册表<br/>只读共享]
+        Shared_Platform[平台适配器<br/>多路复用]
+    end
+
+    TA_FS -.->|完全隔离| TB_FS
+    TA_FS -.->|完全隔离| TC_FS
+    TA_Process -.->|cgroups隔离| TB_Process
+    TA_Network -.->|独立策略| TB_Network
+                </pre>
+            </div>
+
+            <div class="info-card">
+                <h3>🔒 五层隔离机制</h3>
+                <ul>
+                    <li><strong>文件沙箱</strong>：每个租户独立目录，路径限制防止目录遍历攻击</li>
+                    <li><strong>进程沙箱</strong>：命令白名单+超时控制，防止危险命令执行和资源耗尽</li>
+                    <li><strong>网络沙箱</strong>：URL白名单+速率限制，防止SSRF攻击和滥用</li>
+                    <li><strong>存储配额</strong>：强制执行存储上限，流式写入追踪</li>
+                    <li><strong>线程池隔离</strong>：租户级线程池，防止线程饥饿和OOM</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Sequence Section -->
+        <div id="sequence" class="diagram-section">
+            <h2 class="section-title">关键业务流程时序图</h2>
+            
+            <h3 style="margin: 30px 0 15px; color: #00d4ff;">租户创建流程</h3>
+            <div class="diagram-container">
+                <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Client as 客户端
+    participant Gateway as GatewayServer
+    participant Auth as TenantAuthFilter
+    participant TenantMgr as TenantManager
+    participant Context as TenantContext
+    participant FileSB as TenantFileSandbox
+    participant ProcessSB as ProcessSandbox
+    participant NetworkSB as NetworkSandbox
+    participant Audit as TenantAuditLogger
+
+    Client->>Gateway: POST /api/tenants
+    Gateway->>Auth: 验证管理员Token
+    Auth-->>Gateway: 验证通过
+    Gateway->>TenantMgr: provisionTenant(request)
+    
+    par 初始化各沙箱组件
+        Context->>FileSB: 初始化文件沙箱
+        Context->>ProcessSB: 初始化进程沙箱
+        Context->>NetworkSB: 初始化网络沙箱
+    end
+    
+    TenantMgr->>Audit: 记录租户创建日志
+    TenantMgr-->>Gateway: Tenant实例
+    Gateway-->>Client: 201 Created
+                </pre>
+            </div>
+
+            <h3 style="margin: 30px 0 15px; color: #00d4ff;">工具执行流程（带资源限制）</h3>
+            <div class="diagram-container">
+                <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Agent as HermesAgentV2
+    participant Tool as Tool实现类
+    participant TenantCtx as TenantContext
+    participant Auth as 权限检查
+    participant Quota as 配额检查
+    participant Sandbox as 沙箱执行
+
+    Agent->>Tool: execute(args, context)
+    Tool->>TenantCtx: 获取租户上下文
+    Tool->>Auth: 检查权限
+    
+    alt 权限检查失败
+        Auth-->>Tool: SecurityException
+    else 权限检查通过
+        Tool->>Quota: 检查配额
+        
+        alt 配额超限
+            Quota-->>Tool: QuotaExceededException
+        else 配额充足
+            Tool->>Sandbox: 在沙箱中执行
+            Sandbox-->>Tool: 执行结果
+            Tool-->>Agent: ToolResult.success
+        end
+    end
+                </pre>
+            </div>
+        </div>
+
+        <!-- Roadmap Section -->
+        <div id="roadmap" class="diagram-section">
+            <h2 class="section-title">迭代规划路线图</h2>
+            
+            <div class="phase-list">
+                <div class="phase-item completed">
+                    <div>
+                        <div class="phase-title">Phase 1: 基础安全加固</div>
+                        <div class="phase-desc">文件沙箱、进程沙箱、网络沙箱、存储配额</div>
+                    </div>
+                    <div class="phase-status status-completed">已完成 ✅</div>
+                </div>
+                
+                <div class="phase-item in-progress">
+                    <div>
+                        <div class="phase-title">Phase 2: 高级隔离</div>
+                        <div class="phase-desc">Linux cgroups集成、网络代理模式、JVM内存隔离</div>
+                    </div>
+                    <div class="phase-status status-in-progress">进行中 🔄</div>
+                </div>
+                
+                <div class="phase-item pending">
+                    <div>
+                        <div class="phase-title">Phase 3: 可观测性</div>
+                        <div class="phase-desc">JMX指标、Prometheus集成、Grafana仪表板、实时监控告警</div>
+                    </div>
+                    <div class="phase-status status-pending">规划中 📊</div>
+                </div>
+                
+                <div class="phase-item pending">
+                    <div>
+                        <div class="phase-title">Phase 4: 高可用性</div>
+                        <div class="phase-desc">状态持久化、分布式会话、优雅重启、多节点迁移</div>
+                    </div>
+                    <div class="phase-status status-pending">规划中 🔄</div>
+                </div>
+                
+                <div class="phase-item pending">
+                    <div>
+                        <div class="phase-title">Phase 5: 高级功能</div>
+                        <div class="phase-desc">容器化隔离、GPU资源隔离、智能调度、自动扩缩容</div>
+                    </div>
+                    <div class="phase-status status-pending">长期规划 🔮</div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>📋 下一步建议（1-2周内）</h3>
+                <ul>
+                    <li>集成 Linux cgroups 进行进程资源限制（CPU/内存/PID）</li>
+                    <li>实现网络代理模式，透明拦截所有出站HTTP请求</li>
+                    <li>添加 JMX MBean 暴露租户资源使用指标</li>
+                    <li>编写完整的集成测试覆盖沙箱边界情况</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: {
+                curve: 'basis',
+                padding: 20
+            },
+            sequence: {
+                diagramMarginX: 50,
+                diagramMarginY: 10,
+                actorMargin: 50,
+                width: 150,
+                height: 65,
+                boxMargin: 10,
+                boxTextMargin: 5,
+                noteMargin: 10,
+                messageMargin: 35
+            }
+        });
+
+        // Section navigation
+        function showSection(sectionId) {
+            // Hide all sections
+            document.querySelectorAll('.diagram-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.nav button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected section
+            document.getElementById(sectionId).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+            
+            // Re-render mermaid diagrams in the visible section
+            mermaid.init(undefined, document.querySelectorAll('.diagram-section.active .mermaid'));
+        }
+
+        // Initial render
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+        });
+    </script>
+</body>
+</html>
