@@ -185,7 +185,7 @@ public class RestrictedHttpClient {
     /**
      * 检查 URL 是否允许访问
      */
-    private boolean isUrlAllowed(String url) {
+    public boolean isUrlAllowed(String url) {
         try {
             URI uri = URI.create(url);
             

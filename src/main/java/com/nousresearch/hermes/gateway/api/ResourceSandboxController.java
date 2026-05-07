@@ -5,8 +5,7 @@ import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.sandbox.*;
 import com.nousresearch.hermes.tenant.metrics.TenantMetrics;
-import spark.Request;
-import spark.Response;
+import io.javalin.http.Context;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -32,17 +31,18 @@ public class ResourceSandboxController {
      * POST /api/tenants/{tenantId}/exec
      * Body: { "command": ["git", "clone", "url"], "timeout": 60 }
      */
-    public String executeCommand(Request req, Response res) {
-        String tenantId = req.params(":tenantId");
+    public void executeCommand(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
         TenantContext context = tenantManager.getTenant(tenantId);
 
         if (context == null) {
-            res.status(404);
-            return error("Tenant not found: " + tenantId);
+            ctx.status(404);
+            ctx.json(error("Tenant not found: " + tenantId));
+            return;
         }
 
         try {
-            Map<String, Object> body = objectMapper.readValue(req.body(), Map.class);
+            Map<String, Object> body = objectMapper.readValue(ctx.body(), Map.class);
 
             // 解析命令
             List<String> command = ((List<?>) body.get("command")).stream()
@@ -50,7 +50,7 @@ public class ResourceSandboxController {
                 .collect(Collectors.toList());
 
             // 解析选项
-            ProcessOptions.ProcessOptionsBuilder optionsBuilder = ProcessOptions.builder();
+            ProcessOptions.Builder optionsBuilder = ProcessOptions.builder();
             if (body.containsKey("timeout")) {
                 optionsBuilder.timeoutSeconds((Integer) body.get("timeout"));
             }
@@ -72,17 +72,17 @@ public class ResourceSandboxController {
             response.put("timedOut", result.isTimedOut());
 
             if (!result.isSuccess()) {
-                res.status(400);
+                ctx.status(400);
             }
 
-            return objectMapper.writeValueAsString(response);
+            ctx.json(response);
 
         } catch (ProcessSandboxException e) {
-            res.status(403);
-            return error("Command not allowed: " + e.getMessage());
+            ctx.status(403);
+            ctx.json(error("Command not allowed: " + e.getMessage()));
         } catch (Exception e) {
-            res.status(500);
-            return error("Execution failed: " + e.getMessage());
+            ctx.status(500);
+            ctx.json(error("Execution failed: " + e.getMessage()));
         }
     }
 
@@ -91,19 +91,21 @@ public class ResourceSandboxController {
      *
      * GET /api/tenants/{tenantId}/http?url=https://api.example.com
      */
-    public String httpGet(Request req, Response res) {
-        String tenantId = req.params(":tenantId");
-        String url = req.queryParams("url");
+    public void httpGet(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        String url = ctx.queryParam("url");
 
         if (url == null || url.isEmpty()) {
-            res.status(400);
-            return error("Missing required parameter: url");
+            ctx.status(400);
+            ctx.json(error("Missing required parameter: url"));
+            return;
         }
 
         TenantContext context = tenantManager.getTenant(tenantId);
         if (context == null) {
-            res.status(404);
-            return error("Tenant not found: " + tenantId);
+            ctx.status(404);
+            ctx.json(error("Tenant not found: " + tenantId));
+            return;
         }
 
         try {
@@ -114,14 +116,14 @@ public class ResourceSandboxController {
             result.put("headers", response.headers().map());
             result.put("body", response.body());
 
-            return objectMapper.writeValueAsString(result);
+            ctx.json(result);
 
         } catch (NetworkSandboxException e) {
-            res.status(403);
-            return error("Access denied: " + e.getMessage());
+            ctx.status(403);
+            ctx.json(error("Access denied: " + e.getMessage()));
         } catch (Exception e) {
-            res.status(500);
-            return error("Request failed: " + e.getMessage());
+            ctx.status(500);
+            ctx.json(error("Request failed: " + e.getMessage()));
         }
     }
 
@@ -130,13 +132,14 @@ public class ResourceSandboxController {
      *
      * GET /api/tenants/{tenantId}/metrics
      */
-    public String getMetrics(Request req, Response res) {
-        String tenantId = req.params(":tenantId");
+    public void getMetrics(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
         TenantContext context = tenantManager.getTenant(tenantId);
 
         if (context == null) {
-            res.status(404);
-            return error("Tenant not found: " + tenantId);
+            ctx.status(404);
+            ctx.json(error("Tenant not found: " + tenantId));
+            return;
         }
 
         try {
@@ -144,15 +147,16 @@ public class ResourceSandboxController {
             TenantMetrics metrics = new TenantMetrics(tenantId);
 
             // 收集实时数据
-            metrics.setCurrentStorageUsage(context.getFileSandbox().getStorageUsage());
+            TenantFileSandbox.StorageUsage storageUsage = context.getFileSandbox().getStorageUsage();
+            metrics.setCurrentStorageUsage(storageUsage.usedBytes());
 
             Map<String, Object> result = metrics.getAllMetrics();
 
-            return objectMapper.writeValueAsString(result);
+            ctx.json(result);
 
         } catch (Exception e) {
-            res.status(500);
-            return error("Failed to get metrics: " + e.getMessage());
+            ctx.status(500);
+            ctx.json(error("Failed to get metrics: " + e.getMessage()));
         }
     }
 
@@ -161,16 +165,16 @@ public class ResourceSandboxController {
      *
      * GET /api/tenants/{tenantId}/network/logs?limit=100
      */
-    public String getNetworkLogs(Request req, Response res) {
-        String tenantId = req.params(":tenantId");
-        int limit = req.queryParams("limit") != null
-            ? Integer.parseInt(req.queryParams("limit"))
-            : 100;
+    public void getNetworkLogs(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        String limitParam = ctx.queryParam("limit");
+        int limit = limitParam != null ? Integer.parseInt(limitParam) : 100;
 
         TenantContext context = tenantManager.getTenant(tenantId);
         if (context == null) {
-            res.status(404);
-            return error("Tenant not found: " + tenantId);
+            ctx.status(404);
+            ctx.json(error("Tenant not found: " + tenantId));
+            return;
         }
 
         try {
@@ -184,14 +188,14 @@ public class ResourceSandboxController {
                 ))
                 .collect(Collectors.toList());
 
-            return objectMapper.writeValueAsString(Map.of(
+            ctx.json(Map.of(
                 "tenantId", tenantId,
                 "logs", events
             ));
 
         } catch (Exception e) {
-            res.status(500);
-            return error("Failed to get logs: " + e.getMessage());
+            ctx.status(500);
+            ctx.json(error("Failed to get logs: " + e.getMessage()));
         }
     }
 
@@ -201,39 +205,36 @@ public class ResourceSandboxController {
      * POST /api/tenants/{tenantId}/network/test
      * Body: { "url": "https://api.example.com" }
      */
-    public String testNetworkAccess(Request req, Response res) {
-        String tenantId = req.params(":tenantId");
+    public void testNetworkAccess(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
         TenantContext context = tenantManager.getTenant(tenantId);
 
         if (context == null) {
-            res.status(404);
-            return error("Tenant not found: " + tenantId);
+            ctx.status(404);
+            ctx.json(error("Tenant not found: " + tenantId));
+            return;
         }
 
         try {
-            Map<String, Object> body = objectMapper.readValue(req.body(), Map.class);
+            Map<String, Object> body = objectMapper.readValue(ctx.body(), Map.class);
             String url = (String) body.get("url");
 
             boolean allowed = context.isNetworkAllowed(url);
 
-            return objectMapper.writeValueAsString(Map.of(
+            ctx.json(Map.of(
                 "url", url,
                 "allowed", allowed
             ));
 
         } catch (Exception e) {
-            res.status(500);
-            return error("Test failed: " + e.getMessage());
+            ctx.status(500);
+            ctx.json(error("Test failed: " + e.getMessage()));
         }
     }
 
     // ============ 辅助方法 ============
 
-    private String error(String message) {
-        try {
-            return objectMapper.writeValueAsString(Map.of("error", message));
-        } catch (Exception e) {
-            return "{\"error\":\"Unknown error\"}";
-        }
+    private Map<String, String> error(String message) {
+        return Map.of("error", message);
     }
 }

@@ -299,21 +299,36 @@ public class TenantContext {
         checkState();
         return restrictedHttpClient.post(url, body);
     }
-    
+
+    /**
+     * Phase 2: 检查网络访问是否被允许
+     */
+    public boolean isNetworkAllowed(String url) {
+        if (restrictedHttpClient == null) {
+            return false;
+        }
+        return restrictedHttpClient.isUrlAllowed(url);
+    }
+
     /**
      * Phase 2: 便捷方法 - 分配内存
      */
     public java.nio.ByteBuffer allocateMemory(int size) throws MemoryQuotaExceededException {
         checkState();
-        return memoryPool.allocate(size);
+        return memoryPool.allocate(size).getDelegate();
     }
     
     /**
      * Phase 2: 便捷方法 - 释放内存
+     * 注意：现在主要依赖 Cleaner 自动释放内存。
+     * 如果手动释放，需要保留对 TrackedByteBuffer 的引用并调用其 free() 方法。
      */
     public void freeMemory(java.nio.ByteBuffer buffer) {
-        if (buffer instanceof TrackedByteBuffer) {
-            ((TrackedByteBuffer) buffer).free();
+        // 由于 allocateMemory 返回的是 delegate，这里无法通过 instanceof 检查
+        // 内存会在 TrackedByteBuffer 被 GC 时通过 Cleaner 自动释放
+        // 如需手动释放，请使用 allocate() 返回 TrackedByteBuffer 并直接调用 free()
+        if (memoryPool != null && buffer != null) {
+            memoryPool.free(buffer);
         }
     }
     

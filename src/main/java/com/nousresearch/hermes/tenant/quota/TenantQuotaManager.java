@@ -83,6 +83,13 @@ public class TenantQuotaManager {
             throw new QuotaExceededException("File size exceeds limit: " + size + " > " + quota.getMaxFileSizeBytes());
         }
     }
+
+    /**
+     * 获取最大内存配额（字节）
+     */
+    public long getMaxMemoryBytes() {
+        return quota.getMaxMemoryBytes();
+    }
     
     // ============ 记录方法 ============
     

@@ -88,6 +88,42 @@ public class TenantAuditLogger {
     }
     
     /**
+     * 记录网络请求
+     */
+    public void logNetworkRequest(String tenantId, String method, String url) {
+        log(AuditEvent.NETWORK_REQUEST, Map.of(
+            "tenantId", tenantId,
+            "method", method,
+            "url", url,
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+
+    /**
+     * 记录网络响应
+     */
+    public void logNetworkResponse(String tenantId, String url, int statusCode) {
+        log(AuditEvent.NETWORK_RESPONSE, Map.of(
+            "tenantId", tenantId,
+            "url", url,
+            "statusCode", statusCode,
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+
+    /**
+     * 记录被阻止的网络请求
+     */
+    public void logBlockedNetworkRequest(String tenantId, String url, String reason) {
+        log(AuditEvent.NETWORK_BLOCKED, Map.of(
+            "tenantId", tenantId,
+            "url", url,
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+    }
+
+    /**
      * 获取最近的审计事件
      */
     public java.util.List<AuditEntry> getRecentEvents(int limit) {

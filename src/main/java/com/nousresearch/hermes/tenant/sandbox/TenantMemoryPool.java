@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
 import java.lang.ref.Cleaner;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
@@ -35,13 +37,20 @@ public class TenantMemoryPool {
     }
 
     /**
+     * 获取 Cleaner 实例（供 TrackedByteBuffer 使用）
+     */
+    static Cleaner getCleaner() {
+        return cleaner;
+    }
+
+    /**
      * 分配内存
      * 
      * @param size 分配大小（字节）
-     * @return 分配的 ByteBuffer
+     * @return 分配的 TrackedByteBuffer
      * @throws MemoryQuotaExceededException 如果超出配额
      */
-    public ByteBuffer allocate(int size) throws MemoryQuotaExceededException {
+    public TrackedByteBuffer allocate(int size) throws MemoryQuotaExceededException {
         if (size <= 0) {
             throw new IllegalArgumentException("Size must be positive: " + size);
         }
@@ -72,9 +81,8 @@ public class TenantMemoryPool {
         AllocationInfo info = new AllocationInfo(allocationId, size, Thread.currentThread().getName());
         allocations.put(allocationId, info);
 
-        // 注册清理器
+        // 创建追踪包装器（内部已注册 cleaner）
         TrackedByteBuffer tracked = new TrackedByteBuffer(buffer, allocationId, size, this);
-        cleaner.register(tracked, new CleanupAction(allocationId, size, this));
 
         // 检查告警阈值
         checkWarningThreshold();
@@ -85,10 +93,10 @@ public class TenantMemoryPool {
     /**
      * 分配并清零内存
      */
-    public ByteBuffer allocateZeroed(int size) throws MemoryQuotaExceededException {
-        ByteBuffer buffer = allocate(size);
-        buffer.put(new byte[size]);
-        buffer.flip();
+    public TrackedByteBuffer allocateZeroed(int size) throws MemoryQuotaExceededException {
+        TrackedByteBuffer buffer = allocate(size);
+        buffer.getDelegate().put(new byte[size]);
+        buffer.getDelegate().flip();
         return buffer;
     }
 
@@ -108,17 +116,34 @@ public class TenantMemoryPool {
 
     /**
      * 手动释放 ByteBuffer
+     * 注意：对于通过 allocate() 返回的缓冲区，应该调用 TrackedByteBuffer.free()
+     * 此方法用于释放其他直接缓冲区
      */
     public void free(ByteBuffer buffer) {
-        if (buffer instanceof TrackedByteBuffer) {
-            ((TrackedByteBuffer) buffer).free();
-        } else if (buffer.isDirect()) {
-            // 对于非追踪的直接缓冲区，尝试释放
-            try {
-                ((sun.nio.ch.DirectBuffer) buffer).cleaner().clean();
-            } catch (Exception e) {
-                // 忽略释放失败
+        if (buffer != null && buffer.isDirect()) {
+            // 使用反射尝试释放直接缓冲区
+            cleanDirectBuffer(buffer);
+        }
+    }
+
+    /**
+     * 使用反射清理直接缓冲区
+     * 兼容 Java 9+ 的模块系统
+     */
+    private void cleanDirectBuffer(ByteBuffer buffer) {
+        try {
+            // 获取 cleaner 方法
+            Method cleanerMethod = buffer.getClass().getMethod("cleaner");
+            cleanerMethod.setAccessible(true);
+            Object cleaner = cleanerMethod.invoke(buffer);
+            if (cleaner != null) {
+                Method cleanMethod = cleaner.getClass().getMethod("clean");
+                cleanMethod.setAccessible(true);
+                cleanMethod.invoke(cleaner);
             }
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
+            // 如果反射失败，依赖 GC 最终回收
+            // 这在 Java 9+ 中是正常情况
         }
     }
 
@@ -203,6 +228,19 @@ public class TenantMemoryPool {
         System.gc();
         // 触发清理器运行
         cleaner.notify();
+    }
+
+    /**
+     * 清理所有分配的内存
+     */
+    public void clear() {
+        for (AllocationInfo info : allocations.values()) {
+            if (!info.isFreed()) {
+                free(info.getAllocationId(), info.getSize());
+            }
+        }
+        allocations.clear();
+        usedMemory.set(0);
     }
 
     // ============ 内部类 ============

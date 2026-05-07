@@ -22,9 +22,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -159,32 +161,32 @@ public class TenantController implements HttpHandler {
             return;
         }
         
-        // 构建配置
-        TenantConfig tenantConfig = new TenantConfig();
-        tenantConfig.setTenantId(tenantId);
-        tenantConfig.setName((String) request.getOrDefault("name", tenantId));
-        tenantConfig.setDescription((String) request.getOrDefault("description", ""));
-        tenantConfig.setCreatedBy((String) request.getOrDefault("created_by", "api"));
+        // 提取配置
+        String name = (String) request.getOrDefault("name", tenantId);
+        String description = (String) request.getOrDefault("description", "");
+        String createdBy = (String) request.getOrDefault("created_by", "api");
         
         // 配额配置
+        TenantQuota quota = TenantQuota.defaults();
         @SuppressWarnings("unchecked")
         Map<String, Object> quotaMap = (Map<String, Object>) request.get("quota");
         if (quotaMap != null) {
-            tenantConfig.setQuota(parseQuota(quotaMap));
+            quota = parseQuota(quotaMap);
         }
         
         // 安全策略
+        TenantSecurityPolicy securityPolicy = TenantSecurityPolicy.defaults();
         @SuppressWarnings("unchecked")
         Map<String, Object> securityMap = (Map<String, Object>) request.get("security");
         if (securityMap != null) {
-            tenantConfig.setSecurityPolicy(parseSecurityPolicy(securityMap));
+            securityPolicy = parseSecurityPolicy(securityMap);
         }
         
-        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, tenantConfig.getCreatedBy())
-            .tenantName(tenantConfig.getName())
-            .description(tenantConfig.getDescription())
-            .quota(tenantConfig.getQuota())
-            .securityPolicy(tenantConfig.getSecurityPolicy())
+        TenantProvisioningRequest provisionRequest = TenantProvisioningRequest.builder(tenantId, createdBy)
+            .tenantName(name)
+            .description(description)
+            .quota(quota)
+            .securityPolicy(securityPolicy)
             .build();
         
         TenantContext context = tenantManager.provisionTenant(provisionRequest);

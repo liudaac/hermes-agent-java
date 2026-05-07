@@ -2,6 +2,8 @@ package com.nousresearch.hermes.tenant.core;
 
 import com.nousresearch.hermes.tenant.quota.TenantQuota;
 import com.nousresearch.hermes.tenant.sandbox.FileSandboxConfig;
+import com.nousresearch.hermes.tenant.sandbox.NetworkPolicy;
+import com.nousresearch.hermes.tenant.sandbox.ProcessSandboxConfig;
 import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
 
 import java.util.Map;
@@ -22,7 +24,13 @@ public class TenantProvisioningRequest {
     
     // 文件沙箱配置
     private FileSandboxConfig fileSandboxConfig = FileSandboxConfig.defaults();
-    
+
+    // 进程沙箱配置
+    private ProcessSandboxConfig processSandboxConfig = ProcessSandboxConfig.defaultConfig();
+
+    // 网络策略配置
+    private NetworkPolicy networkPolicy = NetworkPolicy.defaultPolicy();
+
     // 安全配置
     private TenantSecurityPolicy securityPolicy = TenantSecurityPolicy.defaults();
     
@@ -99,15 +107,24 @@ public class TenantProvisioningRequest {
     }
     
     // ============ Getters ============
-    
+
     public String getTenantId() { return tenantId; }
     public String getTenantName() { return tenantName; }
     public String getCreatedBy() { return createdBy; }
     public String getDescription() { return description; }
     public TenantQuota getQuota() { return quota; }
     public FileSandboxConfig getFileSandboxConfig() { return fileSandboxConfig; }
+    public ProcessSandboxConfig getProcessSandboxConfig() { return processSandboxConfig; }
+    public NetworkPolicy getNetworkPolicy() { return networkPolicy; }
     public TenantSecurityPolicy getSecurityPolicy() { return securityPolicy; }
     public Map<String, Object> getConfig() { return config; }
     public boolean isInheritSystemSkills() { return inheritSystemSkills; }
     public boolean isEnableAudit() { return enableAudit; }
+
+    /**
+     * 获取最大内存配额（字节）
+     */
+    public long getMaxMemoryBytes() {
+        return quota != null ? quota.getMaxMemoryBytes() : 128L * 1024 * 1024; // 默认128MB
+    }
 }

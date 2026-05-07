@@ -46,5 +46,10 @@ public enum AuditEvent {
     
     // 安全
     SECURITY_VIOLATION,
-    AUTHENTICATION_FAILED
+    AUTHENTICATION_FAILED,
+
+    // 网络请求
+    NETWORK_REQUEST,
+    NETWORK_RESPONSE,
+    NETWORK_BLOCKED
 }

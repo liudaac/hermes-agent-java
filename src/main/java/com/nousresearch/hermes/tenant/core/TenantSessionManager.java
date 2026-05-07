@@ -33,4 +33,12 @@ public class TenantSessionManager {
     public void persistAll() {
         // 持久化所有会话
     }
+
+    /**
+     * 获取活跃会话数量
+     */
+    public int getActiveSessionCount() {
+        // TODO: 实现会话计数
+        return 0;
+    }
 }

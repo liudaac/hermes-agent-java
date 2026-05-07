@@ -18,6 +18,9 @@ public class ProcessOptions {
     private double maxCpuCores = 0; // 0 = unlimited, e.g., 0.5 = half core
     private long maxMemoryMB = 0; // 0 = unlimited
     private long maxIoBps = 0; // 0 = unlimited, bytes per second
+    
+    // GPU 支持
+    private boolean gpuEnabled = false;
 
     public static Builder builder() {
         return new Builder();
@@ -77,6 +80,11 @@ public class ProcessOptions {
             return this;
         }
 
+        public Builder gpuEnabled(boolean enabled) {
+            options.gpuEnabled = enabled;
+            return this;
+        }
+
         public ProcessOptions build() {
             return options;
         }
@@ -92,6 +100,7 @@ public class ProcessOptions {
     public double getMaxCpuCores() { return maxCpuCores; }
     public long getMaxMemoryMB() { return maxMemoryMB; }
     public long getMaxIoBps() { return maxIoBps; }
+    public boolean isGpuEnabled() { return gpuEnabled; }
 
     // Setters
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
@@ -103,4 +112,5 @@ public class ProcessOptions {
     public void setMaxCpuCores(double maxCpuCores) { this.maxCpuCores = maxCpuCores; }
     public void setMaxMemoryMB(long maxMemoryMB) { this.maxMemoryMB = maxMemoryMB; }
     public void setMaxIoBps(long maxIoBps) { this.maxIoBps = maxIoBps; }
+    public void setGpuEnabled(boolean gpuEnabled) { this.gpuEnabled = gpuEnabled; }
 }

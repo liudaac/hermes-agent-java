@@ -28,29 +28,76 @@ public class TenantMetrics implements TenantMetricsMBean {
     
     private final TenantContext context;
     private final String tenantId;
-    
+
     // 指标缓存（减少实时计算）
     private volatile Map<String, Object> metricsCache = new HashMap<>();
     private volatile long lastCacheUpdate = 0;
     private static final long CACHE_TTL_MS = 5000; // 5秒缓存
-    
+
     // 历史统计
     private final AtomicLong totalProcessesExecuted = new AtomicLong(0);
     private final AtomicLong processesTimedOut = new AtomicLong(0);
     private final AtomicLong processesOomKilled = new AtomicLong(0);
     private final AtomicLong totalAgentsCreated = new AtomicLong(0);
     private final AtomicLong totalAuditEvents = new AtomicLong(0);
-    
+
+    // 存储使用情况（由外部设置）
+    private volatile long currentStorageUsage = 0;
+
     // 告警阈值
     private static final double MEMORY_WARNING_THRESHOLD = 0.8;
     private static final double MEMORY_CRITICAL_THRESHOLD = 0.95;
     private static final double STORAGE_WARNING_THRESHOLD = 0.85;
     private static final double STORAGE_CRITICAL_THRESHOLD = 0.98;
-    
+
+    /**
+     * 创建租户指标（完整上下文）
+     */
     public TenantMetrics(TenantContext context) {
         this.context = context;
         this.tenantId = context.getTenantId();
         registerMBean();
+    }
+
+    /**
+     * 创建租户指标（仅 tenantId，用于简化场景）
+     */
+    public TenantMetrics(String tenantId) {
+        this.context = null;
+        this.tenantId = tenantId;
+        // 不注册 JMX MBean，因为没有完整上下文
+    }
+
+    /**
+     * 设置当前存储使用量
+     */
+    public void setCurrentStorageUsage(long bytes) {
+        this.currentStorageUsage = bytes;
+    }
+
+    /**
+     * 获取所有指标（简化版）
+     */
+    public Map<String, Object> getAllMetrics() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("tenantId", tenantId);
+        result.put("timestamp", Instant.now().toString());
+
+        // 存储指标
+        result.put("storageUsedBytes", currentStorageUsage);
+
+        // 如果有完整上下文，添加更多指标
+        if (context != null) {
+            result.put("state", getState());
+            result.put("memoryUsedBytes", getMemoryUsedBytes());
+            result.put("memoryMaxBytes", getMemoryMaxBytes());
+            result.put("memoryUsagePercent", getMemoryUsagePercent());
+            result.put("activeAgents", getActiveAgents());
+            result.put("activeSessions", getActiveSessions());
+            result.put("quotaStatus", getQuotaStatus());
+        }
+
+        return result;
     }
     
     /**
@@ -127,53 +174,59 @@ public class TenantMetrics implements TenantMetricsMBean {
     
     @Override
     public String getState() {
-        return context.getState().name();
+        return context != null ? context.getState().name() : "UNKNOWN";
     }
-    
+
     @Override
     public long getCreatedAt() {
-        return context.getCreatedAt().toEpochMilli();
+        return context != null ? context.getCreatedAt().toEpochMilli() : 0;
     }
-    
+
     @Override
     public long getLastActivity() {
-        return context.getLastActivity().toEpochMilli();
+        return context != null ? context.getLastActivity().toEpochMilli() : 0;
     }
     
     // ============ 内存指标 ============
-    
+
     @Override
     public long getMemoryMaxBytes() {
+        if (context == null) return 0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.maxBytes() : 0;
     }
-    
+
     @Override
     public long getMemoryUsedBytes() {
+        if (context == null) return 0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.usedBytes() : 0;
     }
-    
+
     @Override
     public long getMemoryAvailableBytes() {
+        if (context == null) return 0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.availableBytes() : 0;
     }
-    
+
     @Override
     public double getMemoryUsagePercent() {
+        if (context == null) return 0.0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.usagePercent() : 0.0;
     }
-    
+
     @Override
     public int getMemoryAllocationCount() {
+        if (context == null) return 0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.allocationCount() : 0;
     }
-    
+
     @Override
     public int getMemoryLeakCount() {
+        if (context == null) return 0;
         TenantMemoryPool.MemoryStats stats = context.getMemoryStats();
         return stats != null ? stats.potentialLeaks().size() : 0;
     }
@@ -202,38 +255,42 @@ public class TenantMetrics implements TenantMetricsMBean {
     }
     
     // ============ 网络指标 ============
-    
+
     @Override
     public int getNetworkTotalRequests() {
+        if (context == null) return 0;
         RestrictedHttpClient.NetworkStats stats = context.getNetworkStats();
         return stats != null ? stats.getTotalRequests() : 0;
     }
-    
+
     @Override
     public int getNetworkBlockedRequests() {
+        if (context == null) return 0;
         RestrictedHttpClient.NetworkStats stats = context.getNetworkStats();
         return stats != null ? stats.getBlockedRequests() : 0;
     }
-    
+
     @Override
     public double getNetworkBlockRate() {
+        if (context == null) return 0.0;
         RestrictedHttpClient.NetworkStats stats = context.getNetworkStats();
         return stats != null ? stats.getBlockRate() : 0.0;
     }
-    
+
     @Override
     public int getNetworkRequestsPerSecond() {
         // TODO: 计算 RPS
         return 0;
     }
-    
+
     @Override
     public Map<String, Integer> getNetworkHostCounts() {
+        if (context == null) return Map.of();
         RestrictedHttpClient.NetworkStats stats = context.getNetworkStats();
         if (stats == null || stats.getHostCounts() == null) {
             return Map.of();
         }
-        
+
         Map<String, Integer> result = new HashMap<>();
         stats.getHostCounts().forEach((host, count) -> {
             result.put(host, count.get());
@@ -276,20 +333,20 @@ public class TenantMetrics implements TenantMetricsMBean {
     }
     
     // ============ Agent 指标 ============
-    
+
     @Override
     public int getActiveAgents() {
-        return context.getActiveAgentCount();
+        return context != null ? context.getActiveAgentCount() : 0;
     }
-    
+
     @Override
     public long getTotalAgentsCreated() {
         return totalAgentsCreated.get();
     }
-    
+
     @Override
     public int getActiveSessions() {
-        return context.getActiveSessionCount();
+        return context != null ? context.getActiveSessionCount() : 0;
     }
     
     // ============ 审计指标 ============
@@ -339,7 +396,7 @@ public class TenantMetrics implements TenantMetricsMBean {
     
     @Override
     public void compactMemory() {
-        if (context.getMemoryPool() != null) {
+        if (context != null && context.getMemoryPool() != null) {
             context.getMemoryPool().compact();
             logger.info("Memory compacted for tenant: {}", tenantId);
         }
@@ -425,15 +482,15 @@ public class TenantMetrics implements TenantMetricsMBean {
         
         sb.append("# HELP hermes_tenant_state Tenant state (0=DESTROYED, 1=SUSPENDED, 2=ACTIVE)\n");
         sb.append("# TYPE hermes_tenant_state gauge\n");
-        int stateValue = switch (context.getState()) {
+        int stateValue = context != null ? switch (context.getState()) {
             case DESTROYED -> 0;
             case SUSPENDED -> 1;
             case ACTIVE -> 2;
             default -> -1;
-        };
-        sb.append(String.format("hermes_tenant_state{tenant=\"%s\"} %d\n", 
+        } : -1;
+        sb.append(String.format("hermes_tenant_state{tenant=\"%s\"} %d\n",
             tenantId, stateValue));
-        
+
         return sb.toString();
     }
 }

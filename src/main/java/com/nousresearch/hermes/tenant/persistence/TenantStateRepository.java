@@ -1,7 +1,6 @@
 package com.nousresearch.hermes.tenant.persistence;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
-import com.nousresearch.hermes.tenant.core.TenantState;
 
 import java.time.Instant;
 import java.util.Map;

@@ -229,6 +229,29 @@ public class TenantManager {
     public Collection<TenantContext> listActiveTenants() {
         return Collections.unmodifiableCollection(tenants.values());
     }
+
+    /**
+     * 获取所有租户（包括活跃和已注册的）
+     */
+    public Collection<TenantContext> getAllTenants() {
+        registryLock.readLock().lock();
+        try {
+            // 加载所有已注册但未在内存中的租户
+            for (String tenantId : registry.listAll()) {
+                if (!tenants.containsKey(tenantId)) {
+                    try {
+                        TenantContext context = TenantContext.load(tenantId);
+                        tenants.put(tenantId, context);
+                    } catch (Exception e) {
+                        logger.warn("Failed to load tenant: {}", tenantId, e);
+                    }
+                }
+            }
+            return Collections.unmodifiableCollection(tenants.values());
+        } finally {
+            registryLock.readLock().unlock();
+        }
+    }
     
     /**
      * 列出所有已注册租户ID
@@ -240,36 +263,6 @@ public class TenantManager {
         } finally {
             registryLock.readLock().unlock();
         }
-    }
-    
-    /**
-     * 检查租户是否已注册
-     */
-    public boolean isRegistered(String tenantId) {
-        if (tenants.containsKey(tenantId)) {
-            return true;
-        }
-        
-        registryLock.readLock().lock();
-        try {
-            return registry.isRegistered(tenantId);
-        } finally {
-            registryLock.readLock().unlock();
-        }
-    }
-    
-    /**
-     * 删除租户
-     */
-    public void deleteTenant(String tenantId) {
-        destroyTenant(tenantId, false);
-    }
-    
-    /**
-     * 暂停租户（单参数版本）
-     */
-    public void suspendTenant(String tenantId) {
-        suspendTenant(tenantId, "api_request");
     }
     
     /**

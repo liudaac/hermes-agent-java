@@ -2,6 +2,7 @@ package com.nousresearch.hermes.tenant.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.nousresearch.hermes.tenant.sandbox.NetworkPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,7 @@ public class TenantSecurityPolicy {
     // 网络策略
     private boolean allowNetworkAccess = false;
     private Set<String> allowedHosts = new HashSet<>();
+    private NetworkPolicy networkPolicy = NetworkPolicy.defaultPolicy();
     
     // 工具策略
     private Set<String> allowedTools = new HashSet<>();
@@ -97,6 +99,9 @@ public class TenantSecurityPolicy {
     
     public Set<String> getAllowedHosts() { return allowedHosts; }
     public void setAllowedHosts(Set<String> hosts) { this.allowedHosts = hosts; }
+
+    public NetworkPolicy getNetworkPolicy() { return networkPolicy; }
+    public void setNetworkPolicy(NetworkPolicy policy) { this.networkPolicy = policy; }
     
     public Set<String> getAllowedTools() { return allowedTools; }
     public void setAllowedTools(Set<String> tools) { this.allowedTools = tools; }
