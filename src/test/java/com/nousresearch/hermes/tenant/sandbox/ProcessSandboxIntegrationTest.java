@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
-import com.nousresearch.hermes.tenant.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,9 +27,7 @@ public class ProcessSandboxIntegrationTest {
     @BeforeAll
     void setUp() throws Exception {
         // 创建测试租户
-        TenantProvisioningRequest request = TenantProvisioningRequest.builder()
-            .tenantId("test-tenant")
-            .createdBy("test-user")
+        TenantProvisioningRequest request = TenantProvisioningRequest.builder("test-tenant", "test-user")
             .processSandboxConfig(
                 ProcessSandboxConfig.builder()
                     .workDirectory(tempDir)

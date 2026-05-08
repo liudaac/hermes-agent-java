@@ -80,7 +80,17 @@ public class TenantProvisioningRequest {
             request.fileSandboxConfig = config;
             return this;
         }
-        
+
+        public Builder processSandboxConfig(ProcessSandboxConfig config) {
+            request.processSandboxConfig = config;
+            return this;
+        }
+
+        public Builder networkPolicy(NetworkPolicy policy) {
+            request.networkPolicy = policy;
+            return this;
+        }
+
         public Builder securityPolicy(TenantSecurityPolicy policy) {
             request.securityPolicy = policy;
             return this;

@@ -23,18 +23,18 @@ class TenantMemoryPoolTest {
     @Test
     void testAllocateAndFree() {
         int size = 1024 * 1024; // 1MB
-        
-        ByteBuffer buffer = pool.allocate(size);
+
+        TrackedByteBuffer buffer = pool.allocate(size);
         assertNotNull(buffer);
-        assertEquals(size, buffer.capacity());
-        
+        assertEquals(size, buffer.getSize());
+
         TenantMemoryPool.MemoryStats stats = pool.getStats();
         assertEquals(size, stats.usedBytes());
         assertEquals(1, stats.allocationCount());
-        
+
         // 释放内存
-        pool.free(buffer);
-        
+        buffer.free();
+
         stats = pool.getStats();
         assertEquals(0, stats.usedBytes());
     }
@@ -43,7 +43,7 @@ class TenantMemoryPoolTest {
     void testQuotaExceeded() {
         // 尝试分配超过配额的内存
         long oversizedAllocation = POOL_SIZE + 1;
-        
+
         assertThrows(
             MemoryQuotaExceededException.class,
             () -> pool.allocate((int) oversizedAllocation)
@@ -59,86 +59,84 @@ class TenantMemoryPoolTest {
 
     @Test
     void testMultipleAllocations() {
-        ByteBuffer buf1 = pool.allocate(1024 * 1024); // 1MB
-        ByteBuffer buf2 = pool.allocate(2 * 1024 * 1024); // 2MB
-        
+        TrackedByteBuffer buf1 = pool.allocate(1024 * 1024); // 1MB
+        TrackedByteBuffer buf2 = pool.allocate(2 * 1024 * 1024); // 2MB
+
         TenantMemoryPool.MemoryStats stats = pool.getStats();
         assertEquals(3 * 1024 * 1024, stats.usedBytes());
         assertEquals(2, stats.allocationCount());
-        
+
         // 释放一个
-        pool.free(buf1);
-        
+        buf1.free();
+
         stats = pool.getStats();
         assertEquals(2 * 1024 * 1024, stats.usedBytes());
         assertEquals(1, stats.allocationCount());
-        
+
         // 清理
-        pool.free(buf2);
+        buf2.free();
     }
 
     @Test
     void testWarningThreshold() {
         // 分配超过 80% 应该触发警告
         long warningSize = (long) (POOL_SIZE * 0.85);
-        
-        ByteBuffer buffer = pool.allocate((int) warningSize);
-        
+
+        TrackedByteBuffer buffer = pool.allocate((int) warningSize);
+
         TenantMemoryPool.MemoryStats stats = pool.getStats();
         assertTrue(stats.warning());
-        
-        pool.free(buffer);
+
+        buffer.free();
     }
 
     @Test
     void testMemoryLeakDetection() throws InterruptedException {
         // 分配但不释放
-        ByteBuffer buffer = pool.allocate(1024);
-        
+        TrackedByteBuffer buffer = pool.allocate(1024);
+
         // 模拟长时间不释放（实际测试中不会真的等待 5 分钟）
         // 这里我们只是测试接口存在
         TenantMemoryPool.MemoryStats stats = pool.getStats();
         assertNotNull(stats.potentialLeaks());
-        
-        pool.free(buffer);
+
+        buffer.free();
     }
 
     @Test
     void testTrackedByteBuffer() {
-        ByteBuffer buffer = pool.allocate(1024);
-        
-        assertTrue(buffer instanceof TrackedByteBuffer);
-        TrackedByteBuffer tracked = (TrackedByteBuffer) buffer;
-        
-        assertNotNull(tracked.getAllocationId());
-        assertEquals(1024, tracked.getSize());
-        assertFalse(tracked.isFreed());
-        
-        tracked.free();
-        assertTrue(tracked.isFreed());
+        TrackedByteBuffer buffer = pool.allocate(1024);
+
+        assertNotNull(buffer.getAllocationId());
+        assertEquals(1024, buffer.getSize());
+        assertFalse(buffer.isFreed());
+
+        buffer.free();
+        assertTrue(buffer.isFreed());
     }
 
     @Test
     void testDoubleFree() {
-        ByteBuffer buffer = pool.allocate(1024);
-        
-        pool.free(buffer);
-        
+        TrackedByteBuffer buffer = pool.allocate(1024);
+
+        buffer.free();
+
         // 双重释放不应该抛出异常
-        assertDoesNotThrow(() -> pool.free(buffer));
+        assertDoesNotThrow(() -> buffer.free());
     }
 
     @Test
     void testAllocateZeroed() {
-        ByteBuffer buffer = pool.allocateZeroed(1024);
-        
+        TrackedByteBuffer trackedBuffer = pool.allocateZeroed(1024);
+        ByteBuffer buffer = trackedBuffer.getDelegate();
+
         // 验证所有字节都是 0
         byte[] bytes = new byte[1024];
         buffer.get(bytes);
         for (byte b : bytes) {
             assertEquals(0, b);
         }
-        
-        pool.free(buffer);
+
+        trackedBuffer.free();
     }
 }
