@@ -233,7 +233,7 @@ public class TenantManager {
     /**
      * 获取所有租户（包括活跃和已注册的）
      */
-    public Collection<TenantContext> getAllTenants() {
+    public Map<String, TenantContext> getAllTenants() {
         registryLock.readLock().lock();
         try {
             // 加载所有已注册但未在内存中的租户
@@ -247,7 +247,7 @@ public class TenantManager {
                     }
                 }
             }
-            return Collections.unmodifiableCollection(tenants.values());
+            return Collections.unmodifiableMap(new HashMap<>(tenants));
         } finally {
             registryLock.readLock().unlock();
         }
