@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.dashboard;
 
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,12 +17,21 @@ public class DashboardRunner {
 
     private DashboardServer server;
     private Thread serverThread;
+    private TenantManager tenantManager;
 
     /**
      * Start the dashboard server.
      */
     public void start(int port, String host) {
+        start(port, host, new TenantManager());
+    }
+    
+    /**
+     * Start the dashboard server with tenant manager.
+     */
+    public void start(int port, String host, TenantManager tenantManager) {
         logger.info("Starting Hermes Dashboard on http://{}:{}", host, port);
+        this.tenantManager = tenantManager;
 
         HermesConfig config;
         try {
@@ -30,7 +40,7 @@ public class DashboardRunner {
             logger.warn("Could not load config, using defaults: {}", e.getMessage());
             config = new HermesConfig();  // Uses default config when file doesn't exist
         }
-        server = new DashboardServer(port, host, config);
+        server = new DashboardServer(port, host, config, tenantManager);
 
         serverThread = new Thread(() -> {
             try {

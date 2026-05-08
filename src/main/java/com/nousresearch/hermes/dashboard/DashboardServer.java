@@ -4,6 +4,11 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantManager;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.quota.TenantQuota;
+import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -16,6 +21,9 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -60,11 +68,19 @@ public class DashboardServer {
     private final SkillsHandler skillsHandler;
     private final ToolsHandler toolsHandler;
     private final GatewayHandler gatewayHandler;
+    
+    // Tenant Manager
+    private final TenantManager tenantManager;
 
     public DashboardServer(int port, String host, HermesConfig config) {
+        this(port, host, config, new TenantManager());
+    }
+    
+    public DashboardServer(int port, String host, HermesConfig config, TenantManager tenantManager) {
         this.port = port;
         this.host = host;
         this.config = config;
+        this.tenantManager = tenantManager;
         this.sessionToken = generateSessionToken();
 
         // Initialize handlers
@@ -282,6 +298,9 @@ public class DashboardServer {
         // Cron jobs API (placeholder)
         app.get("/api/cron/jobs", ctx -> ctx.json(new java.util.ArrayList<>()));
 
+        // ========== Tenant Management APIs ==========
+        registerTenantRoutes();
+
         // Dashboard themes API
         app.get("/api/dashboard/themes", ctx -> {
             ctx.json(new JSONObject()
@@ -398,7 +417,326 @@ public class DashboardServer {
         status.put("gateway_exit_reason", (String) null);
         status.put("gateway_updated_at", (String) null);
         status.put("gateway_platforms", new JSONObject());
+        // Add tenant info
+        status.put("multi_tenant_enabled", true);
+        status.put("tenant_count", tenantManager.getAllTenants().size());
 
         ctx.json(status);
+    }
+    
+    // ========== Tenant Management Methods ==========
+    
+    private void registerTenantRoutes() {
+        // List all tenants
+        app.get("/api/tenants", this::listTenants);
+        
+        // Create new tenant
+        app.post("/api/tenants", this::createTenant);
+        
+        // Get tenant details
+        app.get("/api/tenants/{tenantId}", this::getTenant);
+        
+        // Delete tenant
+        app.delete("/api/tenants/{tenantId}", this::deleteTenant);
+        
+        // Suspend tenant
+        app.post("/api/tenants/{tenantId}/suspend", this::suspendTenant);
+        
+        // Resume tenant
+        app.post("/api/tenants/{tenantId}/resume", this::resumeTenant);
+        
+        // Get tenant quota
+        app.get("/api/tenants/{tenantId}/quota", this::getTenantQuota);
+        
+        // Update tenant quota
+        app.put("/api/tenants/{tenantId}/quota", this::updateTenantQuota);
+        
+        // Get tenant usage
+        app.get("/api/tenants/{tenantId}/usage", this::getTenantUsage);
+        
+        // Get tenant security policy
+        app.get("/api/tenants/{tenantId}/security", this::getTenantSecurity);
+        
+        // Update tenant security policy
+        app.put("/api/tenants/{tenantId}/security", this::updateTenantSecurity);
+        
+        // Get tenant audit logs
+        app.get("/api/tenants/{tenantId}/audit", this::getTenantAuditLogs);
+        
+        // Get tenant sessions
+        app.get("/api/tenants/{tenantId}/sessions", this::getTenantSessions);
+        
+        // Get tenant skills
+        app.get("/api/tenants/{tenantId}/skills", this::getTenantSkills);
+    }
+    
+    private void listTenants(Context ctx) {
+        java.util.List<Map<String, Object>> tenants = tenantManager.getAllTenants().entrySet().stream()
+            .map(entry -> {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("id", entry.getKey());
+                info.put("state", entry.getValue().getState().name());
+                info.put("createdAt", entry.getValue().getCreatedAt().toString());
+                info.put("lastActivity", entry.getValue().getLastActivity().toString());
+                info.put("activeAgents", entry.getValue().getActiveAgentCount());
+                info.put("activeSessions", entry.getValue().getActiveSessionCount());
+                return info;
+            })
+            .collect(java.util.stream.Collectors.toList());
+        
+        ctx.json(Map.of("tenants", tenants));
+    }
+    
+    private void createTenant(Context ctx) {
+        try {
+            JSONObject body = JSON.parseObject(ctx.body());
+            String tenantId = body.getString("id");
+            String createdBy = body.getString("createdBy");
+            
+            if (tenantId == null || tenantId.isEmpty()) {
+                ctx.status(400).json(Map.of("error", "Tenant ID is required"));
+                return;
+            }
+            
+            if (tenantManager.getTenant(tenantId) != null) {
+                ctx.status(409).json(Map.of("error", "Tenant already exists: " + tenantId));
+                return;
+            }
+            
+            TenantProvisioningRequest request = TenantProvisioningRequest.builder(tenantId, 
+                createdBy != null ? createdBy : "admin").build();
+            
+            TenantContext tenant = tenantManager.provisionTenant(request);
+            
+            ctx.json(Map.of(
+                "success", true,
+                "id", tenantId,
+                "state", tenant.getState().name()
+            ));
+            logger.info("Created tenant: {}", tenantId);
+        } catch (Exception e) {
+            logger.error("Failed to create tenant: {}", e.getMessage(), e);
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    private void getTenant(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("id", tenantId);
+        info.put("state", tenant.getState().name());
+        info.put("createdAt", tenant.getCreatedAt().toString());
+        info.put("lastActivity", tenant.getLastActivity().toString());
+        info.put("activeAgents", tenant.getActiveAgentCount());
+        info.put("activeSessions", tenant.getActiveSessionCount());
+        info.put("quota", tenant.getQuotaManager().getQuota().toMap());
+        
+        ctx.json(info);
+    }
+    
+    private void deleteTenant(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+
+        tenantManager.deleteTenant(tenantId);
+        ctx.json(Map.of("success", true, "id", tenantId));
+        logger.info("Deleted tenant: {}", tenantId);
+    }
+    
+    private void suspendTenant(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        tenant.suspend("Manual suspension via dashboard");
+        ctx.json(Map.of("success", true, "id", tenantId, "state", "SUSPENDED"));
+    }
+    
+    private void resumeTenant(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        tenant.resume();
+        ctx.json(Map.of("success", true, "id", tenantId, "state", "ACTIVE"));
+    }
+    
+    private void getTenantQuota(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        ctx.json(tenant.getQuotaManager().getQuota().toMap());
+    }
+    
+    private void updateTenantQuota(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        // Store quota in config
+        JSONObject body = JSON.parseObject(ctx.body());
+        tenant.getConfig().set("quota", body);
+        tenant.getConfig().save();
+        
+        ctx.json(Map.of("success", true));
+    }
+    
+    private void getTenantUsage(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        Map<String, Object> usage = new LinkedHashMap<>();
+        usage.put("storage", tenant.getQuotaManager().getStorageUsage());
+        usage.put("memory", tenant.getQuotaManager().getMemoryUsage());
+        usage.put("quota", tenant.getQuotaManager().getUsage());
+        
+        ctx.json(usage);
+    }
+    
+    private void getTenantSecurity(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        TenantSecurityPolicy policy = tenant.getSecurityPolicy();
+        Map<String, Object> security = new LinkedHashMap<>();
+        security.put("allowCodeExecution", policy.isAllowCodeExecution());
+        security.put("requireSandbox", policy.isRequireSandbox());
+        security.put("allowNetworkAccess", policy.isAllowNetworkAccess());
+        security.put("allowedLanguages", policy.getAllowedLanguages());
+        security.put("allowedTools", policy.getAllowedTools());
+        security.put("deniedTools", policy.getDeniedTools());
+        
+        ctx.json(security);
+    }
+    
+    private void updateTenantSecurity(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        JSONObject body = JSON.parseObject(ctx.body());
+        TenantSecurityPolicy policy = tenant.getSecurityPolicy();
+        
+        if (body.containsKey("allowCodeExecution")) {
+            policy.setAllowCodeExecution(body.getBoolean("allowCodeExecution"));
+        }
+        if (body.containsKey("requireSandbox")) {
+            policy.setRequireSandbox(body.getBoolean("requireSandbox"));
+        }
+        if (body.containsKey("allowNetworkAccess")) {
+            policy.setAllowNetworkAccess(body.getBoolean("allowNetworkAccess"));
+        }
+        
+        tenant.setSecurityPolicy(policy);
+        
+        try {
+            java.nio.file.Path configDir = tenant.getTenantDir().resolve("config");
+            policy.save(configDir);
+        } catch (Exception e) {
+            logger.warn("Failed to save security policy: {}", e.getMessage());
+        }
+        
+        ctx.json(Map.of("success", true));
+    }
+    
+    private void getTenantAuditLogs(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(100);
+        
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        java.util.List<Map<String, Object>> events = tenant.getAuditLogger().getRecentEvents(limit).stream()
+            .map(e -> {
+                Map<String, Object> event = new LinkedHashMap<>();
+                event.put("timestamp", e.timestamp().toString());
+                event.put("type", e.event().name());
+                event.put("details", e.details());
+                return event;
+            })
+            .collect(java.util.stream.Collectors.toList());
+        
+        ctx.json(Map.of("events", events));
+    }
+    
+    private void getTenantSessions(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        // Return session count (session IDs not available in current implementation)
+        ctx.json(Map.of(
+            "activeSessions", tenant.getActiveSessionCount()
+        ));
+    }
+    
+    private void getTenantSkills(Context ctx) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
+        }
+        
+        List<String> skillNames = tenant.getSkillManager().listSkills().stream()
+            .map(summary -> summary.name())
+            .collect(java.util.stream.Collectors.toList());
+        
+        ctx.json(Map.of(
+            "installedSkills", skillNames,
+            "totalSkills", skillNames.size()
+        ));
     }
 }

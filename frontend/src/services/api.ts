@@ -59,6 +59,56 @@ export interface Config {
   };
 }
 
+export interface Tenant {
+  id: string;
+  state: string;
+  createdAt: string;
+  lastActivity: string;
+  activeAgents: number;
+  activeSessions: number;
+}
+
+export interface TenantQuota {
+  maxDailyRequests: number;
+  maxDailyTokens: number;
+  maxConcurrentAgents: number;
+  maxConcurrentSessions: number;
+  maxStorageBytes: number;
+  maxMemoryBytes: number;
+  requestsPerSecond: number;
+  requestsPerMinute: number;
+  maxToolCallsPerSession: number;
+  maxFileSizeBytes: number;
+  maxExecutionTimeSeconds: number;
+  allowCodeExecution: boolean;
+  maxPrivateSkills: number;
+  maxInstalledSkills: number;
+}
+
+export interface TenantUsage {
+  storage: number;
+  memory: number;
+  quota: {
+    dailyRequests: number;
+    maxDailyRequests: number;
+    dailyTokens: number;
+    maxDailyTokens: number;
+    activeAgents: number;
+    maxConcurrentAgents: number;
+    storageUsage: number;
+    maxStorage: number;
+  };
+}
+
+export interface TenantSecurity {
+  allowCodeExecution: boolean;
+  requireSandbox: boolean;
+  allowNetworkAccess: boolean;
+  allowedLanguages: string[];
+  allowedTools: string[];
+  deniedTools: string[];
+}
+
 export const agentApi = {
   // Health check
   health: () => api.get('/health'),
@@ -90,6 +140,60 @@ export const agentApi = {
   // Webhook for platforms
   sendWebhook: (platform: string, data: unknown) =>
     api.post(`/webhook/${platform}`, data),
+};
+
+// Tenant Management API
+export const tenantApi = {
+  // List all tenants
+  listTenants: () => api.get<{ tenants: Tenant[] }>('/api/tenants'),
+
+  // Create tenant
+  createTenant: (id: string, createdBy?: string) =>
+    api.post('/api/tenants', { id, createdBy }),
+
+  // Get tenant details
+  getTenant: (tenantId: string) => api.get<Tenant>(`/api/tenants/${tenantId}`),
+
+  // Delete tenant
+  deleteTenant: (tenantId: string, preserveData?: boolean) =>
+    api.delete(`/api/tenants/${tenantId}`, { params: { preserveData } }),
+
+  // Suspend tenant
+  suspendTenant: (tenantId: string) =>
+    api.post(`/api/tenants/${tenantId}/suspend`),
+
+  // Resume tenant
+  resumeTenant: (tenantId: string) =>
+    api.post(`/api/tenants/${tenantId}/resume`),
+
+  // Get tenant quota
+  getQuota: (tenantId: string) => api.get<TenantQuota>(`/api/tenants/${tenantId}/quota`),
+
+  // Update tenant quota
+  updateQuota: (tenantId: string, quota: Partial<TenantQuota>) =>
+    api.put(`/api/tenants/${tenantId}/quota`, quota),
+
+  // Get tenant usage
+  getUsage: (tenantId: string) => api.get<TenantUsage>(`/api/tenants/${tenantId}/usage`),
+
+  // Get tenant security policy
+  getSecurity: (tenantId: string) => api.get<TenantSecurity>(`/api/tenants/${tenantId}/security`),
+
+  // Update tenant security policy
+  updateSecurity: (tenantId: string, security: Partial<TenantSecurity>) =>
+    api.put(`/api/tenants/${tenantId}/security`, security),
+
+  // Get tenant audit logs
+  getAuditLogs: (tenantId: string, limit?: number) =>
+    api.get(`/api/tenants/${tenantId}/audit`, { params: { limit } }),
+
+  // Get tenant sessions
+  getSessions: (tenantId: string) =>
+    api.get(`/api/tenants/${tenantId}/sessions`),
+
+  // Get tenant skills
+  getSkills: (tenantId: string) =>
+    api.get(`/api/tenants/${tenantId}/skills`),
 };
 
 export default api;
