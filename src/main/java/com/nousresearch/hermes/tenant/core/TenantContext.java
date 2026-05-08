@@ -583,6 +583,7 @@ public class TenantContext {
     public TenantQuotaManager getQuotaManager() { return quotaManager; }
     public TenantAuditLogger getAuditLogger() { return auditLogger; }
     public TenantSecurityPolicy getSecurityPolicy() { return securityPolicy; }
+    public void setSecurityPolicy(TenantSecurityPolicy policy) { this.securityPolicy = policy; }
     public TenantResourceMonitor getResourceMonitor() { return resourceMonitor; }
     
     public Map<String, TenantAIAgent> getActiveAgents() { 

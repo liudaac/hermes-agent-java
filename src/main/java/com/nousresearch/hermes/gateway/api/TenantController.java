@@ -295,7 +295,7 @@ public class TenantController implements HttpHandler {
         Map<String, Object> quotaMap = mapper.readValue(body, Map.class);
         
         TenantQuota quota = parseQuota(quotaMap);
-        context.getConfig().setQuota(quota);
+        context.getConfig().set("quota", quota.toMap());
         
         // 保存配置
         context.getConfig().save();
@@ -345,7 +345,7 @@ public class TenantController implements HttpHandler {
         Map<String, Object> policyMap = mapper.readValue(body, Map.class);
         
         TenantSecurityPolicy policy = parseSecurityPolicy(policyMap);
-        context.getConfig().setSecurityPolicy(policy);
+        context.setSecurityPolicy(policy);
         
         // 保存配置
         try {
@@ -370,23 +370,23 @@ public class TenantController implements HttpHandler {
         
         // 获取查询参数
         String query = exchange.getRequestURI().getQuery();
-        int limit = 100;
-        String eventType = null;
+        final int[] limit = {100};
+        final String[] eventType = {null};
         
         if (query != null) {
             for (String param : query.split("&")) {
                 String[] parts = param.split("=");
                 if (parts.length == 2) {
                     switch (parts[0]) {
-                        case "limit" -> limit = Math.min(Integer.parseInt(parts[1]), 1000);
-                        case "event_type" -> eventType = parts[1];
+                        case "limit" -> limit[0] = Math.min(Integer.parseInt(parts[1]), 1000);
+                        case "event_type" -> eventType[0] = parts[1];
                     }
                 }
             }
         }
         
-        List<Map<String, Object>> events = context.getAuditLogger().getRecentEvents(limit).stream()
-            .filter(e -> eventType == null || e.event().name().equalsIgnoreCase(eventType))
+        List<Map<String, Object>> events = context.getAuditLogger().getRecentEvents(limit[0]).stream()
+            .filter(e -> eventType[0] == null || e.event().name().equalsIgnoreCase(eventType[0]))
             .map(e -> {
                 Map<String, Object> map = new LinkedHashMap<>();
                 map.put("timestamp", e.timestamp().toString());
