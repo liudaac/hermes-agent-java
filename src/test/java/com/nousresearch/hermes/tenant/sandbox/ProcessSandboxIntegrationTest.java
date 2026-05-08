@@ -8,8 +8,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * ProcessSandbox 集成测试
@@ -25,9 +27,9 @@ public class ProcessSandboxIntegrationTest {
     @BeforeAll
     void setUp() throws Exception {
         // 创建测试租户
-        TenantProvisioningRequest request = TenantProvisioningRequest.builder(
-                "test-tenant", "test-user")
-            .tenantName("Test Tenant")
+        TenantProvisioningRequest request = TenantProvisioningRequest.builder()
+            .tenantId("test-tenant")
+            .createdBy("test-user")
             .processSandboxConfig(
                 ProcessSandboxConfig.builder()
                     .workDirectory(tempDir)
@@ -36,14 +38,8 @@ public class ProcessSandboxIntegrationTest {
             )
             .build();
 
-        // 创建临时目录结构
-        Path configDir = tempDir.resolve("config");
-        Path sandboxDir = tempDir.resolve("sandbox");
-        Files.createDirectories(configDir);
-        Files.createDirectories(sandboxDir);
-
         // 初始化 TenantContext
-        context = new TenantContext(request, configDir, sandboxDir, null, null);
+        context = TenantContext.create("test-tenant", request);
     }
 
     @Test
@@ -120,7 +116,7 @@ public class ProcessSandboxIntegrationTest {
     @AfterAll
     void tearDown() {
         if (context != null) {
-            context.close();
+            context.destroy(false);
         }
     }
 }

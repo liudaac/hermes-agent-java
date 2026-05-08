@@ -22,7 +22,7 @@ class NetworkSandboxTest {
     void setUp() {
         mockContext = mock(TenantContext.class);
         when(mockContext.getTenantId()).thenReturn("test-tenant");
-        when(mockContext.getAuditLogger()).thenReturn(mock(com.nousresearch.hermes.tenant.core.TenantAuditLogger.class));
+        when(mockContext.getAuditLogger()).thenReturn(mock(com.nousresearch.hermes.tenant.audit.TenantAuditLogger.class));
 
         policy = NetworkPolicy.builder()
             .allowHost("*.github.com")

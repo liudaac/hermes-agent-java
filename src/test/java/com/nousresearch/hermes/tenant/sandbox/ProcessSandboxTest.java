@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -30,11 +31,7 @@ class ProcessSandboxTest {
         when(mockContext.getTenantDir()).thenReturn(tempDir);
 
         config = ProcessSandboxConfig.builder()
-            .allowCommand("echo")
-            .allowCommand("cat")
-            .allowCommand("ls")
-            .blockCommand("rm")
-            .blockCommand("sudo")
+            .commandWhitelist(Set.of("echo", "cat", "ls"))
             .workDirectory(tempDir)
             .build();
 
