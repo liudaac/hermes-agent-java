@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { Send, Bot, User, Loader2 } from 'lucide-vue-next'
-import { agentApi, type MessageRequest } from '../services/api'
+import { api } from '../services/api'
 
 interface Message {
   id: string
@@ -54,7 +54,7 @@ const handleSend = async () => {
       sessionId: 'frontend-session',
     }
 
-    const response = await agentApi.sendMessage(request)
+    const response = await api.sendMessage(userMessage.content, 'frontend-session')
     
     const msg = messages.value.find(m => m.id === assistantMessage.id)
     if (msg) {

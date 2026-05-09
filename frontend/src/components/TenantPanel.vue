@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { tenantApi, type Tenant, type TenantQuota, type TenantUsage, type TenantSecurity } from '../services/api'
-
-interface AuditEvent {
-  timestamp: string
-  type: string
-  details: Record<string, unknown>
-}
+import { api, type Tenant, type TenantQuota, type TenantUsage, type TenantSecurity, type AuditEvent } from '../services/api'
 
 type TabType = 'list' | 'details' | 'quota' | 'security' | 'audit'
 
@@ -28,8 +22,8 @@ const editedSecurity = reactive<Partial<TenantSecurity>>({})
 const loadTenants = async () => {
   try {
     loading.value = true
-    const response = await tenantApi.listTenants()
-    tenants.value = response.data.tenants || []
+    const response = await api.getTenants()
+    tenants.value = response.tenants || []
     error.value = null
   } catch (err) {
     error.value = 'Failed to load tenants'
@@ -43,7 +37,7 @@ const createTenant = async () => {
   if (!newTenantId.value.trim()) return
   try {
     loading.value = true
-    await tenantApi.createTenant(newTenantId.value)
+    await api.createTenant(newTenantId.value)
     newTenantId.value = ''
     await loadTenants()
   } catch (err) {
@@ -58,7 +52,7 @@ const deleteTenant = async (tenantId: string) => {
   if (!confirm(`Delete tenant "${tenantId}"?`)) return
   try {
     loading.value = true
-    await tenantApi.deleteTenant(tenantId)
+    await api.deleteTenant(tenantId)
     if (selectedTenant.value?.id === tenantId) {
       selectedTenant.value = null
       activeTab.value = 'list'
@@ -74,7 +68,7 @@ const deleteTenant = async (tenantId: string) => {
 
 const suspendTenant = async (tenantId: string) => {
   try {
-    await tenantApi.suspendTenant(tenantId)
+    await api.suspendTenant(tenantId)
     await loadTenants()
   } catch (err) {
     error.value = 'Failed to suspend tenant'
@@ -84,7 +78,7 @@ const suspendTenant = async (tenantId: string) => {
 
 const resumeTenant = async (tenantId: string) => {
   try {
-    await tenantApi.resumeTenant(tenantId)
+    await api.resumeTenant(tenantId)
     await loadTenants()
   } catch (err) {
     error.value = 'Failed to resume tenant'
@@ -101,9 +95,9 @@ const viewTenantDetails = async (tenant: Tenant) => {
 const loadTenantData = async (tenantId: string) => {
   try {
     const [quotaRes, usageRes, securityRes] = await Promise.all([
-      tenantApi.getQuota(tenantId),
-      tenantApi.getUsage(tenantId),
-      tenantApi.getSecurity(tenantId),
+      api.getQuota(tenantId),
+      api.getUsage(tenantId),
+      api.getSecurity(tenantId),
     ])
     quota.value = quotaRes.data
     usage.value = usageRes.data
@@ -119,7 +113,7 @@ const loadAuditLogs = async () => {
   if (!selectedTenant.value) return
   try {
     loading.value = true
-    const response = await tenantApi.getAuditLogs(selectedTenant.value.id, 100)
+    const response = await api.getTenantAuditLogs(selectedTenant.value.id, 100)
     auditLogs.value = response.data.events || []
   } catch (err) {
     error.value = 'Failed to load audit logs'
@@ -133,7 +127,7 @@ const updateQuota = async () => {
   if (!selectedTenant.value) return
   try {
     loading.value = true
-    await tenantApi.updateQuota(selectedTenant.value.id, { ...editedQuota })
+    await api.updateTenantQuota(selectedTenant.value.id, { ...editedQuota })
     await loadTenantData(selectedTenant.value.id)
     editingQuota.value = false
   } catch (err) {
@@ -148,7 +142,7 @@ const updateSecurity = async () => {
   if (!selectedTenant.value) return
   try {
     loading.value = true
-    await tenantApi.updateSecurity(selectedTenant.value.id, { ...editedSecurity })
+    await api.updateTenantSecurity(selectedTenant.value.id, { ...editedSecurity })
     await loadTenantData(selectedTenant.value.id)
     editingSecurity.value = false
   } catch (err) {
