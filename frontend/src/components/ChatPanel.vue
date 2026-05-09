@@ -48,22 +48,50 @@ const handleSend = async () => {
 
   messages.value.push(assistantMessage)
 
+  const msg = messages.value.find(m => m.id === assistantMessage.id)
+  if (!msg) {
+    isLoading.value = false
+    return
+  }
+
+  let fullContent = ''
+  let streamController: EventSource | null = null
+
   try {
-    const response = await api.sendChatMessage(userMessage.content, 'frontend-session')
-    
-    const msg = messages.value.find(m => m.id === assistantMessage.id)
-    if (msg) {
-      msg.content = response.response || ''
-      msg.status = 'sent'
-    }
+    streamController = api.streamChatMessage(
+      userMessage.content,
+      'frontend-session',
+      (chunk) => {
+        // Append chunk to message with typing effect
+        fullContent += chunk
+        if (msg) {
+          msg.content = fullContent
+          msg.status = 'sent'
+        }
+        scrollToBottom()
+      },
+      () => {
+        // Stream completed
+        isLoading.value = false
+        if (msg) {
+          msg.status = 'sent'
+        }
+      },
+      (error) => {
+        // Error occurred
+        isLoading.value = false
+        if (msg) {
+          msg.content = fullContent + '\n\n[Error: ' + error + ']'
+          msg.status = 'error'
+        }
+      }
+    )
   } catch (error) {
-    const msg = messages.value.find(m => m.id === assistantMessage.id)
+    isLoading.value = false
     if (msg) {
       msg.content = 'Sorry, I encountered an error. Please try again.'
       msg.status = 'error'
     }
-  } finally {
-    isLoading.value = false
   }
 }
 

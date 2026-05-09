@@ -257,7 +257,7 @@ class ApiClient {
     return this.fetch('/analytics')
   }
 
-  // Chat
+  // Chat (non-streaming)
   async sendChatMessage(message: string, sessionId?: string): Promise<{
     response: string
     session_id: string
@@ -267,6 +267,103 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ message, session_id: sessionId })
     })
+  }
+
+  // Chat (SSE streaming)
+  streamChatMessage(
+    message: string,
+    sessionId: string,
+    onChunk: (content: string) => void,
+    onDone: () => void,
+    onError: (error: string) => void
+  ): EventSource {
+    const encodedMessage = encodeURIComponent(message)
+    const sid = sessionId || 'frontend-' + Date.now()
+    const url = `${API_BASE}/chat/stream?session_id=${sid}`
+    
+    // Use fetch with POST for the message body
+    const controller = new AbortController()
+    
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, session_id: sid }),
+      signal: controller.signal
+    }).then(async (response) => {
+      if (!response.ok) {
+        onError(`HTTP error: ${response.status}`)
+        return
+      }
+      
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      if (!reader) {
+        onError('No response body')
+        return
+      }
+      
+      let buffer = ''
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          
+          buffer += decoder.decode(value, { stream: true })
+          
+          // Process SSE events
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          
+          let currentEvent = ''
+          let currentData = ''
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7)
+            } else if (line.startsWith('data: ')) {
+              currentData = line.slice(6)
+            } else if (line === '' && currentEvent) {
+              try {
+                if (currentEvent === 'message') {
+                  const data = JSON.parse(currentData)
+                  onChunk(data.content || '')
+                } else if (currentEvent === 'done') {
+                  onDone()
+                } else if (currentEvent === 'error') {
+                  const data = JSON.parse(currentData)
+                  onError(data.error || 'Unknown error')
+                }
+              } catch (e) {
+                // Ignore parse errors
+              }
+              currentEvent = ''
+              currentData = ''
+            }
+          }
+        }
+        onDone()
+      } catch (e) {
+        onError(e instanceof Error ? e.message : 'Stream error')
+      }
+    }).catch((e) => {
+      onError(e instanceof Error ? e.message : 'Request error')
+    })
+    
+    // Return a mock EventSource that can be used to abort
+    return {
+      close: () => controller.abort(),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => true,
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      readyState: 1,
+      url,
+      withCredentials: false
+    } as EventSource
   }
 
   // Tenants

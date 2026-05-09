@@ -387,6 +387,113 @@ public class AIAgent {
     }
     
     /**
+     * Process a message with streaming output for SSE.
+     * @param message User message
+     * @param chunkConsumer Callback to receive each text chunk
+     */
+    public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
+        // Track user turns
+        userTurnCount++;
+        
+        // Check memory nudge trigger
+        boolean shouldReviewMemory = false;
+        if (memoryNudgeInterval > 0 && hasTool("memory")) {
+            turnsSinceMemory++;
+            if (turnsSinceMemory >= memoryNudgeInterval) {
+                shouldReviewMemory = true;
+                turnsSinceMemory = 0;
+            }
+        }
+        
+        // Add user message to history
+        conversationHistory.add(ModelMessage.user(message));
+        autoSaveSession();
+        
+        StringBuilder responseBuilder = new StringBuilder();
+        
+        // Conversation loop
+        boolean continueLoop = true;
+        while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
+            if (!iterationBudget.consume()) {
+                chunkConsumer.accept("\n[Reached maximum iterations]");
+                break;
+            }
+            
+            try {
+                // Call the model with streaming
+                ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
+                    conversationHistory,
+                    toolDefinitions,
+                    true  // Enable streaming
+                );
+                
+                ModelMessage assistantMessage = response.getMessage();
+                if (assistantMessage == null) {
+                    chunkConsumer.accept("\n[No response from model]");
+                    break;
+                }
+                
+                // Add assistant message to history
+                conversationHistory.add(assistantMessage);
+                autoSaveSession();
+                
+                // Stream the content chunk by chunk
+                String content = assistantMessage.getContent();
+                if (content != null && !content.isEmpty()) {
+                    // For now, stream the whole content as one chunk
+                    // In a real implementation, this would come from the model's streaming API
+                    chunkConsumer.accept(content);
+                    responseBuilder.append(content);
+                }
+                
+                // Check for tool calls
+                if (response.hasToolCalls()) {
+                    // Execute tool calls
+                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
+                    for (ToolCall toolCall : toolCalls) {
+                        chunkConsumer.accept("\n[Executing tool: " + toolCall.getFunction().getName() + "]\n");
+                        String result = executeToolCall(toolCall);
+                        conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
+                    }
+                    
+                    // Track skill nudge
+                    if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
+                        itersSinceSkill++;
+                    }
+                    
+                    continueLoop = true;
+                } else {
+                    continueLoop = false;
+                }
+                
+                if ("stop".equals(response.getFinishReason())) {
+                    continueLoop = false;
+                }
+                
+            } catch (Exception e) {
+                logger.error("Error in stream conversation loop: {}", e.getMessage());
+                chunkConsumer.accept("\n[Error: " + e.getMessage() + "]");
+                break;
+            }
+        }
+        
+        // Final save
+        persistSession();
+        
+        // Check skill trigger
+        boolean shouldReviewSkills = false;
+        if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval && hasTool("skill_manage")) {
+            shouldReviewSkills = true;
+            itersSinceSkill = 0;
+        }
+        
+        // Background review
+        if (shouldReviewMemory || shouldReviewSkills) {
+            spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
+        }
+    }
+    
+    /**
      * Process a user message through the conversation loop (interactive CLI mode).
      */
     private void processUserMessage(String userInput) {

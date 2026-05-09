@@ -9,9 +9,11 @@ import io.javalin.http.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Gateway HTTP server for webhook handling.
@@ -89,6 +91,7 @@ public class GatewayServer {
         
         // Chat API
         app.post("/api/chat", this::handleChat);
+        app.post("/api/chat/stream", this::handleChatStream);
         
         // Tenants API
         app.get("/api/tenants", this::handleGetTenants);
@@ -364,6 +367,55 @@ public class GatewayServer {
         } catch (Exception e) {
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
+    }
+    
+    private void handleChatStream(Context ctx) throws IOException {
+        ctx.header("Content-Type", "text/event-stream");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("Connection", "keep-alive");
+        
+        String sessionId = ctx.queryParam("session_id");
+        if (sessionId == null) {
+            sessionId = UUID.randomUUID().toString();
+        }
+        
+        JSONObject body = JSON.parseObject(ctx.body());
+        String message = body.getString("message");
+        
+        // Use raw output stream for SSE
+        jakarta.servlet.http.HttpServletResponse response = ctx.res();
+        PrintWriter writer = response.getWriter();
+        
+        // Send session info first
+        writer.write("event: session\n");
+        writer.write("data: " + JSON.toJSONString(Map.of("session_id", sessionId)) + "\n\n");
+        writer.flush();
+        
+        try {
+            // Process with streaming callback
+            AIAgent agent = new AIAgent(config, sessionId);
+            StringBuilder fullResponse = new StringBuilder();
+            
+            agent.processMessageStream(message, chunk -> {
+                fullResponse.append(chunk);
+                writer.write("event: message\n");
+                writer.write("data: " + JSON.toJSONString(Map.of("content", chunk)) + "\n\n");
+                writer.flush();
+            });
+            
+            // Send completion event
+            writer.write("event: done\n");
+            writer.write("data: " + JSON.toJSONString(Map.of("timestamp", System.currentTimeMillis())) + "\n\n");
+            writer.flush();
+            
+        } catch (Exception e) {
+            logger.error("SSE chat error: {}", e.getMessage());
+            writer.write("event: error\n");
+            writer.write("data: " + JSON.toJSONString(Map.of("error", e.getMessage())) + "\n\n");
+            writer.flush();
+        }
+        
+        writer.close();
     }
     
     // ==================== Config Schema API ====================
