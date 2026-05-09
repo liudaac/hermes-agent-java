@@ -73,6 +73,66 @@ export interface CronJob {
   next_run?: string
 }
 
+export interface MessageRequest {
+  content: string
+  sessionId?: string
+}
+
+export interface Tenant {
+  id: string
+  name?: string
+  status: string
+  created_at?: number
+}
+
+export interface TenantStats {
+  active_tenants: number
+  suspended_tenants: number
+  total_registered: number
+}
+
+export interface TenantQuota {
+  daily_requests: number
+  max_tokens: number
+  max_sessions: number
+  used_requests: number
+  used_tokens: number
+}
+
+export interface TenantUsage {
+  total_requests: number
+  total_tokens: number
+  sessions: number
+  uptime: number
+}
+
+export interface TenantSecurity {
+  file_access: boolean
+  web_access: boolean
+  shell_access: boolean
+  max_file_size: number
+}
+
+export interface AuditEvent {
+  timestamp: number
+  type: string
+  details: Record<string, unknown>
+}
+
+export interface LogEntry {
+  timestamp: number
+  level: string
+  message: string
+  source: string
+}
+
+export interface AnalyticsData {
+  total_messages: number
+  total_sessions: number
+  avg_response_time: number
+  top_platforms: Record<string, number>
+}
+
 // API Client
 class ApiClient {
   private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -94,17 +154,23 @@ class ApiClient {
     return this.fetch('/status')
   }
 
-  async getSessions(limit = 50): Promise<{ sessions: SessionInfo[] }> {
-    return this.fetch(`/sessions?limit=${limit}`)
+  // Sessions
+  async getSessions(limit?: number): Promise<SessionInfo[]> {
+    const params = limit ? `?limit=${limit}` : ''
+    return this.fetch(`/sessions${params}`)
+  }
+
+  async getSessionMessages(id: string): Promise<{ sessionId: string; messages: any[] }> {
+    return this.fetch(`/sessions/${id}/messages`)
   }
 
   // Actions
-  async restartGateway(): Promise<void> {
-    await this.fetch('/actions/restart-gateway', { method: 'POST' })
+  async restartGateway(): Promise<{ status: string; timestamp: number }> {
+    return this.fetch('/actions/restart-gateway', { method: 'POST' })
   }
 
-  async updateHermes(): Promise<void> {
-    await this.fetch('/actions/update', { method: 'POST' })
+  async updateHermes(): Promise<{ status: string; version: string }> {
+    return this.fetch('/actions/update', { method: 'POST' })
   }
 
   async getActionStatus(name: string): Promise<ActionStatusResponse> {
@@ -120,27 +186,27 @@ class ApiClient {
     return this.fetch('/config')
   }
 
-  async updateConfig(config: Record<string, any>): Promise<void> {
-    await this.fetch('/config', {
-      method: 'PUT',
+  async updateConfig(config: Record<string, any>): Promise<{ status: string }> {
+    return this.fetch('/config', {
+      method: 'POST',
       body: JSON.stringify(config)
     })
   }
 
   // Environment / API Keys
-  async getEnvVars(): Promise<Record<string, string>> {
+  async getEnvVars(): Promise<Record<string, { value: string; updated_at: number }>> {
     return this.fetch('/env')
   }
 
-  async setEnvVar(key: string, value: string): Promise<void> {
-    await this.fetch('/env', {
+  async setEnvVar(key: string, value: string): Promise<{ status: string }> {
+    return this.fetch('/env', {
       method: 'PUT',
-      body: JSON.stringify({ [key]: value })
+      body: JSON.stringify({ key, value })
     })
   }
 
-  async deleteEnvVar(key: string): Promise<void> {
-    await this.fetch(`/env/${key}`, { method: 'DELETE' })
+  async deleteEnvVar(key: string): Promise<{ status: string }> {
+    return this.fetch(`/env/${key}`, { method: 'DELETE' })
   }
 
   // Skills
@@ -148,8 +214,8 @@ class ApiClient {
     return this.fetch('/skills')
   }
 
-  async toggleSkill(name: string, enabled: boolean): Promise<void> {
-    await this.fetch(`/skills/${name}`, {
+  async toggleSkill(name: string, enabled: boolean): Promise<{ status: string }> {
+    return this.fetch(`/skills/${name}`, {
       method: 'PUT',
       body: JSON.stringify({ enabled })
     })
@@ -160,80 +226,80 @@ class ApiClient {
     return this.fetch('/cron')
   }
 
-  async createCronJob(job: Omit<CronJob, 'id'>): Promise<CronJob> {
+  async createCronJob(job: Omit<CronJob, 'id'>): Promise<{ id: string; status: string }> {
     return this.fetch('/cron', {
       method: 'POST',
       body: JSON.stringify(job)
     })
   }
 
-  async updateCronJob(id: string, job: Partial<CronJob>): Promise<void> {
-    await this.fetch(`/cron/${id}`, {
+  async updateCronJob(id: string, job: Partial<CronJob>): Promise<{ status: string }> {
+    return this.fetch(`/cron/${id}`, {
       method: 'PUT',
       body: JSON.stringify(job)
     })
   }
 
-  async deleteCronJob(id: string): Promise<void> {
-    await this.fetch(`/cron/${id}`, { method: 'DELETE' })
+  async deleteCronJob(id: string): Promise<{ status: string }> {
+    return this.fetch(`/cron/${id}`, { method: 'DELETE' })
   }
 
   // Logs
-  async getLogs(service?: string, lines = 100): Promise<string[]> {
+  async getLogs(level?: string, limit = 100): Promise<LogEntry[]> {
     const params = new URLSearchParams()
-    if (service) params.append('service', service)
-    params.append('lines', lines.toString())
+    if (level) params.append('level', level)
+    params.append('limit', limit.toString())
     return this.fetch(`/logs?${params}`)
   }
 
   // Analytics
-  async getAnalytics(): Promise<{
-    total_sessions: number
-    total_messages: number
-    active_tenants: number
-    tool_calls: Record<string, number>
-  }> {
+  async getAnalytics(): Promise<AnalyticsData> {
     return this.fetch('/analytics')
   }
 
   // Chat
-  async sendMessage(content: string, sessionId = 'frontend-session'): Promise<{ data: { content: string } }> {
+  async sendChatMessage(message: string, sessionId?: string): Promise<{
+    response: string
+    session_id: string
+    timestamp: number
+  }> {
     return this.fetch('/chat', {
       method: 'POST',
-      body: JSON.stringify({ content, sessionId })
+      body: JSON.stringify({ message, session_id: sessionId })
     })
   }
 
-  // Tenant
-  async getTenants(): Promise<{ tenants: Tenant[] }> {
+  // Tenants
+  async getTenants(): Promise<TenantStats> {
     return this.fetch('/tenants')
   }
 
-  async createTenant(id: string): Promise<void> {
-    await this.fetch('/tenants', {
-      method: 'POST',
-      body: JSON.stringify({ id })
-    })
+  async createTenant(): Promise<{ id: string; status: string }> {
+    return this.fetch('/tenants', { method: 'POST' })
   }
 
-  async deleteTenant(id: string): Promise<void> {
-    await this.fetch(`/tenants/${id}`, { method: 'DELETE' })
+  async getTenant(id: string): Promise<Tenant> {
+    return this.fetch(`/tenants/${id}`)
   }
 
-  async suspendTenant(id: string): Promise<void> {
-    await this.fetch(`/tenants/${id}/suspend`, { method: 'POST' })
+  async deleteTenant(id: string): Promise<{ status: string }> {
+    return this.fetch(`/tenants/${id}`, { method: 'DELETE' })
   }
 
-  async resumeTenant(id: string): Promise<void> {
-    await this.fetch(`/tenants/${id}/resume`, { method: 'POST' })
+  async suspendTenant(id: string): Promise<{ status: string }> {
+    return this.fetch(`/tenants/${id}/suspend`, { method: 'POST' })
+  }
+
+  async resumeTenant(id: string): Promise<{ status: string }> {
+    return this.fetch(`/tenants/${id}/resume`, { method: 'POST' })
   }
 
   async getTenantQuota(id: string): Promise<TenantQuota> {
     return this.fetch(`/tenants/${id}/quota`)
   }
 
-  async updateTenantQuota(id: string, quota: Partial<TenantQuota>): Promise<void> {
-    await this.fetch(`/tenants/${id}/quota`, {
+  async updateTenantQuota(id: string, quota: Partial<TenantQuota>): Promise<{ status: string }> {
+    return this.fetch(`/tenants/${id}/quota`, {
       method: 'PUT',
       body: JSON.stringify(quota)
     })
@@ -247,15 +313,15 @@ class ApiClient {
     return this.fetch(`/tenants/${id}/security`)
   }
 
-  async updateTenantSecurity(id: string, security: Partial<TenantSecurity>): Promise<void> {
-    await this.fetch(`/tenants/${id}/security`, {
+  async updateTenantSecurity(id: string, security: Partial<TenantSecurity>): Promise<{ status: string }> {
+    return this.fetch(`/tenants/${id}/security`, {
       method: 'PUT',
       body: JSON.stringify(security)
     })
   }
 
-  async getTenantAuditLogs(id: string, limit = 100): Promise<{ events: AuditEvent[] }> {
-    return this.fetch(`/tenants/${id}/audit?limit=${limit}`)
+  async getTenantAuditLogs(id: string): Promise<AuditEvent[]> {
+    return this.fetch(`/tenants/${id}/audit`)
   }
 }
 
@@ -263,15 +329,16 @@ export const api = new ApiClient()
 
 // Legacy exports for compatibility
 export const agentApi = {
-  sendMessage: async (request: { content: string; sessionId?: string }) => {
-    const response = await api.sendMessage(request.content, request.sessionId)
-    return response
+  sendMessage: async (request: MessageRequest) => {
+    const response = await api.sendChatMessage(request.content, request.sessionId)
+    return { data: { content: response.response } }
   }
 }
 
 export const tenantApi = {
   listTenants: () => api.getTenants(),
-  createTenant: (id: string) => api.createTenant(id),
+  createTenant: () => api.createTenant(),
+  getTenant: (id: string) => api.getTenant(id),
   deleteTenant: (id: string) => api.deleteTenant(id),
   suspendTenant: (id: string) => api.suspendTenant(id),
   resumeTenant: (id: string) => api.resumeTenant(id),
@@ -280,75 +347,5 @@ export const tenantApi = {
   getUsage: (id: string) => api.getTenantUsage(id),
   getSecurity: (id: string) => api.getTenantSecurity(id),
   updateSecurity: (id: string, security: Partial<TenantSecurity>) => api.updateTenantSecurity(id, security),
-  getAuditLogs: (id: string, limit: number) => api.getTenantAuditLogs(id, limit)
-}
-
-// Types
-export interface MessageRequest {
-  content: string
-  sessionId?: string
-}
-
-export interface Tenant {
-  id: string
-  state: 'ACTIVE' | 'SUSPENDED' | 'DESTROYED'
-  createdAt: string
-  lastActivity: string
-  activeAgents: number
-  activeSessions: number
-}
-
-export interface TenantQuota {
-  maxDailyRequests: number
-  maxDailyTokens: number
-  maxConcurrentAgents: number
-  maxConcurrentSessions: number
-  maxStorageBytes: number
-  maxMemoryBytes: number
-  requestsPerSecond: number
-  requestsPerMinute: number
-  maxToolCallsPerSession: number
-  maxExecutionTimeSeconds: number
-}
-
-export interface TenantUsage {
-  storage: number
-  quota: {
-    storageUsage: number
-    maxStorage: number
-    dailyRequests: number
-    maxDailyRequests: number
-    dailyTokens: number
-    maxDailyTokens: number
-  }
-}
-
-export interface TenantSecurity {
-  allowCodeExecution: boolean
-  requireSandbox: boolean
-  allowNetworkAccess: boolean
-  allowedLanguages: string[]
-  allowedTools: string[]
-  deniedTools: string[]
-}
-
-export interface AuditEvent {
-  timestamp: string
-  type: string
-  details: Record<string, unknown>
-}
-
-export const api = new ApiClient()
-
-// Legacy agent API for ChatPanel compatibility
-export const agentApi = {
-  sendMessage: async (request: { content: string; sessionId?: string }) => {
-    const response = await api.sendMessage(request.content, request.sessionId)
-    return response
-  }
-}
-
-export interface MessageRequest {
-  content: string
-  sessionId?: string
+  getAuditLogs: (id: string) => api.getTenantAuditLogs(id)
 }

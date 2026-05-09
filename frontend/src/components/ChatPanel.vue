@@ -49,16 +49,11 @@ const handleSend = async () => {
   messages.value.push(assistantMessage)
 
   try {
-    const request: MessageRequest = {
-      content: userMessage.content,
-      sessionId: 'frontend-session',
-    }
-
-    const response = await api.sendMessage(userMessage.content, 'frontend-session')
+    const response = await api.sendChatMessage(userMessage.content, 'frontend-session')
     
     const msg = messages.value.find(m => m.id === assistantMessage.id)
     if (msg) {
-      msg.content = response.data.content || ''
+      msg.content = response.response || ''
       msg.status = 'sent'
     }
   } catch (error) {

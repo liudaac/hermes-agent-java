@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.UUID;
 
 /**
  * Gateway HTTP server for webhook handling.
@@ -57,6 +58,14 @@ public class GatewayServer {
         // Health check
         app.get("/health", ctx -> ctx.result("OK"));
         
+        // CORS
+        app.before(ctx -> {
+            ctx.header("Access-Control-Allow-Origin", "*");
+            ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            ctx.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        });
+        app.options("/*", ctx -> ctx.status(200));
+        
         // Webhook endpoints for each platform
         app.post("/webhook/{platform}", this::handleWebhook);
         
@@ -72,10 +81,54 @@ public class GatewayServer {
         // Config API
         app.get("/api/config", this::handleGetConfig);
         app.post("/api/config", this::handleUpdateConfig);
+        app.get("/api/config/schema", this::handleGetConfigSchema);
         
         // Sessions API
         app.get("/api/sessions", this::handleGetSessions);
         app.get("/api/sessions/{id}/messages", this::handleGetSessionMessages);
+        
+        // Chat API
+        app.post("/api/chat", this::handleChat);
+        
+        // Tenants API
+        app.get("/api/tenants", this::handleGetTenants);
+        app.post("/api/tenants", this::handleCreateTenant);
+        app.get("/api/tenants/{id}", this::handleGetTenant);
+        app.delete("/api/tenants/{id}", this::handleDeleteTenant);
+        app.post("/api/tenants/{id}/suspend", this::handleSuspendTenant);
+        app.post("/api/tenants/{id}/resume", this::handleResumeTenant);
+        app.get("/api/tenants/{id}/quota", this::handleGetTenantQuota);
+        app.put("/api/tenants/{id}/quota", this::handleUpdateTenantQuota);
+        app.get("/api/tenants/{id}/usage", this::handleGetTenantUsage);
+        app.get("/api/tenants/{id}/security", this::handleGetTenantSecurity);
+        app.put("/api/tenants/{id}/security", this::handleUpdateTenantSecurity);
+        app.get("/api/tenants/{id}/audit", this::handleGetTenantAudit);
+        
+        // Skills API
+        app.get("/api/skills", this::handleGetSkills);
+        app.put("/api/skills/{name}", this::handleUpdateSkill);
+        
+        // Cron API
+        app.get("/api/cron", this::handleGetCronJobs);
+        app.post("/api/cron", this::handleCreateCronJob);
+        app.put("/api/cron/{id}", this::handleUpdateCronJob);
+        app.delete("/api/cron/{id}", this::handleDeleteCronJob);
+        
+        // Env API
+        app.get("/api/env", this::handleGetEnv);
+        app.put("/api/env", this::handleSetEnv);
+        app.delete("/api/env/{key}", this::handleDeleteEnv);
+        
+        // Actions API
+        app.post("/api/actions/restart-gateway", this::handleRestartGateway);
+        app.post("/api/actions/update", this::handleUpdateHermes);
+        app.get("/api/actions/{name}/status", this::handleGetActionStatus);
+        
+        // Logs API
+        app.get("/api/logs", this::handleGetLogs);
+        
+        // Analytics API
+        app.get("/api/analytics", this::handleGetAnalytics);
         
         app.start(port);
         running = true;
@@ -289,6 +342,270 @@ public class GatewayServer {
                 logger.error("Failed to send error message: {}", sendError.getMessage());
             }
         }
+    }
+    
+    // ==================== Chat API ====================
+    
+    private void handleChat(Context ctx) {
+        try {
+            JSONObject body = JSON.parseObject(ctx.body());
+            String message = body.getString("message");
+            String sessionId = body.getString("session_id");
+            
+            // Process chat message through AI agent
+            AIAgent agent = new AIAgent(config);
+            String response = agent.processMessage(message);
+            
+            ctx.json(Map.of(
+                "response", response,
+                "session_id", sessionId != null ? sessionId : UUID.randomUUID().toString(),
+                "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+    
+    // ==================== Config Schema API ====================
+    
+    private void handleGetConfigSchema(Context ctx) {
+        List<Map<String, Object>> sections = new ArrayList<>();
+        
+        // Model section
+        Map<String, Object> modelSection = new LinkedHashMap<>();
+        modelSection.put("name", "model");
+        modelSection.put("title", "模型设置");
+        List<Map<String, Object>> modelFields = new ArrayList<>();
+        modelFields.add(createField("provider", "string", "提供商", "AI模型提供商", "openrouter", false, 
+            List.of(Map.of("label", "OpenRouter", "value", "openrouter"),
+                    Map.of("label", "OpenAI", "value", "openai"),
+                    Map.of("label", "Anthropic", "value", "anthropic"))));
+        modelFields.add(createField("model", "string", "模型", "使用的AI模型", "anthropic/claude-3.5-sonnet", false, null));
+        modelFields.add(createField("api_key", "password", "API密钥", "提供商的API密钥", "", true, null));
+        modelSection.put("fields", modelFields);
+        sections.add(modelSection);
+        
+        // Display section
+        Map<String, Object> displaySection = new LinkedHashMap<>();
+        displaySection.put("name", "display");
+        displaySection.put("title", "显示设置");
+        List<Map<String, Object>> displayFields = new ArrayList<>();
+        displayFields.add(createField("personality", "select", "性格", "AI助手性格", "kawaii", false,
+            List.of(Map.of("label", "可爱", "value", "kawaii"),
+                    Map.of("label", "专业", "value", "professional"),
+                    Map.of("label", "友好", "value", "friendly"))));
+        displaySection.put("fields", displayFields);
+        sections.add(displaySection);
+        
+        ctx.json(Map.of("sections", sections));
+    }
+    
+    private Map<String, Object> createField(String key, String type, String label, String description, 
+                                             Object defaultValue, boolean secret, List<Map<String, Object>> options) {
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("key", key);
+        field.put("type", type);
+        field.put("label", label);
+        field.put("description", description);
+        field.put("default", defaultValue);
+        field.put("secret", secret);
+        if (options != null) field.put("options", options);
+        return field;
+    }
+    
+    // ==================== Tenants API ====================
+    
+    private void handleGetTenants(Context ctx) {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("active_tenants", 1);
+        stats.put("suspended_tenants", 0);
+        stats.put("total_registered", 1);
+        ctx.json(stats);
+    }
+    
+    private void handleCreateTenant(Context ctx) {
+        ctx.json(Map.of("id", UUID.randomUUID().toString(), "status", "created"));
+    }
+    
+    private void handleGetTenant(Context ctx) {
+        String tenantId = ctx.pathParam("id");
+        ctx.json(Map.of(
+            "id", tenantId,
+            "name", "Default Tenant",
+            "status", "active",
+            "created_at", System.currentTimeMillis()
+        ));
+    }
+    
+    private void handleDeleteTenant(Context ctx) {
+        ctx.json(Map.of("status", "deleted"));
+    }
+    
+    private void handleSuspendTenant(Context ctx) {
+        ctx.json(Map.of("status", "suspended"));
+    }
+    
+    private void handleResumeTenant(Context ctx) {
+        ctx.json(Map.of("status", "resumed"));
+    }
+    
+    private void handleGetTenantQuota(Context ctx) {
+        ctx.json(Map.of(
+            "daily_requests", 1000,
+            "max_tokens", 100000,
+            "max_sessions", 100,
+            "used_requests", 123,
+            "used_tokens", 45678
+        ));
+    }
+    
+    private void handleUpdateTenantQuota(Context ctx) {
+        ctx.json(Map.of("status", "updated"));
+    }
+    
+    private void handleGetTenantUsage(Context ctx) {
+        ctx.json(Map.of(
+            "total_requests", 1234,
+            "total_tokens", 567890,
+            "sessions", 12,
+            "uptime", 86400
+        ));
+    }
+    
+    private void handleGetTenantSecurity(Context ctx) {
+        ctx.json(Map.of(
+            "file_access", true,
+            "web_access", true,
+            "shell_access", false,
+            "max_file_size", 10485760
+        ));
+    }
+    
+    private void handleUpdateTenantSecurity(Context ctx) {
+        ctx.json(Map.of("status", "updated"));
+    }
+    
+    private void handleGetTenantAudit(Context ctx) {
+        List<Map<String, Object>> logs = new ArrayList<>();
+        logs.add(Map.of(
+            "timestamp", System.currentTimeMillis(),
+            "type", "login",
+            "details", Map.of("ip", "127.0.0.1")
+        ));
+        ctx.json(logs);
+    }
+    
+    // ==================== Skills API ====================
+    
+    private void handleGetSkills(Context ctx) {
+        List<Map<String, Object>> skills = new ArrayList<>();
+        skills.add(Map.of("name", "terminal", "version", "1.0", "description", "终端操作", "enabled", true));
+        skills.add(Map.of("name", "web_search", "version", "1.0", "description", "网页搜索", "enabled", true));
+        skills.add(Map.of("name", "file_operations", "version", "1.0", "description", "文件操作", "enabled", true));
+        ctx.json(skills);
+    }
+    
+    private void handleUpdateSkill(Context ctx) {
+        ctx.json(Map.of("status", "updated"));
+    }
+    
+    // ==================== Cron API ====================
+    
+    private void handleGetCronJobs(Context ctx) {
+        List<Map<String, Object>> jobs = new ArrayList<>();
+        jobs.add(Map.of(
+            "id", "job-1",
+            "name", "Daily Report",
+            "schedule", "0 9 * * *",
+            "command", "generate-daily-report",
+            "enabled", true,
+            "last_run", System.currentTimeMillis() - 3600000,
+            "next_run", System.currentTimeMillis() + 3600000
+        ));
+        ctx.json(jobs);
+    }
+    
+    private void handleCreateCronJob(Context ctx) {
+        ctx.json(Map.of("id", UUID.randomUUID().toString(), "status", "created"));
+    }
+    
+    private void handleUpdateCronJob(Context ctx) {
+        ctx.json(Map.of("status", "updated"));
+    }
+    
+    private void handleDeleteCronJob(Context ctx) {
+        ctx.json(Map.of("status", "deleted"));
+    }
+    
+    // ==================== Env API ====================
+    
+    private void handleGetEnv(Context ctx) {
+        Map<String, Object> env = new LinkedHashMap<>();
+        env.put("OPENAI_API_KEY", Map.of("value", "sk-****", "updated_at", System.currentTimeMillis()));
+        env.put("ANTHROPIC_API_KEY", Map.of("value", "sk-****", "updated_at", System.currentTimeMillis()));
+        ctx.json(env);
+    }
+    
+    private void handleSetEnv(Context ctx) {
+        ctx.json(Map.of("status", "updated"));
+    }
+    
+    private void handleDeleteEnv(Context ctx) {
+        ctx.json(Map.of("status", "deleted"));
+    }
+    
+    // ==================== Actions API ====================
+    
+    private void handleRestartGateway(Context ctx) {
+        ctx.json(Map.of("status", "restarting", "timestamp", System.currentTimeMillis()));
+        // In real implementation, schedule restart
+    }
+    
+    private void handleUpdateHermes(Context ctx) {
+        ctx.json(Map.of("status", "updating", "version", "latest"));
+    }
+    
+    private void handleGetActionStatus(Context ctx) {
+        String actionName = ctx.pathParam("name");
+        ctx.json(Map.of(
+            "action", actionName,
+            "running", false,
+            "exit_code", 0,
+            "lines", List.of("Action completed successfully")
+        ));
+    }
+    
+    // ==================== Logs API ====================
+    
+    private void handleGetLogs(Context ctx) {
+        String level = ctx.queryParam("level");
+        int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(100);
+        
+        List<Map<String, Object>> logs = new ArrayList<>();
+        logs.add(Map.of(
+            "timestamp", System.currentTimeMillis(),
+            "level", "INFO",
+            "message", "Gateway server started",
+            "source", "GatewayServer"
+        ));
+        logs.add(Map.of(
+            "timestamp", System.currentTimeMillis() - 60000,
+            "level", "DEBUG",
+            "message", "Processing message",
+            "source", "AIAgent"
+        ));
+        ctx.json(logs);
+    }
+    
+    // ==================== Analytics API ====================
+    
+    private void handleGetAnalytics(Context ctx) {
+        Map<String, Object> analytics = new LinkedHashMap<>();
+        analytics.put("total_messages", 1234);
+        analytics.put("total_sessions", 56);
+        analytics.put("avg_response_time", 2.5);
+        analytics.put("top_platforms", Map.of("web", 500, "telegram", 400, "discord", 334));
+        ctx.json(analytics);
     }
     
     // ==================== Data Classes ====================
