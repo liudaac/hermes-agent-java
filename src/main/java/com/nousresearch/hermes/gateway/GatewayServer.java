@@ -660,6 +660,35 @@ public class GatewayServer {
         ctx.json(analytics);
     }
     
+    // ==================== Shutdown ====================
+    
+    /**
+     * Graceful shutdown of the gateway server.
+     */
+    private void shutdown() {
+        logger.info("Shutting down GatewayServer...");
+        
+        // Stop accepting new requests
+        if (app != null) {
+            app.stop();
+        }
+        
+        // Shutdown executor services
+        if (sessionCleanupExecutor != null) {
+            sessionCleanupExecutor.shutdown();
+            try {
+                if (!sessionCleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    sessionCleanupExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                sessionCleanupExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        
+        logger.info("GatewayServer shutdown complete");
+    }
+    
     // ==================== Data Classes ====================
     
     public record IncomingMessage(
