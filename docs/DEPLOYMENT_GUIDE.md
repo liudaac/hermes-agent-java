@@ -645,6 +645,6 @@ docker-compose exec postgres psql -U hermes < migration.sql
 
 ## 参考
 
-- [API 文档](API_DOCUMENTATION.md)
-- [架构图文档](ARCHITECTURE_DIAGRAMS.md)
+- [API 文档](API.md)
+- [架构说明](ARCHITECTURE.md)
 - [GitHub 仓库](https://github.com/liudaac/hermes-agent-java)

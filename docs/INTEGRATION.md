@@ -143,6 +143,6 @@ try {
 
 所有代码文件已保存在服务器：
 - 位置：`/root/hermes-agent-java/src/main/java/com/nousresearch/hermes/tenant/sandbox/`
-- 说明文档：`/root/hermes-agent-java/IMPLEMENTATION_DETAILS.md`
+- 说明文档：`/root/hermes-agent-java/docs/IMPLEMENTATION_DETAILS.md`
 
 您可以直接复制这些文件到本地项目中使用。

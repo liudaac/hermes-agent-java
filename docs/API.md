@@ -463,8 +463,7 @@ volumes:
 
 ## 更多资源
 
-- [架构图文档](ARCHITECTURE_DIAGRAMS.md)
-- [Phase 2 实现文档](PHASE2_IMPLEMENTATION.md)
-- [Phase 3 实现文档](PHASE3_IMPLEMENTATION.md)
-- [Phase 4 实现文档](PHASE4_IMPLEMENTATION.md)
-- [Phase 5 实现文档](PHASE5_IMPLEMENTATION.md)
+- [架构说明](ARCHITECTURE.md)
+- [重构与迁移](REFACTORING.md)
+- [资源隔离](RESOURCE_ISOLATION.md)
+- [实现状态](IMPLEMENTATION_STATUS.md)

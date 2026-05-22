@@ -199,7 +199,7 @@ hermes-agent-java/
 │   └── DashboardServer.java             # 原 Dashboard 服务器（需修改）
 ├── frontend/
 │   └── tenant-management.html           # 租户管理前端页面
-└── TENANT_INTEGRATION_GUIDE.md          # 本指南
+└── docs/TENANT_INTEGRATION.md           # 本指南
 ```
 
 ## 快速开始
