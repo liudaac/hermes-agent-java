@@ -435,4 +435,49 @@ public class HermesConfig {
     private Object getValue(String key) {
         return config.get(key);
     }
+
+    // ============ ModelConfig Support for ModelClient ============
+
+    /**
+     * Get model configuration for ModelClient.
+     */
+    public ModelConfig getModelConfig() {
+        Map<String, Object> model = getNested("model", new HashMap<>());
+        String provider = (String) model.getOrDefault("provider", "openrouter");
+        String modelName = (String) model.getOrDefault("model", "anthropic/claude-3.5-sonnet");
+        String apiKey = getApiKey();
+        String baseUrl = (String) model.getOrDefault("base_url", getDefaultBaseUrl(provider));
+        return new ModelConfig(provider, modelName, apiKey, baseUrl);
+    }
+
+    private String getDefaultBaseUrl(String provider) {
+        return switch (provider.toLowerCase()) {
+            case "openai" -> "https://api.openai.com/v1";
+            case "anthropic" -> "https://api.anthropic.com/v1";
+            case "openrouter" -> "https://openrouter.ai/api/v1";
+            default -> "https://openrouter.ai/api/v1";
+        };
+    }
+
+    /**
+     * Model configuration class for ModelClient compatibility.
+     */
+    public static class ModelConfig {
+        private final String provider;
+        private final String name;
+        private final String apiKey;
+        private final String baseUrl;
+
+        public ModelConfig(String provider, String name, String apiKey, String baseUrl) {
+            this.provider = provider;
+            this.name = name;
+            this.apiKey = apiKey;
+            this.baseUrl = baseUrl;
+        }
+
+        public String getProvider() { return provider; }
+        public String getName() { return name; }
+        public String getApiKey() { return apiKey; }
+        public String getBaseUrl() { return baseUrl; }
+    }
 }

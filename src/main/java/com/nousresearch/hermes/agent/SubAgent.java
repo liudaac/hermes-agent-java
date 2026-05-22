@@ -1,8 +1,10 @@
 package com.nousresearch.hermes.agent;
 
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.model.ModelMessage;
+import com.nousresearch.hermes.model.ToolDefinition;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +40,7 @@ public class SubAgent implements Callable<SubAgentResult> {
         this.task = task;
         this.context = context;
         this.config = config;
-        this.modelClient = new ModelClient(config);
+        this.modelClient = new ModelClient(config.getModelConfig());
         this.toolRegistry = ToolRegistry.getInstance();
         this.budget = new IterationBudget(config.getMaxTurns() / 2); // Sub-agents get half budget
         this.conversationHistory = new ArrayList<>();
@@ -75,8 +77,8 @@ public class SubAgent implements Callable<SubAgentResult> {
                 }
                 
                 // Call model - get tool definitions from registry
-                List<Map<String, Object>> toolDefs = buildToolDefinitions();
-                ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
+                List<ToolDefinition> toolDefs = buildToolDefinitions();
+                var response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefs.isEmpty() ? null : toolDefs,
                     false
@@ -184,11 +186,11 @@ public class SubAgent implements Callable<SubAgentResult> {
                "Return your final result when done.";
     }
     
-    private List<Map<String, Object>> buildToolDefinitions() {
+    private List<ToolDefinition> buildToolDefinitions() {
         // Get a subset of tools for sub-agents
         var toolNames = List.of("web_search", "web_extract", "read_file", "write_file", 
                                 "execute_command", "search_files");
-        return toolRegistry.getDefinitions(java.util.Set.copyOf(toolNames), true);
+        return toolRegistry.getToolDefinitions(java.util.Set.copyOf(toolNames));
     }
     
     private String executeToolCall(com.nousresearch.hermes.model.ToolCall toolCall) {

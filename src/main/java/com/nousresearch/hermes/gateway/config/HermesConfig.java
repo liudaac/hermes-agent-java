@@ -11,10 +11,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Main configuration class for Hermes Agent.
- * Loaded from config.json or environment variables.
- */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class HermesConfig {
     private static final Logger logger = LoggerFactory.getLogger(HermesConfig.class);
@@ -43,6 +39,22 @@ public class HermesConfig {
     @JsonProperty("tools")
     private ToolsConfig tools = new ToolsConfig();
 
+    // Platform configurations
+    @JsonProperty("telegram")
+    private PlatformConfig telegram = new PlatformConfig();
+
+    @JsonProperty("discord")
+    private PlatformConfig discord = new PlatformConfig();
+
+    @JsonProperty("slack")
+    private PlatformConfig slack = new PlatformConfig();
+
+    @JsonProperty("feishu")
+    private PlatformConfig feishu = new PlatformConfig();
+
+    @JsonProperty("wechat")
+    private PlatformConfig wechat = new PlatformConfig();
+
     // Tenant quota settings
     @JsonProperty("max_tokens_per_tenant")
     private long maxTokensPerTenant = 1000000L;
@@ -68,69 +80,39 @@ public class HermesConfig {
 
     public static HermesConfig loadFromEnv() {
         HermesConfig config = new HermesConfig();
-        // TODO: Load from environment variables
         return config;
     }
 
     // Getters
-    public String getVersion() {
-        return version;
-    }
+    public String getVersion() { return version; }
+    public String getDefaultModel() { return defaultModel; }
+    public List<ModelConfig> getModels() { return models; }
+    public GatewayConfig getGateway() { return gateway; }
+    public SkillsConfig getSkills() { return skills; }
+    public SandboxConfig getSandbox() { return sandbox; }
+    public MemoryConfig getMemory() { return memory; }
+    public ToolsConfig getTools() { return tools; }
 
-    public String getDefaultModel() {
-        return defaultModel;
-    }
-
-    public List<ModelConfig> getModels() {
-        return models;
-    }
-
-    public GatewayConfig getGateway() {
-        return gateway;
-    }
-
-    public SkillsConfig getSkills() {
-        return skills;
-    }
-
-    public SandboxConfig getSandbox() {
-        return sandbox;
-    }
-
-    public MemoryConfig getMemory() {
-        return memory;
-    }
-
-    public ToolsConfig getTools() {
-        return tools;
-    }
+    // Platform getters
+    public PlatformConfig getTelegram() { return telegram; }
+    public PlatformConfig getDiscord() { return discord; }
+    public PlatformConfig getSlack() { return slack; }
+    public PlatformConfig getFeishu() { return feishu; }
+    public PlatformConfig getWechat() { return wechat; }
 
     // Tenant quota getters
-    public long getMaxTokensPerTenant() {
-        return maxTokensPerTenant;
-    }
+    public long getMaxTokensPerTenant() { return maxTokensPerTenant; }
+    public long getMaxRequestsPerDay() { return maxRequestsPerDay; }
+    public int getMaxConcurrentSessions() { return maxConcurrentSessions; }
+    public double getRequestsPerSecondPerTenant() { return requestsPerSecondPerTenant; }
 
-    public long getMaxRequestsPerDay() {
-        return maxRequestsPerDay;
-    }
-
-    public int getMaxConcurrentSessions() {
-        return maxConcurrentSessions;
-    }
-
-    public double getRequestsPerSecondPerTenant() {
-        return requestsPerSecondPerTenant;
-    }
-
-    // Sub-config classes
+    // Inner classes
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class GatewayConfig {
         @JsonProperty("port")
         private int port = 8080;
-
         @JsonProperty("host")
         private String host = "0.0.0.0";
-
         @JsonProperty("api_key")
         private String apiKey = "";
 
@@ -143,7 +125,6 @@ public class HermesConfig {
     public static class SkillsConfig {
         @JsonProperty("auto_load")
         private boolean autoLoad = true;
-
         @JsonProperty("directory")
         private String directory = "skills";
 
@@ -155,10 +136,8 @@ public class HermesConfig {
     public static class SandboxConfig {
         @JsonProperty("enabled")
         private boolean enabled = true;
-
         @JsonProperty("max_file_size")
-        private long maxFileSize = 10485760; // 10MB
-
+        private long maxFileSize = 10485760;
         @JsonProperty("allowed_paths")
         private List<String> allowedPaths = new ArrayList<>();
 
@@ -171,10 +150,8 @@ public class HermesConfig {
     public static class MemoryConfig {
         @JsonProperty("enabled")
         private boolean enabled = true;
-
         @JsonProperty("max_entries")
         private int maxEntries = 1000;
-
         @JsonProperty("retention_days")
         private int retentionDays = 30;
 
@@ -187,7 +164,6 @@ public class HermesConfig {
     public static class ToolsConfig {
         @JsonProperty("timeout_seconds")
         private int timeoutSeconds = 30;
-
         @JsonProperty("max_concurrent")
         private int maxConcurrent = 10;
 
@@ -199,13 +175,10 @@ public class HermesConfig {
     public static class ModelConfig {
         @JsonProperty("name")
         private String name = "";
-
         @JsonProperty("provider")
         private String provider = "openrouter";
-
         @JsonProperty("api_key")
         private String apiKey = "";
-
         @JsonProperty("base_url")
         private String baseUrl = "";
 
@@ -213,5 +186,19 @@ public class HermesConfig {
         public String getProvider() { return provider; }
         public String getApiKey() { return apiKey; }
         public String getBaseUrl() { return baseUrl; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PlatformConfig {
+        @JsonProperty("enabled")
+        private boolean enabled = false;
+        @JsonProperty("token")
+        private String token = "";
+        @JsonProperty("webhook_url")
+        private String webhookUrl = "";
+
+        public boolean isEnabled() { return enabled; }
+        public String getToken() { return token; }
+        public String getWebhookUrl() { return webhookUrl; }
     }
 }

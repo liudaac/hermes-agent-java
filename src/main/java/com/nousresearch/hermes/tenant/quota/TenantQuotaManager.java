@@ -139,6 +139,31 @@ public class TenantQuotaManager {
         }
     }
     
+    /**
+     * 检查每日请求配额
+     */
+    public void checkDailyRequestQuota() {
+        checkRequestQuota();
+    }
+    
+    /**
+     * 更新租户配额配置
+     */
+    public void updateQuota(TenantQuota newQuota) {
+        // 更新配额配置
+        this.quota.setMaxDailyRequests(newQuota.getMaxDailyRequests());
+        this.quota.setMaxDailyTokens(newQuota.getMaxDailyTokens());
+        this.quota.setMaxConcurrentAgents(newQuota.getMaxConcurrentAgents());
+        this.quota.setMaxStorageBytes(newQuota.getMaxStorageBytes());
+        this.quota.setMaxFileSizeBytes(newQuota.getMaxFileSizeBytes());
+        this.quota.setMaxToolCallsPerSession(newQuota.getMaxToolCallsPerSession());
+        logger.info("Updated quota for tenant: maxRequests={}, maxTokens={}, maxAgents={}, maxStorage={}",
+            newQuota.getMaxDailyRequests(),
+            newQuota.getMaxDailyTokens(),
+            newQuota.getMaxConcurrentAgents(),
+            newQuota.getMaxStorageBytes());
+    }
+    
     public QuotaUsage getUsage() {
         return new QuotaUsage(
             dailyRequests.get(),
@@ -175,6 +200,17 @@ public class TenantQuotaManager {
         int activeAgents, int maxConcurrentAgents,
         long storageUsage, long maxStorage
     ) {
+        public int getDailyRequests() { return dailyRequests; }
+        public int getMaxDailyRequests() { return maxDailyRequests; }
+        public long getDailyTokens() { return dailyTokens; }
+        public long getMaxDailyTokens() { return maxDailyTokens; }
+        public int getActiveAgents() { return activeAgents; }
+        public int getMaxConcurrentAgents() { return maxConcurrentAgents; }
+        public long getStorageBytes() { return storageUsage; }
+        public long getMaxStorageBytes() { return maxStorage; }
+        public int getTotalRequests() { return dailyRequests; }
+        public long getTotalTokens() { return dailyTokens; }
+        
         public double getDailyRequestPercent() {
             return (double) dailyRequests / maxDailyRequests * 100;
         }

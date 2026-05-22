@@ -188,6 +188,34 @@ public class TenantManager {
     }
     
     /**
+     * 初始化默认租户（用于单用户场景）
+     */
+    public void initializeDefaultTenant() {
+        String defaultTenantId = "default";
+        
+        registryLock.writeLock().lock();
+        try {
+            if (!tenants.containsKey(defaultTenantId)) {
+                TenantProvisioningRequest request = new TenantProvisioningRequest(
+                    defaultTenantId,
+                    "system"
+                );
+                
+                try {
+                    TenantContext context = TenantContext.create(defaultTenantId, request);
+                    tenants.put(defaultTenantId, context);
+                    registry.register(defaultTenantId, request);
+                    logger.info("Default tenant initialized: {}", defaultTenantId);
+                } catch (Exception e) {
+                    logger.error("Failed to initialize default tenant: {}", e.getMessage(), e);
+                }
+            }
+        } finally {
+            registryLock.writeLock().unlock();
+        }
+    }
+    
+    /**
      * 检查租户是否已注册
      */
     public boolean isRegistered(String tenantId) {

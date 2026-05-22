@@ -3,9 +3,11 @@ package com.nousresearch.hermes.agent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
+import com.nousresearch.hermes.model.ToolDefinition;
 import com.nousresearch.hermes.memory.MemoryManager;
 import com.nousresearch.hermes.tools.ToolInitializer;
 import com.nousresearch.hermes.tools.ToolRegistry;
@@ -40,7 +42,7 @@ public class AIAgent {
     private final String sessionId;
     
     // Tool definitions cache
-    private List<Map<String, Object>> toolDefinitions;
+    private List<ToolDefinition> toolDefinitions;
     
     // Auto-save settings
     private static final int AUTO_SAVE_INTERVAL = 5; // Save every 5 messages
@@ -92,7 +94,7 @@ public class AIAgent {
     
     public AIAgent(HermesConfig config) {
         this.config = config;
-        this.modelClient = new ModelClient(config);
+        this.modelClient = new ModelClient(config.getModelConfig());
         this.toolRegistry = ToolRegistry.getInstance();
         this.iterationBudget = new IterationBudget(config.getMaxTurns());
         this.memoryManager = new MemoryManager();
@@ -120,7 +122,7 @@ public class AIAgent {
      */
     public AIAgent(HermesConfig config, String sessionId) {
         this.config = config;
-        this.modelClient = new ModelClient(config);
+        this.modelClient = new ModelClient(config.getModelConfig());
         this.toolRegistry = ToolRegistry.getInstance();
         this.iterationBudget = new IterationBudget(config.getMaxTurns());
         this.memoryManager = new MemoryManager();
@@ -196,7 +198,7 @@ public class AIAgent {
      * Build tool definitions from registry.
      * Loads all registered tools from ToolRegistry.
      */
-    private List<Map<String, Object>> buildToolDefinitions() {
+    private List<ToolDefinition> buildToolDefinitions() {
         // Get all registered tool names from the registry
         List<String> allTools = toolRegistry.getAllToolNames();
         
@@ -205,7 +207,7 @@ public class AIAgent {
         
         logger.debug("Building tool definitions for {} tools: {}", toolNames.size(), toolNames);
         
-        return toolRegistry.getDefinitions(toolNames, false);
+        return toolRegistry.getToolDefinitions(toolNames);
     }
     
     /**
@@ -296,18 +298,18 @@ public class AIAgent {
             
             try {
                 // Call the model
-                ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
+                ChatCompletionResponse response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefinitions,
                     false
                 );
-                
+
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
                     responseBuilder.append("\n[No response from model]");
                     break;
                 }
-                
+
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
                 
@@ -421,7 +423,7 @@ public class AIAgent {
             
             try {
                 // Call the model with streaming
-                ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
+                var response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefinitions,
                     true  // Enable streaming
@@ -526,18 +528,18 @@ public class AIAgent {
             
             try {
                 // Call the model
-                ModelClient.ChatCompletionResponse response = modelClient.chatCompletion(
+                ChatCompletionResponse response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefinitions,
                     false
                 );
-                
+
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
                     System.out.println("\n[No response from model]");
                     break;
                 }
-                
+
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
                 
@@ -702,21 +704,17 @@ public class AIAgent {
         
         // Add available tools info
         prompt.append("## Available Tools\n\n");
-        for (Map<String, Object> tool : toolDefinitions) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> function = (Map<String, Object>) tool.get("function");
-            if (function != null) {
-                prompt.append("- ").append(function.get("name"));
-                if (function.containsKey("description")) {
-                    String desc = (String) function.get("description");
-                    // Truncate long descriptions
-                    if (desc.length() > 200) {
-                        desc = desc.substring(0, 200) + "...";
-                    }
-                    prompt.append(": ").append(desc);
+        for (ToolDefinition tool : toolDefinitions) {
+            prompt.append("- ").append(tool.getName());
+            String desc = tool.getDescription();
+            if (desc != null && !desc.isEmpty()) {
+                // Truncate long descriptions
+                if (desc.length() > 200) {
+                    desc = desc.substring(0, 200) + "...";
                 }
-                prompt.append("\n");
+                prompt.append(": ").append(desc);
             }
+            prompt.append("\n");
         }
         
         // Add available skills info
@@ -992,10 +990,8 @@ public class AIAgent {
         if (toolDefinitions == null || toolDefinitions.isEmpty()) {
             return false;
         }
-        for (Map<String, Object> tool : toolDefinitions) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> function = (Map<String, Object>) tool.get("function");
-            if (function != null && toolName.equals(function.get("name"))) {
+        for (ToolDefinition tool : toolDefinitions) {
+            if (toolName.equals(tool.getName())) {
                 return true;
             }
         }

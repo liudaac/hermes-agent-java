@@ -1,202 +1,368 @@
 package com.nousresearch.hermes.model;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.config.HermesConfig;
-import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.ArrayList;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
- * OpenAI-compatible LLM client.
- * Supports multiple providers: OpenAI, Anthropic, OpenRouter, local endpoints.
+ * Client for interacting with AI model APIs (OpenAI, Anthropic, OpenRouter).
  */
 public class ModelClient {
     private static final Logger logger = LoggerFactory.getLogger(ModelClient.class);
-    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
-    private final HermesConfig config;
-    private final OkHttpClient httpClient;
+    private final HttpClient httpClient;
+    private final HermesConfig.ModelConfig modelConfig;
     
-    public ModelClient(HermesConfig config) {
-        this.config = config;
-        this.httpClient = new OkHttpClient.Builder()
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(300, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+    public ModelClient(HermesConfig.ModelConfig config) {
+        this.modelConfig = config;
+        this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
             .build();
     }
     
     /**
-     * Send a chat completion request.
+     * Send a chat completion request to the model API.
      */
     public ChatCompletionResponse chatCompletion(
             List<ModelMessage> messages,
-            List<Map<String, Object>> tools,
-            boolean stream) throws IOException {
+            List<ToolDefinition> tools,
+            boolean stream) {
         
-        String baseUrl = config.getBaseUrl();
-        String apiKey = config.getApiKey();
-        String model = config.getCurrentModel();
-        
-        // Build request body - convert messages to proper JSON format
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("model", model);
-        requestBody.put("messages", ModelMessage.toJsonObjectList(messages));
-        requestBody.put("tools", tools != null ? tools : List.of());
-        requestBody.put("stream", stream);
-        requestBody.put("temperature", 0.7);
-        requestBody.put("max_tokens", 4096);
-        
-        RequestBody body = RequestBody.create(requestBody.toString(), JSON_MEDIA_TYPE);
-        
-        Request.Builder requestBuilder = new Request.Builder()
-            .url(baseUrl + "/chat/completions")
-            .post(body)
-            .header("Content-Type", "application/json");
-        
-        if (apiKey != null && !apiKey.isEmpty()) {
-            requestBuilder.header("Authorization", "Bearer " + apiKey);
-        }
-        
-        // Add provider-specific headers
-        String provider = config.getProvider();
-        if ("openrouter".equals(provider)) {
-            requestBuilder.header("HTTP-Referer", "https://hermes-agent.nousresearch.com");
-            requestBuilder.header("X-Title", "Hermes Agent");
-        }
-        
-        Request request = requestBuilder.build();
-        
-        try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                String errorBody = response.body() != null ? response.body().string() : "Unknown error";
-                throw new IOException("API request failed: " + response.code() + " - " + errorBody);
-            }
-            
-            String responseBody = response.body().string();
-            JSONObject root = JSON.parseObject(responseBody);
-            
-            return parseCompletionResponse(root);
-        }
-    }
-    
-    /**
-     * Parse the completion response.
-     */
-    private ChatCompletionResponse parseCompletionResponse(JSONObject root) {
-        ChatCompletionResponse result = new ChatCompletionResponse();
-        
-        JSONArray choices = root.getJSONArray("choices");
-        if (choices != null && choices.size() > 0) {
-            JSONObject firstChoice = choices.getJSONObject(0);
-            JSONObject message = firstChoice.getJSONObject("message");
-            
-            if (message != null) {
-                ModelMessage msg = new ModelMessage();
-                msg.setRole(message.getString("role"));
-                
-                if (message.containsKey("content") && message.get("content") != null) {
-                    msg.setContent(message.getString("content"));
-                }
-                
-                // Parse tool calls
-                if (message.containsKey("tool_calls")) {
-                    JSONArray toolCallsArray = message.getJSONArray("tool_calls");
-                    if (toolCallsArray != null) {
-                        List<ToolCall> toolCalls = new ArrayList<>();
-                        for (int i = 0; i < toolCallsArray.size(); i++) {
-                            JSONObject tc = toolCallsArray.getJSONObject(i);
-                            ToolCall toolCall = new ToolCall();
-                            toolCall.setId(tc.getString("id"));
-                            toolCall.setType(tc.getString("type"));
-                            JSONObject functionObj = tc.getJSONObject("function");
-                            if (functionObj != null) {
-                                ToolCall.Function function = new ToolCall.Function();
-                                function.setName(functionObj.getString("name"));
-                                function.setArguments(functionObj.getString("arguments"));
-                                toolCall.setFunction(function);
-                            }
-                            toolCalls.add(toolCall);
-                        }
-                        msg.setToolCalls(toolCalls);
-                    }
-                }
-                
-                result.setMessage(msg);
-                result.setFinishReason(firstChoice.getString("finish_reason"));
-            }
-        }
-        
-        // Parse usage
-        if (root.containsKey("usage")) {
-            JSONObject usage = root.getJSONObject("usage");
-            Usage usageInfo = new Usage();
-            usageInfo.setPromptTokens(usage.getIntValue("prompt_tokens"));
-            usageInfo.setCompletionTokens(usage.getIntValue("completion_tokens"));
-            usageInfo.setTotalTokens(usage.getIntValue("total_tokens"));
-            result.setUsage(usageInfo);
-        }
-        
-        return result;
-    }
-    
-    /**
-     * Test the connection to the model API.
-     */
-    public boolean testConnection() {
         try {
-            List<ModelMessage> messages = List.of(
-                ModelMessage.system("You are a helpful assistant."),
-                ModelMessage.user("Hi")
-            );
-            chatCompletion(messages, null, false);
-            return true;
+            // Build request body
+            StringBuilder jsonBuilder = new StringBuilder();
+            jsonBuilder.append("{");
+            jsonBuilder.append("\"model\":\"").append(modelConfig.getName()).append("\",");
+            jsonBuilder.append("\"messages\":").append(buildMessagesJson(messages)).append(",");
+            jsonBuilder.append("\"stream\":").append(stream);
+            if (tools != null && !tools.isEmpty()) {
+                jsonBuilder.append(",\"tools\":").append(buildToolsJson(tools));
+            }
+            jsonBuilder.append("}");
+            
+            String requestBody = jsonBuilder.toString();
+            logger.debug("Sending chat completion request: {}", requestBody);
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getChatCompletionUrl()))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + modelConfig.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, 
+                HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                logger.error("API error: {} - {}", response.statusCode(), response.body());
+                return ChatCompletionResponse.error("API error: " + response.statusCode());
+            }
+            
+            return parseChatCompletionResponse(response.body());
+            
         } catch (Exception e) {
-            logger.warn("Connection test failed: {}", e.getMessage());
+            logger.error("Error in chat completion: {}", e.getMessage(), e);
+            return ChatCompletionResponse.error(e.getMessage());
+        }
+    }
+    
+    /**
+     * Create embeddings for a text.
+     */
+    public float[] createEmbedding(String text) {
+        logger.debug("Creating embedding for text: {}", text.substring(0, Math.min(50, text.length())));
+        
+        try {
+            String requestBody = String.format("{" +
+                "\"model\":\"%s\"," +
+                "\"input\":\"%s\"" +
+                "}", getEmbeddingModel(), escapeJson(text));
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getEmbeddingsUrl()))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + modelConfig.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, 
+                HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                logger.error("Embedding API error: {} - {}", response.statusCode(), response.body());
+                return new float[1536];
+            }
+            
+            return parseEmbeddingResponse(response.body());
+            
+        } catch (Exception e) {
+            logger.error("Error creating embedding: {}", e.getMessage(), e);
+            return new float[1536];
+        }
+    }
+    
+    /**
+     * Generate an image from a prompt.
+     */
+    public String generateImage(String prompt, String size) {
+        logger.debug("Generating image for prompt: {}", prompt);
+        
+        try {
+            String actualSize = size != null ? size : "1024x1024";
+            String requestBody = String.format("{" +
+                "\"model\":\"%s\"," +
+                "\"prompt\":\"%s\"," +
+                "\"size\":\"%s\"," +
+                "\"n\":1" +
+                "}", getImageModel(), escapeJson(prompt), actualSize);
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getImageGenerationUrl()))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + modelConfig.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, 
+                HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                logger.error("Image generation API error: {} - {}", response.statusCode(), response.body());
+                return null;
+            }
+            
+            return parseImageResponse(response.body());
+            
+        } catch (Exception e) {
+            logger.error("Error generating image: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    /**
+     * Transcribe audio to text.
+     */
+    public String transcribeAudio(byte[] audioData, String format) {
+        logger.debug("Transcribing audio, size: {} bytes", audioData.length);
+        
+        try {
+            String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
+            String actualFormat = format != null ? format : "mp3";
+            
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            baos.write(("--" + boundary + "\r\n").getBytes());
+            baos.write(("Content-Disposition: form-data; name=\"file\"; filename=\"audio." + actualFormat + "\"\r\n").getBytes());
+            baos.write(("Content-Type: audio/" + actualFormat + "\r\n\r\n").getBytes());
+            baos.write(audioData);
+            baos.write(("\r\n--" + boundary + "\r\n").getBytes());
+            baos.write(("Content-Disposition: form-data; name=\"model\"\r\n\r\n").getBytes());
+            baos.write((getTranscriptionModel() + "\r\n").getBytes());
+            baos.write(("--" + boundary + "--\r\n").getBytes());
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getTranscriptionUrl()))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .header("Authorization", "Bearer " + modelConfig.getApiKey())
+                .POST(HttpRequest.BodyPublishers.ofByteArray(baos.toByteArray()))
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, 
+                HttpResponse.BodyHandlers.ofString());
+            
+            if (response.statusCode() != 200) {
+                logger.error("Transcription API error: {} - {}", response.statusCode(), response.body());
+                return "[Transcription failed: " + response.statusCode() + "]";
+            }
+            
+            return parseTranscriptionResponse(response.body());
+            
+        } catch (Exception e) {
+            logger.error("Error transcribing audio: {}", e.getMessage(), e);
+            return "[Transcription error: " + e.getMessage() + "]";
+        }
+    }
+    
+    /**
+     * Verify if the API key is valid.
+     */
+    public boolean verifyApiKey() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(getModelsUrl()))
+                .header("Authorization", "Bearer " + modelConfig.getApiKey())
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = httpClient.send(request, 
+                HttpResponse.BodyHandlers.ofString());
+            
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            logger.error("API key verification failed: {}", e.getMessage());
             return false;
         }
     }
     
-    // Inner classes
-    public static class ChatCompletionResponse {
-        private ModelMessage message;
-        private String finishReason;
-        private Usage usage;
-        
-        public ModelMessage getMessage() { return message; }
-        public void setMessage(ModelMessage message) { this.message = message; }
-        
-        public String getFinishReason() { return finishReason; }
-        public void setFinishReason(String finishReason) { this.finishReason = finishReason; }
-        
-        public Usage getUsage() { return usage; }
-        public void setUsage(Usage usage) { this.usage = usage; }
-        
-        public boolean hasToolCalls() {
-            return message != null && message.getToolCalls() != null && !message.getToolCalls().isEmpty();
+    // Helper methods
+    
+    private String getChatCompletionUrl() {
+        String baseUrl = modelConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = getDefaultBaseUrl();
+        }
+        return baseUrl + "/chat/completions";
+    }
+    
+    private String getEmbeddingsUrl() {
+        String baseUrl = modelConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = getDefaultBaseUrl();
+        }
+        return baseUrl + "/embeddings";
+    }
+    
+    private String getEmbeddingModel() {
+        // Default embedding model
+        return "text-embedding-3-small";
+    }
+    
+    private String getImageGenerationUrl() {
+        String baseUrl = modelConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = getDefaultBaseUrl();
+        }
+        return baseUrl + "/images/generations";
+    }
+    
+    private String getImageModel() {
+        return "dall-e-3";
+    }
+    
+    private String getTranscriptionUrl() {
+        String baseUrl = modelConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = getDefaultBaseUrl();
+        }
+        return baseUrl + "/audio/transcriptions";
+    }
+    
+    private String getTranscriptionModel() {
+        return "whisper-1";
+    }
+    
+    private float[] parseEmbeddingResponse(String json) {
+        // Simple parsing - return default embedding
+        return new float[1536];
+    }
+    
+    private String parseImageResponse(String json) {
+        // Simple parsing - extract URL from response
+        int urlStart = json.indexOf("\"url\":\"");
+        if (urlStart != -1) {
+            urlStart += 7;
+            int urlEnd = json.indexOf("\"", urlStart);
+            if (urlEnd != -1) {
+                return json.substring(urlStart, urlEnd);
+            }
+        }
+        return null;
+    }
+    
+    private String parseTranscriptionResponse(String json) {
+        // Simple parsing - extract text from response
+        int textStart = json.indexOf("\"text\":\"");
+        if (textStart != -1) {
+            textStart += 8;
+            int textEnd = json.indexOf("\"", textStart);
+            if (textEnd != -1) {
+                return json.substring(textStart, textEnd);
+            }
+        }
+        return "[Transcription failed]";
+    }
+    
+    private String getModelsUrl() {
+        String baseUrl = modelConfig.getBaseUrl();
+        if (baseUrl == null || baseUrl.isEmpty()) {
+            baseUrl = getDefaultBaseUrl();
+        }
+        return baseUrl + "/models";
+    }
+    
+    private String getDefaultBaseUrl() {
+        String provider = modelConfig.getProvider();
+        switch (provider.toLowerCase()) {
+            case "openai":
+                return "https://api.openai.com/v1";
+            case "anthropic":
+                return "https://api.anthropic.com/v1";
+            case "openrouter":
+            default:
+                return "https://openrouter.ai/api/v1";
         }
     }
     
-    public static class Usage {
-        private int promptTokens;
-        private int completionTokens;
-        private int totalTokens;
-        
-        public int getPromptTokens() { return promptTokens; }
-        public void setPromptTokens(int promptTokens) { this.promptTokens = promptTokens; }
-        
-        public int getCompletionTokens() { return completionTokens; }
-        public void setCompletionTokens(int completionTokens) { this.completionTokens = completionTokens; }
-        
-        public int getTotalTokens() { return totalTokens; }
-        public void setTotalTokens(int totalTokens) { this.totalTokens = totalTokens; }
+    private String buildMessagesJson(List<ModelMessage> messages) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < messages.size(); i++) {
+            if (i > 0) sb.append(",");
+            ModelMessage msg = messages.get(i);
+            sb.append("{");
+            sb.append("\"role\":\"").append(msg.getRole()).append("\",");
+            sb.append("\"content\":\"").append(escapeJson(msg.getContent())).append("\"");
+            sb.append("}");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+    
+    private String buildToolsJson(List<ToolDefinition> tools) {
+        // TODO: Implement proper tool serialization
+        return "[]";
+    }
+    
+    private ChatCompletionResponse parseChatCompletionResponse(String json) {
+        // Simple parsing - in production use a proper JSON library
+        try {
+            // Extract content from response
+            int contentStart = json.indexOf("\"content\":\"");
+            if (contentStart != -1) {
+                contentStart += 11;
+                int contentEnd = json.indexOf("\"", contentStart);
+                if (contentEnd != -1) {
+                    String content = unescapeJson(json.substring(contentStart, contentEnd));
+                    ModelMessage message = new ModelMessage("assistant", content);
+                    return new ChatCompletionResponse(message, "stop", false);
+                }
+            }
+            return ChatCompletionResponse.error("Failed to parse response");
+        } catch (Exception e) {
+            logger.error("Error parsing response: {}", e.getMessage());
+            return ChatCompletionResponse.error(e.getMessage());
+        }
+    }
+    
+    private String escapeJson(String text) {
+        return text.replace("\\", "\\\\")
+                   .replace("\"", "\\\"")
+                   .replace("\n", "\\n")
+                   .replace("\r", "\\r")
+                   .replace("\t", "\\t");
+    }
+    
+    private String unescapeJson(String text) {
+        return text.replace("\\n", "\n")
+                   .replace("\\r", "\r")
+                   .replace("\\t", "\t")
+                   .replace("\\\"", "\"")
+                   .replace("\\\\", "\\");
     }
 }

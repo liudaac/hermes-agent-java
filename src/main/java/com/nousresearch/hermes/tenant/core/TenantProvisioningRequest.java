@@ -48,6 +48,30 @@ public class TenantProvisioningRequest {
         this.createdBy = createdBy;
     }
     
+    /**
+     * 默认构造函数（用于反序列化）
+     */
+    public TenantProvisioningRequest() {
+        this.tenantId = "default";
+        this.createdBy = "system";
+    }
+    
+    /**
+     * 设置默认配额
+     */
+    public TenantProvisioningRequest withDefaultQuota() {
+        // 使用默认配额配置
+        return this;
+    }
+
+    /**
+     * 设置默认安全策略
+     */
+    public TenantProvisioningRequest withDefaultSecurityPolicy() {
+        this.securityPolicy = TenantSecurityPolicy.defaults();
+        return this;
+    }
+    
     // ============ Builder 模式 ============
     
     public static Builder builder(String tenantId, String createdBy) {

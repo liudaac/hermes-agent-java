@@ -26,6 +26,7 @@ public class GatewayServer {
     private final HermesConfig config;
     private final Map<String, PlatformAdapter> adapters;
     private final ExecutorService executor;
+    private final ScheduledExecutorService sessionCleanupExecutor;
     private Javalin app;
     private volatile boolean running = false;
     
@@ -34,6 +35,7 @@ public class GatewayServer {
         this.config = config;
         this.adapters = new ConcurrentHashMap<>();
         this.executor = Executors.newCachedThreadPool();
+        this.sessionCleanupExecutor = Executors.newScheduledThreadPool(1);
     }
     
     /**
@@ -701,12 +703,9 @@ public class GatewayServer {
     ) {}
     
     /**
-     * Platform adapter interface.
+     * Platform adapter interface (deprecated, use {@link PlatformAdapter} instead).
      */
-    public interface PlatformAdapter {
-        String getPlatformName();
-        IncomingMessage parseWebhook(JSONObject payload);
-        void sendMessage(String channel, String content) throws Exception;
-        void sendReply(String channel, String messageId, String content) throws Exception;
+    @Deprecated
+    public interface PlatformAdapter extends com.nousresearch.hermes.gateway.PlatformAdapter {
     }
 }

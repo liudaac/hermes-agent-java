@@ -374,6 +374,17 @@ public class TenantContext {
         return sessionManager != null ? sessionManager.getActiveSessionCount() : 0;
     }
 
+    /**
+     * Phase 3: 获取或创建 TenantAIAgent
+     */
+    public TenantAIAgent getOrCreateAgent(String sessionId, com.nousresearch.hermes.config.HermesConfig hermesConfig) {
+        return activeAgents.computeIfAbsent(sessionId, id -> {
+            TenantAIAgent agent = new TenantAIAgent(this, id, hermesConfig);
+            logger.debug("Created new TenantAIAgent for session: {} in tenant: {}", id, tenantId);
+            return agent;
+        });
+    }
+
     private void loadExistingComponents() {
         lifecycleLock.writeLock().lock();
         try {

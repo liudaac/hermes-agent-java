@@ -1,12 +1,15 @@
 package com.nousresearch.hermes;
 
 import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.config.ConfigManager;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.gateway.GatewayServer;
+import com.nousresearch.hermes.gateway.GatewayServerV2;
 import com.nousresearch.hermes.gateway.SessionManager;
 import com.nousresearch.hermes.gateway.platforms.*;
+import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tools.ToolInitializerV2;
 import org.slf4j.Logger;
@@ -16,47 +19,76 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * Enhanced Hermes Agent main class with all new features.
+ * Enhanced Hermes Agent main class with unified tenant mode.
  */
 public class HermesAgentV2 {
     private static final Logger logger = LoggerFactory.getLogger(HermesAgentV2.class);
-    
+
     private final ConfigManager config;
     private final ApprovalSystem approvalSystem;
     private final ToolRegistry toolRegistry;
     private final SessionManager sessionManager;
-    private final GatewayServer gatewayServer;
-    private AIAgent interactiveAgent;  // Persistent agent for interactive mode
+    private final TenantManager tenantManager;
+    private GatewayServer gatewayServer;       // Legacy gateway (V1)
+    private GatewayServerV2 gatewayServerV2;   // New tenant-aware gateway (V2)
+    private final boolean tenantMode;
+    private TenantAwareAIAgent interactiveAgent;  // Persistent agent for interactive mode
     
     public HermesAgentV2() throws Exception {
+        this(false); // Default to non-tenant mode for backward compatibility
+    }
+
+    /**
+     * Constructor with tenant mode option.
+     * @param tenantMode true to enable unified tenant mode
+     */
+    public HermesAgentV2(boolean tenantMode) throws Exception {
+        this.tenantMode = tenantMode;
+
         // Load configuration
         this.config = ConfigManager.getInstance();
         config.load();
-        
+
         // Initialize approval system
         this.approvalSystem = new ApprovalSystem();
-        
+
         // Initialize tool registry
         this.toolRegistry = ToolRegistry.getInstance();
         ToolInitializerV2.initializeAll(toolRegistry, approvalSystem);
-        
+
         // Initialize session manager
         Path dataDir = Paths.get(System.getProperty("user.home"), ".hermes");
         this.sessionManager = new SessionManager(dataDir);
-        
-        // Initialize gateway server
+
+        // Initialize tenant manager (always available, used in both modes)
+        this.tenantManager = new TenantManager();
+        if (tenantMode) {
+            // Initialize default tenant for single-user scenario
+            tenantManager.initializeDefaultTenant();
+            logger.info("Tenant mode initialized with default tenant");
+        }
+
+        // Initialize gateway server based on mode
         int gatewayPort = config.getInt("gateway.port", 8080);
         HermesConfig agentConfig = new HermesConfig(
             config.getApiKey(),
             config.getBaseUrl(),
             config.getModelName()
         );
-        this.gatewayServer = new GatewayServer(gatewayPort, agentConfig);
-        
-        // Register platform adapters
-        registerAdapters();
-        
-        logger.info("Hermes Agent V2 initialized");
+
+        if (tenantMode) {
+            this.gatewayServerV2 = new GatewayServerV2(gatewayPort, agentConfig);
+            this.gatewayServer = null;
+            // Register platform adapters for V2
+            registerAdaptersV2();
+        } else {
+            this.gatewayServer = new GatewayServer(gatewayPort, agentConfig);
+            this.gatewayServerV2 = null;
+            // Register platform adapters for V1
+            registerAdapters();
+        }
+
+        logger.info("Hermes Agent V2 initialized (tenant mode: {})", tenantMode);
     }
     
     private void registerAdapters() {
@@ -65,17 +97,37 @@ public class HermesAgentV2 {
             gatewayServer.registerAdapter(new FeishuAdapterV2());
             logger.info("Feishu adapter registered");
         }
-        
+
         // Telegram
         if (System.getenv("TELEGRAM_BOT_TOKEN") != null) {
             gatewayServer.registerAdapter(new TelegramAdapter());
             logger.info("Telegram adapter registered");
         }
-        
+
         // Discord
         if (System.getenv("DISCORD_BOT_TOKEN") != null) {
             gatewayServer.registerAdapter(new DiscordAdapter());
             logger.info("Discord adapter registered");
+        }
+    }
+
+    private void registerAdaptersV2() {
+        // Feishu (V2 with tenant support)
+        if (System.getenv("FEISHU_APP_ID") != null) {
+            gatewayServerV2.registerAdapter(new FeishuAdapterV2());
+            logger.info("Feishu adapter registered (V2)");
+        }
+
+        // Telegram (V2 with tenant support)
+        if (System.getenv("TELEGRAM_BOT_TOKEN") != null) {
+            gatewayServerV2.registerAdapter(new TelegramAdapter());
+            logger.info("Telegram adapter registered (V2)");
+        }
+
+        // Discord (V2 with tenant support)
+        if (System.getenv("DISCORD_BOT_TOKEN") != null) {
+            gatewayServerV2.registerAdapter(new DiscordAdapter());
+            logger.info("Discord adapter registered (V2)");
         }
     }
     
@@ -83,17 +135,31 @@ public class HermesAgentV2 {
      * Start the agent.
      */
     public void start() {
-        // Start gateway server
-        gatewayServer.start();
-        
+        // Start gateway server based on mode
+        if (tenantMode && gatewayServerV2 != null) {
+            gatewayServerV2.start();
+            logger.info("Gateway V2 started (tenant mode)");
+        } else if (gatewayServer != null) {
+            gatewayServer.start();
+            logger.info("Gateway V1 started (legacy mode)");
+        }
+
         // Add shutdown hook
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutting down...");
-            gatewayServer.stop();
+            if (gatewayServerV2 != null) {
+                gatewayServerV2.stop();
+            }
+            if (gatewayServer != null) {
+                gatewayServer.stop();
+            }
             sessionManager.persistAll();
+            if (tenantManager != null) {
+                tenantManager.shutdown();
+            }
         }));
-        
-        logger.info("Hermes Agent V2 started");
+
+        logger.info("Hermes Agent V2 started (tenant mode: {})", tenantMode);
     }
     
     /**
@@ -180,10 +246,10 @@ public class HermesAgentV2 {
         if (message.equalsIgnoreCase("exit") || message.equalsIgnoreCase("quit")) {
             return false; // Signal to exit
         }
-        
+
         try {
             logger.info("Processing message: {}", message.substring(0, Math.min(50, message.length())));
-            
+
             // Initialize persistent agent on first message
             if (interactiveAgent == null) {
                 HermesConfig agentConfig = new HermesConfig(
@@ -191,31 +257,50 @@ public class HermesAgentV2 {
                     config.getBaseUrl(),
                     config.getModelName()
                 );
-                interactiveAgent = new AIAgent(agentConfig);
-                logger.info("Created persistent AIAgent for interactive mode");
+                // Use TenantAwareAIAgent (works in both tenant and non-tenant modes)
+                interactiveAgent = TenantAwareAIAgent.createDefault(agentConfig);
+                logger.info("Created persistent TenantAwareAIAgent for interactive mode (tenant: {})",
+                    interactiveAgent.getTenantId());
             }
-            
+
             // Process the message and get response
             String response = interactiveAgent.processMessage(message);
-            
+
             // Display the response
-            System.out.println("\n🤖 " + response + "\n");
-            
+            if (response != null && !response.isEmpty()) {
+                System.out.println("\n🤖 " + response + "\n");
+            }
+
         } catch (Exception e) {
             logger.error("Failed to process message: {}", e.getMessage(), e);
             System.out.println("❌ Error: " + e.getMessage());
         }
-        
+
         return true; // Continue running
     }
     
     public static void main(String[] args) {
         try {
-            HermesAgentV2 agent = new HermesAgentV2();
+            // Check for tenant mode flag
+            boolean tenantMode = false;
+            for (String arg : args) {
+                if (arg.equals("--tenant") || arg.equals("-t")) {
+                    tenantMode = true;
+                    break;
+                }
+            }
+
+            // Also check environment variable
+            if (System.getenv("HERMES_TENANT_MODE") != null) {
+                tenantMode = Boolean.parseBoolean(System.getenv("HERMES_TENANT_MODE"));
+            }
+
+            logger.info("Starting Hermes Agent V2 with tenant mode: {}", tenantMode);
+            HermesAgentV2 agent = new HermesAgentV2(tenantMode);
             agent.start();
-            
+
             // Run interactive if no gateway adapters configured
-            if (System.getenv("FEISHU_APP_ID") == null && 
+            if (System.getenv("FEISHU_APP_ID") == null &&
                 System.getenv("TELEGRAM_BOT_TOKEN") == null &&
                 System.getenv("DISCORD_BOT_TOKEN") == null) {
                 agent.runInteractive();
@@ -223,7 +308,7 @@ public class HermesAgentV2 {
                 // Keep running for gateway mode
                 Thread.currentThread().join();
             }
-            
+
         } catch (Exception e) {
             logger.error("Fatal error: {}", e.getMessage(), e);
             System.exit(1);

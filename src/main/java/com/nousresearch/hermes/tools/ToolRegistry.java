@@ -119,6 +119,42 @@ public class ToolRegistry {
     }
     
     /**
+     * Get ToolDefinition objects for specific tools (for ModelClient).
+     */
+    public List<com.nousresearch.hermes.model.ToolDefinition> getToolDefinitions(Set<String> toolNames) {
+        List<com.nousresearch.hermes.model.ToolDefinition> result = new ArrayList<>();
+        Map<Function<Void, Boolean>, Boolean> checkResults = new HashMap<>();
+        
+        for (String name : toolNames.stream().sorted().toList()) {
+            ToolEntry entry = tools.get(name);
+            if (entry == null) continue;
+            
+            // Check availability
+            Function<Void, Boolean> checkFn = toolsetChecks.get(entry.getToolset());
+            if (checkFn != null) {
+                if (!checkResults.containsKey(checkFn)) {
+                    try {
+                        checkResults.put(checkFn, checkFn.apply(null));
+                    } catch (Exception e) {
+                        checkResults.put(checkFn, false);
+                    }
+                }
+                if (!checkResults.get(checkFn)) {
+                    continue;
+                }
+            }
+            
+            // Build ToolDefinition
+            String description = entry.getDescription();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) entry.getSchema().get("parameters");
+            result.add(new com.nousresearch.hermes.model.ToolDefinition(entry.getName(), description, parameters));
+        }
+        
+        return result;
+    }
+    
+    /**
      * Execute a tool.
      */
     public String dispatch(String name, Map<String, Object> args) {
