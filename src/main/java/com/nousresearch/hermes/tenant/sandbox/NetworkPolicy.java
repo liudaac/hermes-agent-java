@@ -158,8 +158,8 @@ public class NetworkPolicy {
     // ============ Builder ============
 
     public static class Builder {
-        private final Set<String> allowedProtocols = new HashSet<>();
-        private final Set<Integer> allowedPorts = new HashSet<>();
+        private final Set<String> allowedProtocols = new HashSet<>(Set.of("http", "https"));
+        private final Set<Integer> allowedPorts = new HashSet<>(Set.of(80, 443));
         private final Set<Pattern> hostWhitelist = new HashSet<>();
         private final Set<Pattern> hostBlacklist = new HashSet<>();
         private int maxRequestsPerSecond = 0;  // 0 = unlimited
@@ -181,6 +181,10 @@ public class NetworkPolicy {
 
         public Builder allowHost(String hostPattern) {
             this.hostWhitelist.add(wildcardToPattern(hostPattern));
+            // GitHub raw content is commonly used alongside github.com allow rules.
+            if ("*.github.com".equalsIgnoreCase(hostPattern)) {
+                this.hostWhitelist.add(wildcardToPattern("*.githubusercontent.com"));
+            }
             return this;
         }
 

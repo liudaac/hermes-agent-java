@@ -143,8 +143,11 @@ public class TenantProvisioningRequest {
     // ============ Getters ============
 
     public String getTenantId() { return tenantId; }
+    public TenantProvisioningRequest setTenantId(String tenantId) { this.tenantId = tenantId; return this; }
     public String getTenantName() { return tenantName; }
+    public TenantProvisioningRequest setTenantName(String tenantName) { this.tenantName = tenantName; return this; }
     public String getCreatedBy() { return createdBy; }
+    public TenantProvisioningRequest setCreatedBy(String createdBy) { this.createdBy = createdBy; return this; }
     public String getDescription() { return description; }
     public TenantQuota getQuota() { return quota; }
     public FileSandboxConfig getFileSandboxConfig() { return fileSandboxConfig; }

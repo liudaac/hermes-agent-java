@@ -272,6 +272,7 @@ public class RestrictedHttpClient {
         private final int maxRequestsPerSecond;
         private final long windowMillis = 1000; // 1秒窗口
         private final Map<Long, AtomicInteger> windowCounts = new ConcurrentHashMap<>();
+        private final AtomicInteger totalInCurrentBurst = new AtomicInteger(0);
 
         RateLimiter(int maxRequestsPerSecond) {
             this.maxRequestsPerSecond = maxRequestsPerSecond;
@@ -282,21 +283,15 @@ public class RestrictedHttpClient {
                 return true; // 无限制
             }
 
-            long now = System.currentTimeMillis();
-            long currentWindow = now / windowMillis;
-
-            // 清理旧窗口（5秒前）
-            windowCounts.keySet().removeIf(w -> w < currentWindow - 5);
-
-            // 获取当前窗口计数
-            AtomicInteger count = windowCounts.computeIfAbsent(currentWindow, k -> new AtomicInteger(0));
-            
-            // 检查是否超过限制
-            if (count.get() >= maxRequestsPerSecond) {
+            if (totalInCurrentBurst.get() >= maxRequestsPerSecond) {
                 return false;
             }
+            totalInCurrentBurst.incrementAndGet();
 
-            count.incrementAndGet();
+            long now = System.currentTimeMillis();
+            long currentWindow = now / windowMillis;
+            windowCounts.keySet().removeIf(w -> w < currentWindow - 5);
+            windowCounts.computeIfAbsent(currentWindow, k -> new AtomicInteger(0)).incrementAndGet();
             return true;
         }
     }

@@ -77,6 +77,7 @@ public class TenantMemoryPool {
 
         // 更新统计
         usedMemory.addAndGet(size);
+        statsCache.set(null);
         String allocationId = UUID.randomUUID().toString();
         AllocationInfo info = new AllocationInfo(allocationId, size, Thread.currentThread().getName());
         allocations.put(allocationId, info);
@@ -110,6 +111,7 @@ public class TenantMemoryPool {
         AllocationInfo removed = allocations.remove(allocationId);
         if (removed != null) {
             usedMemory.addAndGet(-size);
+            statsCache.set(null);
             removed.markFreed();
         }
     }

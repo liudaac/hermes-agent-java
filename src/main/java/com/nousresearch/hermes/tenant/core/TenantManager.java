@@ -127,7 +127,7 @@ public class TenantManager {
      * 获取租户（如果不存在返回 null）
      */
     public TenantContext getTenant(String tenantId) {
-        return tenants.get(tenantId);
+        return getOrLoadTenant(tenantId);
     }
     
     /**
@@ -219,7 +219,12 @@ public class TenantManager {
      * 检查租户是否已注册
      */
     public boolean isRegistered(String tenantId) {
-        return exists(tenantId);
+        registryLock.readLock().lock();
+        try {
+            return tenants.containsKey(tenantId) || registry.listAll().contains(tenantId);
+        } finally {
+            registryLock.readLock().unlock();
+        }
     }
     
     /**
@@ -491,7 +496,10 @@ public class TenantManager {
                         for (JsonNode tenant : tenants) {
                             String tenantId = tenant.path("id").asText();
                             if (!tenantId.isEmpty()) {
-                                TenantRegistryEntry entry = mapper.treeToValue(tenant, TenantRegistryEntry.class);
+                                Instant createdAt = Instant.parse(tenant.path("createdAt").asText(Instant.now().toString()));
+                                String createdBy = tenant.path("createdBy").asText("system");
+                                Map<String, Object> quota = mapper.convertValue(tenant.path("quota"), Map.class);
+                                TenantRegistryEntry entry = new TenantRegistryEntry(tenantId, createdAt, createdBy, quota);
                                 registeredTenants.put(tenantId, entry);
                             }
                         }
@@ -512,7 +520,11 @@ public class TenantManager {
                 ArrayNode tenants = root.putArray("tenants");
                 
                 for (TenantRegistryEntry entry : registeredTenants.values()) {
-                    tenants.add(mapper.valueToTree(entry));
+                    ObjectNode tenant = tenants.addObject();
+                    tenant.put("id", entry.id());
+                    tenant.put("createdAt", entry.createdAt().toString());
+                    tenant.put("createdBy", entry.createdBy());
+                    tenant.set("quota", mapper.valueToTree(entry.quota()));
                 }
                 
                 mapper.writerWithDefaultPrettyPrinter().writeValue(registryFile.toFile(), root);

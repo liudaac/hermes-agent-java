@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -91,13 +92,16 @@ public class TenantFileSandbox {
         }
         
         try {
-            // 1. 解析原始路径
+            // 1. Parse and resolve paths relative to this tenant sandbox.
+            // Relative paths must never be interpreted against the JVM working directory.
             Path rawPath = Paths.get(pathStr);
             
-            // 2. 检查是否为绝对路径（应该是相对或沙箱内）
-            if (rawPath.isAbsolute() && !rawPath.startsWith(sandboxRoot)) {
-                // 尝试作为相对路径处理
-                rawPath = sandboxRoot.resolve(rawPath.getFileName());
+            // 2. Absolute paths are only accepted when they are already inside sandboxRoot.
+            // Outside absolute paths are rejected instead of being silently remapped.
+            if (rawPath.isAbsolute()) {
+                rawPath = rawPath.normalize();
+            } else {
+                rawPath = sandboxRoot.resolve(rawPath).normalize();
             }
             
             // 3. 规范化路径
@@ -143,7 +147,7 @@ public class TenantFileSandbox {
             }
             
             // 9. 黑名单检查
-            boolean inBlacklist = config.getDeniedPaths().stream().anyMatch(realPath::startsWith);
+            boolean inBlacklist = !withinSandbox && config.getDeniedPaths().stream().anyMatch(realPath::startsWith);
             if (inBlacklist) {
                 return PathValidationResult.rejected("Access denied - blacklisted path", path);
             }
@@ -437,6 +441,48 @@ public class TenantFileSandbox {
         Files.deleteIfExists(path);
     }
     
+
+    /**
+     * Convenience writer for callers/tests that expect a string result.
+     * The sandbox already belongs to a single tenant instance, so validation is based on this instance.
+     */
+    public String writeFile(String relativePath, String content) {
+        return writeFile(relativePath, content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Convenience writer for callers/tests that expect a string result.
+     */
+    public String writeFile(String relativePath, byte[] content) {
+        try {
+            PathValidationResult validation = validatePath(relativePath, AccessMode.WRITE);
+            if (!validation.allowed()) {
+                return "error: " + validation.reason();
+            }
+            Path path = validation.path();
+            Files.createDirectories(path.getParent());
+            Files.write(path, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            return "ok";
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
+    /**
+     * Convenience UTF-8 reader for callers/tests that expect a string result.
+     */
+    public String readFile(String relativePath) {
+        try {
+            PathValidationResult validation = validatePath(relativePath, AccessMode.READ);
+            if (!validation.allowed()) {
+                return "error: " + validation.reason();
+            }
+            return Files.readString(validation.path(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "error: " + e.getMessage();
+        }
+    }
+
     // ============ 记录类 ============
     
     public record PathValidationResult(boolean allowed, Path path, String reason) {

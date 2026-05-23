@@ -210,6 +210,27 @@ public class TenantQuotaManager {
         public long getMaxStorageBytes() { return maxStorage; }
         public int getTotalRequests() { return dailyRequests; }
         public long getTotalTokens() { return dailyTokens; }
+
+        /**
+         * Return a new usage snapshot with the daily request count incremented.
+         * Kept immutable because QuotaUsage is a record.
+         */
+        public QuotaUsage incrementRequests() {
+            return new QuotaUsage(
+                dailyRequests + 1,
+                maxDailyRequests,
+                dailyTokens,
+                maxDailyTokens,
+                activeAgents,
+                maxConcurrentAgents,
+                storageUsage,
+                maxStorage
+            );
+        }
+
+        public QuotaUsage incrementDailyRequests() {
+            return incrementRequests();
+        }
         
         public double getDailyRequestPercent() {
             return (double) dailyRequests / maxDailyRequests * 100;

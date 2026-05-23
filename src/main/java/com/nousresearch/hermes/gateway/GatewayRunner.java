@@ -23,6 +23,7 @@ public class GatewayRunner {
     private final List<GatewayServer.PlatformAdapter> adapters;
     private volatile boolean running;
     private DashboardServer dashboardServer;
+    private GatewayServerV2 gatewayServer;
     
     public GatewayRunner(HermesConfig config) {
         this.config = config;
@@ -37,11 +38,11 @@ public class GatewayRunner {
         logger.info("Starting Hermes Gateway...");
         
         try {
-            // Start Dashboard server
-            startDashboard();
-            
             initializeAdapters();
-            startAdapters();
+            startGatewayServer();
+
+            // Start Dashboard server after the webhook/API gateway is listening.
+            startDashboard();
             
             running = true;
             System.out.println("Gateway is running. Press Ctrl+C to stop.");
@@ -60,12 +61,42 @@ public class GatewayRunner {
         } catch (Exception e) {
             logger.error("Gateway error: {}", e.getMessage(), e);
         } finally {
+            stopGatewayServer();
             stopAdapters();
             stopDashboard();
             running = false;
         }
         
         logger.info("Gateway stopped");
+    }
+
+    /**
+     * Start the tenant-aware HTTP webhook/API gateway and register platform adapters.
+     */
+    private void startGatewayServer() {
+        int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
+        gatewayServer = new GatewayServerV2(port, config);
+        for (GatewayServer.PlatformAdapter adapter : adapters) {
+            gatewayServer.registerAdapter(adapter);
+        }
+        gatewayServer.start();
+        logger.info("Gateway server started on port {} with {} adapter(s)", port, adapters.size());
+    }
+
+    /**
+     * Stop the tenant-aware HTTP webhook/API gateway.
+     */
+    private void stopGatewayServer() {
+        if (gatewayServer != null) {
+            try {
+                gatewayServer.stop();
+                logger.info("Gateway server stopped");
+            } catch (Exception e) {
+                logger.error("Error stopping gateway server: {}", e.getMessage());
+            } finally {
+                gatewayServer = null;
+            }
+        }
     }
 
     /**
@@ -126,6 +157,11 @@ public class GatewayRunner {
         System.out.println("  Adapters: " + adapters.size());
         for (GatewayServer.PlatformAdapter adapter : adapters) {
             System.out.println("    - " + adapter.getPlatformName() + ": connected");
+        }
+        if (gatewayServer != null) {
+            System.out.println("  Gateway API: running");
+        } else {
+            System.out.println("  Gateway API: not started");
         }
         if (dashboardServer != null) {
             System.out.println("  Dashboard: running");
@@ -200,12 +236,7 @@ public class GatewayRunner {
                 logger.error("Error stopping {} adapter: {}", adapter.getPlatformName(), e.getMessage());
             }
         }
-        
-        // Stop dashboard server
-        if (dashboardServer != null) {
-            logger.info("Stopping dashboard server...");
-            dashboardServer.stop();
-        }
+
     }
     
     /**
