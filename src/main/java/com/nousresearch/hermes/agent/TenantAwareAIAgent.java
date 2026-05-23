@@ -100,6 +100,14 @@ public class TenantAwareAIAgent {
     }
 
     /**
+     * Create an agent bound to an already-resolved tenant context.
+     * This keeps Gateway/TenantManager runtime state, quota, sessions and sandboxing on one object graph.
+     */
+    public static TenantAwareAIAgent forContext(TenantContext context, String sessionId, HermesConfig config) {
+        return new TenantAwareAIAgent(context, config, sessionId);
+    }
+
+    /**
      * 从网关消息创建 Agent（自动识别租户）
      */
     public static TenantAwareAIAgent fromGateway(String platform, String channelId,
@@ -125,6 +133,30 @@ public class TenantAwareAIAgent {
         this("default", config, sessionId, true);
     }
 
+    private TenantAwareAIAgent(TenantContext context, HermesConfig config,
+                                String explicitSessionId) {
+        if (context == null) {
+            throw new IllegalArgumentException("TenantContext is required");
+        }
+        this.tenantId = context.getTenantId();
+        this.config = config != null ? config : new HermesConfig();
+        this.sessionId = explicitSessionId != null ? explicitSessionId
+            : "cli_" + UUID.randomUUID().toString().substring(0, 8);
+        this.tenantContext = context;
+
+        this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
+        this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
+        this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        this.conversationHistory = new ArrayList<>();
+        this.interrupted = new AtomicBoolean(false);
+
+        initializeLearningComponents();
+        initializeTools();
+
+        logger.info("Created TenantAwareAIAgent for existing tenant context: {}, session: {}",
+            this.tenantId, this.sessionId);
+    }
+
     private TenantAwareAIAgent(String tenantId, HermesConfig config,
                                 String explicitSessionId, boolean initializeDefaultTenant) {
         this.tenantId = tenantId;
@@ -143,8 +175,8 @@ public class TenantAwareAIAgent {
         }
 
         // 初始化核心组件
-        this.modelClient = new com.nousresearch.hermes.model.ModelClient(config.getModelConfig());
-        this.iterationBudget = new IterationBudget(config.getMaxTurns());
+        this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
+        this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
         this.conversationHistory = new ArrayList<>();
         this.interrupted = new AtomicBoolean(false);

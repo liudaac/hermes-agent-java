@@ -389,11 +389,11 @@ public class TenantContext {
      * Phase 3: 获取或创建 TenantAIAgent
      */
     public TenantAIAgent getOrCreateAgent(String sessionId, com.nousresearch.hermes.config.HermesConfig hermesConfig) {
-        return activeAgents.computeIfAbsent(sessionId, id -> {
-            TenantAIAgent agent = new TenantAIAgent(this, id, hermesConfig);
-            logger.debug("Created new TenantAIAgent for session: {} in tenant: {}", id, tenantId);
-            return agent;
-        });
+        TenantAIAgent existing = activeAgents.get(sessionId);
+        if (existing != null) {
+            return existing;
+        }
+        return createAgent(sessionId, hermesConfig);
     }
 
     private void loadExistingComponents() {
@@ -527,12 +527,24 @@ public class TenantContext {
      * 创建新的 Agent 实例
      */
     public TenantAIAgent createAgent(String sessionId) {
+        return createAgent(sessionId, null);
+    }
+
+    /**
+     * 创建新的 Agent 实例（带 Hermes 配置）
+     */
+    public TenantAIAgent createAgent(String sessionId, com.nousresearch.hermes.config.HermesConfig hermesConfig) {
         checkState();
+
+        TenantAIAgent existing = activeAgents.get(sessionId);
+        if (existing != null) {
+            return existing;
+        }
 
         // 检查配额
         quotaManager.checkConcurrentAgents(activeAgents.size() + 1);
 
-        TenantAIAgent agent = new TenantAIAgent(this, sessionId);
+        TenantAIAgent agent = new TenantAIAgent(this, sessionId, hermesConfig);
         activeAgents.put(sessionId, agent);
 
         updateActivity();
@@ -550,7 +562,11 @@ public class TenantContext {
      * 获取或创建 Agent
      */
     public TenantAIAgent getOrCreateAgent(String sessionId) {
-        return activeAgents.computeIfAbsent(sessionId, id -> createAgent(id));
+        TenantAIAgent existing = activeAgents.get(sessionId);
+        if (existing != null) {
+            return existing;
+        }
+        return createAgent(sessionId);
     }
 
     /**

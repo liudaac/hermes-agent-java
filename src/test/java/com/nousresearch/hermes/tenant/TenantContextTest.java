@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tenant;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantAIAgent;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
@@ -124,4 +125,28 @@ public class TenantContextTest {
 
         assertNotEquals(content1, content2);
     }
+
+    @Test
+    @Order(8)
+    @DisplayName("TenantAIAgent should reuse existing TenantContext and session ID")
+    void testTenantAIAgentUsesExistingContextAndSession() throws Exception {
+        String sessionId = "gateway-session-123";
+        TenantAIAgent agent = tenantContext.getOrCreateAgent(sessionId);
+        assertNotNull(agent);
+        assertEquals(sessionId, agent.getSessionId());
+
+        var delegateField = TenantAIAgent.class.getDeclaredField("delegate");
+        delegateField.setAccessible(true);
+        Object delegate = delegateField.get(agent);
+
+        var tenantContextField = delegate.getClass().getDeclaredField("tenantContext");
+        tenantContextField.setAccessible(true);
+        Object delegateContext = tenantContextField.get(delegate);
+        assertSame(tenantContext, delegateContext, "Delegate should use the already-created tenant context");
+
+        var sessionField = delegate.getClass().getDeclaredField("sessionId");
+        sessionField.setAccessible(true);
+        assertEquals(sessionId, sessionField.get(delegate), "Delegate should preserve gateway session ID");
+    }
+
 }

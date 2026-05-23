@@ -21,8 +21,9 @@ public class TenantAIAgent {
     public TenantAIAgent(TenantContext context, String sessionId, HermesConfig config) {
         this.context = context;
         this.sessionId = sessionId;
-        // 创建 TenantAwareAIAgent 作为实际实现
-        this.delegate = TenantAwareAIAgent.forTenant(context.getTenantId(), config);
+        // Bind the delegate to the already-resolved tenant context and session.
+        // Do not call forTenant(...), which would create/load a separate TenantManager/TenantContext graph.
+        this.delegate = TenantAwareAIAgent.forContext(context, sessionId, config);
         logger.debug("Created TenantAIAgent for tenant: {}, session: {}", context.getTenantId(), sessionId);
     }
     
