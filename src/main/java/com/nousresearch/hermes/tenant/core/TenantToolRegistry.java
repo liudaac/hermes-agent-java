@@ -99,7 +99,7 @@ public class TenantToolRegistry {
             "tenantId", context.getTenantId(),
             "tool", toolName,
             "args", maskSensitiveArgs(args),
-            "success", !result.contains("\"error\""),
+            "success", result != null && !result.contains("\"error\""),
             "sessionCalls", sessionToolCalls.get()
         );
         

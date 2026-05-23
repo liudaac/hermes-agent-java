@@ -38,24 +38,31 @@ public class TenantAwareToolDispatcher {
     }
     
     public String dispatch(String toolName, Map<String, Object> args) {
+        Map<String, Object> safeArgs = args != null ? args : Map.of();
         logger.debug("Dispatching tool: {} for tenant: {}", toolName, tenantContext.getTenantId());
-        
+
+        var permission = tenantContext.getToolRegistry().checkPermission(toolName, safeArgs);
+        if (!permission.isAllowed()) {
+            return ToolRegistry.toolError(permission.getReason());
+        }
+
+        String result;
         try {
-            String result = switch (toolName) {
+            result = switch (toolName) {
                 case "read_file", "write_file", "list_directory", "search_files",
-                     "file_read", "file_write", "file_list" -> dispatchFileTool(toolName, args);
-                case "execute_python", "execute_javascript", "execute_bash" -> dispatchCodeTool(toolName, args);
-                case "terminal", "execute_command" -> dispatchTerminalTool(toolName, args);
-                case "memory_read", "memory_write", "memory_search" -> dispatchMemoryTool(toolName, args);
-                default -> dispatchGenericTool(toolName, args);
+                     "file_read", "file_write", "file_list" -> dispatchFileTool(toolName, safeArgs);
+                case "execute_python", "execute_javascript", "execute_bash" -> dispatchCodeTool(toolName, safeArgs);
+                case "terminal", "execute_command" -> dispatchTerminalTool(toolName, safeArgs);
+                case "memory_read", "memory_write", "memory_search" -> dispatchMemoryTool(toolName, safeArgs);
+                default -> dispatchGenericTool(toolName, safeArgs);
             };
-            
-            return result;
-            
         } catch (Exception e) {
             logger.error("Error dispatching tool: {}", toolName, e);
-            return ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
+            result = ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
         }
+
+        tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, result);
+        return result;
     }
     
     private String dispatchFileTool(String toolName, Map<String, Object> args) {

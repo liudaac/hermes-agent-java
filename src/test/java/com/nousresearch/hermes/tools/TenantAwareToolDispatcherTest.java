@@ -5,6 +5,7 @@ import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.junit.jupiter.api.*;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -116,4 +117,38 @@ public class TenantAwareToolDispatcherTest {
         // Result depends on tenant network policy
         assertNotNull(result);
     }
+
+    @Test
+    @Order(8)
+    @DisplayName("Denied tools should fail before execution and not be recorded")
+    void testDeniedToolShouldNotExecuteOrRecord() {
+        tenantContext.getSecurityPolicy().setDeniedTools(Set.of("write_file"));
+
+        String result = dispatcher.dispatch("write_file", Map.of(
+            "path", "denied.txt",
+            "content", "should not be written"
+        ));
+
+        assertTrue(result.contains("error"));
+        assertTrue(result.contains("denied") || result.contains("explicitly"));
+        assertEquals(0, tenantContext.getToolRegistry().getStats().currentCalls());
+        assertTrue(tenantContext.getFileSandbox().readFile("denied.txt").contains("error"));
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("Allowed tool calls should be recorded in tenant registry stats")
+    void testAllowedToolCallsShouldBeRecorded() {
+        String result = dispatcher.dispatch("write_file", Map.of(
+            "path", "recorded.txt",
+            "content", "record me"
+        ));
+
+        assertNotNull(result);
+        assertFalse(result.contains("error"));
+        assertEquals(1, tenantContext.getToolRegistry().getStats().currentCalls());
+        assertTrue(tenantContext.getToolRegistry().getStats().toolCounts().containsKey("write_file"));
+        assertEquals(1, tenantContext.getToolRegistry().getStats().toolCounts().get("write_file").get());
+    }
+
 }
