@@ -1,5 +1,7 @@
 package com.nousresearch.hermes.model;
 
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.config.HermesConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,18 +39,15 @@ public class ModelClient {
             boolean stream) {
         
         try {
-            // Build request body
-            StringBuilder jsonBuilder = new StringBuilder();
-            jsonBuilder.append("{");
-            jsonBuilder.append("\"model\":\"").append(modelConfig.getName()).append("\",");
-            jsonBuilder.append("\"messages\":").append(buildMessagesJson(messages)).append(",");
-            jsonBuilder.append("\"stream\":").append(stream);
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("model", modelConfig.getName());
+            requestJson.put("messages", buildMessagesArray(messages));
+            requestJson.put("stream", stream);
             if (tools != null && !tools.isEmpty()) {
-                jsonBuilder.append(",\"tools\":").append(buildToolsJson(tools));
+                requestJson.put("tools", buildToolsArray(tools));
             }
-            jsonBuilder.append("}");
-            
-            String requestBody = jsonBuilder.toString();
+
+            String requestBody = requestJson.toJSONString();
             logger.debug("Sending chat completion request: {}", requestBody);
             
             HttpRequest request = HttpRequest.newBuilder()
@@ -310,40 +309,77 @@ public class ModelClient {
         }
     }
     
-    private String buildMessagesJson(List<ModelMessage> messages) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < messages.size(); i++) {
-            if (i > 0) sb.append(",");
-            ModelMessage msg = messages.get(i);
-            sb.append("{");
-            sb.append("\"role\":\"").append(msg.getRole()).append("\",");
-            sb.append("\"content\":\"").append(escapeJson(msg.getContent())).append("\"");
-            sb.append("}");
+    private JSONArray buildMessagesArray(List<ModelMessage> messages) {
+        JSONArray array = new JSONArray();
+        if (messages == null) {
+            return array;
         }
-        sb.append("]");
-        return sb.toString();
+        for (ModelMessage message : messages) {
+            array.add(message.toJsonObject());
+        }
+        return array;
+    }
+
+    private String buildMessagesJson(List<ModelMessage> messages) {
+        return buildMessagesArray(messages).toJSONString();
     }
     
+    private JSONArray buildToolsArray(List<ToolDefinition> tools) {
+        JSONArray array = new JSONArray();
+        if (tools == null) {
+            return array;
+        }
+        for (ToolDefinition tool : tools) {
+            JSONObject function = new JSONObject();
+            function.put("name", tool.getName());
+            function.put("description", tool.getDescription() != null ? tool.getDescription() : "");
+            function.put("parameters", tool.getParameters() != null ? tool.getParameters() : Map.of(
+                "type", "object",
+                "properties", Map.of()
+            ));
+
+            JSONObject wrapper = new JSONObject();
+            wrapper.put("type", "function");
+            wrapper.put("function", function);
+            array.add(wrapper);
+        }
+        return array;
+    }
+
     private String buildToolsJson(List<ToolDefinition> tools) {
-        // TODO: Implement proper tool serialization
-        return "[]";
+        return buildToolsArray(tools).toJSONString();
     }
     
     private ChatCompletionResponse parseChatCompletionResponse(String json) {
-        // Simple parsing - in production use a proper JSON library
         try {
-            // Extract content from response
-            int contentStart = json.indexOf("\"content\":\"");
-            if (contentStart != -1) {
-                contentStart += 11;
-                int contentEnd = json.indexOf("\"", contentStart);
-                if (contentEnd != -1) {
-                    String content = unescapeJson(json.substring(contentStart, contentEnd));
-                    ModelMessage message = new ModelMessage("assistant", content);
-                    return new ChatCompletionResponse(message, "stop", false);
-                }
+            JSONObject root = JSONObject.parseObject(json);
+            JSONArray choices = root.getJSONArray("choices");
+            if (choices == null || choices.isEmpty()) {
+                return ChatCompletionResponse.error("Failed to parse response: missing choices");
             }
-            return ChatCompletionResponse.error("Failed to parse response");
+
+            JSONObject choice = choices.getJSONObject(0);
+            String finishReason = choice.getString("finish_reason");
+            JSONObject messageJson = choice.getJSONObject("message");
+            if (messageJson == null) {
+                return ChatCompletionResponse.error("Failed to parse response: missing message");
+            }
+
+            ModelMessage message = new ModelMessage();
+            message.setRole(messageJson.getString("role"));
+            message.setContent(messageJson.getString("content"));
+
+            JSONArray toolCallsJson = messageJson.getJSONArray("tool_calls");
+            boolean hasToolCalls = toolCallsJson != null && !toolCallsJson.isEmpty();
+            if (hasToolCalls) {
+                message.setToolCalls(toolCallsJson.toJavaList(ToolCall.class));
+            }
+
+            return new ChatCompletionResponse(
+                message,
+                finishReason != null ? finishReason : (hasToolCalls ? "tool_calls" : "stop"),
+                hasToolCalls || "tool_calls".equals(finishReason)
+            );
         } catch (Exception e) {
             logger.error("Error parsing response: {}", e.getMessage());
             return ChatCompletionResponse.error(e.getMessage());
