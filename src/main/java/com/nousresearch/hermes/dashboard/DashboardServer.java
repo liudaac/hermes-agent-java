@@ -63,6 +63,7 @@ public class DashboardServer {
     private final ToolsHandler toolsHandler;
     private final GatewayHandler gatewayHandler;
     private final CronHandler cronHandler;
+    private final OAuthProvidersHandler oauthProvidersHandler;
     
     // Tenant Manager
     private final TenantManager tenantManager;
@@ -97,6 +98,7 @@ public class DashboardServer {
         this.toolsHandler = new ToolsHandler();
         this.gatewayHandler = new GatewayHandler();
         this.cronHandler = new CronHandler();
+        this.oauthProvidersHandler = new OAuthProvidersHandler();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -270,6 +272,14 @@ public class DashboardServer {
         app.delete("/api/env", envHandler::deleteEnvVar);
         app.post("/api/env/reveal", envHandler::revealEnvVar);
 
+        // OAuth provider status API
+        app.get("/api/providers/oauth", oauthProvidersHandler::listProviders);
+        app.delete("/api/providers/oauth/{providerId}", oauthProvidersHandler::disconnectProvider);
+        app.post("/api/providers/oauth/{providerId}/start", oauthProvidersHandler::startLogin);
+        app.post("/api/providers/oauth/{providerId}/submit", oauthProvidersHandler::submitCode);
+        app.get("/api/providers/oauth/{providerId}/poll/{sessionId}", oauthProvidersHandler::pollSession);
+        app.delete("/api/providers/oauth/sessions/{sessionId}", oauthProvidersHandler::cancelSession);
+
         // Sessions API
         app.get("/api/sessions", sessionHandler::getSessions);
         app.get("/api/sessions/search", sessionHandler::searchSessions);
@@ -335,11 +345,11 @@ public class DashboardServer {
      * Register static asset routes.
      */
     private void registerStaticRoutes() {
-        // Serve static assets from web_dist directory
-        String webDistPath = System.getenv().getOrDefault("HERMES_WEB_DIST", "web_dist");
-        java.nio.file.Path webDist = java.nio.file.Path.of(webDistPath).toAbsolutePath().normalize();
+        // Serve static assets from the configured or detected dashboard build directory.
+        java.nio.file.Path webDist = resolveWebDistPath();
 
         if (java.nio.file.Files.exists(webDist)) {
+            logger.info("Serving dashboard static assets from {}", webDist);
             // Serve static files
             app.get("/assets/*", ctx -> serveStaticFile(ctx, webDist.resolve("assets")));
             app.get("/fonts/*", ctx -> serveStaticFile(ctx, webDist.resolve("fonts")));
@@ -367,6 +377,29 @@ public class DashboardServer {
         } else {
             logger.warn("Web dist directory not found: {}. Static assets will not be served.", webDist);
         }
+    }
+
+
+    java.nio.file.Path resolveWebDistPath() {
+        String explicit = System.getenv("HERMES_WEB_DIST");
+        if (explicit != null && !explicit.isBlank()) {
+            return java.nio.file.Path.of(explicit).toAbsolutePath().normalize();
+        }
+
+        java.util.List<java.nio.file.Path> candidates = java.util.List.of(
+            java.nio.file.Path.of("web_dist"),
+            java.nio.file.Path.of("web", "dist"),
+            java.nio.file.Path.of("frontend", "dist")
+        );
+
+        for (java.nio.file.Path candidate : candidates) {
+            java.nio.file.Path normalized = candidate.toAbsolutePath().normalize();
+            if (java.nio.file.Files.exists(normalized.resolve("index.html"))) {
+                return normalized;
+            }
+        }
+
+        return candidates.get(0).toAbsolutePath().normalize();
     }
 
     private void serveStaticFile(Context ctx, java.nio.file.Path basePath) {
