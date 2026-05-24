@@ -5,6 +5,7 @@ import com.nousresearch.hermes.dashboard.DashboardServer;
 import com.nousresearch.hermes.gateway.platforms.DiscordAdapter;
 import com.nousresearch.hermes.gateway.platforms.FeishuAdapter;
 import com.nousresearch.hermes.gateway.platforms.TelegramAdapter;
+import com.nousresearch.hermes.tenant.core.TenantManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +25,7 @@ public class GatewayRunner {
     private volatile boolean running;
     private DashboardServer dashboardServer;
     private GatewayServerV2 gatewayServer;
+    private final TenantManager tenantManager;
     private final Integer gatewayPortOverride;
     
     public GatewayRunner(HermesConfig config) {
@@ -33,6 +35,7 @@ public class GatewayRunner {
     public GatewayRunner(HermesConfig config, Integer gatewayPortOverride) {
         this.config = config;
         this.gatewayPortOverride = gatewayPortOverride;
+        this.tenantManager = new TenantManager();
         this.adapters = new ArrayList<>();
         this.running = false;
     }
@@ -70,6 +73,7 @@ public class GatewayRunner {
             stopGatewayServer();
             stopAdapters();
             stopDashboard();
+            tenantManager.shutdown();
             running = false;
         }
         
@@ -83,7 +87,7 @@ public class GatewayRunner {
         int port = gatewayPortOverride != null
             ? gatewayPortOverride
             : Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
-        gatewayServer = new GatewayServerV2(port, config);
+        gatewayServer = new GatewayServerV2(port, config, tenantManager);
         for (GatewayServer.PlatformAdapter adapter : adapters) {
             gatewayServer.registerAdapter(adapter);
         }
@@ -115,7 +119,7 @@ public class GatewayRunner {
             int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_DASHBOARD_PORT", "9119"));
             String host = System.getenv().getOrDefault("HERMES_DASHBOARD_HOST", "127.0.0.1");
             
-            dashboardServer = new DashboardServer(port, host, config);
+            dashboardServer = new DashboardServer(port, host, config, tenantManager);
             dashboardServer.start();
             
             logger.info("Dashboard server started on http://{}:{}", host, port);

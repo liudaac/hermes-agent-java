@@ -35,6 +35,7 @@ public class GatewayServerV2 {
     private final int port;
     private final HermesConfig config;
     private final TenantManager tenantManager;
+    private final boolean ownsTenantManager;
     private final Map<String, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter> adapters;
     private final ExecutorService executor;
     private final ScheduledExecutorService sessionCleanupExecutor;
@@ -45,9 +46,18 @@ public class GatewayServerV2 {
     private final ConcurrentHashMap<String, String> userTenantCache = new ConcurrentHashMap<>();
 
     public GatewayServerV2(int port, HermesConfig config) {
+        this(port, config, new TenantManager(), true);
+    }
+
+    public GatewayServerV2(int port, HermesConfig config, TenantManager tenantManager) {
+        this(port, config, tenantManager, false);
+    }
+
+    private GatewayServerV2(int port, HermesConfig config, TenantManager tenantManager, boolean ownsTenantManager) {
         this.port = port;
         this.config = config;
-        this.tenantManager = new TenantManager();
+        this.tenantManager = tenantManager;
+        this.ownsTenantManager = ownsTenantManager;
         this.adapters = new ConcurrentHashMap<>();
         this.executor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "gateway-worker");
@@ -115,8 +125,11 @@ public class GatewayServerV2 {
             Thread.currentThread().interrupt();
         }
 
-        // 关闭租户管理器
-        tenantManager.shutdown();
+        // Close the tenant manager only when this server created it. GatewayRunner
+        // can inject a shared manager used by both GatewayServerV2 and DashboardServer.
+        if (ownsTenantManager) {
+            tenantManager.shutdown();
+        }
 
         logger.info("Gateway V2 server stopped");
     }
@@ -252,12 +265,12 @@ public class GatewayServerV2 {
                 false
             );
 
-            executor.submit(() -> processMessage(message, adapter));
+            executor.submit(() -> processMessage(message, adapter, tenantId));
 
             ctx.json(Map.of(
                 "status", "queued",
                 "message_id", message.id(),
-                "tenant_id", resolveTenantId(message, adapter)
+                "tenant_id", resolveTenantId(message, adapter, tenantId)
             ));
 
         } catch (Exception e) {
@@ -856,7 +869,13 @@ public class GatewayServerV2 {
     // ==================== Core Processing Logic ====================
 
     private void processMessage(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
-        String tenantId = resolveTenantId(message, adapter);
+        processMessage(message, adapter, null);
+    }
+
+    private void processMessage(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message,
+                                com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter,
+                                String explicitTenantId) {
+        String tenantId = resolveTenantId(message, adapter, explicitTenantId);
 
         try {
             logger.info("Processing message from {} on {} for tenant {}",
@@ -915,6 +934,16 @@ public class GatewayServerV2 {
     }
 
     private String resolveTenantId(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
+        return resolveTenantId(message, adapter, null);
+    }
+
+    private String resolveTenantId(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message,
+                                   com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter,
+                                   String explicitTenantId) {
+        if (explicitTenantId != null && !explicitTenantId.isBlank()) {
+            return sanitizeTenantId(explicitTenantId);
+        }
+
         // 策略1：缓存查询
         String userKey = adapter.getPlatformName() + ":" + message.sender();
         String cachedTenant = userTenantCache.get(userKey);
@@ -923,9 +952,13 @@ public class GatewayServerV2 {
         }
 
         // 策略3：自动创建个人租户
-        String autoTenantId = "user_" + message.sender().replaceAll("[^a-zA-Z0-9_-]", "_");
+        String autoTenantId = "user_" + sanitizeTenantId(message.sender());
         userTenantCache.put(userKey, autoTenantId);
         return autoTenantId;
+    }
+
+    private String sanitizeTenantId(String tenantId) {
+        return tenantId.trim().replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 
     private TenantProvisioningRequest createProvisioningRequest(
