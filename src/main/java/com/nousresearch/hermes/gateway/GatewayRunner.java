@@ -5,6 +5,7 @@ import com.nousresearch.hermes.dashboard.DashboardServer;
 import com.nousresearch.hermes.gateway.platforms.DiscordAdapter;
 import com.nousresearch.hermes.gateway.platforms.FeishuAdapter;
 import com.nousresearch.hermes.gateway.platforms.TelegramAdapter;
+import com.nousresearch.hermes.gateway.platforms.feishu.FeishuCommentAdapter;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -215,6 +216,14 @@ public class GatewayRunner {
                 logger.error("Failed to initialize Feishu adapter: {}", e.getMessage());
             }
         }
+        if (isPlatformEnabled("feishu_comment")) {
+            try {
+                adapters.add(new FeishuCommentAdapter());
+                logger.info("Initialized Feishu Comment adapter");
+            } catch (Exception e) {
+                logger.error("Failed to initialize Feishu Comment adapter: {}", e.getMessage());
+            }
+        }
         if (isPlatformEnabled("discord")) {
             try {
                 adapters.add(new DiscordAdapter(config));
@@ -297,7 +306,7 @@ public class GatewayRunner {
     private boolean hasRequiredCredentials(String platform) {
         return switch (platform) {
             case "telegram" -> hasEnv("TELEGRAM_BOT_TOKEN");
-            case "feishu" -> hasEnv("FEISHU_APP_ID") && hasEnv("FEISHU_APP_SECRET");
+            case "feishu", "feishu_comment" -> hasEnv("FEISHU_APP_ID") && hasEnv("FEISHU_APP_SECRET");
             case "discord" -> hasEnv("DISCORD_BOT_TOKEN");
             default -> false;
         };

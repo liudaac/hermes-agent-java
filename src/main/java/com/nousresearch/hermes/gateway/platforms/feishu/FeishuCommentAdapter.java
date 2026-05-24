@@ -3,6 +3,7 @@ package com.nousresearch.hermes.gateway.platforms.feishu;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.gateway.IncomingMessage;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -96,8 +97,10 @@ public class FeishuCommentAdapter implements PlatformAdapter {
         
         ensureTokenValid();
         
-        if ("doc".equals(type) || "docx".equals(type)) {
+        if ("doc".equals(type)) {
             replyToDocumentComment(token, commentId, message);
+        } else if ("docx".equals(type)) {
+            replyToDocxComment(token, commentId, message);
         } else if ("sheet".equals(type) || "spreadsheet".equals(type)) {
             replyToSpreadsheetComment(token, commentId, message);
         } else if ( "bitable".equals(type)) {
@@ -181,6 +184,58 @@ public class FeishuCommentAdapter implements PlatformAdapter {
         return JSON.parseObject(response);
     }
     
+    @Override
+    public IncomingMessage parseWebhook(JSONObject payload) {
+        JSONObject event = extractEvent(payload);
+        if (event == null) {
+            return null;
+        }
+
+        String eventType = firstNonBlank(
+            event.getString("event_type"),
+            event.getString("type"),
+            payload != null && payload.getJSONObject("header") != null
+                ? payload.getJSONObject("header").getString("event_type")
+                : null
+        );
+        if (!"comment.created".equals(eventType) && !"comment.updated".equals(eventType)) {
+            return null;
+        }
+
+        JSONObject comment = event.getJSONObject("comment");
+        if (comment == null) {
+            return null;
+        }
+
+        String commentId = firstNonBlank(comment.getString("comment_id"), comment.getString("id"));
+        String content = firstNonBlank(comment.getString("content"), comment.getString("text"));
+        if (commentId == null || content == null || content.isBlank()) {
+            return null;
+        }
+
+        JSONObject document = event.getJSONObject("document");
+        String docType = document != null ? firstNonBlank(document.getString("type"), document.getString("obj_type")) : null;
+        String docToken = document != null ? firstNonBlank(document.getString("token"), document.getString("obj_token")) : null;
+        if (docType == null || docToken == null) {
+            return null;
+        }
+
+        String creator = extractCreator(comment);
+        String chatId = docType + ":" + docToken + ":" + commentId;
+        String context = String.format("Document: %s (%s)\nComment by: %s\n\n%s",
+            docToken, docType, creator, content);
+
+        logger.debug("Parsed Feishu comment webhook from {} on {}: {}", creator, docType, commentId);
+        return new IncomingMessage(
+            commentId,
+            chatId,
+            creator,
+            context,
+            System.currentTimeMillis(),
+            false
+        );
+    }
+
     /**
      * Process incoming comment event.
      */
@@ -216,12 +271,43 @@ public class FeishuCommentAdapter implements PlatformAdapter {
                     docToken, docType, creator, content);
                 String response = agent.processMessage(context);
                 if (response != null && !response.isEmpty()) {
-                    replyToDocumentComment(docToken, commentId, response);
+                    sendMessage(chatId, response);
                 }
             } catch (Exception e) {
                 logger.error("Error processing Feishu comment", e);
             }
         }
+    }
+
+    private JSONObject extractEvent(JSONObject payload) {
+        if (payload == null) {
+            return null;
+        }
+        JSONObject event = payload.getJSONObject("event");
+        return event != null ? event : payload;
+    }
+
+    private String extractCreator(JSONObject comment) {
+        JSONObject creator = comment.getJSONObject("creator");
+        if (creator == null) {
+            return "unknown";
+        }
+        return firstNonBlank(
+            creator.getString("open_id"),
+            creator.getString("user_id"),
+            creator.getString("union_id"),
+            creator.getString("name"),
+            "unknown"
+        );
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
     
     // Private helper methods
