@@ -314,6 +314,17 @@ public class HermesConfig {
         String value = get(key);
         return value != null ? value : defaultValue;
     }
+
+    public boolean getBoolean(String key, boolean defaultValue) {
+        Object value = getValue(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String str) {
+            return Boolean.parseBoolean(str);
+        }
+        return defaultValue;
+    }
     
     @SuppressWarnings("unchecked")
     public List<String> getStringList(String key) {
@@ -433,6 +444,12 @@ public class HermesConfig {
     }
 
     private Object getValue(String key) {
+        if (key == null || key.isBlank()) {
+            return null;
+        }
+        if (key.contains(".")) {
+            return getNested(key, null);
+        }
         return config.get(key);
     }
 
