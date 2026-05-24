@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * Hermes Dashboard Web Server.
@@ -71,16 +72,26 @@ public class DashboardServer {
     
     // Tenant Manager
     private final TenantManager tenantManager;
+    private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
 
     public DashboardServer(int port, String host, HermesConfig config) {
-        this(port, host, config, new TenantManager());
+        this(port, host, config, new TenantManager(), GatewayRuntimeStatus::disconnected);
     }
     
     public DashboardServer(int port, String host, HermesConfig config, TenantManager tenantManager) {
+        this(port, host, config, tenantManager, GatewayRuntimeStatus::disconnected);
+    }
+
+    public DashboardServer(int port, String host, HermesConfig config,
+                           TenantManager tenantManager,
+                           Supplier<GatewayRuntimeStatus> gatewayStatusSupplier) {
         this.port = port;
         this.host = host;
         this.config = config;
         this.tenantManager = tenantManager;
+        this.gatewayStatusSupplier = gatewayStatusSupplier != null
+            ? gatewayStatusSupplier
+            : GatewayRuntimeStatus::disconnected;
         this.sessionToken = generateSessionToken();
 
         // Initialize handlers
@@ -401,6 +412,10 @@ public class DashboardServer {
      * Get dashboard status.
      */
     private void handleStatus(Context ctx) {
+        ctx.json(buildStatus());
+    }
+
+    JSONObject buildStatus() {
         JSONObject status = new JSONObject();
         status.put("version", "0.1.0");
         status.put("release_date", "2026-04-23");
@@ -410,18 +425,25 @@ public class DashboardServer {
         status.put("config_version", 1);
         status.put("latest_config_version", 1);
         status.put("active_sessions", sessionHandler.getActiveSessionCount());
-        status.put("gateway_running", false);
+
+        GatewayRuntimeStatus gatewayStatus = gatewayStatusSupplier.get();
+        JSONObject gatewayPlatforms = new JSONObject();
+        for (String platform : gatewayStatus.platforms()) {
+            gatewayPlatforms.put(platform, true);
+        }
+        status.put("gateway_running", gatewayStatus.running());
         status.put("gateway_pid", (Integer) null);
-        status.put("gateway_state", (String) null);
-        status.put("gateway_health_url", (String) null);
-        status.put("gateway_exit_reason", (String) null);
-        status.put("gateway_updated_at", (String) null);
-        status.put("gateway_platforms", new JSONObject());
+        status.put("gateway_state", gatewayStatus.state());
+        status.put("gateway_health_url", gatewayStatus.healthUrl());
+        status.put("gateway_exit_reason", gatewayStatus.exitReason());
+        status.put("gateway_updated_at", gatewayStatus.updatedAt() != null ? gatewayStatus.updatedAt().toString() : null);
+        status.put("gateway_platforms", gatewayPlatforms);
+        status.put("gateway_port", gatewayStatus.port());
         // Add tenant info
         status.put("multi_tenant_enabled", true);
         status.put("tenant_count", tenantManager.getAllTenants().size());
 
-        ctx.json(status);
+        return status;
     }
     
     // ========== Tenant Management Methods ==========

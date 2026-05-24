@@ -2,6 +2,7 @@ package com.nousresearch.hermes.gateway;
 
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.dashboard.DashboardServer;
+import com.nousresearch.hermes.dashboard.GatewayRuntimeStatus;
 import com.nousresearch.hermes.gateway.platforms.DiscordAdapter;
 import com.nousresearch.hermes.gateway.platforms.FeishuAdapter;
 import com.nousresearch.hermes.gateway.platforms.TelegramAdapter;
@@ -28,6 +29,7 @@ public class GatewayRunner {
     private volatile boolean running;
     private DashboardServer dashboardServer;
     private GatewayServerV2 gatewayServer;
+    private Integer gatewayPort;
     private final TenantManager tenantManager;
     private final Integer gatewayPortOverride;
     
@@ -91,6 +93,7 @@ public class GatewayRunner {
         int port = gatewayPortOverride != null
             ? gatewayPortOverride
             : Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
+        gatewayPort = port;
         gatewayServer = new GatewayServerV2(port, config, tenantManager);
         for (PlatformAdapter adapter : adapters) {
             gatewayServer.registerAdapter(adapter);
@@ -111,6 +114,7 @@ public class GatewayRunner {
                 logger.error("Error stopping gateway server: {}", e.getMessage());
             } finally {
                 gatewayServer = null;
+                gatewayPort = null;
             }
         }
     }
@@ -123,7 +127,7 @@ public class GatewayRunner {
             int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_DASHBOARD_PORT", "9119"));
             String host = System.getenv().getOrDefault("HERMES_DASHBOARD_HOST", "127.0.0.1");
             
-            dashboardServer = new DashboardServer(port, host, config, tenantManager);
+            dashboardServer = new DashboardServer(port, host, config, tenantManager, this::getRuntimeStatus);
             dashboardServer.start();
             
             logger.info("Dashboard server started on http://{}:{}", host, port);
@@ -146,6 +150,20 @@ public class GatewayRunner {
         }
     }
     
+    private GatewayRuntimeStatus getRuntimeStatus() {
+        boolean gatewayRunning = gatewayServer != null;
+        Integer port = gatewayPort;
+        return new GatewayRuntimeStatus(
+            gatewayRunning,
+            port,
+            gatewayRunning ? "RUNNING" : "STOPPED",
+            gatewayRunning && port != null ? "http://127.0.0.1:" + port + "/health" : null,
+            null,
+            System.currentTimeMillis(),
+            adapters.stream().map(PlatformAdapter::getPlatformName).toList()
+        );
+    }
+
     /**
      * Start gateway as service (background).
      */
