@@ -1,13 +1,9 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,110 +13,46 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GatewayHandler {
     private static final Logger logger = LoggerFactory.getLogger(GatewayHandler.class);
 
-    // Track running actions
+    // Track actions exposed through /api/actions/{name}/status.
     private final Map<String, ActionStatus> runningActions = new ConcurrentHashMap<>();
 
     public GatewayHandler() {
     }
 
     /**
-     * POST /api/gateway/restart - Restart the gateway
+     * POST /api/gateway/restart - Restart the gateway.
+     *
+     * Restart requires an external supervisor or an explicit GatewayRunner control API.
+     * Do not fake success here: returning 501 is safer than pretending a restart happened.
      */
     public void restartGateway(Context ctx) {
         try {
-            String actionName = "gateway-restart";
-
-            // Check if already running
-            if (runningActions.containsKey(actionName)) {
-                ActionStatus existing = runningActions.get(actionName);
-                ctx.json(createActionResponse(actionName, true, existing.pid));
-                return;
-            }
-
-            // Start restart process
-            ActionStatus status = new ActionStatus();
-            status.name = actionName;
-            status.running = true;
-            status.pid = (int) (Math.random() * 10000) + 1000; // Simulated PID
-            status.startTime = System.currentTimeMillis();
-            status.lines = new ArrayList<>();
-
-            runningActions.put(actionName, status);
-
-            // Simulate async restart
-            new Thread(() -> {
-                try {
-                    status.lines.add("Stopping gateway...");
-                    Thread.sleep(1000);
-                    status.lines.add("Gateway stopped");
-                    Thread.sleep(500);
-                    status.lines.add("Starting gateway...");
-                    Thread.sleep(1500);
-                    status.lines.add("Gateway started successfully");
-                    status.running = false;
-                    status.exitCode = 0;
-                } catch (InterruptedException e) {
-                    status.running = false;
-                    status.exitCode = 1;
-                    status.lines.add("Restart interrupted: " + e.getMessage());
-                }
-            }).start();
-
-            ctx.json(createActionResponse(actionName, true, status.pid));
+            Map<String, Object> result = markUnsupported(
+                "gateway-restart",
+                "Gateway restart is not wired to a runtime supervisor yet. Use the process/service manager directly."
+            );
+            ctx.status(501).json(result);
         } catch (Exception e) {
-            logger.error("Error restarting gateway: {}", e.getMessage());
+            logger.error("Error reporting gateway restart unsupported: {}", e.getMessage());
             ctx.status(500).result("Error: " + e.getMessage());
         }
     }
 
     /**
-     * POST /api/hermes/update - Update Hermes
+     * POST /api/hermes/update - Update Hermes.
+     *
+     * Updating the running application is a privileged external action and must be
+     * implemented by an explicit updater/supervisor, not simulated in the dashboard.
      */
     public void updateHermes(Context ctx) {
         try {
-            String actionName = "hermes-update";
-
-            // Check if already running
-            if (runningActions.containsKey(actionName)) {
-                ActionStatus existing = runningActions.get(actionName);
-                ctx.json(createActionResponse(actionName, true, existing.pid));
-                return;
-            }
-
-            // Start update process
-            ActionStatus status = new ActionStatus();
-            status.name = actionName;
-            status.running = true;
-            status.pid = (int) (Math.random() * 10000) + 1000;
-            status.startTime = System.currentTimeMillis();
-            status.lines = new ArrayList<>();
-
-            runningActions.put(actionName, status);
-
-            // Simulate async update
-            new Thread(() -> {
-                try {
-                    status.lines.add("Checking for updates...");
-                    Thread.sleep(1000);
-                    status.lines.add("Found new version: 0.2.0");
-                    Thread.sleep(500);
-                    status.lines.add("Downloading...");
-                    Thread.sleep(2000);
-                    status.lines.add("Installing...");
-                    Thread.sleep(2000);
-                    status.lines.add("Update completed successfully");
-                    status.running = false;
-                    status.exitCode = 0;
-                } catch (InterruptedException e) {
-                    status.running = false;
-                    status.exitCode = 1;
-                    status.lines.add("Update interrupted: " + e.getMessage());
-                }
-            }).start();
-
-            ctx.json(createActionResponse(actionName, true, status.pid));
+            Map<String, Object> result = markUnsupported(
+                "hermes-update",
+                "Hermes update is not wired to a trusted updater yet. Run the update command outside the dashboard."
+            );
+            ctx.status(501).json(result);
         } catch (Exception e) {
-            logger.error("Error updating Hermes: {}", e.getMessage());
+            logger.error("Error reporting Hermes update unsupported: {}", e.getMessage());
             ctx.status(500).result("Error: " + e.getMessage());
         }
     }
@@ -147,20 +79,7 @@ public class GatewayHandler {
                 return;
             }
 
-            // Get last N lines
-            List<String> outputLines = status.lines;
-            if (outputLines.size() > lines) {
-                outputLines = outputLines.subList(outputLines.size() - lines, outputLines.size());
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("name", status.name);
-            result.put("running", status.running);
-            result.put("exit_code", status.exitCode);
-            result.put("pid", status.pid);
-            result.put("lines", outputLines);
-
-            ctx.json(result);
+            ctx.json(toActionStatusMap(status, lines));
 
             // Clean up completed actions older than 5 minutes
             if (!status.running && status.exitCode != null) {
@@ -174,16 +93,40 @@ public class GatewayHandler {
         }
     }
 
-    private Map<String, Object> createActionResponse(String name, boolean ok, int pid) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("name", name);
-        response.put("ok", ok);
-        response.put("pid", pid);
+    Map<String, Object> markUnsupported(String actionName, String message) {
+        ActionStatus status = new ActionStatus();
+        status.name = actionName;
+        status.running = false;
+        status.exitCode = 2;
+        status.pid = null;
+        status.startTime = System.currentTimeMillis();
+        status.lines = new ArrayList<>(List.of("Unsupported action: " + message));
+        runningActions.put(actionName, status);
+
+        Map<String, Object> response = toActionStatusMap(status, 200);
+        response.put("ok", false);
+        response.put("unsupported", true);
+        response.put("message", message);
         return response;
     }
 
+    Map<String, Object> toActionStatusMap(ActionStatus status, int lines) {
+        List<String> outputLines = status.lines != null ? status.lines : List.of();
+        if (outputLines.size() > lines) {
+            outputLines = outputLines.subList(outputLines.size() - lines, outputLines.size());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("name", status.name);
+        result.put("running", status.running);
+        result.put("exit_code", status.exitCode);
+        result.put("pid", status.pid);
+        result.put("lines", outputLines);
+        return result;
+    }
+
     // Data class
-    private static class ActionStatus {
+    static class ActionStatus {
         public String name;
         public boolean running;
         public Integer exitCode;
