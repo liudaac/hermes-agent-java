@@ -9,6 +9,10 @@ import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -21,6 +25,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     
     private static final String API_BASE_URL = "https://open.feishu.cn/open-apis";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
+    private static final long DEFAULT_MAX_TIMESTAMP_SKEW_MS = 5 * 60 * 1000L;
     
     private final OkHttpClient httpClient;
     private AIAgent agent;
@@ -185,6 +190,35 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     }
     
     @Override
+    public JSONObject getWebhookChallengeResponse(JSONObject payload) {
+        if (payload == null || !payload.containsKey("challenge")) {
+            return null;
+        }
+        if (!verifyFeishuToken(payload)) {
+            logger.warn("Rejected Feishu comment challenge: verification token mismatch");
+            return null;
+        }
+        return JSONObject.of("challenge", payload.getString("challenge"));
+    }
+
+    @Override
+    public boolean verifyWebhook(JSONObject payload, Map<String, String> headers, String rawBody) {
+        if (!verifyFeishuToken(payload)) {
+            logger.warn("Rejected Feishu comment webhook: verification token mismatch");
+            return false;
+        }
+        if (!verifyTimestamp(headers)) {
+            logger.warn("Rejected Feishu comment webhook: timestamp outside allowed skew");
+            return false;
+        }
+        if (!verifySignatureIfConfigured(headers, rawBody)) {
+            logger.warn("Rejected Feishu comment webhook: signature mismatch");
+            return false;
+        }
+        return true;
+    }
+
+    @Override
     public IncomingMessage parseWebhook(JSONObject payload) {
         JSONObject event = extractEvent(payload);
         if (event == null) {
@@ -277,6 +311,84 @@ public class FeishuCommentAdapter implements PlatformAdapter {
                 logger.error("Error processing Feishu comment", e);
             }
         }
+    }
+
+    private boolean verifyFeishuToken(JSONObject payload) {
+        String expectedToken = getExpectedVerificationToken();
+        if (expectedToken == null) {
+            return true;
+        }
+
+        String actualToken = null;
+        if (payload != null) {
+            actualToken = firstNonBlank(payload.getString("token"));
+            JSONObject header = payload.getJSONObject("header");
+            if (actualToken == null && header != null) {
+                actualToken = firstNonBlank(header.getString("token"));
+            }
+        }
+        return expectedToken.equals(actualToken);
+    }
+
+    private boolean verifyTimestamp(Map<String, String> headers) {
+        String timestamp = getHeader(headers, "X-Lark-Request-Timestamp");
+        if (timestamp == null) {
+            return true;
+        }
+        try {
+            long requestTimeMs = Long.parseLong(timestamp) * 1000L;
+            long skew = Math.abs(System.currentTimeMillis() - requestTimeMs);
+            return skew <= DEFAULT_MAX_TIMESTAMP_SKEW_MS;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private boolean verifySignatureIfConfigured(Map<String, String> headers, String rawBody) {
+        String encryptKey = getEncryptKey();
+        if (encryptKey == null || encryptKey.isBlank()) {
+            return true;
+        }
+
+        String signature = getHeader(headers, "X-Lark-Signature");
+        String timestamp = getHeader(headers, "X-Lark-Request-Timestamp");
+        String nonce = getHeader(headers, "X-Lark-Request-Nonce");
+        if (signature == null || timestamp == null || nonce == null) {
+            return false;
+        }
+
+        try {
+            String base = timestamp + nonce + encryptKey + (rawBody != null ? rawBody : "");
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            String expected = HexFormat.of().formatHex(digest.digest(base.getBytes(StandardCharsets.UTF_8)));
+            return expected.equalsIgnoreCase(signature);
+        } catch (Exception e) {
+            logger.error("Failed to verify Feishu comment signature", e);
+            return false;
+        }
+    }
+
+    protected String getExpectedVerificationToken() {
+        return firstNonBlank(
+            System.getenv("FEISHU_VERIFICATION_TOKEN"),
+            System.getenv("FEISHU_EVENT_TOKEN")
+        );
+    }
+
+    protected String getEncryptKey() {
+        return System.getenv("FEISHU_ENCRYPT_KEY");
+    }
+
+    private String getHeader(Map<String, String> headers, String name) {
+        if (headers == null || name == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (name.equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private JSONObject extractEvent(JSONObject payload) {

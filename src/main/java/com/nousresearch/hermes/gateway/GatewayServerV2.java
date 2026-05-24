@@ -220,6 +220,18 @@ public class GatewayServerV2 {
             String body = ctx.body();
             JSONObject payload = JSON.parseObject(body);
 
+            JSONObject challengeResponse = adapter.getWebhookChallengeResponse(payload);
+            if (challengeResponse != null) {
+                ctx.status(200).json(challengeResponse);
+                return;
+            }
+
+            if (!adapter.verifyWebhook(payload, ctx.headerMap(), body)) {
+                logger.warn("Rejected webhook for {}: verification failed", platform);
+                ctx.status(401).json(Map.of("error", "Webhook verification failed"));
+                return;
+            }
+
             IncomingMessage message = adapter.parseWebhook(payload);
             if (message == null) {
                 ctx.status(200).result("OK");
