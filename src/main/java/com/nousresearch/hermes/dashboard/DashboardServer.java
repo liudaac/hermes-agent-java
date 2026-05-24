@@ -288,6 +288,7 @@ public class DashboardServer {
 
         // Logs API
         app.get("/api/logs", logsHandler::getLogs);
+        app.get("/api/logs/files", logsHandler::getLogFiles);
 
         // Skills API
         app.get("/api/skills", skillsHandler::getSkills);
@@ -332,7 +333,14 @@ public class DashboardServer {
                     new JSONObject().fluentPut("name", "ember").fluentPut("label", "Ember")
                 )));
         });
-        app.put("/api/dashboard/theme", ctx -> ctx.json(new JSONObject().fluentPut("ok", true)));
+        app.put("/api/dashboard/theme", ctx -> {
+            JSONObject body = ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String theme = body.getString("name");
+            if (theme == null || theme.isBlank()) {
+                theme = "default";
+            }
+            ctx.json(new JSONObject().fluentPut("ok", true).fluentPut("theme", theme));
+        });
 
         // Plugins API
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));

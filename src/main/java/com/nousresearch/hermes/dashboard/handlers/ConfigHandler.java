@@ -286,7 +286,7 @@ public class ConfigHandler {
             // Save to file
             saveConfigToFile(currentConfig);
 
-            ctx.json(Map.of("status", "updated"));
+            ctx.json(Map.of("ok", true, "status", "updated"));
         } catch (Exception e) {
             logger.error("Error updating config: {}", e.getMessage());
             ctx.status(400).result("Invalid config: " + e.getMessage());

@@ -44,14 +44,15 @@ export const api = {
     fetchJSON<{ ok: boolean }>(`/api/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
-  getLogs: (params: { file?: string; lines?: number; level?: string; component?: string }) => {
+  getLogs: (params: { file: string; lines?: number; level?: string; component?: string }) => {
     const qs = new URLSearchParams();
-    if (params.file) qs.set("file", params.file);
+    qs.set("file", params.file);
     if (params.lines) qs.set("lines", String(params.lines));
     if (params.level && params.level !== "ALL") qs.set("level", params.level);
     if (params.component && params.component !== "all") qs.set("component", params.component);
     return fetchJSON<LogsResponse>(`/api/logs?${qs.toString()}`);
   },
+  getLogFiles: () => fetchJSON<LogFilesResponse>("/api/logs/files"),
   getAnalytics: (days: number) =>
     fetchJSON<AnalyticsResponse>(`/api/analytics/usage?days=${days}`),
   getConfig: () => fetchJSON<Record<string, unknown>>("/api/config"),
@@ -298,6 +299,17 @@ export interface SessionMessage {
 export interface SessionMessagesResponse {
   session_id: string;
   messages: SessionMessage[];
+}
+
+export interface LogFileInfo {
+  name: string;
+  path: string;
+  size: number;
+  modified: number;
+}
+
+export interface LogFilesResponse {
+  files: LogFileInfo[];
 }
 
 export interface LogsResponse {

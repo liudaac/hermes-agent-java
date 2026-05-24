@@ -37,9 +37,9 @@ public class LogsHandler {
             String componentParam = ctx.queryParam("component");
             String component = componentParam != null ? componentParam : "all";
 
-            // If no file specified, list available log files
+            // If no file specified, return a stable object wrapper around available log files.
             if (file == null || file.isEmpty()) {
-                ctx.json(getLogFiles());
+                ctx.json(java.util.Map.of("files", listLogFiles()));
                 return;
             }
 
@@ -57,9 +57,21 @@ public class LogsHandler {
     }
 
     /**
+     * GET /api/logs/files - Get list of available log files.
+     */
+    public void getLogFiles(Context ctx) {
+        try {
+            ctx.json(java.util.Map.of("files", listLogFiles()));
+        } catch (Exception e) {
+            logger.error("Error listing log files: {}", e.getMessage());
+            ctx.status(500).result("Error listing logs");
+        }
+    }
+
+    /**
      * Get list of available log files.
      */
-    private List<java.util.Map<String, Object>> getLogFiles() {
+    private List<java.util.Map<String, Object>> listLogFiles() {
         List<java.util.Map<String, Object>> files = new ArrayList<>();
 
         try {
