@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
@@ -16,17 +17,22 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 租户管理功能集成到 Dashboard
+ * Canonical tenant management routes for the Dashboard API.
  *
- * 使用方式：
- * 1. 在 DashboardServer 中添加 TenantManager 字段
- * 2. 调用 TenantDashboardIntegration.registerRoutes(app, tenantManager)
+ * DashboardServer delegates all /api/tenants routes here so the Java dashboard has
+ * one tenant API contract instead of two drifting implementations.  The canonical
+ * external field name is tenantId.  Tenant creation still accepts legacy id as an
+ * input alias to avoid breaking older callers while responses consistently expose
+ * tenantId.
  */
-public class TenantDashboardIntegration {
+public final class TenantDashboardIntegration {
     private static final Logger logger = LoggerFactory.getLogger(TenantDashboardIntegration.class);
 
+    private TenantDashboardIntegration() {
+    }
+
     /**
-     * 注册所有租户管理路由
+     * Register all tenant management routes.
      */
     public static void registerRoutes(Javalin app, TenantManager tenantManager) {
         if (tenantManager == null) {
@@ -36,72 +42,45 @@ public class TenantDashboardIntegration {
 
         logger.info("Registering tenant management routes");
 
-        // 租户列表
         app.get("/api/tenants", ctx -> listTenants(ctx, tenantManager));
-
-        // 创建租户
         app.post("/api/tenants", ctx -> createTenant(ctx, tenantManager));
-
-        // 租户详情
         app.get("/api/tenants/{tenantId}", ctx -> getTenant(ctx, tenantManager));
-
-        // 删除租户
         app.delete("/api/tenants/{tenantId}", ctx -> deleteTenant(ctx, tenantManager));
-
-        // 暂停/恢复
         app.post("/api/tenants/{tenantId}/suspend", ctx -> suspendTenant(ctx, tenantManager));
         app.post("/api/tenants/{tenantId}/resume", ctx -> resumeTenant(ctx, tenantManager));
-
-        // 配额管理
         app.get("/api/tenants/{tenantId}/quota", ctx -> getQuota(ctx, tenantManager));
         app.put("/api/tenants/{tenantId}/quota", ctx -> updateQuota(ctx, tenantManager));
         app.get("/api/tenants/{tenantId}/usage", ctx -> getUsage(ctx, tenantManager));
-
-        // 安全策略
         app.get("/api/tenants/{tenantId}/security", ctx -> getSecurity(ctx, tenantManager));
-
-        // 审计日志
+        app.put("/api/tenants/{tenantId}/security", ctx -> updateSecurity(ctx, tenantManager));
         app.get("/api/tenants/{tenantId}/audit", ctx -> getAuditLogs(ctx, tenantManager));
-
-        // 资源指标
+        app.get("/api/tenants/{tenantId}/sessions", ctx -> getSessions(ctx, tenantManager));
+        app.get("/api/tenants/{tenantId}/skills", ctx -> getSkills(ctx, tenantManager));
         app.get("/api/tenants/{tenantId}/metrics", ctx -> getMetrics(ctx, tenantManager));
-
-        // 租户配置
         app.get("/api/tenants/{tenantId}/config", ctx -> getTenantConfig(ctx, tenantManager));
         app.put("/api/tenants/{tenantId}/config", ctx -> updateTenantConfig(ctx, tenantManager));
 
         logger.info("Tenant management routes registered successfully");
     }
 
-    // ============ 路由处理 ============
-
-    private static void listTenants(Context ctx, TenantManager tenantManager) {
-        Map<String, TenantContext> tenants = tenantManager.getAllTenants();
-
-        List<Map<String, Object>> list = tenants.entrySet().stream()
-            .map(e -> {
-                TenantContext t = e.getValue();
-                Map<String, Object> info = new LinkedHashMap<>();
-                info.put("tenantId", t.getTenantId());
-                info.put("state", t.getState().name());
-                info.put("createdAt", t.getCreatedAt().toString());
-                info.put("lastActivity", t.getLastActivity().toString());
-                info.put("activeAgents", t.getActiveAgentCount());
-                info.put("activeSessions", t.getActiveSessionCount());
-                return info;
-            })
+    static void listTenants(Context ctx, TenantManager tenantManager) {
+        List<Map<String, Object>> tenants = tenantManager.getAllTenants().entrySet().stream()
+            .map(entry -> tenantSummary(entry.getKey(), entry.getValue()))
             .collect(Collectors.toList());
 
-        ctx.json(Map.of("tenants", list, "total", list.size()));
+        ctx.json(Map.of("tenants", tenants, "total", tenants.size()));
     }
 
-    private static void createTenant(Context ctx, TenantManager tenantManager) {
+    static void createTenant(Context ctx, TenantManager tenantManager) {
         try {
-            JSONObject body = JSON.parseObject(ctx.body());
+            JSONObject body = parseBody(ctx);
             String tenantId = body.getString("tenantId");
+            if (tenantId == null || tenantId.isBlank()) {
+                tenantId = body.getString("id"); // legacy input alias
+            }
             String createdBy = body.getString("createdBy");
 
-            if (tenantId == null || tenantId.isEmpty()) {
+            if (tenantId == null || tenantId.isBlank()) {
                 ctx.status(400).json(Map.of("error", "tenantId is required"));
                 return;
             }
@@ -112,220 +91,292 @@ public class TenantDashboardIntegration {
             }
 
             TenantProvisioningRequest request = TenantProvisioningRequest.builder(
-                    tenantId, createdBy != null ? createdBy : "admin")
+                    tenantId,
+                    createdBy != null ? createdBy : "admin")
                 .build();
-
             TenantContext tenant = tenantManager.createTenant(request);
 
-            ctx.json(Map.of(
-                "success", true,
-                "tenantId", tenantId,
-                "message", "Tenant created successfully"
-            ));
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("success", true);
+            response.put("tenantId", tenant.getTenantId());
+            response.put("state", tenant.getState().name());
+            response.put("message", "Tenant created successfully");
+            ctx.json(response);
 
             logger.info("Tenant created: {}", tenantId);
-
         } catch (Exception e) {
             logger.error("Failed to create tenant", e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
     }
 
-    private static void getTenant(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getTenant(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
-        Map<String, Object> info = new LinkedHashMap<>();
-        info.put("tenantId", tenant.getTenantId());
-        info.put("state", tenant.getState().name());
-        info.put("createdAt", tenant.getCreatedAt().toString());
-        info.put("lastActivity", tenant.getLastActivity().toString());
-        info.put("activeAgents", tenant.getActiveAgentCount());
-        info.put("activeSessions", tenant.getActiveSessionCount());
-
+        Map<String, Object> info = tenantSummary(ctx.pathParam("tenantId"), tenant);
+        info.put("quota", tenant.getQuotaManager().getQuota().toMap());
         ctx.json(info);
     }
 
-    private static void deleteTenant(Context ctx, TenantManager tenantManager) {
+    static void deleteTenant(Context ctx, TenantManager tenantManager) {
         String tenantId = ctx.pathParam("tenantId");
         TenantContext tenant = tenantManager.getTenant(tenantId);
-
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            notFound(ctx, tenantId);
             return;
         }
 
         try {
             tenantManager.destroyTenant(tenantId, false);
-            ctx.json(Map.of("success", true, "message", "Tenant deleted"));
+            ctx.json(Map.of("success", true, "tenantId", tenantId, "message", "Tenant deleted"));
             logger.info("Tenant deleted: {}", tenantId);
         } catch (Exception e) {
+            logger.error("Failed to delete tenant: {}", tenantId, e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
     }
 
-    private static void suspendTenant(Context ctx, TenantManager tenantManager) {
+    static void suspendTenant(Context ctx, TenantManager tenantManager) {
         String tenantId = ctx.pathParam("tenantId");
         TenantContext tenant = tenantManager.getTenant(tenantId);
-
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            notFound(ctx, tenantId);
             return;
         }
 
         tenantManager.suspendTenant(tenantId, "Suspended via dashboard");
-        ctx.json(Map.of("success", true, "state", "SUSPENDED"));
+        ctx.json(Map.of("success", true, "tenantId", tenantId, "state", "SUSPENDED"));
     }
 
-    private static void resumeTenant(Context ctx, TenantManager tenantManager) {
+    static void resumeTenant(Context ctx, TenantManager tenantManager) {
         String tenantId = ctx.pathParam("tenantId");
         TenantContext tenant = tenantManager.getTenant(tenantId);
-
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            notFound(ctx, tenantId);
             return;
         }
 
         tenantManager.resumeTenant(tenantId);
-        ctx.json(Map.of("success", true, "state", "ACTIVE"));
+        ctx.json(Map.of("success", true, "tenantId", tenantId, "state", "ACTIVE"));
     }
 
-    private static void getQuota(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getQuota(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
         ctx.json(tenant.getQuotaManager().getQuota().toMap());
     }
 
-    private static void updateQuota(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void updateQuota(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
-        // 实现配额更新逻辑
-        ctx.json(Map.of("success", true));
+        JSONObject body = parseBody(ctx);
+        tenant.getConfig().set("quota", body);
+        tenant.getConfig().save();
+        ctx.json(Map.of("success", true, "tenantId", tenant.getTenantId()));
     }
 
-    private static void getUsage(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getUsage(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
         var usage = tenant.getQuotaManager().getUsage();
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("tenantId", tenant.getTenantId());
         result.put("dailyRequests", usage.dailyRequests());
         result.put("maxDailyRequests", usage.maxDailyRequests());
         result.put("dailyTokens", usage.dailyTokens());
         result.put("maxDailyTokens", usage.maxDailyTokens());
         result.put("activeAgents", usage.activeAgents());
         result.put("storageUsage", usage.storageUsage());
-
+        result.put("storage", tenant.getQuotaManager().getStorageUsage());
+        result.put("memory", tenant.getQuotaManager().getMemoryUsage());
         ctx.json(result);
     }
 
-    private static void getSecurity(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getSecurity(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
-        var policy = tenant.getSecurityPolicy();
+        TenantSecurityPolicy policy = tenant.getSecurityPolicy();
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("tenantId", tenant.getTenantId());
         result.put("allowCodeExecution", policy.isAllowCodeExecution());
+        result.put("requireSandbox", policy.isRequireSandbox());
         result.put("allowNetworkAccess", policy.isAllowNetworkAccess());
         result.put("allowFileRead", policy.isAllowFileRead());
         result.put("allowFileWrite", policy.isAllowFileWrite());
-
+        result.put("allowedLanguages", policy.getAllowedLanguages());
+        result.put("allowedHosts", policy.getAllowedHosts());
+        result.put("allowedTools", policy.getAllowedTools());
+        result.put("deniedTools", policy.getDeniedTools());
+        result.put("deniedPaths", policy.getDeniedPaths());
         ctx.json(result);
     }
 
-    private static void getAuditLogs(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void updateSecurity(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            return;
+        }
+
+        JSONObject body = parseBody(ctx);
+        TenantSecurityPolicy policy = tenant.getSecurityPolicy();
+
+        if (body.containsKey("allowCodeExecution")) {
+            policy.setAllowCodeExecution(body.getBoolean("allowCodeExecution"));
+        }
+        if (body.containsKey("requireSandbox")) {
+            policy.setRequireSandbox(body.getBoolean("requireSandbox"));
+        }
+        if (body.containsKey("allowNetworkAccess")) {
+            policy.setAllowNetworkAccess(body.getBoolean("allowNetworkAccess"));
+        }
+        if (body.containsKey("allowFileRead")) {
+            policy.setAllowFileRead(body.getBoolean("allowFileRead"));
+        }
+        if (body.containsKey("allowFileWrite")) {
+            policy.setAllowFileWrite(body.getBoolean("allowFileWrite"));
+        }
+
+        tenant.setSecurityPolicy(policy);
+        try {
+            policy.save(tenant.getTenantDir().resolve("config"));
+        } catch (Exception e) {
+            logger.warn("Failed to save tenant security policy for {}: {}", tenant.getTenantId(), e.getMessage());
+        }
+
+        ctx.json(Map.of("success", true, "tenantId", tenant.getTenantId()));
+    }
+
+    static void getAuditLogs(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
+        if (tenant == null) {
             return;
         }
 
         int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(100);
-
         var events = tenant.getAuditLogger().getRecentEvents(limit).stream()
-            .map(e -> Map.of(
-                "timestamp", e.timestamp().toString(),
-                "event", e.event().name(),
-                "details", e.details()
-            ))
+            .map(e -> {
+                Map<String, Object> event = new LinkedHashMap<>();
+                event.put("timestamp", e.timestamp().toString());
+                event.put("event", e.event().name());
+                event.put("type", e.event().name()); // compatibility alias
+                event.put("details", e.details());
+                return event;
+            })
             .collect(Collectors.toList());
 
-        ctx.json(Map.of("logs", events, "total", events.size()));
+        ctx.json(Map.of("tenantId", tenant.getTenantId(), "logs", events, "events", events, "total", events.size()));
     }
 
-    private static void getMetrics(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getSessions(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            return;
+        }
+
+        ctx.json(Map.of("tenantId", tenant.getTenantId(), "activeSessions", tenant.getActiveSessionCount()));
+    }
+
+    static void getSkills(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
+        if (tenant == null) {
+            return;
+        }
+
+        List<String> skillNames = tenant.getSkillManager().listSkills().stream()
+            .map(summary -> summary.name())
+            .collect(Collectors.toList());
+
+        ctx.json(Map.of(
+            "tenantId", tenant.getTenantId(),
+            "installedSkills", skillNames,
+            "totalSkills", skillNames.size()
+        ));
+    }
+
+    static void getMetrics(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
+        if (tenant == null) {
             return;
         }
 
         Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("tenantId", tenant.getTenantId());
         metrics.put("activeSessions", tenant.getActiveSessionCount());
         metrics.put("activeAgents", tenant.getActiveAgentCount());
-
         ctx.json(metrics);
     }
 
-    private static void getTenantConfig(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void getTenantConfig(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
         ctx.json(tenant.getConfig().getAll());
     }
 
-    private static void updateTenantConfig(Context ctx, TenantManager tenantManager) {
-        String tenantId = ctx.pathParam("tenantId");
-        TenantContext tenant = tenantManager.getTenant(tenantId);
-
+    static void updateTenantConfig(Context ctx, TenantManager tenantManager) {
+        TenantContext tenant = requireTenant(ctx, tenantManager);
         if (tenant == null) {
-            ctx.status(404).json(Map.of("error", "Tenant not found"));
             return;
         }
 
         try {
-            JSONObject body = JSON.parseObject(ctx.body());
+            JSONObject body = parseBody(ctx);
             body.forEach((key, value) -> tenant.getConfig().set(key, value));
             tenant.getConfig().save();
-            ctx.json(Map.of("success", true));
+            ctx.json(Map.of("success", true, "tenantId", tenant.getTenantId()));
         } catch (Exception e) {
+            logger.error("Failed to update tenant config for {}", tenant.getTenantId(), e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
+    }
+
+    private static TenantContext requireTenant(Context ctx, TenantManager tenantManager) {
+        String tenantId = ctx.pathParam("tenantId");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        if (tenant == null) {
+            notFound(ctx, tenantId);
+        }
+        return tenant;
+    }
+
+    private static void notFound(Context ctx, String tenantId) {
+        ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId, "tenantId", tenantId));
+    }
+
+    private static JSONObject parseBody(Context ctx) {
+        String raw = ctx.body();
+        if (raw == null || raw.isBlank()) {
+            return new JSONObject();
+        }
+        return JSON.parseObject(raw);
+    }
+
+    private static Map<String, Object> tenantSummary(String fallbackTenantId, TenantContext tenant) {
+        String tenantId = tenant.getTenantId() != null ? tenant.getTenantId() : fallbackTenantId;
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("tenantId", tenantId);
+        info.put("state", tenant.getState().name());
+        info.put("createdAt", tenant.getCreatedAt().toString());
+        info.put("lastActivity", tenant.getLastActivity().toString());
+        info.put("activeAgents", tenant.getActiveAgentCount());
+        info.put("activeSessions", tenant.getActiveSessionCount());
+        return info;
     }
 }
