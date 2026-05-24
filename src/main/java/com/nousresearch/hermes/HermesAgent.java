@@ -71,11 +71,14 @@ public class HermesAgent implements Callable<Integer> {
         @Parameters(defaultValue = "run")
         private String action;
 
+        @Option(names = {"--port", "-p"}, description = "Gateway API port")
+        private Integer port;
+
         @Override
         public Integer call() {
             try {
                 HermesConfig config = HermesConfig.load();
-                GatewayRunner gateway = new GatewayRunner(config);
+                GatewayRunner gateway = new GatewayRunner(config, port);
                 gateway.runForeground();
                 return 0;
             } catch (Exception e) {

@@ -24,9 +24,15 @@ public class GatewayRunner {
     private volatile boolean running;
     private DashboardServer dashboardServer;
     private GatewayServerV2 gatewayServer;
+    private final Integer gatewayPortOverride;
     
     public GatewayRunner(HermesConfig config) {
+        this(config, null);
+    }
+
+    public GatewayRunner(HermesConfig config, Integer gatewayPortOverride) {
         this.config = config;
+        this.gatewayPortOverride = gatewayPortOverride;
         this.adapters = new ArrayList<>();
         this.running = false;
     }
@@ -74,7 +80,9 @@ public class GatewayRunner {
      * Start the tenant-aware HTTP webhook/API gateway and register platform adapters.
      */
     private void startGatewayServer() {
-        int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
+        int port = gatewayPortOverride != null
+            ? gatewayPortOverride
+            : Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
         gatewayServer = new GatewayServerV2(port, config);
         for (GatewayServer.PlatformAdapter adapter : adapters) {
             gatewayServer.registerAdapter(adapter);
