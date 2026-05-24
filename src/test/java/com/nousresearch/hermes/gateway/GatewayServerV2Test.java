@@ -13,14 +13,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class GatewayServerV2Test {
 
-    private static class TestAdapter implements GatewayServer.PlatformAdapter {
+    private static class TestAdapter implements PlatformAdapter {
         @Override
         public String getPlatformName() {
             return "test";
         }
 
         @Override
-        public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
+        public IncomingMessage parseWebhook(JSONObject payload) {
             return null;
         }
 
@@ -52,7 +52,7 @@ class GatewayServerV2Test {
     @DisplayName("Explicit API tenant_id should override auto user tenant mapping")
     void explicitTenantIdOverridesAutoMapping() throws Exception {
         GatewayServerV2 server = new GatewayServerV2(0, new HermesConfig(), new TenantManager());
-        GatewayServer.IncomingMessage message = new GatewayServer.IncomingMessage(
+        IncomingMessage message = new IncomingMessage(
             "msg-1",
             "channel-1",
             "sender@example.com",
@@ -63,8 +63,8 @@ class GatewayServerV2Test {
 
         Method method = GatewayServerV2.class.getDeclaredMethod(
             "resolveTenantId",
-            GatewayServer.IncomingMessage.class,
-            GatewayServer.PlatformAdapter.class,
+            IncomingMessage.class,
+            PlatformAdapter.class,
             String.class
         );
         method.setAccessible(true);

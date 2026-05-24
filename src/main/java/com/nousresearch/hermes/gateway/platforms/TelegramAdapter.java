@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.gateway.platforms;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.gateway.GatewayServer;
+import com.nousresearch.hermes.gateway.IncomingMessage;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
  * Telegram platform adapter.
  * Supports: messages, replies, markdown, inline keyboards.
  */
-public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
+public class TelegramAdapter implements com.nousresearch.hermes.gateway.PlatformAdapter, PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(TelegramAdapter.class);
     private static final String API_BASE = "https://api.telegram.org/bot";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
@@ -41,7 +41,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
+    public IncomingMessage parseWebhook(JSONObject payload) {
         try {
             JSONObject message = payload.getJSONObject("message");
             if (message == null) {
@@ -61,7 +61,7 @@ public class TelegramAdapter implements GatewayServer.PlatformAdapter, com.nousr
             
             String chatType = chat != null ? chat.getString("type") : "";
             
-            return new GatewayServer.IncomingMessage(
+            return new IncomingMessage(
                 String.valueOf(message.getLongValue("message_id")),
                 String.valueOf(chat != null ? chat.getLongValue("id") : 0),
                 String.valueOf(from != null ? from.getLongValue("id") : 0),

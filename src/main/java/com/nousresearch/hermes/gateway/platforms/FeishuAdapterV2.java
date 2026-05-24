@@ -2,7 +2,7 @@ package com.nousresearch.hermes.gateway.platforms;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.JSON;
-import com.nousresearch.hermes.gateway.GatewayServer;
+import com.nousresearch.hermes.gateway.IncomingMessage;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Complete Feishu platform adapter.
  */
-public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
+public class FeishuAdapterV2 implements com.nousresearch.hermes.gateway.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(FeishuAdapterV2.class);
     private static final String API_BASE = "https://open.feishu.cn/open-apis";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
@@ -39,7 +39,7 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
+    public IncomingMessage parseWebhook(JSONObject payload) {
         try {
             if (payload.containsKey("challenge")) {
                 return null;
@@ -61,7 +61,7 @@ public class FeishuAdapterV2 implements GatewayServer.PlatformAdapter {
                 ? sender.getJSONObject("sender_id").getString("open_id") 
                 : "";
             
-            return new GatewayServer.IncomingMessage(
+            return new IncomingMessage(
                 event.getString("message_id"),
                 event.getString("chat_id"),
                 senderId,

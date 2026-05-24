@@ -3,7 +3,7 @@ package com.nousresearch.hermes.gateway.platforms;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.gateway.GatewayServer;
+import com.nousresearch.hermes.gateway.IncomingMessage;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Discord platform adapter.
  */
-public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousresearch.hermes.gateway.platforms.PlatformAdapter {
+public class DiscordAdapter implements com.nousresearch.hermes.gateway.PlatformAdapter, PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(DiscordAdapter.class);
     private static final String API_BASE = "https://discord.com/api/v10";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
@@ -40,7 +40,7 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
     }
     
     @Override
-    public GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
+    public IncomingMessage parseWebhook(JSONObject payload) {
         try {
             // Handle ping
             if (payload.getIntValue("type") == 1) {
@@ -52,7 +52,7 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
                 JSONObject data = payload.getJSONObject("data");
                 String content = "/" + data.getString("name");
                 
-                return new GatewayServer.IncomingMessage(
+                return new IncomingMessage(
                     payload.getString("id"),
                     payload.getString("channel_id"),
                     payload.getJSONObject("member").getJSONObject("user").getString("id"),
@@ -65,7 +65,7 @@ public class DiscordAdapter implements GatewayServer.PlatformAdapter, com.nousre
             // Handle messages
             String content = payload.getString("content");
             
-            return new GatewayServer.IncomingMessage(
+            return new IncomingMessage(
                 payload.getString("id"),
                 payload.getString("channel_id"),
                 payload.getJSONObject("author").getString("id"),

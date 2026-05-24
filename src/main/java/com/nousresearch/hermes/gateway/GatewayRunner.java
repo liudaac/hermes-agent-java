@@ -22,7 +22,7 @@ public class GatewayRunner {
     private static final Logger logger = LoggerFactory.getLogger(GatewayRunner.class);
     
     private final HermesConfig config;
-    private final List<GatewayServer.PlatformAdapter> adapters;
+    private final List<PlatformAdapter> adapters;
     private volatile boolean running;
     private DashboardServer dashboardServer;
     private GatewayServerV2 gatewayServer;
@@ -89,7 +89,7 @@ public class GatewayRunner {
             ? gatewayPortOverride
             : Integer.parseInt(System.getenv().getOrDefault("HERMES_GATEWAY_PORT", "8080"));
         gatewayServer = new GatewayServerV2(port, config, tenantManager);
-        for (GatewayServer.PlatformAdapter adapter : adapters) {
+        for (PlatformAdapter adapter : adapters) {
             gatewayServer.registerAdapter(adapter);
         }
         gatewayServer.start();
@@ -168,7 +168,7 @@ public class GatewayRunner {
         System.out.println("Gateway Status:");
         System.out.println("  Running: " + running);
         System.out.println("  Adapters: " + adapters.size());
-        for (GatewayServer.PlatformAdapter adapter : adapters) {
+        for (PlatformAdapter adapter : adapters) {
             System.out.println("    - " + adapter.getPlatformName() + ": connected");
         }
         if (gatewayServer != null) {
@@ -227,7 +227,7 @@ public class GatewayRunner {
      * Start all adapters.
      */
     private void startAdapters() {
-        for (GatewayServer.PlatformAdapter adapter : adapters) {
+        for (PlatformAdapter adapter : adapters) {
             try {
                 logger.info("Starting {} adapter...", adapter.getPlatformName());
                 // Adapters are webhook-based, no explicit start needed
@@ -241,7 +241,7 @@ public class GatewayRunner {
      * Stop all adapters.
      */
     private void stopAdapters() {
-        for (GatewayServer.PlatformAdapter adapter : adapters) {
+        for (PlatformAdapter adapter : adapters) {
             try {
                 logger.info("Stopping {} adapter...", adapter.getPlatformName());
                 // Adapters are webhook-based, no explicit stop needed

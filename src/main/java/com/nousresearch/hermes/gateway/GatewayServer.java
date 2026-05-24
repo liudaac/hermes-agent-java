@@ -213,7 +213,7 @@ public class GatewayServer {
             
             executor.submit(() -> processMessage(message, adapter));
             
-            ctx.json(Map.of("status", "queued", "message_id", message.id));
+            ctx.json(Map.of("status", "queued", "message_id", message.id()));
         } catch (Exception e) {
             ctx.status(500).result("Error: " + e.getMessage());
         }
@@ -330,19 +330,19 @@ public class GatewayServer {
     private void processMessage(IncomingMessage message, PlatformAdapter adapter) {
         try {
             logger.info("Processing message from {}: {}", 
-                message.sender, message.content.substring(0, Math.min(50, message.content.length())));
+                message.sender(), message.content().substring(0, Math.min(50, message.content().length())));
             
             // Create agent and process
             AIAgent agent = new AIAgent(config);
-            String response = agent.processMessage(message.content);
+            String response = agent.processMessage(message.content());
             
             // Send response back
-            adapter.sendMessage(message.channel, response);
+            adapter.sendMessage(message.channel(), response);
             
         } catch (Exception e) {
             logger.error("Failed to process message: {}", e.getMessage(), e);
             try {
-                adapter.sendMessage(message.channel, "Error processing your request: " + e.getMessage());
+                adapter.sendMessage(message.channel(), "Error processing your request: " + e.getMessage());
             } catch (Exception sendError) {
                 logger.error("Failed to send error message: {}", sendError.getMessage());
             }
@@ -691,21 +691,4 @@ public class GatewayServer {
         logger.info("GatewayServer shutdown complete");
     }
     
-    // ==================== Data Classes ====================
-    
-    public record IncomingMessage(
-        String id,
-        String channel,
-        String sender,
-        String content,
-        long timestamp,
-        boolean isGroup
-    ) {}
-    
-    /**
-     * Platform adapter interface (deprecated, use {@link PlatformAdapter} instead).
-     */
-    @Deprecated
-    public interface PlatformAdapter extends com.nousresearch.hermes.gateway.PlatformAdapter {
-    }
 }

@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  * Feishu (Lark) platform adapter.
  * Handles Feishu bot messages.
  */
-public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter {
+public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.gateway.PlatformAdapter {
     private static final Logger logger = LoggerFactory.getLogger(FeishuAdapter.class);
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     private static final String BASE_URL = "https://open.feishu.cn/open-apis";
@@ -246,7 +246,7 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
         }
     }
     
-    // ==================== GatewayServer.PlatformAdapter Methods ====================
+    // ==================== PlatformAdapter Methods ====================
     
     @Override
     public String getPlatformName() {
@@ -254,7 +254,7 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     }
     
     @Override
-    public com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage parseWebhook(JSONObject payload) {
+    public com.nousresearch.hermes.gateway.IncomingMessage parseWebhook(JSONObject payload) {
         try {
             JSONObject event = payload.getJSONObject("event");
             if (event == null) {
@@ -276,7 +276,7 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
             JSONObject contentNode = JSON.parseObject(content);
             String text = contentNode.getString("text");
             
-            return new com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage(
+            return new com.nousresearch.hermes.gateway.IncomingMessage(
                 messageId, chatId, sender, text, System.currentTimeMillis(), false
             );
             

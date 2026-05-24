@@ -36,7 +36,7 @@ public class GatewayServerV2 {
     private final HermesConfig config;
     private final TenantManager tenantManager;
     private final boolean ownsTenantManager;
-    private final Map<String, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter> adapters;
+    private final Map<String, com.nousresearch.hermes.gateway.PlatformAdapter> adapters;
     private final ExecutorService executor;
     private final ScheduledExecutorService sessionCleanupExecutor;
     private Javalin app;
@@ -209,7 +209,7 @@ public class GatewayServerV2 {
 
     private void handleWebhook(Context ctx) {
         String platform = ctx.pathParam("platform");
-        GatewayServer.PlatformAdapter adapter = adapters.get(platform);
+        PlatformAdapter adapter = adapters.get(platform);
 
         if (adapter == null) {
             ctx.status(404).json(Map.of("error", "Unknown platform: " + platform));
@@ -220,7 +220,7 @@ public class GatewayServerV2 {
             String body = ctx.body();
             JSONObject payload = JSON.parseObject(body);
 
-            GatewayServer.IncomingMessage message = adapter.parseWebhook(payload);
+            IncomingMessage message = adapter.parseWebhook(payload);
             if (message == null) {
                 ctx.status(200).result("OK");
                 return;
@@ -250,13 +250,13 @@ public class GatewayServerV2 {
                 return;
             }
 
-            GatewayServer.PlatformAdapter adapter = adapters.get(platform);
+            PlatformAdapter adapter = adapters.get(platform);
             if (adapter == null) {
                 ctx.status(400).json(Map.of("error", "Unknown platform: " + platform));
                 return;
             }
 
-            GatewayServer.IncomingMessage message = new GatewayServer.IncomingMessage(
+            IncomingMessage message = new IncomingMessage(
                 UUID.randomUUID().toString(),
                 channel,
                 userId != null ? userId : "api",
@@ -868,12 +868,12 @@ public class GatewayServerV2 {
 
     // ==================== Core Processing Logic ====================
 
-    private void processMessage(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
+    private void processMessage(com.nousresearch.hermes.gateway.IncomingMessage message, com.nousresearch.hermes.gateway.PlatformAdapter adapter) {
         processMessage(message, adapter, null);
     }
 
-    private void processMessage(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message,
-                                com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter,
+    private void processMessage(com.nousresearch.hermes.gateway.IncomingMessage message,
+                                com.nousresearch.hermes.gateway.PlatformAdapter adapter,
                                 String explicitTenantId) {
         String tenantId = resolveTenantId(message, adapter, explicitTenantId);
 
@@ -933,12 +933,12 @@ public class GatewayServerV2 {
         }
     }
 
-    private String resolveTenantId(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
+    private String resolveTenantId(com.nousresearch.hermes.gateway.IncomingMessage message, com.nousresearch.hermes.gateway.PlatformAdapter adapter) {
         return resolveTenantId(message, adapter, null);
     }
 
-    private String resolveTenantId(com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message,
-                                   com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter,
+    private String resolveTenantId(com.nousresearch.hermes.gateway.IncomingMessage message,
+                                   com.nousresearch.hermes.gateway.PlatformAdapter adapter,
                                    String explicitTenantId) {
         if (explicitTenantId != null && !explicitTenantId.isBlank()) {
             return sanitizeTenantId(explicitTenantId);
@@ -962,7 +962,7 @@ public class GatewayServerV2 {
     }
 
     private TenantProvisioningRequest createProvisioningRequest(
-            com.nousresearch.hermes.gateway.GatewayServer.IncomingMessage message, com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
+            com.nousresearch.hermes.gateway.IncomingMessage message, com.nousresearch.hermes.gateway.PlatformAdapter adapter) {
         String tenantId = resolveTenantId(message, adapter);
         String createdBy = adapter.getPlatformName() + ":" + message.sender();
         return TenantProvisioningRequest.builder(tenantId, createdBy).build();
@@ -1008,12 +1008,12 @@ public class GatewayServerV2 {
         );
     }
 
-    public void registerAdapter(com.nousresearch.hermes.gateway.GatewayServer.PlatformAdapter adapter) {
+    public void registerAdapter(com.nousresearch.hermes.gateway.PlatformAdapter adapter) {
         adapters.put(adapter.getPlatformName(), adapter);
         logger.info("Registered adapter: {}", adapter.getPlatformName());
     }
 
     // ==================== Data Classes ====================
-    // Using GatewayServer.IncomingMessage for compatibility
+    // Using IncomingMessage for compatibility
 
 }
