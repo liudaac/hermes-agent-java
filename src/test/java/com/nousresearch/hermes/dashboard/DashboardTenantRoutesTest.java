@@ -72,6 +72,18 @@ class DashboardTenantRoutesTest {
             assertEquals(tenantId, details.getString("tenantId"));
             assertTrue(details.containsKey("quota"));
             assertFalse(details.containsKey("id"), "tenant detail should not mix id and tenantId");
+
+            HttpResponse<String> tenantSkills = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/skills"))
+                .GET());
+            assertEquals(200, tenantSkills.statusCode());
+            JSONObject skills = JSON.parseObject(tenantSkills.body());
+            assertEquals(tenantId, skills.getString("tenantId"));
+            assertEquals("tenant", skills.getString("scope"));
+            assertTrue(skills.containsKey("skills"));
+            assertTrue(skills.containsKey("installedSkills"));
+            assertTrue(skills.containsKey("total"));
+            assertTrue(skills.containsKey("totalSkills"));
         } finally {
             try {
                 if (tenantManager.getTenant(tenantId) != null) {

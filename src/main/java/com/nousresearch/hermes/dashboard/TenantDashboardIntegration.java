@@ -297,15 +297,32 @@ public final class TenantDashboardIntegration {
             return;
         }
 
-        List<String> skillNames = tenant.getSkillManager().listSkills().stream()
-            .map(summary -> summary.name())
+        List<Map<String, Object>> skills = tenant.getSkillManager().listSkills().stream()
+            .map(summary -> {
+                Map<String, Object> map = new LinkedHashMap<>();
+                map.put("name", summary.name());
+                map.put("description", summary.description());
+                map.put("source", summary.source());
+                map.put("version", summary.version());
+                map.put("readOnly", summary.readOnly());
+                map.put("scope", "tenant");
+                map.put("tenantId", tenant.getTenantId());
+                return map;
+            })
             .collect(Collectors.toList());
 
-        ctx.json(Map.of(
-            "tenantId", tenant.getTenantId(),
-            "installedSkills", skillNames,
-            "totalSkills", skillNames.size()
-        ));
+        List<String> skillNames = skills.stream()
+            .map(skill -> (String) skill.get("name"))
+            .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("tenantId", tenant.getTenantId());
+        response.put("scope", "tenant");
+        response.put("skills", skills);
+        response.put("installedSkills", skillNames); // compatibility alias for the previous dashboard response
+        response.put("total", skills.size());
+        response.put("totalSkills", skills.size()); // compatibility alias
+        ctx.json(response);
     }
 
     static void getMetrics(Context ctx, TenantManager tenantManager) {
