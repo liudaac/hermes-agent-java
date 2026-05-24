@@ -62,6 +62,7 @@ public class DashboardServer {
     private final SkillsHandler skillsHandler;
     private final ToolsHandler toolsHandler;
     private final GatewayHandler gatewayHandler;
+    private final CronHandler cronHandler;
     
     // Tenant Manager
     private final TenantManager tenantManager;
@@ -95,6 +96,7 @@ public class DashboardServer {
         this.skillsHandler = new SkillsHandler();
         this.toolsHandler = new ToolsHandler();
         this.gatewayHandler = new GatewayHandler();
+        this.cronHandler = new CronHandler();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -299,8 +301,13 @@ public class DashboardServer {
                 .fluentPut("skills", new JSONObject()));
         });
 
-        // Cron jobs API (placeholder)
-        app.get("/api/cron/jobs", ctx -> ctx.json(new java.util.ArrayList<>()));
+        // Cron jobs API
+        app.get("/api/cron/jobs", cronHandler::listJobs);
+        app.post("/api/cron/jobs", cronHandler::createJob);
+        app.post("/api/cron/jobs/{id}/pause", cronHandler::pauseJob);
+        app.post("/api/cron/jobs/{id}/resume", cronHandler::resumeJob);
+        app.post("/api/cron/jobs/{id}/trigger", cronHandler::triggerJob);
+        app.delete("/api/cron/jobs/{id}", cronHandler::deleteJob);
 
         // ========== Tenant Management APIs ==========
         TenantDashboardIntegration.registerRoutes(app, tenantManager);
