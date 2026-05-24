@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
@@ -49,6 +50,7 @@ public class GatewayRunner {
         
         try {
             initializeAdapters();
+            startAdapters();
             startGatewayServer();
 
             // Start Dashboard server after the webhook/API gateway is listening.
@@ -227,12 +229,21 @@ public class GatewayRunner {
      * Start all adapters.
      */
     private void startAdapters() {
-        for (PlatformAdapter adapter : adapters) {
+        Iterator<PlatformAdapter> iterator = adapters.iterator();
+        while (iterator.hasNext()) {
+            PlatformAdapter adapter = iterator.next();
             try {
                 logger.info("Starting {} adapter...", adapter.getPlatformName());
-                // Adapters are webhook-based, no explicit start needed
+                if (adapter instanceof com.nousresearch.hermes.gateway.platforms.PlatformAdapter lifecycleAdapter) {
+                    lifecycleAdapter.start();
+                    if (!lifecycleAdapter.isConnected()) {
+                        logger.warn("{} adapter started but is not connected; removing from gateway registry", adapter.getPlatformName());
+                        iterator.remove();
+                    }
+                }
             } catch (Exception e) {
                 logger.error("Failed to start {} adapter: {}", adapter.getPlatformName(), e.getMessage());
+                iterator.remove();
             }
         }
     }
@@ -244,7 +255,9 @@ public class GatewayRunner {
         for (PlatformAdapter adapter : adapters) {
             try {
                 logger.info("Stopping {} adapter...", adapter.getPlatformName());
-                // Adapters are webhook-based, no explicit stop needed
+                if (adapter instanceof com.nousresearch.hermes.gateway.platforms.PlatformAdapter lifecycleAdapter) {
+                    lifecycleAdapter.stop();
+                }
             } catch (Exception e) {
                 logger.error("Error stopping {} adapter: {}", adapter.getPlatformName(), e.getMessage());
             }
