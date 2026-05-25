@@ -41,3 +41,5 @@ web/node_modules/
 web/dist/
 web/public/ds-assets/
 hermes_cli/web_dist/
+frontend/node_modules/
+frontend/dist/

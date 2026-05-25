@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# Legacy Vue Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> Status: legacy / fallback UI. New dashboard work should target the React app in `../web`.
 
-Currently, two official plugins are available:
+This directory contains the older Vue 3 + Vite dashboard implementation. It is kept in the repository as a compatibility fallback because some deployments may still have a built `frontend/dist` directory.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Current dashboard mainline
 
-## React Compiler
+The current dashboard mainline is the React/Vite app in:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+web/
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Build it with:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd ../web
+npm install
+npm run build
 ```
+
+The React build output is:
+
+```text
+hermes_cli/web_dist
+```
+
+`DashboardServer` auto-detects static assets in this order when `HERMES_WEB_DIST` is not set:
+
+1. `hermes_cli/web_dist` — current React dashboard build output
+2. `web_dist` — legacy/default local path
+3. `web/dist` — Vite default fallback
+4. `frontend/dist` — legacy Vue fallback
+
+## Tenant management
+
+The React dashboard now owns the main tenant UI:
+
+```text
+web/src/pages/TenantsPage.tsx
+```
+
+This Vue implementation has older tenant components such as:
+
+```text
+src/components/TenantPanel.vue
+src/views/TenantView.vue
+```
+
+Those components predate the current Java dashboard API contract and may use outdated assumptions such as `id` instead of canonical `tenantId`, wrapper responses like `response.data`, or older quota/security field names.
+
+Do not add new tenant functionality here unless you are deliberately maintaining the legacy Vue fallback. Prefer migrating useful ideas into the React dashboard.
+
+## Local development
+
+If you need to inspect this legacy UI:
+
+```bash
+npm install
+npm run dev
+```
+
+For production dashboard work, use `../web` instead.
