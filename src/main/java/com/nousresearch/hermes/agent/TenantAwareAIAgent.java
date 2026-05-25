@@ -374,6 +374,8 @@ public class TenantAwareAIAgent {
                     break;
                 }
 
+                recordModelUsage(response);
+
                 conversationHistory.add(assistantMessage);
                 autoSaveSession();
 
@@ -386,7 +388,17 @@ public class TenantAwareAIAgent {
                     }
 
                     for (ToolCall toolCall : assistantMessage.getToolCalls()) {
-                        String result = executeToolCall(toolCall);
+                        long toolStart = System.currentTimeMillis();
+                        boolean toolOk = true;
+                        String result;
+                        try {
+                            result = executeToolCall(toolCall);
+                        } catch (RuntimeException ex) {
+                            toolOk = false;
+                            throw ex;
+                        } finally {
+                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                        }
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
 
@@ -470,6 +482,8 @@ public class TenantAwareAIAgent {
                     break;
                 }
 
+                recordModelUsage(response);
+
                 conversationHistory.add(assistantMessage);
                 autoSaveSession();
 
@@ -481,7 +495,17 @@ public class TenantAwareAIAgent {
                 if (response.hasToolCalls()) {
                     for (ToolCall toolCall : assistantMessage.getToolCalls()) {
                         chunkConsumer.accept("\n[Executing tool: " + toolCall.getFunction().getName() + "]\n");
-                        String result = executeToolCall(toolCall);
+                        long toolStart = System.currentTimeMillis();
+                        boolean toolOk = true;
+                        String result;
+                        try {
+                            result = executeToolCall(toolCall);
+                        } catch (RuntimeException ex) {
+                            toolOk = false;
+                            throw ex;
+                        } finally {
+                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                        }
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
 
@@ -515,6 +539,40 @@ public class TenantAwareAIAgent {
 
         if (shouldReviewMemory || shouldReviewSkills) {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
+        }
+    }
+
+
+    private void recordModelUsage(com.nousresearch.hermes.model.ChatCompletionResponse response) {
+        if (response == null || response.getUsage() == null) {
+            return;
+        }
+        try {
+            var session = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome())
+                .getSession(sessionId);
+            var usage = response.getUsage();
+            session.recordUsage(
+                response.getModel() != null ? response.getModel() : "unknown",
+                usage.getPromptTokens(),
+                usage.getCompletionTokens(),
+                usage.getCachedPromptTokens(),
+                usage.getReasoningTokens(),
+                usage.getTotalTokens()
+            );
+        } catch (Exception e) {
+            logger.debug("Failed to record model usage: {}", e.getMessage());
+        }
+    }
+
+    private void recordToolCall(ToolCall toolCall, boolean ok, long durationMs) {
+        try {
+            var session = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome())
+                .getSession(sessionId);
+            session.recordToolCall(toolCall.getFunction().getName(), ok, durationMs);
+        } catch (Exception e) {
+            logger.debug("Failed to record tool call: {}", e.getMessage());
         }
     }
 
