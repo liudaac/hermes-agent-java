@@ -108,7 +108,21 @@ java -cp target/hermes-agent-java-0.1.0-SNAPSHOT.jar com.nousresearch.hermes.das
 |-----|-------|------|
 | `HERMES_DASHBOARD_PORT` | 9119 | Dashboard 端口 |
 | `HERMES_DASHBOARD_HOST` | 127.0.0.1 | Dashboard 绑定地址 |
-| `HERMES_WEB_DIST` | web_dist | Web 静态资源目录 |
+| `HERMES_WEB_DIST` | auto-detect | Web 静态资源目录；未设置时依次检测 `hermes_cli/web_dist`（React `web/` 构建产物）、`web_dist`、`web/dist`、`frontend/dist`（旧 Vue fallback） |
+
+## 前端构建与静态资源
+
+当前 Dashboard 主线前端是 `web/` 下的 React/Vite 应用。构建命令：
+
+```bash
+cd web
+npm install
+npm run build
+```
+
+Vite 默认输出到仓库根目录的 `hermes_cli/web_dist`。Java `DashboardServer` 在未设置 `HERMES_WEB_DIST` 时会优先检测该目录。
+
+`frontend/` 是旧版/并行 Vue Dashboard 目录，仅作为 fallback（`frontend/dist`）保留，新的 Dashboard 功能应优先接入 React `web/`。
 
 ## 安全特性
 

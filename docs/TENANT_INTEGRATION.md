@@ -1,4 +1,6 @@
 # Hermes 多租户前端集成指南
+> **当前状态说明（2026-05）**：React `web/` 已成为 Dashboard 主线，并已接入 `/tenants` 租户管理页面；`frontend/` 是旧版/并行 Vue Dashboard，本文中关于 `frontend/tenant-management.html`、`MultiTenantDashboardServer` 和手动复制到 `web_dist/` 的内容属于历史集成参考，不应作为新功能接入路径。新租户 UI 请优先接入 `web/src/pages/TenantsPage.tsx`，构建输出为 `hermes_cli/web_dist`。
+
 
 ## 概述
 

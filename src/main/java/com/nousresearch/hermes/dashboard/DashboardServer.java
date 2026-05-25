@@ -395,8 +395,12 @@ public class DashboardServer {
         }
 
         java.util.List<java.nio.file.Path> candidates = java.util.List.of(
+            // Canonical React dashboard build output from web/vite.config.ts
+            java.nio.file.Path.of("hermes_cli", "web_dist"),
+            // Legacy/default locations kept for local compatibility
             java.nio.file.Path.of("web_dist"),
             java.nio.file.Path.of("web", "dist"),
+            // Legacy Vue dashboard fallback
             java.nio.file.Path.of("frontend", "dist")
         );
 
