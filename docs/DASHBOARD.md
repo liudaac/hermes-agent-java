@@ -124,6 +124,13 @@ Vite 默认输出到仓库根目录的 `hermes_cli/web_dist`。Java `DashboardSe
 
 `frontend/` 是旧版/并行 Vue Dashboard 目录，仅作为 fallback（`frontend/dist`）保留，新的 Dashboard 功能应优先接入 React `web/`。
 
+## Cron 调度器
+
+- Dashboard cron jobs 由 `CronJobExecutor` 调度，支持 relative (`5m`/`1h`/`2d`) 和标准 5 字段 cron 表达式。
+- 默认 runner 是 `AgentCronRunner`：触发时实例化一个 `AIAgent`，session id 形如 `cron-<jobId>-<timestamp>`，触发结果按 sessions 同步流程进入 `sessions.db`，Analytics 也会计入 cost。
+- 仅 `deliver = local` 会真正调用 AIAgent；其它 deliver 目标（feishu/telegram/...）目前会以结构化错误返回，提示需要 gateway adapter。
+- 任务持久化在 `~/.hermes/dashboard-cron-jobs.json`，进程重启时会自动恢复并重新 schedule。
+
 ## 安全特性
 
 ### 1. Session Token

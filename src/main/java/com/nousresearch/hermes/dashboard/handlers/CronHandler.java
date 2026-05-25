@@ -43,11 +43,16 @@ public class CronHandler {
     }
 
     public CronHandler(Path storePath, boolean withExecutor) {
+        this(storePath, withExecutor, null);
+    }
+
+    public CronHandler(Path storePath, boolean withExecutor, CronJobExecutor.JobRunner runner) {
         this.storePath = storePath.toAbsolutePath().normalize();
         loadJobs();
         if (withExecutor) {
+            CronJobExecutor.JobRunner effectiveRunner = runner != null ? runner : this::defaultRunner;
             this.executor = new CronJobExecutor(
-                job -> defaultRunner(job),
+                effectiveRunner,
                 id -> {
                     lock.readLock().lock();
                     try {

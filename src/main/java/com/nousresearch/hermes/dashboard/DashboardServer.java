@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
 import com.nousresearch.hermes.config.HermesConfig;
+import java.nio.file.Path;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
@@ -98,7 +99,11 @@ public class DashboardServer {
         this.skillsHandler = new SkillsHandler();
         this.toolsHandler = new ToolsHandler();
         this.gatewayHandler = new GatewayHandler();
-        this.cronHandler = new CronHandler();
+        this.cronHandler = new CronHandler(
+            Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"),
+            true,
+            new com.nousresearch.hermes.dashboard.handlers.AgentCronRunner(config)
+        );
         this.oauthProvidersHandler = new OAuthProvidersHandler();
         this.analyticsHandler = new AnalyticsHandler();
 
