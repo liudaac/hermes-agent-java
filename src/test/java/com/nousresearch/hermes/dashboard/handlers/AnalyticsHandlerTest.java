@@ -65,11 +65,19 @@ class AnalyticsHandlerTest {
             JSONObject firstModel = models.getJSONObject(0);
             assertNotNull(firstModel.getString("model"));
             assertTrue(firstModel.getIntValue("sessions") >= 1);
+            assertTrue(firstModel.getDoubleValue("estimated_cost") > 0,
+                "estimated_cost should be > 0 for known model with tokens");
+
+            for (int i = 0; i < daily.size(); i++) {
+                assertTrue(daily.getJSONObject(i).getDoubleValue("estimated_cost") >= 0);
+            }
 
             JSONObject totals = body.getJSONObject("totals");
             assertTrue(totals.getIntValue("total_sessions") >= 2);
             assertTrue(totals.getLongValue("total_input") > 0);
             assertTrue(totals.getLongValue("total_output") > 0);
+            assertTrue(totals.getDoubleValue("total_estimated_cost") > 0,
+                "total_estimated_cost should aggregate model pricing");
 
             JSONObject skills = body.getJSONObject("skills");
             assertNotNull(skills.getJSONObject("summary"));
@@ -110,7 +118,7 @@ class AnalyticsHandlerTest {
             """);
             stmt.setString(1, "s1");
             stmt.setString(2, "cli");
-            stmt.setString(3, "test-model");
+            stmt.setString(3, "gpt-4o");
             stmt.setString(4, "Test 1");
             stmt.setLong(5, now - 86400000);
             stmt.setLong(6, now - 3600000);
@@ -120,7 +128,7 @@ class AnalyticsHandlerTest {
 
             stmt.setString(1, "s2");
             stmt.setString(2, "telegram");
-            stmt.setString(3, "test-model");
+            stmt.setString(3, "gpt-4o-mini");
             stmt.setString(4, "Test 2");
             stmt.setLong(5, now - 172800000);
             stmt.setLong(6, now - 7200000);
