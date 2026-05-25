@@ -64,6 +64,7 @@ public class DashboardServer {
     private final GatewayHandler gatewayHandler;
     private final CronHandler cronHandler;
     private final OAuthProvidersHandler oauthProvidersHandler;
+    private final AnalyticsHandler analyticsHandler;
     
     // Tenant Manager
     private final TenantManager tenantManager;
@@ -99,6 +100,7 @@ public class DashboardServer {
         this.gatewayHandler = new GatewayHandler();
         this.cronHandler = new CronHandler();
         this.oauthProvidersHandler = new OAuthProvidersHandler();
+        this.analyticsHandler = new AnalyticsHandler();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -303,14 +305,8 @@ public class DashboardServer {
         app.post("/api/hermes/update", gatewayHandler::updateHermes);
         app.get("/api/actions/{name}/status", gatewayHandler::getActionStatus);
 
-        // Analytics API (placeholder)
-        app.get("/api/analytics/usage", ctx -> {
-            ctx.json(new JSONObject()
-                .fluentPut("daily", new java.util.ArrayList<>())
-                .fluentPut("by_model", new java.util.ArrayList<>())
-                .fluentPut("totals", new JSONObject())
-                .fluentPut("skills", new JSONObject()));
-        });
+        // Analytics API
+        app.get("/api/analytics/usage", analyticsHandler::getUsage);
 
         // Cron jobs API
         app.get("/api/cron/jobs", cronHandler::listJobs);
