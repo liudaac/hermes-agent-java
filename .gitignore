@@ -36,3 +36,8 @@ application-local.yml
 
 # Playwright
 /playwright/.cache/
+# Frontend dependencies/build output
+web/node_modules/
+web/dist/
+web/public/ds-assets/
+hermes_cli/web_dist/
