@@ -69,8 +69,15 @@ function formatBytes(value: number | undefined): string {
   return `${current.toFixed(current >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-function boolLabel(value: boolean | undefined): string {
-  return value ? "Allowed" : "Blocked";
+function csvToList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function listToCsv(value: string[] | undefined): string {
+  return (value ?? []).join(", ");
 }
 
 export default function TenantsPage() {
@@ -88,6 +95,28 @@ export default function TenantsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [busyTenantId, setBusyTenantId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [savingQuota, setSavingQuota] = useState(false);
+  const [savingSecurity, setSavingSecurity] = useState(false);
+  const [quotaForm, setQuotaForm] = useState({
+    maxDailyRequests: "",
+    maxDailyTokens: "",
+    maxConcurrentAgents: "",
+    maxConcurrentSessions: "",
+    maxStorageBytes: "",
+    maxMemoryBytes: "",
+  });
+  const [securityForm, setSecurityForm] = useState({
+    allowCodeExecution: false,
+    requireSandbox: true,
+    allowNetworkAccess: false,
+    allowFileRead: true,
+    allowFileWrite: true,
+    allowedLanguages: "",
+    allowedHosts: "",
+    allowedTools: "",
+    deniedTools: "",
+    deniedPaths: "",
+  });
   const { toast, showToast } = useToast();
 
   const loadTenants = async () => {
@@ -122,6 +151,26 @@ export default function TenantsPage() {
       setTenantUsage(usage);
       setTenantSecurity(security);
       setTenantAudit(audit.events ?? audit.logs ?? []);
+      setQuotaForm({
+        maxDailyRequests: String(quota.maxDailyRequests ?? ""),
+        maxDailyTokens: String(quota.maxDailyTokens ?? ""),
+        maxConcurrentAgents: String(quota.maxConcurrentAgents ?? ""),
+        maxConcurrentSessions: String(quota.maxConcurrentSessions ?? ""),
+        maxStorageBytes: String(quota.maxStorageBytes ?? ""),
+        maxMemoryBytes: String(quota.maxMemoryBytes ?? ""),
+      });
+      setSecurityForm({
+        allowCodeExecution: Boolean(security.allowCodeExecution),
+        requireSandbox: Boolean(security.requireSandbox),
+        allowNetworkAccess: Boolean(security.allowNetworkAccess),
+        allowFileRead: Boolean(security.allowFileRead),
+        allowFileWrite: Boolean(security.allowFileWrite),
+        allowedLanguages: listToCsv(security.allowedLanguages),
+        allowedHosts: listToCsv(security.allowedHosts),
+        allowedTools: listToCsv(security.allowedTools),
+        deniedTools: listToCsv(security.deniedTools),
+        deniedPaths: listToCsv(security.deniedPaths),
+      });
     } catch (e) {
       showToast(`Failed to load tenant details: ${e}`, "error");
       setSelectedTenant(null);
@@ -220,6 +269,60 @@ export default function TenantsPage() {
       showToast(`Failed to ${action} tenant: ${e}`, "error");
     } finally {
       setBusyTenantId(null);
+    }
+  };
+
+
+  const saveQuota = async () => {
+    if (!selectedTenantId) return;
+    setSavingQuota(true);
+    try {
+      await api.updateTenantQuota(selectedTenantId, {
+        maxDailyRequests: Number(quotaForm.maxDailyRequests),
+        maxDailyTokens: Number(quotaForm.maxDailyTokens),
+        maxConcurrentAgents: Number(quotaForm.maxConcurrentAgents),
+        maxConcurrentSessions: Number(quotaForm.maxConcurrentSessions),
+        maxStorageBytes: Number(quotaForm.maxStorageBytes),
+        maxMemoryBytes: Number(quotaForm.maxMemoryBytes),
+      });
+      showToast(`Quota updated for ${selectedTenantId}`, "success");
+      await loadTenantDetails(selectedTenantId);
+    } catch (e) {
+      showToast(`Failed to update quota: ${e}`, "error");
+    } finally {
+      setSavingQuota(false);
+    }
+  };
+
+  const saveSecurity = async () => {
+    if (!selectedTenantId) return;
+    if (securityForm.allowCodeExecution && !confirm("Allowing code execution can increase tenant risk. Continue?")) {
+      return;
+    }
+    if (securityForm.allowNetworkAccess && !confirm("Allowing network access can expose external resources. Continue?")) {
+      return;
+    }
+
+    setSavingSecurity(true);
+    try {
+      await api.updateTenantSecurity(selectedTenantId, {
+        allowCodeExecution: securityForm.allowCodeExecution,
+        requireSandbox: securityForm.requireSandbox,
+        allowNetworkAccess: securityForm.allowNetworkAccess,
+        allowFileRead: securityForm.allowFileRead,
+        allowFileWrite: securityForm.allowFileWrite,
+        allowedLanguages: csvToList(securityForm.allowedLanguages),
+        allowedHosts: csvToList(securityForm.allowedHosts),
+        allowedTools: csvToList(securityForm.allowedTools),
+        deniedTools: csvToList(securityForm.deniedTools),
+        deniedPaths: csvToList(securityForm.deniedPaths),
+      });
+      showToast(`Security policy updated for ${selectedTenantId}`, "success");
+      await loadTenantDetails(selectedTenantId);
+    } catch (e) {
+      showToast(`Failed to update security policy: ${e}`, "error");
+    } finally {
+      setSavingSecurity(false);
     }
   };
 
@@ -420,13 +523,16 @@ export default function TenantsPage() {
                             Quota
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="grid gap-2 text-xs">
-                          <InfoRow label="Max Daily Requests" value={formatNumber(tenantQuota?.maxDailyRequests)} />
-                          <InfoRow label="Max Daily Tokens" value={formatNumber(tenantQuota?.maxDailyTokens)} />
-                          <InfoRow label="Concurrent Agents" value={formatNumber(tenantQuota?.maxConcurrentAgents)} />
-                          <InfoRow label="Concurrent Sessions" value={formatNumber(tenantQuota?.maxConcurrentSessions)} />
-                          <InfoRow label="Max Storage" value={formatBytes(tenantQuota?.maxStorageBytes)} />
-                          <InfoRow label="Max Memory" value={formatBytes(tenantQuota?.maxMemoryBytes)} />
+                        <CardContent className="grid gap-3 text-xs">
+                          <NumberField label="Max Daily Requests" value={quotaForm.maxDailyRequests} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyRequests: value }))} />
+                          <NumberField label="Max Daily Tokens" value={quotaForm.maxDailyTokens} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyTokens: value }))} />
+                          <NumberField label="Concurrent Agents" value={quotaForm.maxConcurrentAgents} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentAgents: value }))} />
+                          <NumberField label="Concurrent Sessions" value={quotaForm.maxConcurrentSessions} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentSessions: value }))} />
+                          <NumberField label="Max Storage Bytes" value={quotaForm.maxStorageBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxStorageBytes: value }))} hint={formatBytes(Number(quotaForm.maxStorageBytes))} />
+                          <NumberField label="Max Memory Bytes" value={quotaForm.maxMemoryBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxMemoryBytes: value }))} hint={formatBytes(Number(quotaForm.maxMemoryBytes))} />
+                          <Button size="sm" onClick={saveQuota} disabled={savingQuota || !tenantQuota}>
+                            {savingQuota ? "Saving quota…" : "Save Quota"}
+                          </Button>
                         </CardContent>
                       </Card>
 
@@ -437,13 +543,20 @@ export default function TenantsPage() {
                             Security
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="grid gap-2 text-xs">
-                          <InfoRow label="Code Execution" value={boolLabel(tenantSecurity?.allowCodeExecution)} />
-                          <InfoRow label="Sandbox Required" value={tenantSecurity?.requireSandbox ? "Yes" : "No"} />
-                          <InfoRow label="Network Access" value={boolLabel(tenantSecurity?.allowNetworkAccess)} />
-                          <InfoRow label="File Read" value={boolLabel(tenantSecurity?.allowFileRead)} />
-                          <InfoRow label="File Write" value={boolLabel(tenantSecurity?.allowFileWrite)} />
-                          <InfoRow label="Languages" value={(tenantSecurity?.allowedLanguages ?? []).join(", ") || "—"} />
+                        <CardContent className="grid gap-3 text-xs">
+                          <CheckField label="Code Execution" checked={securityForm.allowCodeExecution} onChange={(value) => setSecurityForm((form) => ({ ...form, allowCodeExecution: value }))} danger />
+                          <CheckField label="Sandbox Required" checked={securityForm.requireSandbox} onChange={(value) => setSecurityForm((form) => ({ ...form, requireSandbox: value }))} />
+                          <CheckField label="Network Access" checked={securityForm.allowNetworkAccess} onChange={(value) => setSecurityForm((form) => ({ ...form, allowNetworkAccess: value }))} danger />
+                          <CheckField label="File Read" checked={securityForm.allowFileRead} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileRead: value }))} />
+                          <CheckField label="File Write" checked={securityForm.allowFileWrite} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileWrite: value }))} />
+                          <TextField label="Allowed Languages" value={securityForm.allowedLanguages} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedLanguages: value }))} placeholder="python, javascript" />
+                          <TextField label="Allowed Hosts" value={securityForm.allowedHosts} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedHosts: value }))} placeholder="example.com" />
+                          <TextField label="Allowed Tools" value={securityForm.allowedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedTools: value }))} placeholder="empty = all except denied" />
+                          <TextField label="Denied Tools" value={securityForm.deniedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedTools: value }))} />
+                          <TextField label="Denied Paths" value={securityForm.deniedPaths} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedPaths: value }))} placeholder="/etc, /root/.ssh" />
+                          <Button size="sm" onClick={saveSecurity} disabled={savingSecurity || !tenantSecurity}>
+                            {savingSecurity ? "Saving security…" : "Save Security"}
+                          </Button>
                         </CardContent>
                       </Card>
                     </div>
@@ -524,6 +637,40 @@ export default function TenantsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+function NumberField({ label, value, onChange, hint }: { label: string; value: string; onChange: (value: string) => void; hint?: string }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{label}</span>
+      <Input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} />
+      {hint && hint !== "—" && <span className="text-[10px] text-muted-foreground normal-case">{hint}</span>}
+    </label>
+  );
+}
+
+function TextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{label}</span>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    </label>
+  );
+}
+
+function CheckField({ label, checked, onChange, danger }: { label: string; checked: boolean; onChange: (value: boolean) => void; danger?: boolean }) {
+  return (
+    <label className={`flex items-center justify-between gap-3 border border-border p-2 ${danger && checked ? "border-destructive/60 bg-destructive/10" : ""}`}>
+      <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 accent-foreground"
+      />
+    </label>
   );
 }
 

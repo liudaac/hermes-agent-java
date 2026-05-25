@@ -160,6 +160,80 @@ class DashboardTenantRoutesTest {
         }
     }
 
+
+    @Test
+    @DisplayName("Dashboard tenant quota and security updates should be reflected by read APIs")
+    void tenantQuotaAndSecurityUpdatesRoundTrip() throws Exception {
+        int port = freePort();
+        TenantManager tenantManager = new TenantManager();
+        DashboardServer server = new DashboardServer(
+            port,
+            "127.0.0.1",
+            new HermesConfig(),
+            tenantManager,
+            GatewayRuntimeStatus::disconnected
+        );
+        String tenantId = "tenant-settings-test-" + UUID.randomUUID();
+
+        try {
+            server.start();
+            HttpClient client = HttpClient.newHttpClient();
+            String baseUrl = "http://127.0.0.1:" + port;
+            String token = server.getSessionToken();
+
+            HttpResponse<String> create = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants"))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"tenantId\":\"" + tenantId + "\"}"))
+                .header("Content-Type", "application/json"));
+            assertEquals(200, create.statusCode());
+
+            HttpResponse<String> quotaUpdate = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/quota"))
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"maxDailyRequests\":123,\"maxDailyTokens\":4567,\"maxConcurrentSessions\":8,\"maxMemoryBytes\":2048}"))
+                .header("Content-Type", "application/json"));
+            assertEquals(200, quotaUpdate.statusCode());
+            JSONObject quotaUpdated = JSON.parseObject(quotaUpdate.body());
+            assertTrue(quotaUpdated.getBooleanValue("ok"));
+            assertEquals(123, quotaUpdated.getJSONObject("quota").getIntValue("maxDailyRequests"));
+
+            HttpResponse<String> quotaRead = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/quota"))
+                .GET());
+            assertEquals(200, quotaRead.statusCode());
+            JSONObject quota = JSON.parseObject(quotaRead.body());
+            assertEquals(123, quota.getIntValue("maxDailyRequests"));
+            assertEquals(4567L, quota.getLongValue("maxDailyTokens"));
+            assertEquals(8, quota.getIntValue("maxConcurrentSessions"));
+            assertEquals(2048L, quota.getLongValue("maxMemoryBytes"));
+
+            HttpResponse<String> securityUpdate = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/security"))
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"allowNetworkAccess\":true,\"allowFileWrite\":false,\"allowedLanguages\":[\"python\",\"java\"],\"deniedPaths\":[\"/etc\"]}"))
+                .header("Content-Type", "application/json"));
+            assertEquals(200, securityUpdate.statusCode());
+            assertTrue(JSON.parseObject(securityUpdate.body()).getBooleanValue("ok"));
+
+            HttpResponse<String> securityRead = send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/security"))
+                .GET());
+            assertEquals(200, securityRead.statusCode());
+            JSONObject security = JSON.parseObject(securityRead.body());
+            assertTrue(security.getBooleanValue("allowNetworkAccess"));
+            assertFalse(security.getBooleanValue("allowFileWrite"));
+            assertTrue(security.getJSONArray("allowedLanguages").contains("java"));
+            assertTrue(security.getJSONArray("deniedPaths").contains("/etc"));
+        } finally {
+            try {
+                if (tenantManager.getTenant(tenantId) != null) {
+                    tenantManager.destroyTenant(tenantId, false);
+                }
+            } finally {
+                server.stop();
+                tenantManager.shutdown();
+            }
+        }
+    }
+
     private static HttpResponse<String> send(HttpClient client, String token, HttpRequest.Builder builder)
         throws IOException, InterruptedException {
         return client.send(

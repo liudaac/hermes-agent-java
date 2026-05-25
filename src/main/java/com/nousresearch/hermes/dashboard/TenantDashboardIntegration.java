@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.tenant.quota.TenantQuota;
 import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -12,8 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -180,9 +183,55 @@ public final class TenantDashboardIntegration {
         }
 
         JSONObject body = parseBody(ctx);
-        tenant.getConfig().set("quota", body);
+        TenantQuota quota = tenant.getQuotaManager().getQuota();
+
+        if (body.containsKey("maxDailyRequests")) {
+            quota.setMaxDailyRequests(body.getIntValue("maxDailyRequests"));
+        }
+        if (body.containsKey("maxDailyTokens")) {
+            quota.setMaxDailyTokens(body.getLongValue("maxDailyTokens"));
+        }
+        if (body.containsKey("maxConcurrentAgents")) {
+            quota.setMaxConcurrentAgents(body.getIntValue("maxConcurrentAgents"));
+        }
+        if (body.containsKey("maxConcurrentSessions")) {
+            quota.setMaxConcurrentSessions(body.getIntValue("maxConcurrentSessions"));
+        }
+        if (body.containsKey("maxStorageBytes")) {
+            quota.setMaxStorageBytes(body.getLongValue("maxStorageBytes"));
+        }
+        if (body.containsKey("maxMemoryBytes")) {
+            quota.setMaxMemoryBytes(body.getLongValue("maxMemoryBytes"));
+        }
+        if (body.containsKey("requestsPerSecond")) {
+            quota.setRequestsPerSecond(body.getIntValue("requestsPerSecond"));
+        }
+        if (body.containsKey("requestsPerMinute")) {
+            quota.setRequestsPerMinute(body.getIntValue("requestsPerMinute"));
+        }
+        if (body.containsKey("maxToolCallsPerSession")) {
+            quota.setMaxToolCallsPerSession(body.getIntValue("maxToolCallsPerSession"));
+        }
+        if (body.containsKey("maxFileSizeBytes")) {
+            quota.setMaxFileSizeBytes(body.getLongValue("maxFileSizeBytes"));
+        }
+        if (body.containsKey("maxExecutionTimeSeconds")) {
+            quota.setMaxExecutionTime(java.time.Duration.ofSeconds(body.getLongValue("maxExecutionTimeSeconds")));
+        }
+        if (body.containsKey("allowCodeExecution")) {
+            quota.setAllowCodeExecution(body.getBooleanValue("allowCodeExecution"));
+        }
+        if (body.containsKey("maxPrivateSkills")) {
+            quota.setMaxPrivateSkills(body.getIntValue("maxPrivateSkills"));
+        }
+        if (body.containsKey("maxInstalledSkills")) {
+            quota.setMaxInstalledSkills(body.getIntValue("maxInstalledSkills"));
+        }
+
+        tenant.getQuotaManager().updateQuota(quota);
+        tenant.getConfig().set("quota", quota.toMap());
         tenant.getConfig().save();
-        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId()));
+        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId(), "quota", quota.toMap()));
     }
 
     static void getUsage(Context ctx, TenantManager tenantManager) {
@@ -250,6 +299,21 @@ public final class TenantDashboardIntegration {
         }
         if (body.containsKey("allowFileWrite")) {
             policy.setAllowFileWrite(body.getBoolean("allowFileWrite"));
+        }
+        if (body.containsKey("allowedLanguages")) {
+            policy.setAllowedLanguages(jsonArrayToSet(body.getJSONArray("allowedLanguages")));
+        }
+        if (body.containsKey("allowedHosts")) {
+            policy.setAllowedHosts(jsonArrayToSet(body.getJSONArray("allowedHosts")));
+        }
+        if (body.containsKey("allowedTools")) {
+            policy.setAllowedTools(jsonArrayToSet(body.getJSONArray("allowedTools")));
+        }
+        if (body.containsKey("deniedTools")) {
+            policy.setDeniedTools(jsonArrayToSet(body.getJSONArray("deniedTools")));
+        }
+        if (body.containsKey("deniedPaths")) {
+            policy.setDeniedPaths(jsonArrayToSet(body.getJSONArray("deniedPaths")));
         }
 
         tenant.setSecurityPolicy(policy);
@@ -363,6 +427,20 @@ public final class TenantDashboardIntegration {
             logger.error("Failed to update tenant config for {}", tenant.getTenantId(), e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
+    }
+
+
+    private static Set<String> jsonArrayToSet(com.alibaba.fastjson2.JSONArray array) {
+        Set<String> result = new HashSet<>();
+        if (array == null) {
+            return result;
+        }
+        for (Object value : array) {
+            if (value != null && !value.toString().isBlank()) {
+                result.add(value.toString().trim());
+            }
+        }
+        return result;
     }
 
     private static TenantContext requireTenant(Context ctx, TenantManager tenantManager) {
