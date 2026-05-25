@@ -191,6 +191,13 @@ public class SessionManager {
         public final List<Message> messages;
         public final Map<String, Object> metadata;
         public long lastActivity;
+        public long promptTokens;
+        public long completionTokens;
+        public long cachedPromptTokens;
+        public long reasoningTokens;
+        public long totalTokens;
+        public String lastModel;
+        public final List<ToolCallRecord> toolCalls = new ArrayList<>();
         
         // Session source info (for context)
         public String platform;
@@ -226,11 +233,47 @@ public class SessionManager {
         public Object getMetadata(String key) {
             return metadata.get(key);
         }
+
+        public void recordUsage(String model, long prompt, long completion, long cached, long reasoning, long total) {
+            if (model != null && !model.isBlank()) {
+                this.lastModel = model;
+            }
+            this.promptTokens += Math.max(0, prompt);
+            this.completionTokens += Math.max(0, completion);
+            this.cachedPromptTokens += Math.max(0, cached);
+            this.reasoningTokens += Math.max(0, reasoning);
+            this.totalTokens += Math.max(0, total);
+            this.lastActivity = System.currentTimeMillis();
+        }
+
+        public void recordToolCall(String tool, boolean ok, long durationMs) {
+            toolCalls.add(new ToolCallRecord(tool, ok, durationMs, System.currentTimeMillis()));
+            if (toolCalls.size() > 200) {
+                toolCalls.remove(0);
+            }
+            this.lastActivity = System.currentTimeMillis();
+        }
         
         public ObjectNode toJson() {
             ObjectNode json = mapper.createObjectNode();
             json.put("id", id);
             json.put("lastActivity", lastActivity);
+            json.put("promptTokens", promptTokens);
+            json.put("completionTokens", completionTokens);
+            json.put("cachedPromptTokens", cachedPromptTokens);
+            json.put("reasoningTokens", reasoningTokens);
+            json.put("totalTokens", totalTokens);
+            if (lastModel != null) {
+                json.put("lastModel", lastModel);
+            }
+            var toolCallsArray = json.putArray("toolCalls");
+            for (ToolCallRecord tc : toolCalls) {
+                ObjectNode tcJson = toolCallsArray.addObject();
+                tcJson.put("tool", tc.tool);
+                tcJson.put("ok", tc.ok);
+                tcJson.put("durationMs", tc.durationMs);
+                tcJson.put("timestamp", tc.timestamp);
+            }
             
             // Source info
             if (platform != null) json.put("platform", platform);
@@ -256,6 +299,21 @@ public class SessionManager {
         public static Session fromJson(String id, ObjectNode json) {
             Session session = new Session(id);
             session.lastActivity = json.path("lastActivity").asLong();
+            session.promptTokens = json.path("promptTokens").asLong();
+            session.completionTokens = json.path("completionTokens").asLong();
+            session.cachedPromptTokens = json.path("cachedPromptTokens").asLong();
+            session.reasoningTokens = json.path("reasoningTokens").asLong();
+            session.totalTokens = json.path("totalTokens").asLong();
+            session.lastModel = json.path("lastModel").asText(null);
+            var toolCallsNode = json.path("toolCalls");
+            for (var tcNode : toolCallsNode) {
+                session.toolCalls.add(new ToolCallRecord(
+                    tcNode.path("tool").asText(),
+                    tcNode.path("ok").asBoolean(true),
+                    tcNode.path("durationMs").asLong(),
+                    tcNode.path("timestamp").asLong()
+                ));
+            }
             
             // Source info
             session.platform = json.path("platform").asText(null);
@@ -285,4 +343,6 @@ public class SessionManager {
     }
     
     public record Message(String role, String content, long timestamp) {}
+
+    public record ToolCallRecord(String tool, boolean ok, long durationMs, long timestamp) {}
 }

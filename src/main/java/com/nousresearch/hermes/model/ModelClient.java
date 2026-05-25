@@ -375,10 +375,14 @@ public class ModelClient {
                 message.setToolCalls(toolCallsJson.toJavaList(ToolCall.class));
             }
 
+            ChatCompletionResponse.TokenUsage usage = parseUsage(root.getJSONObject("usage"));
+            String model = root.getString("model");
             return new ChatCompletionResponse(
                 message,
                 finishReason != null ? finishReason : (hasToolCalls ? "tool_calls" : "stop"),
-                hasToolCalls || "tool_calls".equals(finishReason)
+                hasToolCalls || "tool_calls".equals(finishReason),
+                usage,
+                model
             );
         } catch (Exception e) {
             logger.error("Error parsing response: {}", e.getMessage());
@@ -386,6 +390,27 @@ public class ModelClient {
         }
     }
     
+
+    private ChatCompletionResponse.TokenUsage parseUsage(JSONObject usageJson) {
+        if (usageJson == null) {
+            return null;
+        }
+        long prompt = usageJson.getLongValue("prompt_tokens");
+        long completion = usageJson.getLongValue("completion_tokens");
+        long total = usageJson.getLongValue("total_tokens");
+        long cached = 0;
+        long reasoning = 0;
+        JSONObject promptDetails = usageJson.getJSONObject("prompt_tokens_details");
+        if (promptDetails != null) {
+            cached = promptDetails.getLongValue("cached_tokens");
+        }
+        JSONObject completionDetails = usageJson.getJSONObject("completion_tokens_details");
+        if (completionDetails != null) {
+            reasoning = completionDetails.getLongValue("reasoning_tokens");
+        }
+        return new ChatCompletionResponse.TokenUsage(prompt, completion, cached, reasoning, total);
+    }
+
     private String escapeJson(String text) {
         return text.replace("\\", "\\\\")
                    .replace("\"", "\\\"")

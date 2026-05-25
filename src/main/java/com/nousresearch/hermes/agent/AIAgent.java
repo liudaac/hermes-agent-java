@@ -329,7 +329,17 @@ public class AIAgent {
                     // Execute tool calls
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     for (ToolCall toolCall : toolCalls) {
-                        String result = executeToolCall(toolCall);
+                        long toolStart = System.currentTimeMillis();
+                        boolean toolOk = true;
+                        String result;
+                        try {
+                            result = executeToolCall(toolCall);
+                        } catch (RuntimeException ex) {
+                            toolOk = false;
+                            throw ex;
+                        } finally {
+                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                        }
                         
                         // Add tool result to conversation
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
@@ -540,6 +550,8 @@ public class AIAgent {
                     break;
                 }
 
+                recordModelUsage(response);
+
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
                 
@@ -556,7 +568,17 @@ public class AIAgent {
                     // Execute tool calls
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     for (ToolCall toolCall : toolCalls) {
-                        String result = executeToolCall(toolCall);
+                        long toolStart = System.currentTimeMillis();
+                        boolean toolOk = true;
+                        String result;
+                        try {
+                            result = executeToolCall(toolCall);
+                        } catch (RuntimeException ex) {
+                            toolOk = false;
+                            throw ex;
+                        } finally {
+                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                        }
                         
                         // Add tool result to conversation
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
@@ -642,6 +664,38 @@ public class AIAgent {
         }
     }
     
+
+    private void recordModelUsage(ChatCompletionResponse response) {
+        if (response == null || response.getUsage() == null) {
+            return;
+        }
+        try {
+            com.nousresearch.hermes.gateway.SessionManager.Session session =
+                sessionManager.getSession(sessionId);
+            ChatCompletionResponse.TokenUsage usage = response.getUsage();
+            session.recordUsage(
+                response.getModel() != null ? response.getModel() : config.getCurrentModel(),
+                usage.getPromptTokens(),
+                usage.getCompletionTokens(),
+                usage.getCachedPromptTokens(),
+                usage.getReasoningTokens(),
+                usage.getTotalTokens()
+            );
+        } catch (Exception e) {
+            logger.debug("Failed to record model usage: {}", e.getMessage());
+        }
+    }
+
+    private void recordToolCall(ToolCall toolCall, boolean ok, long durationMs) {
+        try {
+            com.nousresearch.hermes.gateway.SessionManager.Session session =
+                sessionManager.getSession(sessionId);
+            session.recordToolCall(toolCall.getFunction().getName(), ok, durationMs);
+        } catch (Exception e) {
+            logger.debug("Failed to record tool call: {}", e.getMessage());
+        }
+    }
+
     /**
      * Execute a tool call.
      */

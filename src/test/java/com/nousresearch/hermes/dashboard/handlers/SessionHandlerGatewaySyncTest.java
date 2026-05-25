@@ -94,6 +94,54 @@ class SessionHandlerGatewaySyncTest {
         }
     }
 
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("Dashboard sessions should prefer real token usage from gateway JSON")
+    void prefersRealUsageOverEstimates() throws Exception {
+        Path gatewaySessions = tempDir.resolve("memory").resolve("sessions");
+        Files.createDirectories(gatewaySessions);
+        Files.writeString(gatewaySessions.resolve("usage_test.json"), """
+            {
+              "id": "usage_test",
+              "lastActivity": 1700000005000,
+              "platform": "cli",
+              "lastModel": "gpt-test",
+              "promptTokens": 1234,
+              "completionTokens": 567,
+              "messages": [
+                { "role": "user", "content": "hi", "timestamp": 1700000001000 },
+                { "role": "assistant", "content": "hello", "timestamp": 1700000002000 }
+              ],
+              "toolCalls": [
+                { "tool": "read_file", "ok": true, "durationMs": 12, "timestamp": 1700000003000 },
+                { "tool": "write_file", "ok": false, "durationMs": 8, "timestamp": 1700000004000 }
+              ]
+            }
+            """);
+
+        SessionHandler handler = new SessionHandler(tempDir.resolve("sessions-usage.db"), gatewaySessions);
+        int port = freePort();
+        Javalin app = Javalin.create(config -> config.showJavalinBanner = false);
+        app.get("/api/sessions", handler::getSessions);
+
+        try {
+            app.start("127.0.0.1", port);
+            HttpResponse<String> response = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/sessions?limit=10")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, response.statusCode());
+            JSONObject session = JSON.parseObject(response.body()).getJSONArray("sessions").getJSONObject(0);
+            assertEquals("usage_test", session.getString("id"));
+            assertEquals("gpt-test", session.getString("model"));
+            assertEquals(1234, session.getIntValue("inputTokens"));
+            assertEquals(567, session.getIntValue("outputTokens"));
+            assertEquals(2, session.getIntValue("toolCallCount"));
+        } finally {
+            app.stop();
+        }
+    }
+
     private static int freePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();

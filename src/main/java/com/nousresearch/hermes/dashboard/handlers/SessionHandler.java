@@ -418,8 +418,8 @@ public class SessionHandler {
 
         long startedAt = lastActivity;
         String preview = "";
-        int inputTokens = 0;
-        int outputTokens = 0;
+        int estimatedInput = 0;
+        int estimatedOutput = 0;
         for (Object item : messages) {
             if (!(item instanceof JSONObject msg)) {
                 continue;
@@ -433,18 +433,29 @@ public class SessionHandler {
                 preview = content.length() > 160 ? content.substring(0, 160) : content;
                 String role = msg.getString("role");
                 if ("assistant".equals(role)) {
-                    outputTokens += estimateTokens(content);
+                    estimatedOutput += estimateTokens(content);
                 } else {
-                    inputTokens += estimateTokens(content);
+                    estimatedInput += estimateTokens(content);
                 }
             }
         }
 
+        long realPrompt = raw.getLongValue("promptTokens");
+        long realCompletion = raw.getLongValue("completionTokens");
+        int inputTokens = realPrompt > 0 ? (int) Math.min(realPrompt, Integer.MAX_VALUE) : estimatedInput;
+        int outputTokens = realCompletion > 0 ? (int) Math.min(realCompletion, Integer.MAX_VALUE) : estimatedOutput;
+
+        JSONArray toolCallEntries = raw.getJSONArray("toolCalls");
+        int toolCallCount = toolCallEntries != null ? toolCallEntries.size() : 0;
+
         String source = firstNonBlank(raw.getString("platform"), raw.getString("chat_type"), "agent");
         String title = firstNonBlank(raw.getString("chat_name"), raw.getString("user_name"), sessionId);
-        String model = raw.getJSONObject("metadata") != null
-            ? firstNonBlank(raw.getJSONObject("metadata").getString("model"), "unknown")
-            : "unknown";
+        String lastModel = raw.getString("lastModel");
+        String model = lastModel != null && !lastModel.isBlank()
+            ? lastModel
+            : (raw.getJSONObject("metadata") != null
+                ? firstNonBlank(raw.getJSONObject("metadata").getString("model"), "unknown")
+                : "unknown");
 
         try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath)) {
             PreparedStatement sessionStmt = conn.prepareStatement("""
@@ -462,7 +473,7 @@ public class SessionHandler {
             sessionStmt.setLong(7, lastActivity);
             sessionStmt.setInt(8, 0);
             sessionStmt.setInt(9, messages.size());
-            sessionStmt.setInt(10, 0);
+            sessionStmt.setInt(10, toolCallCount);
             sessionStmt.setInt(11, inputTokens);
             sessionStmt.setInt(12, outputTokens);
             sessionStmt.setString(13, preview);
