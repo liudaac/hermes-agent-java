@@ -1,14 +1,19 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.config.Constants;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * Handler for session-related API endpoints.
@@ -17,14 +22,23 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SessionHandler {
     private static final Logger logger = LoggerFactory.getLogger(SessionHandler.class);
 
-    private final java.nio.file.Path dbPath;
+    private final Path dbPath;
+    private final Path gatewaySessionsDir;
     private final Map<String, SessionInfo> activeSessions = new ConcurrentHashMap<>();
 
     // Session message cache (in-memory for performance)
     private final Map<String, List<SessionMessage>> sessionMessages = new ConcurrentHashMap<>();
 
     public SessionHandler() {
-        this.dbPath = java.nio.file.Path.of(System.getProperty("user.home"), ".hermes", "sessions.db");
+        this(
+            Constants.getHermesHome().resolve("sessions.db"),
+            Constants.getHermesHome().resolve("memory").resolve("sessions")
+        );
+    }
+
+    public SessionHandler(Path dbPath, Path gatewaySessionsDir) {
+        this.dbPath = dbPath.toAbsolutePath().normalize();
+        this.gatewaySessionsDir = gatewaySessionsDir.toAbsolutePath().normalize();
         initializeDatabase();
     }
 
@@ -92,6 +106,8 @@ public class SessionHandler {
             int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(20);
             int offset = ctx.queryParamAsClass("offset", Integer.class).getOrDefault(0);
 
+            syncGatewaySessions();
+
             List<SessionInfo> sessions = new ArrayList<>();
             int total = 0;
 
@@ -140,6 +156,8 @@ public class SessionHandler {
                 return;
             }
 
+            syncGatewaySessions();
+
             List<SessionSearchResult> results = new ArrayList<>();
 
             try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath)) {
@@ -181,6 +199,7 @@ public class SessionHandler {
     public void getSessionMessages(Context ctx) {
         try {
             String sessionId = ctx.pathParam("id");
+            syncGatewaySessions();
 
             List<SessionMessage> messages = new ArrayList<>();
 
@@ -351,6 +370,165 @@ public class SessionHandler {
      */
     public int getActiveSessionCount() {
         return activeSessions.size();
+    }
+
+
+    /**
+     * Import persisted gateway/agent JSON sessions into the dashboard SQLite DB.
+     *
+     * Agent and gateway code persist conversations under ~/.hermes/memory/sessions/*.json
+     * using gateway.SessionManager. Dashboard pages read ~/.hermes/sessions.db. This
+     * lightweight sync keeps the dashboard backed by real agent sessions without
+     * forcing a larger SessionManager rewrite.
+     */
+    void syncGatewaySessions() {
+        if (!Files.exists(gatewaySessionsDir)) {
+            return;
+        }
+
+        try (Stream<Path> stream = Files.list(gatewaySessionsDir)) {
+            for (Path file : stream.filter(path -> path.toString().endsWith(".json")).toList()) {
+                try {
+                    importGatewaySession(file);
+                } catch (Exception e) {
+                    logger.warn("Failed to import gateway session {}: {}", file, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to list gateway sessions in {}: {}", gatewaySessionsDir, e.getMessage());
+        }
+    }
+
+    private void importGatewaySession(Path file) throws Exception {
+        JSONObject raw = JSON.parseObject(Files.readString(file));
+        String sessionId = raw.getString("id");
+        if (sessionId == null || sessionId.isBlank()) {
+            sessionId = file.getFileName().toString().replaceFirst("\\.json$", "");
+        }
+
+        JSONArray messages = raw.getJSONArray("messages");
+        if (messages == null) {
+            messages = new JSONArray();
+        }
+
+        long lastActivity = raw.getLongValue("lastActivity");
+        if (lastActivity <= 0) {
+            lastActivity = Files.getLastModifiedTime(file).toMillis();
+        }
+
+        long startedAt = lastActivity;
+        String preview = "";
+        int inputTokens = 0;
+        int outputTokens = 0;
+        for (Object item : messages) {
+            if (!(item instanceof JSONObject msg)) {
+                continue;
+            }
+            long timestamp = msg.getLongValue("timestamp");
+            if (timestamp > 0) {
+                startedAt = Math.min(startedAt, timestamp);
+            }
+            String content = msg.getString("content");
+            if (content != null && !content.isBlank()) {
+                preview = content.length() > 160 ? content.substring(0, 160) : content;
+                String role = msg.getString("role");
+                if ("assistant".equals(role)) {
+                    outputTokens += estimateTokens(content);
+                } else {
+                    inputTokens += estimateTokens(content);
+                }
+            }
+        }
+
+        String source = firstNonBlank(raw.getString("platform"), raw.getString("chat_type"), "agent");
+        String title = firstNonBlank(raw.getString("chat_name"), raw.getString("user_name"), sessionId);
+        String model = raw.getJSONObject("metadata") != null
+            ? firstNonBlank(raw.getJSONObject("metadata").getString("model"), "unknown")
+            : "unknown";
+
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + dbPath)) {
+            PreparedStatement sessionStmt = conn.prepareStatement("""
+                INSERT OR REPLACE INTO sessions
+                (id, source, model, title, started_at, ended_at, last_active, is_active,
+                 message_count, tool_call_count, input_tokens, output_tokens, preview)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """);
+            sessionStmt.setString(1, sessionId);
+            sessionStmt.setString(2, source);
+            sessionStmt.setString(3, model);
+            sessionStmt.setString(4, title);
+            sessionStmt.setLong(5, startedAt);
+            sessionStmt.setObject(6, null);
+            sessionStmt.setLong(7, lastActivity);
+            sessionStmt.setInt(8, 0);
+            sessionStmt.setInt(9, messages.size());
+            sessionStmt.setInt(10, 0);
+            sessionStmt.setInt(11, inputTokens);
+            sessionStmt.setInt(12, outputTokens);
+            sessionStmt.setString(13, preview);
+            sessionStmt.executeUpdate();
+
+            PreparedStatement deleteMessages = conn.prepareStatement("DELETE FROM session_messages WHERE session_id = ?");
+            deleteMessages.setString(1, sessionId);
+            deleteMessages.executeUpdate();
+
+            PreparedStatement deleteSearch = conn.prepareStatement("DELETE FROM session_search WHERE session_id = ?");
+            deleteSearch.setString(1, sessionId);
+            deleteSearch.executeUpdate();
+
+            PreparedStatement messageStmt = conn.prepareStatement("""
+                INSERT INTO session_messages
+                (session_id, role, content, tool_calls, tool_name, tool_call_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """);
+            PreparedStatement searchStmt = conn.prepareStatement("""
+                INSERT INTO session_search (session_id, content, role)
+                VALUES (?, ?, ?)
+            """);
+
+            for (Object item : messages) {
+                if (!(item instanceof JSONObject msg)) {
+                    continue;
+                }
+                String role = firstNonBlank(msg.getString("role"), "unknown");
+                String content = firstNonBlank(msg.getString("content"), "");
+                long timestamp = msg.getLongValue("timestamp");
+                if (timestamp <= 0) {
+                    timestamp = lastActivity;
+                }
+
+                messageStmt.setString(1, sessionId);
+                messageStmt.setString(2, role);
+                messageStmt.setString(3, content);
+                messageStmt.setString(4, null);
+                messageStmt.setString(5, null);
+                messageStmt.setString(6, null);
+                messageStmt.setLong(7, timestamp);
+                messageStmt.addBatch();
+
+                if (!content.isBlank()) {
+                    searchStmt.setString(1, sessionId);
+                    searchStmt.setString(2, content);
+                    searchStmt.setString(3, role);
+                    searchStmt.addBatch();
+                }
+            }
+            messageStmt.executeBatch();
+            searchStmt.executeBatch();
+        }
+    }
+
+    private static int estimateTokens(String content) {
+        return Math.max(1, content.length() / 4);
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
     }
 
     private SessionInfo mapResultSetToSession(ResultSet rs) throws SQLException {

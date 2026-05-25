@@ -147,6 +147,7 @@ Vite 默认输出到仓库根目录的 `hermes_cli/web_dist`。Java `DashboardSe
 ### SQLite 数据库
 - 位置：`~/.hermes/sessions.db`
 - 表：`sessions`, `session_messages`, `session_search` (FTS5)
+- Dashboard 查询 sessions/search/messages 前会同步导入真实 Agent/Gateway 会话 JSON：`~/.hermes/memory/sessions/*.json`
 
 ### YAML 配置
 - 位置：`~/.hermes/config.yaml`
