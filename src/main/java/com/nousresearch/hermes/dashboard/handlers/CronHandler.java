@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
@@ -31,14 +32,38 @@ public class CronHandler {
     private final Path storePath;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final LinkedHashMap<String, CronJob> jobs = new LinkedHashMap<>();
+    private final CronJobExecutor executor;
 
     public CronHandler() {
         this(Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"));
     }
 
     public CronHandler(Path storePath) {
+        this(storePath, true);
+    }
+
+    public CronHandler(Path storePath, boolean withExecutor) {
         this.storePath = storePath.toAbsolutePath().normalize();
         loadJobs();
+        if (withExecutor) {
+            this.executor = new CronJobExecutor(
+                job -> defaultRunner(job),
+                id -> {
+                    lock.readLock().lock();
+                    try {
+                        return Optional.ofNullable(jobs.get(id));
+                    } finally {
+                        lock.readLock().unlock();
+                    }
+                });
+            for (CronJob job : jobs.values()) {
+                if (job.enabled) {
+                    executor.schedule(job);
+                }
+            }
+        } else {
+            this.executor = null;
+        }
     }
 
     /** GET /api/cron/jobs */
@@ -94,6 +119,10 @@ public class CronHandler {
                 lock.writeLock().unlock();
             }
 
+            if (executor != null && job.enabled) {
+                executor.schedule(job);
+            }
+
             ctx.status(201).json(toMap(job));
         } catch (Exception e) {
             logger.error("Error creating cron job: {}", e.getMessage(), e);
@@ -122,17 +151,33 @@ public class CronHandler {
                 return;
             }
 
-            job.lastRunAt = Instant.now().toString();
-            job.lastError = "Manual trigger recorded, but no cron execution engine is wired to the dashboard yet.";
-            saveJobs();
+            if (executor != null) {
+                CronJobExecutor.RunResult result = executor.runNow(job);
+                job.lastRunAt = Instant.now().toString();
+                job.lastError = result.ok() ? null : result.error();
+                saveJobs();
 
-            Map<String, Object> response = new LinkedHashMap<>();
-            response.put("ok", false);
-            response.put("unsupported", true);
-            response.put("id", id);
-            response.put("message", job.lastError);
-            response.put("job", toMap(job));
-            ctx.status(501).json(response);
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("ok", result.ok());
+                response.put("id", id);
+                response.put("duration_ms", result.durationMs());
+                response.put("output", result.output());
+                response.put("error", result.error());
+                response.put("job", toMap(job));
+                ctx.status(result.ok() ? 200 : 500).json(response);
+            } else {
+                job.lastRunAt = Instant.now().toString();
+                job.lastError = "Manual trigger recorded, but no cron execution engine is wired to the dashboard yet.";
+                saveJobs();
+
+                Map<String, Object> response = new LinkedHashMap<>();
+                response.put("ok", false);
+                response.put("unsupported", true);
+                response.put("id", id);
+                response.put("message", job.lastError);
+                response.put("job", toMap(job));
+                ctx.status(501).json(response);
+            }
         } catch (Exception e) {
             logger.error("Error triggering cron job {}: {}", id, e.getMessage(), e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
@@ -150,6 +195,9 @@ public class CronHandler {
             if (removed == null) {
                 ctx.status(404).json(Map.of("error", "Cron job not found: " + id));
                 return;
+            }
+            if (executor != null) {
+                executor.cancel(id);
             }
             saveJobs();
             ctx.json(Map.of("ok", true, "id", id));
@@ -173,6 +221,14 @@ public class CronHandler {
             job.enabled = enabled;
             job.state = state;
             job.lastError = error;
+            if (executor != null) {
+                if (enabled) {
+                    executor.schedule(job);
+                } else {
+                    executor.cancel(id);
+                    job.nextRunAt = null;
+                }
+            }
             saveJobs();
             ctx.json(Map.of("ok", true, "id", id, "job", toMap(job)));
         } catch (Exception e) {
@@ -281,6 +337,12 @@ public class CronHandler {
             }
         }
         return "";
+    }
+
+    /** Default runner: dashboard records the manual run but Agent execution is handed off elsewhere. */
+    String defaultRunner(CronJob job) {
+        logger.info("[cron] dashboard recorded run for job {} ({}): {}", job.id, job.schedule.expr(), job.prompt);
+        return "Recorded by dashboard cron scheduler. Connect an agent runner for real execution.";
     }
 
     static class CronJob {

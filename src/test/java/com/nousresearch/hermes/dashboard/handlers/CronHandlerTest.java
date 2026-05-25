@@ -26,7 +26,7 @@ class CronHandlerTest {
     @Test
     @DisplayName("Cron dashboard API should support UI CRUD contract")
     void supportsDashboardCrudContract() throws Exception {
-        CronHandler handler = new CronHandler(tempDir.resolve("cron-jobs.json"));
+        CronHandler handler = new CronHandler(tempDir.resolve("cron-jobs.json"), false);
         int port = freePort();
         Javalin app = app(handler);
 
@@ -98,7 +98,7 @@ class CronHandlerTest {
     @DisplayName("Cron dashboard API should persist jobs between handler instances")
     void persistsJobs() throws Exception {
         Path store = tempDir.resolve("cron-jobs.json");
-        CronHandler handler = new CronHandler(store);
+        CronHandler handler = new CronHandler(store, false);
         int port = freePort();
         Javalin app = app(handler);
         String id;
@@ -118,7 +118,7 @@ class CronHandlerTest {
             app.stop();
         }
 
-        CronHandler reloadedHandler = new CronHandler(store);
+        CronHandler reloadedHandler = new CronHandler(store, false);
         int secondPort = freePort();
         Javalin secondApp = app(reloadedHandler);
         try {
