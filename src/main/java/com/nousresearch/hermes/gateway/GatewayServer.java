@@ -78,62 +78,18 @@ public class GatewayServer {
         
         // Status API
         app.get("/api/status", this::handleStatus);
-        
+
         // Tools API
         app.get("/api/tools", this::handleTools);
-        
-        // Config API
-        app.get("/api/config", this::handleGetConfig);
-        app.post("/api/config", this::handleUpdateConfig);
-        app.get("/api/config/schema", this::handleGetConfigSchema);
-        
-        // Sessions API
-        app.get("/api/sessions", this::handleGetSessions);
-        app.get("/api/sessions/{id}/messages", this::handleGetSessionMessages);
-        
-        // Chat API
+
+        // Chat API stays on the gateway because it owns the agent runtime.
         app.post("/api/chat", this::handleChat);
         app.post("/api/chat/stream", this::handleChatStream);
-        
-        // Tenants API
-        app.get("/api/tenants", this::handleGetTenants);
-        app.post("/api/tenants", this::handleCreateTenant);
-        app.get("/api/tenants/{id}", this::handleGetTenant);
-        app.delete("/api/tenants/{id}", this::handleDeleteTenant);
-        app.post("/api/tenants/{id}/suspend", this::handleSuspendTenant);
-        app.post("/api/tenants/{id}/resume", this::handleResumeTenant);
-        app.get("/api/tenants/{id}/quota", this::handleGetTenantQuota);
-        app.put("/api/tenants/{id}/quota", this::handleUpdateTenantQuota);
-        app.get("/api/tenants/{id}/usage", this::handleGetTenantUsage);
-        app.get("/api/tenants/{id}/security", this::handleGetTenantSecurity);
-        app.put("/api/tenants/{id}/security", this::handleUpdateTenantSecurity);
-        app.get("/api/tenants/{id}/audit", this::handleGetTenantAudit);
-        
-        // Skills API
-        app.get("/api/skills", this::handleGetSkills);
-        app.put("/api/skills/{name}", this::handleUpdateSkill);
-        
-        // Cron API
-        app.get("/api/cron", this::handleGetCronJobs);
-        app.post("/api/cron", this::handleCreateCronJob);
-        app.put("/api/cron/{id}", this::handleUpdateCronJob);
-        app.delete("/api/cron/{id}", this::handleDeleteCronJob);
-        
-        // Env API
-        app.get("/api/env", this::handleGetEnv);
-        app.put("/api/env", this::handleSetEnv);
-        app.delete("/api/env/{key}", this::handleDeleteEnv);
-        
-        // Actions API
-        app.post("/api/actions/restart-gateway", this::handleRestartGateway);
-        app.post("/api/actions/update", this::handleUpdateHermes);
-        app.get("/api/actions/{name}/status", this::handleGetActionStatus);
-        
-        // Logs API
-        app.get("/api/logs", this::handleGetLogs);
-        
-        // Analytics API
-        app.get("/api/analytics", this::handleGetAnalytics);
+
+        // Deprecated dashboard-style API surface.
+        // Kept temporarily for backwards compatibility with old clients; the canonical
+        // implementation lives in DashboardServer (see docs/DASHBOARD.md).
+        DeprecatedDashboardApi.register(app);
         
         app.start(port);
         running = true;
