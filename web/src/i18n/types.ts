@@ -61,6 +61,7 @@ export interface Translations {
       logs: string;
       cron: string;
       skills: string;
+      tenants: string;
       config: string;
       keys: string;
     };

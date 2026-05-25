@@ -59,6 +59,7 @@ export const zh: Translations = {
       logs: "日志",
       cron: "定时任务",
       skills: "技能",
+      tenants: "租户",
       config: "配置",
       keys: "密钥",
     },

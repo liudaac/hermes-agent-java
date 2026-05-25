@@ -59,6 +59,7 @@ export const en: Translations = {
       logs: "Logs",
       cron: "Cron",
       skills: "Skills",
+      tenants: "Tenants",
       config: "Config",
       keys: "Keys",
     },

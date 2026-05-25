@@ -184,6 +184,31 @@ export const api = {
     );
   },
 
+  // Tenants
+  getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
+  createTenant: (tenantId: string) =>
+    fetchJSON<TenantActionResponse>("/api/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId }),
+    }),
+  getTenant: (tenantId: string) =>
+    fetchJSON<TenantSummary>(`/api/tenants/${encodeURIComponent(tenantId)}`),
+  deleteTenant: (tenantId: string) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}`, {
+      method: "DELETE",
+    }),
+  suspendTenant: (tenantId: string) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/suspend`, {
+      method: "POST",
+    }),
+  resumeTenant: (tenantId: string) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/resume`, {
+      method: "POST",
+    }),
+  getTenantSkills: (tenantId: string) =>
+    fetchJSON<TenantSkillsResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/skills`),
+
   // Gateway / update actions
   restartGateway: () =>
     fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
@@ -429,6 +454,50 @@ export interface ModelInfoResponse {
     max_output_tokens?: number;
     model_family?: string;
   };
+}
+
+// ── Tenant types ────────────────────────────────────────────────────────
+
+export interface TenantSummary {
+  tenantId: string;
+  state: string;
+  createdAt?: string;
+  lastActivity?: string;
+  activeAgents: number;
+  activeSessions: number;
+  quota?: Record<string, unknown>;
+}
+
+export interface TenantsResponse {
+  tenants: TenantSummary[];
+  total: number;
+}
+
+export interface TenantActionResponse {
+  ok?: boolean;
+  success?: boolean;
+  tenantId: string;
+  state?: string;
+  message?: string;
+}
+
+export interface TenantSkillInfo {
+  name: string;
+  description?: string;
+  source?: string;
+  version?: string;
+  readOnly?: boolean;
+  scope: "tenant";
+  tenantId: string;
+}
+
+export interface TenantSkillsResponse {
+  tenantId: string;
+  scope: "tenant";
+  skills: TenantSkillInfo[];
+  installedSkills: string[];
+  total: number;
+  totalSkills: number;
 }
 
 // ── OAuth provider types ────────────────────────────────────────────────
