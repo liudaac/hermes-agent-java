@@ -208,6 +208,26 @@ export const api = {
     }),
   getTenantSkills: (tenantId: string) =>
     fetchJSON<TenantSkillsResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/skills`),
+  getTenantQuota: (tenantId: string) =>
+    fetchJSON<TenantQuota>(`/api/tenants/${encodeURIComponent(tenantId)}/quota`),
+  updateTenantQuota: (tenantId: string, quota: Partial<TenantQuota>) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/quota`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(quota),
+    }),
+  getTenantUsage: (tenantId: string) =>
+    fetchJSON<TenantUsage>(`/api/tenants/${encodeURIComponent(tenantId)}/usage`),
+  getTenantSecurity: (tenantId: string) =>
+    fetchJSON<TenantSecurity>(`/api/tenants/${encodeURIComponent(tenantId)}/security`),
+  updateTenantSecurity: (tenantId: string, security: Partial<TenantSecurity>) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/security`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(security),
+    }),
+  getTenantAudit: (tenantId: string, limit = 100) =>
+    fetchJSON<TenantAuditResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/audit?limit=${limit}`),
 
   // Gateway / update actions
   restartGateway: () =>
@@ -498,6 +518,63 @@ export interface TenantSkillsResponse {
   installedSkills: string[];
   total: number;
   totalSkills: number;
+}
+
+export interface TenantQuota {
+  maxDailyRequests: number;
+  maxDailyTokens: number;
+  maxConcurrentAgents: number;
+  maxConcurrentSessions: number;
+  maxStorageBytes: number;
+  maxMemoryBytes: number;
+  requestsPerSecond: number;
+  requestsPerMinute: number;
+  maxToolCallsPerSession: number;
+  maxFileSizeBytes: number;
+  maxExecutionTimeSeconds: number;
+  allowCodeExecution: boolean;
+  maxPrivateSkills: number;
+  maxInstalledSkills: number;
+}
+
+export interface TenantUsage {
+  tenantId: string;
+  dailyRequests: number;
+  maxDailyRequests: number;
+  dailyTokens: number;
+  maxDailyTokens: number;
+  activeAgents: number;
+  storageUsage: number;
+  storage: number;
+  memory: number;
+}
+
+export interface TenantSecurity {
+  tenantId: string;
+  allowCodeExecution: boolean;
+  requireSandbox: boolean;
+  allowNetworkAccess: boolean;
+  allowFileRead: boolean;
+  allowFileWrite: boolean;
+  allowedLanguages: string[];
+  allowedHosts: string[];
+  allowedTools: string[];
+  deniedTools: string[];
+  deniedPaths: string[];
+}
+
+export interface TenantAuditEvent {
+  timestamp: string;
+  event: string;
+  type: string;
+  details: Record<string, unknown>;
+}
+
+export interface TenantAuditResponse {
+  tenantId: string;
+  logs: TenantAuditEvent[];
+  events: TenantAuditEvent[];
+  total: number;
 }
 
 // ── OAuth provider types ────────────────────────────────────────────────

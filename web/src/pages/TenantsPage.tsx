@@ -2,18 +2,29 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   CircleAlert,
+  FileClock,
+  Gauge,
+  HardDrive,
   Layers,
   Pause,
   Play,
   RefreshCw,
   Search,
   Shield,
+  SlidersHorizontal,
   Trash2,
   Users,
 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
-import type { TenantSkillInfo, TenantSummary } from "@/lib/api";
+import type {
+  TenantAuditEvent,
+  TenantQuota,
+  TenantSecurity,
+  TenantSkillInfo,
+  TenantSummary,
+  TenantUsage,
+} from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,11 +51,37 @@ function stateIcon(state: string) {
   return state.toUpperCase() === "ACTIVE" ? CheckCircle2 : CircleAlert;
 }
 
+function formatNumber(value: number | undefined): string {
+  if (value === undefined || Number.isNaN(value)) return "—";
+  return new Intl.NumberFormat().format(value);
+}
+
+function formatBytes(value: number | undefined): string {
+  if (value === undefined || Number.isNaN(value)) return "—";
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let current = value / 1024;
+  let unitIndex = 0;
+  while (current >= 1024 && unitIndex < units.length - 1) {
+    current /= 1024;
+    unitIndex += 1;
+  }
+  return `${current.toFixed(current >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function boolLabel(value: boolean | undefined): string {
+  return value ? "Allowed" : "Blocked";
+}
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [selectedTenant, setSelectedTenant] = useState<TenantSummary | null>(null);
   const [tenantSkills, setTenantSkills] = useState<TenantSkillInfo[]>([]);
+  const [tenantQuota, setTenantQuota] = useState<TenantQuota | null>(null);
+  const [tenantUsage, setTenantUsage] = useState<TenantUsage | null>(null);
+  const [tenantSecurity, setTenantSecurity] = useState<TenantSecurity | null>(null);
+  const [tenantAudit, setTenantAudit] = useState<TenantAuditEvent[]>([]);
   const [newTenantId, setNewTenantId] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -71,16 +108,28 @@ export default function TenantsPage() {
   const loadTenantDetails = async (tenantId: string) => {
     setDetailLoading(true);
     try {
-      const [tenant, skills] = await Promise.all([
+      const [tenant, skills, quota, usage, security, audit] = await Promise.all([
         api.getTenant(tenantId),
         api.getTenantSkills(tenantId),
+        api.getTenantQuota(tenantId),
+        api.getTenantUsage(tenantId),
+        api.getTenantSecurity(tenantId),
+        api.getTenantAudit(tenantId, 20),
       ]);
       setSelectedTenant(tenant);
       setTenantSkills(skills.skills ?? []);
+      setTenantQuota(quota);
+      setTenantUsage(usage);
+      setTenantSecurity(security);
+      setTenantAudit(audit.events ?? audit.logs ?? []);
     } catch (e) {
       showToast(`Failed to load tenant details: ${e}`, "error");
       setSelectedTenant(null);
       setTenantSkills([]);
+      setTenantQuota(null);
+      setTenantUsage(null);
+      setTenantSecurity(null);
+      setTenantAudit([]);
     } finally {
       setDetailLoading(false);
     }
@@ -95,6 +144,10 @@ export default function TenantsPage() {
     if (!selectedTenantId) {
       setSelectedTenant(null);
       setTenantSkills([]);
+      setTenantQuota(null);
+      setTenantUsage(null);
+      setTenantSecurity(null);
+      setTenantAudit([]);
       return;
     }
     loadTenantDetails(selectedTenantId);
@@ -151,6 +204,10 @@ export default function TenantsPage() {
           setSelectedTenantId(null);
           setSelectedTenant(null);
           setTenantSkills([]);
+          setTenantQuota(null);
+          setTenantUsage(null);
+          setTenantSecurity(null);
+          setTenantAudit([]);
         }
       }
       const actionLabel = action === "delete" ? "deleted" : action === "suspend" ? "suspended" : "resumed";
@@ -339,6 +396,58 @@ export default function TenantsPage() {
                       <InfoRow label="Last Activity" value={formatTime(selectedTenant.lastActivity)} />
                     </div>
 
+                    <div className="grid gap-4 xl:grid-cols-3">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <Gauge className="h-4 w-4 text-muted-foreground" />
+                            Usage
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-2 text-xs">
+                          <InfoRow label="Daily Requests" value={`${formatNumber(tenantUsage?.dailyRequests)} / ${formatNumber(tenantUsage?.maxDailyRequests)}`} />
+                          <InfoRow label="Daily Tokens" value={`${formatNumber(tenantUsage?.dailyTokens)} / ${formatNumber(tenantUsage?.maxDailyTokens)}`} />
+                          <InfoRow label="Active Agents" value={formatNumber(tenantUsage?.activeAgents)} />
+                          <InfoRow label="Storage Used" value={formatBytes(tenantUsage?.storage ?? tenantUsage?.storageUsage)} />
+                          <InfoRow label="Memory Used" value={formatBytes(tenantUsage?.memory)} />
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <HardDrive className="h-4 w-4 text-muted-foreground" />
+                            Quota
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-2 text-xs">
+                          <InfoRow label="Max Daily Requests" value={formatNumber(tenantQuota?.maxDailyRequests)} />
+                          <InfoRow label="Max Daily Tokens" value={formatNumber(tenantQuota?.maxDailyTokens)} />
+                          <InfoRow label="Concurrent Agents" value={formatNumber(tenantQuota?.maxConcurrentAgents)} />
+                          <InfoRow label="Concurrent Sessions" value={formatNumber(tenantQuota?.maxConcurrentSessions)} />
+                          <InfoRow label="Max Storage" value={formatBytes(tenantQuota?.maxStorageBytes)} />
+                          <InfoRow label="Max Memory" value={formatBytes(tenantQuota?.maxMemoryBytes)} />
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                            Security
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-2 text-xs">
+                          <InfoRow label="Code Execution" value={boolLabel(tenantSecurity?.allowCodeExecution)} />
+                          <InfoRow label="Sandbox Required" value={tenantSecurity?.requireSandbox ? "Yes" : "No"} />
+                          <InfoRow label="Network Access" value={boolLabel(tenantSecurity?.allowNetworkAccess)} />
+                          <InfoRow label="File Read" value={boolLabel(tenantSecurity?.allowFileRead)} />
+                          <InfoRow label="File Write" value={boolLabel(tenantSecurity?.allowFileWrite)} />
+                          <InfoRow label="Languages" value={(tenantSecurity?.allowedLanguages ?? []).join(", ") || "—"} />
+                        </CardContent>
+                      </Card>
+                    </div>
+
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-sm">
@@ -371,6 +480,36 @@ export default function TenantsPage() {
                                   {skill.source && <span>{skill.source}</span>}
                                   <span>{skill.scope}</span>
                                 </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-sm">
+                          <FileClock className="h-4 w-4 text-muted-foreground" />
+                          Recent Audit Events
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {tenantAudit.length === 0 ? (
+                          <div className="py-6 text-center text-xs text-muted-foreground">
+                            No audit events found.
+                          </div>
+                        ) : (
+                          <div className="flex flex-col divide-y divide-border border border-border">
+                            {tenantAudit.map((event, index) => (
+                              <div key={`${event.timestamp}-${event.type}-${index}`} className="p-3">
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="text-sm font-medium text-foreground">{event.type || event.event}</div>
+                                  <div className="text-[11px] text-muted-foreground">{formatTime(event.timestamp)}</div>
+                                </div>
+                                <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap text-[11px] normal-case text-muted-foreground">
+                                  {JSON.stringify(event.details ?? {}, null, 2)}
+                                </pre>
                               </div>
                             ))}
                           </div>
