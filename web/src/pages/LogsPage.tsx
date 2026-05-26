@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { FileText, RefreshCw, ChevronRight } from "lucide-react";
+import { FileText, RefreshCw, ChevronRight, Layers } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
 const COMPONENTS = ["all", "gateway", "agent", "tools", "cli", "cron"] as const;
 const LINE_COUNTS = [50, 100, 200, 500] as const;
+const MAX_TAIL_BUFFER = 2000;
 
 function classifyLine(line: string): "error" | "warning" | "info" | "debug" {
   const upper = line.toUpperCase();
@@ -74,38 +75,139 @@ export default function LogsPage() {
     useState<(typeof COMPONENTS)[number]>("all");
   const [lineCount, setLineCount] = useState<(typeof LINE_COUNTS)[number]>(100);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [liveTail, setLiveTail] = useState(false);
+  const [aggregate, setAggregate] = useState(false);
   const [lines, setLines] = useState<string[]>([]);
+  const [aggregateLines, setAggregateLines] = useState<
+    { file: string; line: string }[]
+  >([]);
   const [loading, setLoading] = useState(false);
+  const [tailConnected, setTailConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const tailSourceRef = useRef<EventSource | null>(null);
   const { t } = useI18n();
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 30);
+  }, []);
 
   const fetchLogs = useCallback(() => {
     setLoading(true);
     setError(null);
-    api
-      .getLogs({ file, lines: lineCount, level, component })
-      .then((resp) => {
-        setLines(resp.lines);
-        setTimeout(() => {
-          if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-          }
-        }, 50);
-      })
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
-  }, [file, lineCount, level, component]);
+    if (aggregate) {
+      api
+        .getLogAggregate({
+          files: [`${file}.log`],
+          lines: lineCount,
+          level,
+          component,
+        })
+        .then((resp) => {
+          setAggregateLines(resp.entries);
+          scrollToBottom();
+        })
+        .catch((err) => setError(String(err)))
+        .finally(() => setLoading(false));
+    } else {
+      api
+        .getLogs({ file, lines: lineCount, level, component })
+        .then((resp) => {
+          setLines(resp.lines);
+          scrollToBottom();
+        })
+        .catch((err) => setError(String(err)))
+        .finally(() => setLoading(false));
+    }
+  }, [file, lineCount, level, component, aggregate, scrollToBottom]);
 
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
 
+  // Polling auto-refresh — disabled when live tail is on.
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || liveTail) return;
     const interval = setInterval(fetchLogs, 5000);
     return () => clearInterval(interval);
-  }, [autoRefresh, fetchLogs]);
+  }, [autoRefresh, liveTail, fetchLogs]);
+
+  // SSE live tail
+  useEffect(() => {
+    if (!liveTail) {
+      if (tailSourceRef.current) {
+        tailSourceRef.current.close();
+        tailSourceRef.current = null;
+      }
+      setTailConnected(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const source = await api.openLogTail({
+          file: `${file}.log`,
+          level,
+          component,
+        });
+        if (cancelled) {
+          source.close();
+          return;
+        }
+        tailSourceRef.current = source;
+        source.addEventListener("ready", () => setTailConnected(true));
+        source.addEventListener("line", (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data) as { file: string; line: string };
+            if (aggregate) {
+              setAggregateLines((prev) => {
+                const next = [...prev, data];
+                if (next.length > MAX_TAIL_BUFFER)
+                  next.splice(0, next.length - MAX_TAIL_BUFFER);
+                return next;
+              });
+            } else {
+              setLines((prev) => {
+                const next = [...prev, data.line];
+                if (next.length > MAX_TAIL_BUFFER)
+                  next.splice(0, next.length - MAX_TAIL_BUFFER);
+                return next;
+              });
+            }
+            scrollToBottom();
+          } catch {
+            // ignore malformed event
+          }
+        });
+        source.addEventListener("error", () => {
+          setTailConnected(false);
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setError(`Failed to start tail: ${String(err)}`);
+          setLiveTail(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (tailSourceRef.current) {
+        tailSourceRef.current.close();
+        tailSourceRef.current = null;
+      }
+      setTailConnected(false);
+    };
+  }, [liveTail, file, level, component, aggregate, scrollToBottom]);
+
+  const displayLines: { file?: string; line: string }[] = aggregate
+    ? aggregateLines
+    : lines.map((l) => ({ line: l }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -123,9 +225,38 @@ export default function LogsPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+            <Switch checked={aggregate} onCheckedChange={setAggregate} />
+            <Label className="text-xs flex items-center gap-1">
+              <Layers className="h-3 w-3" /> merge
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={liveTail} onCheckedChange={setLiveTail} />
+            <Label className="text-xs">live tail</Label>
+            {liveTail && (
+              <Badge
+                variant={tailConnected ? "success" : "outline"}
+                className="text-[10px]"
+              >
+                <span
+                  className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${
+                    tailConnected
+                      ? "bg-current animate-pulse"
+                      : "bg-current opacity-50"
+                  }`}
+                />
+                {tailConnected ? "streaming" : "connecting"}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+              disabled={liveTail}
+            />
             <Label className="text-xs">{t.logs.autoRefresh}</Label>
-            {autoRefresh && (
+            {autoRefresh && !liveTail && (
               <Badge variant="success" className="text-[10px]">
                 <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
                 {t.common.live}
@@ -137,6 +268,7 @@ export default function LogsPage() {
             size="sm"
             onClick={fetchLogs}
             className="text-xs h-7"
+            disabled={liveTail}
           >
             <RefreshCw className="h-3 w-3 mr-1" />
             {t.common.refresh}
@@ -220,19 +352,24 @@ export default function LogsPage() {
                 ref={scrollRef}
                 className="p-4 font-mono-ui text-xs leading-5 overflow-auto max-h-[600px] min-h-[200px]"
               >
-                {lines.length === 0 && !loading && (
+                {displayLines.length === 0 && !loading && (
                   <p className="text-muted-foreground text-center py-8">
                     {t.logs.noLogLines}
                   </p>
                 )}
-                {lines.map((line, i) => {
-                  const cls = classifyLine(line);
+                {displayLines.map((entry, i) => {
+                  const cls = classifyLine(entry.line);
                   return (
                     <div
                       key={i}
-                      className={`${LINE_COLORS[cls]} hover:bg-secondary/20 px-1 -mx-1`}
+                      className={`${LINE_COLORS[cls]} hover:bg-secondary/20 px-1 -mx-1 flex gap-2`}
                     >
-                      {line}
+                      {entry.file && (
+                        <span className="text-muted-foreground/60 shrink-0 w-24 truncate">
+                          {entry.file}
+                        </span>
+                      )}
+                      <span className="flex-1 break-all">{entry.line}</span>
                     </div>
                   );
                 })}

@@ -1,14 +1,23 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
 import io.javalin.http.Context;
+import io.javalin.http.sse.SseClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -19,9 +28,17 @@ public class LogsHandler {
     private static final Logger logger = LoggerFactory.getLogger(LogsHandler.class);
 
     private final Path logsDir;
+    private final ScheduledExecutorService tailExecutor =
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "logs-tail");
+            t.setDaemon(true);
+            return t;
+        });
+    private final Set<TailSubscriber> subscribers = ConcurrentHashMap.newKeySet();
 
     public LogsHandler() {
         this.logsDir = Path.of(System.getProperty("user.home"), ".hermes", "logs");
+        tailExecutor.scheduleAtFixedRate(this::pollSubscribers, 500, 500, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -191,5 +208,222 @@ public class LogsHandler {
             case "ERROR" -> upperLine.contains("ERROR") || upperLine.contains("[E]");
             default -> true;
         };
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* Multi-file aggregation                                            */
+    /* ----------------------------------------------------------------- */
+
+    /**
+     * GET /api/logs/aggregate?files=a.log,b.log&lines=200&level=ALL
+     * Returns recent lines from multiple files merged + sorted by best-effort
+     * lexicographic timestamp prefix (works for slf4j default pattern).
+     */
+    public void getAggregate(Context ctx) {
+        try {
+            String filesParam = ctx.queryParam("files");
+            String levelParam = ctx.queryParam("level");
+            String componentParam = ctx.queryParam("component");
+            String linesStr = ctx.queryParam("lines");
+            int perFileLines = linesStr != null ? Integer.parseInt(linesStr) : 200;
+            String level = levelParam != null ? levelParam : "ALL";
+            String component = componentParam != null ? componentParam : "all";
+
+            List<String> files;
+            if (filesParam == null || filesParam.isBlank()) {
+                files = listLogFiles().stream()
+                    .map(m -> (String) m.get("name"))
+                    .limit(5)
+                    .collect(Collectors.toList());
+            } else {
+                files = List.of(filesParam.split(","));
+            }
+
+            List<java.util.Map<String, Object>> merged = new ArrayList<>();
+            for (String f : files) {
+                String name = f.trim();
+                if (name.isEmpty()) continue;
+                List<String> lines = getLogContent(name, perFileLines, level, component);
+                for (String line : lines) {
+                    java.util.Map<String, Object> entry = new java.util.HashMap<>();
+                    entry.put("file", name);
+                    entry.put("line", line);
+                    merged.add(entry);
+                }
+            }
+            // Sort by leading timestamp (best-effort); lines without prefix keep insertion order.
+            merged.sort((a, b) -> {
+                String la = (String) a.get("line");
+                String lb = (String) b.get("line");
+                String pa = la.length() > 23 ? la.substring(0, 23) : la;
+                String pb = lb.length() > 23 ? lb.substring(0, 23) : lb;
+                return pa.compareTo(pb);
+            });
+            // Cap response size to avoid blowing up the dashboard.
+            int max = Math.min(merged.size(), perFileLines * 4);
+            int start = Math.max(0, merged.size() - max);
+            ctx.json(java.util.Map.of(
+                "files", files,
+                "count", merged.size(),
+                "entries", merged.subList(start, merged.size())
+            ));
+        } catch (Exception e) {
+            logger.error("Error aggregating logs: {}", e.getMessage(), e);
+            ctx.status(500).result("Error aggregating logs");
+        }
+    }
+
+    /* ----------------------------------------------------------------- */
+    /* SSE tail                                                          */
+    /* ----------------------------------------------------------------- */
+
+    /**
+     * GET /api/logs/tail?file=agent.log[&level=ALL][&component=all]
+     * SSE stream: emits "line" events with {file, line} JSON payloads
+     * whenever the file grows.
+     */
+    public void tail(SseClient client) {
+        String file = client.ctx().queryParam("file");
+        if (file == null || file.isBlank()) {
+            client.sendEvent("error", "{\"message\":\"missing file parameter\"}");
+            client.close();
+            return;
+        }
+        Path resolved = resolveSafe(file);
+        if (resolved == null) {
+            client.sendEvent("error", "{\"message\":\"file not found or access denied\"}");
+            client.close();
+            return;
+        }
+        String levelParam = client.ctx().queryParam("level");
+        String componentParam = client.ctx().queryParam("component");
+
+        long initial;
+        try {
+            initial = Files.size(resolved);
+        } catch (IOException e) {
+            initial = 0;
+        }
+        TailSubscriber sub = new TailSubscriber(
+            client,
+            file,
+            resolved,
+            initial,
+            levelParam != null ? levelParam : "ALL",
+            componentParam != null ? componentParam : "all"
+        );
+        client.keepAlive();
+        client.onClose(() -> subscribers.remove(sub));
+        subscribers.add(sub);
+        client.sendEvent("ready", "{\"file\":\"" + escape(file) + "\",\"offset\":" + initial + "}");
+    }
+
+    private void pollSubscribers() {
+        if (subscribers.isEmpty()) return;
+        for (TailSubscriber sub : new HashSet<>(subscribers)) {
+            try {
+                if (!Files.exists(sub.path)) continue;
+                long size = Files.size(sub.path);
+                if (size < sub.offset) {
+                    // truncated/rotated — reset to start
+                    sub.offset = 0;
+                }
+                if (size == sub.offset) continue;
+                try (RandomAccessFile raf = new RandomAccessFile(sub.path.toFile(), "r")) {
+                    raf.seek(sub.offset);
+                    String line;
+                    while ((line = raf.readLine() ) != null) {
+                        // RandomAccessFile.readLine returns ISO-8859-1; re-encode.
+                        String fixed = new String(line.getBytes("ISO-8859-1"), java.nio.charset.StandardCharsets.UTF_8);
+                        if (!matchesFilters(fixed, sub.level, sub.component)) continue;
+                        String payload = "{\"file\":\"" + escape(sub.file)
+                            + "\",\"line\":\"" + escape(fixed) + "\"}";
+                        try {
+                            sub.client.sendEvent("line", payload);
+                        } catch (Exception e) {
+                            // client likely closed
+                            subscribers.remove(sub);
+                            break;
+                        }
+                    }
+                    sub.offset = raf.getFilePointer();
+                }
+            } catch (Exception e) {
+                logger.debug("tail poll error for {}: {}", sub.file, e.getMessage());
+            }
+        }
+    }
+
+    private boolean matchesFilters(String line, String level, String component) {
+        if (!"ALL".equalsIgnoreCase(level)
+            && !line.contains(level)
+            && !matchesLogLevel(line, level)) {
+            return false;
+        }
+        if (!"all".equalsIgnoreCase(component)
+            && !line.toLowerCase().contains(component.toLowerCase())) {
+            return false;
+        }
+        return true;
+    }
+
+    private Path resolveSafe(String file) {
+        Path logPath = logsDir.resolve(file);
+        if (!Files.exists(logPath)) {
+            logPath = Path.of(System.getProperty("user.home"), ".hermes", file);
+        }
+        if (!Files.exists(logPath)) return null;
+        Path normalized = logPath.toAbsolutePath().normalize();
+        Path allowed1 = logsDir.toAbsolutePath().normalize();
+        Path allowed2 = Path.of(System.getProperty("user.home"), ".hermes").toAbsolutePath().normalize();
+        if (!normalized.startsWith(allowed1) && !normalized.startsWith(allowed2)) {
+            return null;
+        }
+        return normalized;
+    }
+
+    private static String escape(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    int subscriberCount() {
+        return subscribers.size();
+    }
+
+    public void shutdown() {
+        tailExecutor.shutdownNow();
+    }
+
+    private static final class TailSubscriber {
+        final SseClient client;
+        final String file;
+        final Path path;
+        volatile long offset;
+        final String level;
+        final String component;
+
+        TailSubscriber(SseClient client, String file, Path path, long offset, String level, String component) {
+            this.client = client;
+            this.file = file;
+            this.path = path;
+            this.offset = offset;
+            this.level = level;
+            this.component = component;
+        }
     }
 }

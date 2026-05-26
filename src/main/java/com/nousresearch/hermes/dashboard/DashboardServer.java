@@ -194,6 +194,14 @@ public class DashboardServer {
                 String auth = ctx.header("Authorization");
                 String expected = "Bearer " + sessionToken;
 
+                // EventSource (SSE) cannot set custom headers — allow ?token=... on SSE routes.
+                if ((auth == null || !hmacCompare(auth, expected)) && path.equals("/api/logs/tail")) {
+                    String tokenParam = ctx.queryParam("token");
+                    if (tokenParam != null && hmacCompare(tokenParam, sessionToken)) {
+                        auth = expected;
+                    }
+                }
+
                 if (auth == null || !hmacCompare(auth, expected)) {
                     ctx.status(401).result(JSON.toJSONString(new JSONObject()
                         .fluentPut("detail", "Unauthorized")));
@@ -296,6 +304,8 @@ public class DashboardServer {
         // Logs API
         app.get("/api/logs", logsHandler::getLogs);
         app.get("/api/logs/files", logsHandler::getLogFiles);
+        app.get("/api/logs/aggregate", logsHandler::getAggregate);
+        app.sse("/api/logs/tail", logsHandler::tail);
 
         // Skills API
         app.get("/api/skills", skillsHandler::getSkills);
