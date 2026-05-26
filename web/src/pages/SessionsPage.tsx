@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Hash,
   X,
+  Wrench,
 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
@@ -66,13 +67,50 @@ function SnippetHighlight({ snippet }: { snippet: string }) {
   );
 }
 
+function ToolTimeline({
+  messages,
+}: {
+  messages: SessionMessage[];
+}) {
+  const calls = messages
+    .flatMap((msg) =>
+      (msg.tool_calls || []).map((tc) => ({
+        ...tc,
+        _ts: msg.timestamp,
+        _role: msg.role,
+      })),
+    )
+    .filter((tc) => tc.function?.name);
+
+  if (calls.length === 0) {
+    return (
+      <div className="text-xs text-muted-foreground text-center py-6">
+        No tool calls in this session.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-xs font-medium">{calls.length} tool calls</span>
+      </div>
+      {calls.map((tc, i) => (
+        <ToolCallBlock key={tc.id || i} toolCall={tc} timestamp={tc._ts} />
+      ))}
+    </div>
+  );
+}
+
 function ToolCallBlock({
   toolCall,
+  timestamp,
 }: {
   toolCall: { id: string; function: { name: string; arguments: string } };
+  timestamp?: number;
 }) {
   const [open, setOpen] = useState(false);
-  const { t } = useI18n();
 
   let args = toolCall.function.arguments;
   try {
@@ -82,12 +120,11 @@ function ToolCallBlock({
   }
 
   return (
-    <div className="mt-2 border border-warning/20 bg-warning/5">
+    <div className="border border-warning/20 bg-warning/5 rounded">
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-warning cursor-pointer hover:bg-warning/10 transition-colors"
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-warning cursor-pointer hover:bg-warning/10 transition-colors"
         onClick={() => setOpen(!open)}
-        aria-label={`${open ? t.common.collapse : t.common.expand} tool call ${toolCall.function.name}`}
       >
         {open ? (
           <ChevronDown className="h-3 w-3" />
@@ -97,10 +134,14 @@ function ToolCallBlock({
         <span className="font-mono-ui font-medium">
           {toolCall.function.name}
         </span>
-        <span className="text-warning/50 ml-auto">{toolCall.id}</span>
+        {timestamp && (
+          <span className="text-warning/40 text-[10px] ml-auto">
+            {timeAgo(timestamp)}
+          </span>
+        )}
       </button>
       {open && (
-        <pre className="border-t border-warning/20 px-3 py-2 text-xs text-warning/80 overflow-x-auto whitespace-pre-wrap font-mono">
+        <pre className="border-t border-warning/20 px-2.5 py-1.5 text-[11px] text-warning/80 overflow-x-auto whitespace-pre-wrap font-mono leading-snug">
           {args}
         </pre>
       )}
@@ -360,7 +401,22 @@ function SessionRow({
             </p>
           )}
           {messages && messages.length > 0 && (
-            <MessageList messages={messages} highlight={searchQuery} />
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">
+                  Messages
+                </div>
+                <MessageList messages={messages} highlight={searchQuery} />
+              </div>
+              <div className="lg:border-l lg:border-border lg:pl-4">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-2">
+                  Tool Timeline
+                </div>
+                <div className="max-h-[600px] overflow-y-auto pr-1">
+                  <ToolTimeline messages={messages} />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
