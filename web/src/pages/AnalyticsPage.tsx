@@ -5,15 +5,20 @@ import {
   Cpu,
   Hash,
   TrendingUp,
+  RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AnalyticsResponse, AnalyticsDailyEntry, AnalyticsModelEntry, AnalyticsSkillEntry } from "@/lib/api";
 import { timeAgo } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { useI18n } from "@/i18n";
 
 const PERIODS = [
+  { label: "1d", days: 1 },
   { label: "7d", days: 7 },
   { label: "30d", days: 30 },
   { label: "90d", days: 90 },
@@ -280,6 +285,7 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const { t } = useI18n();
 
   const load = useCallback(() => {
@@ -296,22 +302,52 @@ export default function AnalyticsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [autoRefresh, load]);
+
   return (
     <div className="flex flex-col gap-6">
       {/* Period selector */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground font-medium">{t.analytics.period}</span>
-        {PERIODS.map((p) => (
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground font-medium">{t.analytics.period}</span>
+          {PERIODS.map((p) => (
+            <Button
+              key={p.label}
+              variant={days === p.days ? "default" : "outline"}
+              size="sm"
+              className="text-xs h-7"
+              onClick={() => setDays(p.days)}
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
+            <Label className="text-xs">auto refresh</Label>
+            {autoRefresh && (
+              <Badge variant="success" className="text-[10px]">
+                <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                live
+              </Badge>
+            )}
+          </div>
           <Button
-            key={p.label}
-            variant={days === p.days ? "default" : "outline"}
+            variant="outline"
             size="sm"
+            onClick={load}
+            disabled={loading}
             className="text-xs h-7"
-            onClick={() => setDays(p.days)}
           >
-            {p.label}
+            <RefreshCw className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-        ))}
+        </div>
       </div>
 
       {loading && !data && (
