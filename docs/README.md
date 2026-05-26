@@ -32,6 +32,6 @@
 
 ## 子目录文档
 
-- [frontend](../frontend/README.md)
+- [frontend](../legacy/frontend/README.md)
 - [web](../web/README.md)
 - [ui-tui](../ui-tui/README.md)
