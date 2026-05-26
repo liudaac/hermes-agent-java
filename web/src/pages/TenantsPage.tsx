@@ -446,12 +446,25 @@ export default function TenantsPage() {
                   </div>
                   {selectedTenant && (
                     <div className="flex flex-wrap gap-2">
+                      {selectedTenant.tenantId === "default" && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Protected
+                        </Badge>
+                      )}
                       {selectedTenant.state === "ACTIVE" ? (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => runTenantAction(selectedTenant.tenantId, "suspend")}
-                          disabled={busyTenantId === selectedTenant.tenantId}
+                          disabled={
+                            busyTenantId === selectedTenant.tenantId ||
+                            selectedTenant.tenantId === "default"
+                          }
+                          title={
+                            selectedTenant.tenantId === "default"
+                              ? "Cannot suspend the system default tenant"
+                              : undefined
+                          }
                         >
                           <Pause className="h-3.5 w-3.5" />
                           Suspend
@@ -471,7 +484,15 @@ export default function TenantsPage() {
                         variant="destructive"
                         size="sm"
                         onClick={() => runTenantAction(selectedTenant.tenantId, "delete")}
-                        disabled={busyTenantId === selectedTenant.tenantId}
+                        disabled={
+                          busyTenantId === selectedTenant.tenantId ||
+                          selectedTenant.tenantId === "default"
+                        }
+                        title={
+                          selectedTenant.tenantId === "default"
+                            ? "Cannot delete the system default tenant"
+                            : undefined
+                        }
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Delete
@@ -507,12 +528,46 @@ export default function TenantsPage() {
                             Usage
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="grid gap-2 text-xs">
-                          <InfoRow label="Daily Requests" value={`${formatNumber(tenantUsage?.dailyRequests)} / ${formatNumber(tenantUsage?.maxDailyRequests)}`} />
-                          <InfoRow label="Daily Tokens" value={`${formatNumber(tenantUsage?.dailyTokens)} / ${formatNumber(tenantUsage?.maxDailyTokens)}`} />
-                          <InfoRow label="Active Agents" value={formatNumber(tenantUsage?.activeAgents)} />
-                          <InfoRow label="Storage Used" value={formatBytes(tenantUsage?.storage ?? tenantUsage?.storageUsage)} />
-                          <InfoRow label="Memory Used" value={formatBytes(tenantUsage?.memory)} />
+                        <CardContent className="grid gap-3 text-xs">
+                          {tenantUsage && (
+                            <>
+                              <QuotaBar
+                                label="Daily Requests"
+                                used={tenantUsage.dailyRequests}
+                                max={tenantUsage.maxDailyRequests}
+                              />
+                              <QuotaBar
+                                label="Daily Tokens"
+                                used={tenantUsage.dailyTokens}
+                                max={tenantUsage.maxDailyTokens}
+                              />
+                              <QuotaBar
+                                label="Storage"
+                                used={tenantUsage.storage ?? tenantUsage.storageUsage ?? 0}
+                                max={tenantQuota?.maxStorageBytes ?? 0}
+                                unit="bytes"
+                              />
+                              <QuotaBar
+                                label="Memory"
+                                used={tenantUsage.memory ?? 0}
+                                max={tenantQuota?.maxMemoryBytes ?? 0}
+                                unit="bytes"
+                              />
+                              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
+                                <span className="text-muted-foreground uppercase tracking-wider">
+                                  Active Agents
+                                </span>
+                                <span className="font-mono">
+                                  {formatNumber(tenantUsage.activeAgents)}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                          {!tenantUsage && (
+                            <div className="text-muted-foreground text-center py-4">
+                              No usage data
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
 
@@ -688,6 +743,44 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="border border-border p-3">
       <div className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{label}</div>
       <div className="mt-2 text-sm text-foreground normal-case">{value}</div>
+    </div>
+  );
+}
+
+function QuotaBar({
+  label,
+  used,
+  max,
+  unit,
+}: {
+  label: string;
+  used: number;
+  max: number;
+  unit?: "bytes" | "number";
+}) {
+  const pct = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0;
+  const color =
+    pct >= 90 ? "bg-destructive" : pct >= 70 ? "bg-warning" : "bg-success";
+  const fmt = (n: number) => {
+    if (unit === "bytes") return formatBytes(n);
+    return formatNumber(n);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-muted-foreground uppercase tracking-wider">
+          {label}
+        </span>
+        <span className="font-mono">
+          {fmt(used)} / {fmt(max)} ({pct}%)
+        </span>
+      </div>
+      <div className="h-1.5 w-full bg-muted overflow-hidden rounded-full">
+        <div
+          className={`h-full ${color} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }

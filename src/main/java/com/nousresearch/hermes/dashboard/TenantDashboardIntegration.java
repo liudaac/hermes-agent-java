@@ -127,6 +127,10 @@ public final class TenantDashboardIntegration {
 
     static void deleteTenant(Context ctx, TenantManager tenantManager) {
         String tenantId = ctx.pathParam("tenantId");
+        if ("default".equals(tenantId)) {
+            ctx.status(403).json(Map.of("error", "Cannot delete the system default tenant"));
+            return;
+        }
         TenantContext tenant = tenantManager.getTenant(tenantId);
         if (tenant == null) {
             notFound(ctx, tenantId);
@@ -145,6 +149,10 @@ public final class TenantDashboardIntegration {
 
     static void suspendTenant(Context ctx, TenantManager tenantManager) {
         String tenantId = ctx.pathParam("tenantId");
+        if ("default".equals(tenantId)) {
+            ctx.status(403).json(Map.of("error", "Cannot suspend the system default tenant"));
+            return;
+        }
         TenantContext tenant = tenantManager.getTenant(tenantId);
         if (tenant == null) {
             notFound(ctx, tenantId);
