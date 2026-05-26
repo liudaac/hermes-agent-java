@@ -72,4 +72,42 @@ class ToolsHandlerTest {
         assertEquals(true, toolset.get("available"));
         assertEquals(List.of("dashboard_test_gamma"), toolset.get("tools"));
     }
+
+    @Test
+    @DisplayName("ToolsHandler should build per-tool detail with schema and availability")
+    void buildsToolDetail() {
+        ToolRegistry registry = ToolRegistry.getInstance();
+        registry.register(new ToolEntry.Builder()
+            .name("dashboard_test_delta")
+            .toolset("dashboard_test_detail")
+            .schema(Map.of(
+                "description", "Delta tool",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "foo", Map.of("type", "string"),
+                        "bar", Map.of("type", "number")
+                    )
+                )
+            ))
+            .description("Delta tool")
+            .emoji("🔺")
+            .handler(args -> "{}")
+            .build());
+
+        ToolsHandler handler = new ToolsHandler(registry);
+        ToolEntry entry = registry.getAllTools().stream()
+            .filter(t -> "dashboard_test_delta".equals(t.getName()))
+            .findFirst()
+            .orElseThrow();
+
+        Map<String, Object> detail = handler.buildToolDetail(entry);
+        assertEquals("dashboard_test_delta", detail.get("name"));
+        assertEquals("dashboard_test_detail", detail.get("toolset"));
+        assertEquals("Delta tool", detail.get("description"));
+        assertEquals("🔺", detail.get("emoji"));
+        assertEquals(true, detail.get("available"));
+        assertEquals(2, detail.get("parameter_count"));
+        assertNotNull(detail.get("schema"));
+    }
 }

@@ -34,6 +34,7 @@ import LogsPage from "@/pages/LogsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
+import ToolsPage from "@/pages/ToolsPage";
 import TenantsPage from "@/pages/TenantsPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -58,6 +59,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/logs", labelKey: "logs", label: "Logs", icon: FileText },
   { path: "/cron", labelKey: "cron", label: "Cron", icon: Clock },
   { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
+  { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
@@ -239,6 +241,7 @@ export default function App() {
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/cron" element={<CronPage />} />
           <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />

@@ -304,6 +304,7 @@ public class DashboardServer {
         // Tools API
         app.get("/api/tools/toolsets", toolsHandler::getToolsets);
         app.get("/api/tools", toolsHandler::getTools);
+        app.get("/api/tools/{name}", toolsHandler::getToolDetail);
 
         // Gateway control API
         app.post("/api/gateway/restart", gatewayHandler::restartGateway);

@@ -53,6 +53,37 @@ export const api = {
     return fetchJSON<LogsResponse>(`/api/logs?${qs.toString()}`);
   },
   getLogFiles: () => fetchJSON<LogFilesResponse>("/api/logs/files"),
+  getLogAggregate: (params: {
+    files?: string[];
+    lines?: number;
+    level?: string;
+    component?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.files && params.files.length > 0)
+      qs.set("files", params.files.join(","));
+    if (params.lines) qs.set("lines", String(params.lines));
+    if (params.level && params.level !== "ALL") qs.set("level", params.level);
+    if (params.component && params.component !== "all")
+      qs.set("component", params.component);
+    return fetchJSON<LogAggregateResponse>(
+      `/api/logs/aggregate?${qs.toString()}`,
+    );
+  },
+  openLogTail: async (params: {
+    file: string;
+    level?: string;
+    component?: string;
+  }): Promise<EventSource> => {
+    const token = await getSessionToken();
+    const qs = new URLSearchParams();
+    qs.set("file", params.file);
+    qs.set("token", token);
+    if (params.level && params.level !== "ALL") qs.set("level", params.level);
+    if (params.component && params.component !== "all")
+      qs.set("component", params.component);
+    return new EventSource(`/api/logs/tail?${qs.toString()}`);
+  },
   getAnalytics: (days: number) =>
     fetchJSON<AnalyticsResponse>(`/api/analytics/usage?days=${days}`),
   getConfig: () => fetchJSON<Record<string, unknown>>("/api/config"),
@@ -123,6 +154,9 @@ export const api = {
       body: JSON.stringify({ name, enabled }),
     }),
   getToolsets: () => fetchJSON<ToolsetInfo[]>("/api/tools/toolsets"),
+  getToolGroups: () => fetchJSON<ToolGroup[]>("/api/tools"),
+  getToolDetail: (name: string) =>
+    fetchJSON<ToolDetail>(`/api/tools/${encodeURIComponent(name)}`),
 
   // Session search (FTS5)
   searchSessions: (q: string) =>
@@ -362,6 +396,17 @@ export interface LogsResponse {
   lines: string[];
 }
 
+export interface LogAggregateEntry {
+  file: string;
+  line: string;
+}
+
+export interface LogAggregateResponse {
+  files: string[];
+  count: number;
+  entries: LogAggregateEntry[];
+}
+
 export interface AnalyticsDailyEntry {
   day: string;
   input_tokens: number;
@@ -443,6 +488,33 @@ export interface ToolsetInfo {
   enabled: boolean;
   configured: boolean;
   tools: string[];
+}
+
+export interface ToolGroup {
+  name: string;
+  description: string;
+  emoji: string;
+  available: boolean;
+  tools: string[];
+  tool_details: ToolSummary[];
+  source: string;
+}
+
+export interface ToolSummary {
+  name: string;
+  toolset: string;
+  description: string;
+  emoji: string | null;
+  async: boolean;
+  requires_env: string[] | null;
+  max_result_size_chars: number | null;
+}
+
+export interface ToolDetail extends ToolSummary {
+  available: boolean;
+  schema: Record<string, unknown>;
+  parameter_count?: number;
+  source: string;
 }
 
 export interface SessionSearchResult {

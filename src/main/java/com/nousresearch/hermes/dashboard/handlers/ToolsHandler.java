@@ -49,6 +49,52 @@ public class ToolsHandler {
         }
     }
 
+    /**
+     * GET /api/tools/{name} - Get detailed info for a single tool, including JSON schema.
+     */
+    public void getToolDetail(Context ctx) {
+        String name = ctx.pathParam("name");
+        try {
+            ToolEntry entry = toolRegistry.getAllTools().stream()
+                .filter(t -> name.equals(t.getName()))
+                .findFirst()
+                .orElse(null);
+            if (entry == null) {
+                ctx.status(404).json(Map.of("error", "Tool not found: " + name));
+                return;
+            }
+            ctx.json(buildToolDetail(entry));
+        } catch (Exception e) {
+            logger.error("Error getting tool detail for {}: {}", name, e.getMessage(), e);
+            ctx.status(500).result("Error getting tool detail");
+        }
+    }
+
+    Map<String, Object> buildToolDetail(ToolEntry entry) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("name", entry.getName());
+        detail.put("toolset", entry.getToolset());
+        detail.put("description", descriptionForTool(entry));
+        detail.put("emoji", entry.getEmoji());
+        detail.put("async", entry.isAsync());
+        detail.put("requires_env", entry.getRequiresEnv());
+        detail.put("max_result_size_chars", entry.getMaxResultSizeChars());
+        detail.put("available", toolRegistry.isToolsetAvailable(entry.getToolset()));
+        detail.put("schema", entry.getSchema() != null ? entry.getSchema() : Map.of());
+        Map<String, Object> schema = entry.getSchema();
+        if (schema != null) {
+            Object params = schema.get("parameters");
+            if (params instanceof Map<?, ?> map) {
+                Object props = map.get("properties");
+                if (props instanceof Map<?, ?> p) {
+                    detail.put("parameter_count", p.size());
+                }
+            }
+        }
+        detail.put("source", "ToolRegistry");
+        return detail;
+    }
+
     List<Map<String, Object>> buildToolGroups() {
         Map<String, List<ToolEntry>> byToolset = toolRegistry.getAllTools().stream()
             .collect(Collectors.groupingBy(ToolEntry::getToolset, TreeMap::new, Collectors.toList()));
