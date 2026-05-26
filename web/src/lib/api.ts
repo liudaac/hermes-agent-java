@@ -141,9 +141,21 @@ export const api = {
   resumeCronJob: (id: string) =>
     fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}/resume`, { method: "POST" }),
   triggerCronJob: (id: string) =>
-    fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}/trigger`, { method: "POST" }),
+    fetchJSON<CronTriggerResult>(`/api/cron/jobs/${id}/trigger`, { method: "POST" }),
   deleteCronJob: (id: string) =>
     fetchJSON<{ ok: boolean }>(`/api/cron/jobs/${id}`, { method: "DELETE" }),
+  getCronJobRuns: (id: string) =>
+    fetchJSON<{ id: string; runs: CronRunRecord[] }>(`/api/cron/jobs/${id}/runs`),
+  previewCronSchedule: (schedule: string, count = 5) =>
+    fetchJSON<CronSchedulePreview>(
+      `/api/cron/preview?schedule=${encodeURIComponent(schedule)}&count=${count}`,
+    ),
+  openCronRunStream: async (id: string): Promise<EventSource> => {
+    const token = await getSessionToken();
+    return new EventSource(
+      `/api/cron/jobs/${encodeURIComponent(id)}/runs/stream?token=${encodeURIComponent(token)}`,
+    );
+  },
 
   // Skills & Toolsets
   getSkills: () => fetchJSON<SkillInfo[]>("/api/skills"),
@@ -472,6 +484,30 @@ export interface CronJob {
   last_run_at?: string | null;
   next_run_at?: string | null;
   last_error?: string | null;
+}
+
+export interface CronRunRecord {
+  at: string;
+  ok: boolean;
+  duration_ms: number;
+  output: string | null;
+  error: string | null;
+}
+
+export interface CronTriggerResult {
+  ok: boolean;
+  id: string;
+  duration_ms: number;
+  output: string | null;
+  error: string | null;
+  job: CronJob;
+}
+
+export interface CronSchedulePreview {
+  schedule: { kind: string; expr: string; display: string };
+  valid: boolean;
+  upcoming: string[];
+  timezone: string;
 }
 
 export interface SkillInfo {

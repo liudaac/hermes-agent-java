@@ -195,7 +195,9 @@ public class DashboardServer {
                 String expected = "Bearer " + sessionToken;
 
                 // EventSource (SSE) cannot set custom headers — allow ?token=... on SSE routes.
-                if ((auth == null || !hmacCompare(auth, expected)) && path.equals("/api/logs/tail")) {
+                if ((auth == null || !hmacCompare(auth, expected))
+                    && (path.equals("/api/logs/tail")
+                        || path.matches("^/api/cron/jobs/[^/]+/runs/stream$"))) {
                     String tokenParam = ctx.queryParam("token");
                     if (tokenParam != null && hmacCompare(tokenParam, sessionToken)) {
                         auth = expected;
@@ -331,6 +333,9 @@ public class DashboardServer {
         app.post("/api/cron/jobs/{id}/resume", cronHandler::resumeJob);
         app.post("/api/cron/jobs/{id}/trigger", cronHandler::triggerJob);
         app.delete("/api/cron/jobs/{id}", cronHandler::deleteJob);
+        app.get("/api/cron/jobs/{id}/runs", cronHandler::getJobRuns);
+        app.sse("/api/cron/jobs/{id}/runs/stream", cronHandler::streamJobRuns);
+        app.get("/api/cron/preview", cronHandler::previewSchedule);
 
         // ========== Tenant Management APIs ==========
         TenantDashboardIntegration.registerRoutes(app, tenantManager);

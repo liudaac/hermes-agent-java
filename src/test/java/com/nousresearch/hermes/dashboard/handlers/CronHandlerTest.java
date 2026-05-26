@@ -142,6 +142,8 @@ class CronHandlerTest {
         app.post("/api/cron/jobs/{id}/resume", handler::resumeJob);
         app.post("/api/cron/jobs/{id}/trigger", handler::triggerJob);
         app.delete("/api/cron/jobs/{id}", handler::deleteJob);
+        app.get("/api/cron/jobs/{id}/runs", handler::getJobRuns);
+        app.get("/api/cron/preview", handler::previewSchedule);
         return app;
     }
 
@@ -153,6 +155,86 @@ class CronHandlerTest {
     private static int freePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
+        }
+    }
+
+    @Test
+    @DisplayName("Schedule preview should return upcoming run timestamps and humanized display")
+    void schedulePreview() throws Exception {
+        CronHandler handler = new CronHandler(tempDir.resolve("preview-cron.json"), false);
+        int port = freePort();
+        Javalin app = app(handler);
+
+        try {
+            app.start("127.0.0.1", port);
+            HttpClient client = HttpClient.newHttpClient();
+            String baseUrl = "http://127.0.0.1:" + port;
+
+            HttpResponse<String> relativeResp = send(client,
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/preview?schedule=5m&count=3")).GET());
+            assertEquals(200, relativeResp.statusCode());
+            JSONObject relative = JSON.parseObject(relativeResp.body());
+            assertTrue(relative.getBooleanValue("valid"));
+            assertEquals("relative", relative.getJSONObject("schedule").getString("kind"));
+            assertEquals("every 5 minutes", relative.getJSONObject("schedule").getString("display"));
+            assertEquals(3, relative.getJSONArray("upcoming").size());
+
+            HttpResponse<String> cronResp = send(client,
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/preview?schedule=0+9+*+*+*&count=2")).GET());
+            assertEquals(200, cronResp.statusCode());
+            JSONObject cron = JSON.parseObject(cronResp.body());
+            assertTrue(cron.getBooleanValue("valid"));
+            assertEquals("cron", cron.getJSONObject("schedule").getString("kind"));
+            assertEquals("daily at 09:00", cron.getJSONObject("schedule").getString("display"));
+            assertEquals(2, cron.getJSONArray("upcoming").size());
+
+            HttpResponse<String> badResp = send(client,
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/preview")).GET());
+            assertEquals(400, badResp.statusCode());
+        } finally {
+            app.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("Run history should be returned per job after triggers")
+    void runHistory() throws Exception {
+        CronHandler handler = new CronHandler(
+            tempDir.resolve("history-cron.json"),
+            true,
+            job -> "ok for " + job.id);
+        int port = freePort();
+        Javalin app = app(handler);
+
+        try {
+            app.start("127.0.0.1", port);
+            HttpClient client = HttpClient.newHttpClient();
+            String baseUrl = "http://127.0.0.1:" + port;
+
+            HttpResponse<String> created = send(client, HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/jobs"))
+                .POST(HttpRequest.BodyPublishers.ofString("{\"prompt\":\"hello\",\"schedule\":\"1h\"}"))
+                .header("Content-Type", "application/json"));
+            assertEquals(201, created.statusCode());
+            String id = JSON.parseObject(created.body()).getString("id");
+
+            HttpResponse<String> trig1 = send(client, HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/jobs/" + id + "/trigger"))
+                .POST(HttpRequest.BodyPublishers.noBody()));
+            assertEquals(200, trig1.statusCode());
+            HttpResponse<String> trig2 = send(client, HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/jobs/" + id + "/trigger"))
+                .POST(HttpRequest.BodyPublishers.noBody()));
+            assertEquals(200, trig2.statusCode());
+
+            HttpResponse<String> runs = send(client,
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/cron/jobs/" + id + "/runs")).GET());
+            assertEquals(200, runs.statusCode());
+            JSONObject runsBody = JSON.parseObject(runs.body());
+            assertEquals(id, runsBody.getString("id"));
+            JSONArray runsArr = runsBody.getJSONArray("runs");
+            assertEquals(2, runsArr.size());
+            assertTrue(runsArr.getJSONObject(0).getBooleanValue("ok"));
+            assertEquals("ok for " + id, runsArr.getJSONObject(0).getString("output"));
+        } finally {
+            app.stop();
         }
     }
 }

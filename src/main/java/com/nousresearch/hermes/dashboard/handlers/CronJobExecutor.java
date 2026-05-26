@@ -193,6 +193,11 @@ public class CronJobExecutor implements AutoCloseable {
         return false;
     }
 
+    /** Package-visible wrapper so CronHandler can reuse this matcher for schedule preview. */
+    static boolean matchesFieldPublic(String field, int value, int min, int max) {
+        return matchesField(field, value, min, max);
+    }
+
     private static boolean matchesToken(String token, int value, int min, int max) {
         int step = 1;
         if (token.contains("/")) {

@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import io.javalin.http.Context;
+import io.javalin.http.sse.SseClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,8 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 
@@ -33,6 +38,11 @@ public class CronHandler {
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final LinkedHashMap<String, CronJob> jobs = new LinkedHashMap<>();
     private final CronJobExecutor executor;
+    // Per-job rolling run history (in-memory, last N).
+    private static final int MAX_RUN_HISTORY = 20;
+    private final ConcurrentHashMap<String, Deque<RunRecord>> runHistory = new ConcurrentHashMap<>();
+    // SSE subscribers per job id, used to push live trigger output to the UI.
+    private final ConcurrentHashMap<String, Set<SseClient>> runSubscribers = new ConcurrentHashMap<>();
 
     public CronHandler() {
         this(Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"));
@@ -161,6 +171,9 @@ public class CronHandler {
                 job.lastRunAt = Instant.now().toString();
                 job.lastError = result.ok() ? null : result.error();
                 saveJobs();
+
+                recordRun(id, result);
+                broadcastRun(id, result);
 
                 Map<String, Object> response = new LinkedHashMap<>();
                 response.put("ok", result.ok());
@@ -348,6 +361,240 @@ public class CronHandler {
     String defaultRunner(CronJob job) {
         logger.info("[cron] dashboard recorded run for job {} ({}): {}", job.id, job.schedule.expr(), job.prompt);
         return "Recorded by dashboard cron scheduler. Connect an agent runner for real execution.";
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* Schedule preview + run history + SSE                              */
+    /* ---------------------------------------------------------------- */
+
+    /** GET /api/cron/preview?schedule=<expr>&count=5 */
+    public void previewSchedule(Context ctx) {
+        String expr = ctx.queryParam("schedule");
+        String countParam = ctx.queryParam("count");
+        int count = countParam != null ? Math.min(20, Math.max(1, parseInt(countParam, 5))) : 5;
+        if (expr == null || expr.isBlank()) {
+            ctx.status(400).json(Map.of("error", "schedule parameter is required"));
+            return;
+        }
+        CronSchedule schedule = parseSchedule(expr);
+        List<String> upcoming = new ArrayList<>();
+        ZonedDateTime cursor = ZonedDateTime.now(ZoneId.systemDefault());
+        for (int i = 0; i < count; i++) {
+            if ("relative".equalsIgnoreCase(schedule.kind())) {
+                long delay = CronJobExecutor.relativeDelaySeconds(schedule.expr());
+                if (delay <= 0) break;
+                cursor = cursor.plusSeconds(delay);
+            } else {
+                ZonedDateTime match = nextCronMatch(cursor, schedule.expr());
+                if (match == null) break;
+                cursor = match;
+            }
+            upcoming.add(cursor.toInstant().toString());
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("schedule", Map.of(
+            "kind", schedule.kind(),
+            "expr", schedule.expr(),
+            "display", describeSchedule(schedule)
+        ));
+        response.put("valid", !upcoming.isEmpty());
+        response.put("upcoming", upcoming);
+        response.put("timezone", ZoneId.systemDefault().getId());
+        ctx.json(response);
+    }
+
+    private static ZonedDateTime nextCronMatch(ZonedDateTime from, String expr) {
+        ZonedDateTime probe = from.withSecond(0).withNano(0).plusMinutes(1);
+        long maxIter = 60L * 24L * 366L;
+        for (long i = 0; i < maxIter; i++) {
+            if (cronMatches(probe, expr)) {
+                return probe;
+            }
+            probe = probe.plusMinutes(1);
+        }
+        return null;
+    }
+
+    private static boolean cronMatches(ZonedDateTime t, String expr) {
+        String[] parts = expr.trim().split("\\s+");
+        if (parts.length != 5) return false;
+        return CronJobExecutor.matchesFieldPublic(parts[0], t.getMinute(), 0, 59)
+            && CronJobExecutor.matchesFieldPublic(parts[1], t.getHour(), 0, 23)
+            && CronJobExecutor.matchesFieldPublic(parts[2], t.getDayOfMonth(), 1, 31)
+            && CronJobExecutor.matchesFieldPublic(parts[3], t.getMonthValue(), 1, 12)
+            && CronJobExecutor.matchesFieldPublic(parts[4], t.getDayOfWeek().getValue() % 7, 0, 6);
+    }
+
+    static String describeSchedule(CronSchedule schedule) {
+        if ("relative".equalsIgnoreCase(schedule.kind())) {
+            String expr = schedule.expr();
+            char unit = expr.charAt(expr.length() - 1);
+            String num = expr.substring(0, expr.length() - 1);
+            return "every " + num + switch (Character.toLowerCase(unit)) {
+                case 's' -> " seconds";
+                case 'm' -> " minutes";
+                case 'h' -> " hours";
+                case 'd' -> " days";
+                default -> "";
+            };
+        }
+        String[] p = schedule.expr().trim().split("\\s+");
+        if (p.length != 5) return schedule.expr();
+        String mn = p[0], hr = p[1], dom = p[2], mo = p[3], dow = p[4];
+        if (isStar(dom) && isStar(mo)) {
+            if (isStar(dow)) {
+                if (isStar(mn) && isStar(hr)) return "every minute";
+                if (isStar(hr)) return "at minute " + mn + " every hour";
+                if (mn.matches("\\d+") && hr.matches("\\d+"))
+                    return String.format("daily at %02d:%02d",
+                        Integer.parseInt(hr), Integer.parseInt(mn));
+            } else if (mn.matches("\\d+") && hr.matches("\\d+")) {
+                return String.format("at %02d:%02d on dow %s",
+                    Integer.parseInt(hr), Integer.parseInt(mn), dow);
+            }
+        }
+        return schedule.expr();
+    }
+
+    private static boolean isStar(String s) {
+        return "*".equals(s.trim());
+    }
+
+    private static int parseInt(String s, int fallback) {
+        try { return Integer.parseInt(s); } catch (Exception e) { return fallback; }
+    }
+
+    /** GET /api/cron/jobs/{id}/runs */
+    public void getJobRuns(Context ctx) {
+        String id = ctx.pathParam("id");
+        Deque<RunRecord> history = runHistory.get(id);
+        if (history == null) {
+            ctx.json(Map.of("id", id, "runs", List.of()));
+            return;
+        }
+        List<Map<String, Object>> serialized = new ArrayList<>();
+        synchronized (history) {
+            for (RunRecord r : history) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("at", r.at);
+                m.put("ok", r.ok);
+                m.put("duration_ms", r.durationMs);
+                m.put("output", truncate(r.output, 8 * 1024));
+                m.put("error", r.error);
+                serialized.add(m);
+            }
+        }
+        ctx.json(Map.of("id", id, "runs", serialized));
+    }
+
+    /** SSE GET /api/cron/jobs/{id}/runs/stream */
+    public void streamJobRuns(SseClient client) {
+        String id = client.ctx().pathParam("id");
+        client.keepAlive();
+        Set<SseClient> set = runSubscribers.computeIfAbsent(id, k -> ConcurrentHashMap.newKeySet());
+        set.add(client);
+        client.onClose(() -> {
+            Set<SseClient> s = runSubscribers.get(id);
+            if (s != null) s.remove(client);
+        });
+        Deque<RunRecord> history = runHistory.get(id);
+        if (history != null && !history.isEmpty()) {
+            RunRecord latest;
+            synchronized (history) { latest = history.peekLast(); }
+            client.sendEvent("run", recordToJson(id, latest));
+        } else {
+            client.sendEvent("ready", "{\"id\":\"" + escapeJson(id) + "\"}");
+        }
+    }
+
+    private void recordRun(String id, CronJobExecutor.RunResult result) {
+        RunRecord record = new RunRecord(
+            Instant.now().toString(),
+            result.ok(),
+            result.durationMs(),
+            result.output(),
+            result.error()
+        );
+        Deque<RunRecord> history = runHistory.computeIfAbsent(id, k -> new ArrayDeque<>());
+        synchronized (history) {
+            history.addLast(record);
+            while (history.size() > MAX_RUN_HISTORY) history.pollFirst();
+        }
+    }
+
+    private void broadcastRun(String id, CronJobExecutor.RunResult result) {
+        Set<SseClient> set = runSubscribers.get(id);
+        if (set == null || set.isEmpty()) return;
+        RunRecord rec = new RunRecord(
+            Instant.now().toString(),
+            result.ok(),
+            result.durationMs(),
+            result.output(),
+            result.error()
+        );
+        String payload = recordToJson(id, rec);
+        for (SseClient client : new HashSet<>(set)) {
+            try {
+                client.sendEvent("run", payload);
+            } catch (Exception e) {
+                set.remove(client);
+            }
+        }
+    }
+
+    private static String recordToJson(String id, RunRecord r) {
+        return "{\"id\":\"" + escapeJson(id) + "\","
+            + "\"at\":\"" + escapeJson(r.at) + "\","
+            + "\"ok\":" + r.ok + ","
+            + "\"duration_ms\":" + r.durationMs + ","
+            + "\"output\":\"" + escapeJson(truncate(r.output, 8 * 1024)) + "\","
+            + "\"error\":\"" + escapeJson(r.error) + "\"}";
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        return s.length() > max ? s.substring(0, max) + "\n…[truncated]" : s;
+    }
+
+    int runSubscriberCount(String id) {
+        Set<SseClient> s = runSubscribers.get(id);
+        return s == null ? 0 : s.size();
+    }
+
+    static class RunRecord {
+        final String at;
+        final boolean ok;
+        final long durationMs;
+        final String output;
+        final String error;
+
+        RunRecord(String at, boolean ok, long durationMs, String output, String error) {
+            this.at = at;
+            this.ok = ok;
+            this.durationMs = durationMs;
+            this.output = output;
+            this.error = error;
+        }
     }
 
     static class CronJob {

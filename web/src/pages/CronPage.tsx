@@ -1,8 +1,24 @@
-import { useEffect, useState } from "react";
-import { Clock, Pause, Play, Plus, Trash2, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  Clock,
+  Pause,
+  Play,
+  Plus,
+  Trash2,
+  Zap,
+  CalendarClock,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+} from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
-import type { CronJob } from "@/lib/api";
+import type {
+  CronJob,
+  CronRunRecord,
+  CronTriggerResult,
+  CronSchedulePreview,
+} from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +43,14 @@ const STATUS_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
   completed: "destructive",
 };
 
+const PRESETS: { label: string; expr: string }[] = [
+  { label: "every 5 min", expr: "5m" },
+  { label: "every hour", expr: "1h" },
+  { label: "daily 09:00", expr: "0 9 * * *" },
+  { label: "weekdays 09:00", expr: "0 9 * * 1-5" },
+  { label: "every 15 min", expr: "*/15 * * * *" },
+];
+
 export default function CronPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +64,20 @@ export default function CronPage() {
   const [deliver, setDeliver] = useState("local");
   const [creating, setCreating] = useState(false);
 
+  // Schedule preview
+  const [preview, setPreview] = useState<CronSchedulePreview | null>(null);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Trigger output modal
+  const [triggerResult, setTriggerResult] =
+    useState<CronTriggerResult | null>(null);
+  const [triggerModalOpen, setTriggerModalOpen] = useState(false);
+
+  // Run history drawer
+  const [historyJob, setHistoryJob] = useState<CronJob | null>(null);
+  const [historyRuns, setHistoryRuns] = useState<CronRunRecord[]>([]);
+  const historySource = useRef<EventSource | null>(null);
+
   const loadJobs = () => {
     api
       .getCronJobs()
@@ -50,6 +88,31 @@ export default function CronPage() {
 
   useEffect(() => {
     loadJobs();
+  }, []);
+
+  // Schedule preview (debounced)
+  useEffect(() => {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    if (!schedule.trim()) {
+      setPreview(null);
+      return;
+    }
+    previewTimer.current = setTimeout(() => {
+      api
+        .previewCronSchedule(schedule.trim(), 5)
+        .then(setPreview)
+        .catch(() => setPreview(null));
+    }, 400);
+    return () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    };
+  }, [schedule]);
+
+  // Clean up SSE on unmount
+  useEffect(() => {
+    return () => {
+      if (historySource.current) historySource.current.close();
+    };
   }, []);
 
   const handleCreate = async () => {
@@ -102,14 +165,51 @@ export default function CronPage() {
 
   const handleTrigger = async (job: CronJob) => {
     try {
-      await api.triggerCronJob(job.id);
+      const result = await api.triggerCronJob(job.id);
+      setTriggerResult(result);
+      setTriggerModalOpen(true);
       showToast(
         `${t.cron.triggerNow}: "${job.name || job.prompt.slice(0, 30)}"`,
-        "success",
+        result.ok ? "success" : "error",
       );
       loadJobs();
     } catch (e) {
       showToast(`${t.status.error}: ${e}`, "error");
+    }
+  };
+
+  const openHistory = async (job: CronJob) => {
+    setHistoryJob(job);
+    try {
+      const data = await api.getCronJobRuns(job.id);
+      setHistoryRuns(data.runs);
+    } catch {
+      setHistoryRuns([]);
+    }
+    // Subscribe to live runs while drawer is open
+    if (historySource.current) historySource.current.close();
+    const src = await api.openCronRunStream(job.id);
+    historySource.current = src;
+    src.addEventListener("run", (e: MessageEvent) => {
+      try {
+        const rec = JSON.parse(e.data) as CronRunRecord & { id: string };
+        setHistoryRuns((prev) => {
+          const next = [...prev, rec];
+          if (next.length > 50) next.splice(0, next.length - 50);
+          return next;
+        });
+      } catch {
+        // ignore
+      }
+    });
+  };
+
+  const closeHistory = () => {
+    setHistoryJob(null);
+    setHistoryRuns([]);
+    if (historySource.current) {
+      historySource.current.close();
+      historySource.current = null;
     }
   };
 
@@ -178,6 +278,42 @@ export default function CronPage() {
                   value={schedule}
                   onChange={(e) => setSchedule(e.target.value)}
                 />
+                <div className="flex flex-wrap gap-1">
+                  {PRESETS.map((p) => (
+                    <button
+                      key={p.expr}
+                      type="button"
+                      onClick={() => setSchedule(p.expr)}
+                      className="text-[10px] px-1.5 py-0.5 border border-input rounded hover:bg-accent/40 cursor-pointer text-muted-foreground"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {preview && (
+                  <div className="text-[11px] text-muted-foreground border border-border/40 rounded p-2 mt-1">
+                    <div className="flex items-center gap-1 mb-1">
+                      <CalendarClock className="h-3 w-3" />
+                      <span className="font-medium">
+                        {preview.schedule.display}
+                      </span>
+                      {!preview.valid && (
+                        <Badge variant="destructive" className="text-[10px] ml-auto">
+                          invalid
+                        </Badge>
+                      )}
+                    </div>
+                    {preview.upcoming.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {preview.upcoming.slice(0, 3).map((iso) => (
+                          <li key={iso} className="font-mono">
+                            → {formatTime(iso)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-2">
@@ -309,6 +445,16 @@ export default function CronPage() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  title="Run history"
+                  aria-label="Run history"
+                  onClick={() => openHistory(job)}
+                >
+                  <CalendarClock className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
                   title={t.common.delete}
                   aria-label={t.common.delete}
                   onClick={() => handleDelete(job)}
@@ -320,6 +466,120 @@ export default function CronPage() {
           </Card>
         ))}
       </div>
+
+      {/* Trigger output modal */}
+      {triggerModalOpen && triggerResult && (
+        <div
+          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setTriggerModalOpen(false)}
+        >
+          <Card
+            className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                {triggerResult.ok ? (
+                  <CheckCircle2 className="h-4 w-4 text-success" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                )}
+                Trigger result
+                <Badge variant={triggerResult.ok ? "success" : "destructive"}>
+                  {triggerResult.duration_ms} ms
+                </Badge>
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setTriggerModalOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="overflow-auto">
+              {triggerResult.error && (
+                <pre className="text-xs text-destructive bg-destructive/10 p-2 rounded mb-3 whitespace-pre-wrap">
+                  {triggerResult.error}
+                </pre>
+              )}
+              <pre className="text-xs bg-muted/40 p-3 rounded whitespace-pre-wrap font-mono leading-relaxed">
+                {triggerResult.output || "(no output)"}
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Run history drawer */}
+      {historyJob && (
+        <div
+          className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-end sm:justify-center p-4"
+          onClick={closeHistory}
+        >
+          <Card
+            className="w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarClock className="h-4 w-4" />
+                Run history
+                <span className="text-xs text-muted-foreground font-normal">
+                  {historyJob.name ||
+                    historyJob.prompt.slice(0, 40) +
+                      (historyJob.prompt.length > 40 ? "…" : "")}
+                </span>
+                <Badge variant="secondary" className="text-[10px]">
+                  live
+                </Badge>
+              </CardTitle>
+              <Button variant="ghost" size="icon" onClick={closeHistory}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="overflow-auto space-y-2">
+              {historyRuns.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-6 text-center">
+                  No runs yet. Trigger the job to populate history.
+                </p>
+              ) : (
+                historyRuns
+                  .slice()
+                  .reverse()
+                  .map((r, i) => (
+                    <div
+                      key={i}
+                      className="border border-border/40 rounded p-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {r.ok ? (
+                          <CheckCircle2 className="h-3 w-3 text-success" />
+                        ) : (
+                          <AlertTriangle className="h-3 w-3 text-destructive" />
+                        )}
+                        <span className="font-mono">{formatTime(r.at)}</span>
+                        <Badge variant="outline" className="text-[10px] ml-auto">
+                          {r.duration_ms} ms
+                        </Badge>
+                      </div>
+                      {r.error && (
+                        <pre className="text-[11px] text-destructive bg-destructive/10 p-2 rounded mb-1 whitespace-pre-wrap">
+                          {r.error}
+                        </pre>
+                      )}
+                      {r.output && (
+                        <pre className="text-[11px] bg-muted/30 p-2 rounded whitespace-pre-wrap font-mono">
+                          {r.output}
+                        </pre>
+                      )}
+                    </div>
+                  ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
