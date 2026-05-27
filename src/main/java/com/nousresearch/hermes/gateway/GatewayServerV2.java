@@ -437,13 +437,14 @@ public class GatewayServerV2 {
             // 更新租户活动状态
             tenant.updateActivity();
 
-            ctx.json(Map.of(
-                "response", response != null ? response : "",
-                "session_id", resolvedSessionId,
-                "tenant_id", resolvedTenantId,
-                "duration_ms", duration,
-                "timestamp", System.currentTimeMillis()
-            ));
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("response", response != null ? response : "");
+            result.put("session_id", resolvedSessionId);
+            result.put("tenant_id", resolvedTenantId);
+            result.put("duration_ms", duration);
+            result.put("timestamp", System.currentTimeMillis());
+            result.put("debug", agent.getSessionDebugInfo());
+            ctx.status(200).json(result);
 
         } catch (Exception e) {
             logger.error("Chat error: {}", e.getMessage(), e);
@@ -499,9 +500,18 @@ public class GatewayServerV2 {
         TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
 
         try {
-            // 流式处理
-            agent.processMessage(message); // 简化版本，不支持流式
-            sendSseEvent(ctx, "message", Map.of("content", "Response processed"));
+            // 流式处理（当前为简化版，一次性返回后分事件推送）
+            String response = agent.processMessage(message);
+            sendSseEvent(ctx, "message", Map.of("content", response != null ? response : ""));
+
+            // 发送调试事件（usage + tool calls）
+            Map<String, Object> debug = agent.getSessionDebugInfo();
+            if (debug.containsKey("usage")) {
+                sendSseEvent(ctx, "usage", (Map<String, Object>) debug.get("usage"));
+            }
+            if (debug.containsKey("toolCalls")) {
+                sendSseEvent(ctx, "tool_chain", Map.of("calls", debug.get("toolCalls")));
+            }
 
             // 发送完成事件
             sendSseEvent(ctx, "done", Map.of(

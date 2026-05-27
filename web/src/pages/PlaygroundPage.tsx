@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Trash2, Bot, User, AlertCircle } from "lucide-react";
+import {
+  Send,
+  Trash2,
+  Bot,
+  User,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +26,22 @@ interface ChatMessage {
   streaming?: boolean;
 }
 
+interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  cachedPromptTokens: number;
+  reasoningTokens: number;
+  totalTokens: number;
+  lastModel?: string;
+}
+
+interface ToolCallInfo {
+  tool: string;
+  ok: boolean;
+  durationMs: number;
+  timestamp: number;
+}
+
 export default function PlaygroundPage() {
   const { showToast } = useToast();
 
@@ -24,6 +50,9 @@ export default function PlaygroundPage() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
+  const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([]);
+  const [debugOpen, setDebugOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
 
@@ -35,6 +64,8 @@ export default function PlaygroundPage() {
     abortRef.current?.();
     setMessages([]);
     setSessionId("");
+    setUsage(null);
+    setToolCalls([]);
   }, []);
 
   const sendMessage = useCallback(async () => {
@@ -58,6 +89,8 @@ export default function PlaygroundPage() {
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
     setInput("");
     setLoading(true);
+    setUsage(null);
+    setToolCalls([]);
 
     let currentSid = sessionId;
 
@@ -67,12 +100,14 @@ export default function PlaygroundPage() {
         tenant_id: tenantId,
         session_id: currentSid || undefined,
         onEvent: (event, data) => {
-          if (event === "session" && (data as Record<string, unknown>).session_id) {
-            currentSid = String((data as Record<string, unknown>).session_id);
+          const d = data as Record<string, unknown>;
+
+          if (event === "session" && d.session_id) {
+            currentSid = String(d.session_id);
             setSessionId(currentSid);
           }
           if (event === "message" || event === "delta") {
-            const content = String((data as Record<string, unknown>).content ?? "");
+            const content = String(d.content ?? "");
             setMessages((prev) => {
               const last = prev[prev.length - 1];
               if (last?.role === "assistant" && last.streaming) {
@@ -83,6 +118,26 @@ export default function PlaygroundPage() {
               }
               return prev;
             });
+          }
+          if (event === "usage") {
+            setUsage({
+              promptTokens: Number(d.promptTokens ?? 0),
+              completionTokens: Number(d.completionTokens ?? 0),
+              cachedPromptTokens: Number(d.cachedPromptTokens ?? 0),
+              reasoningTokens: Number(d.reasoningTokens ?? 0),
+              totalTokens: Number(d.totalTokens ?? 0),
+              lastModel: d.lastModel ? String(d.lastModel) : undefined,
+            });
+          }
+          if (event === "tool_chain" && Array.isArray(d.calls)) {
+            setToolCalls(
+              d.calls.map((tc: Record<string, unknown>) => ({
+                tool: String(tc.tool ?? ""),
+                ok: Boolean(tc.ok),
+                durationMs: Number(tc.durationMs ?? 0),
+                timestamp: Number(tc.timestamp ?? 0),
+              })),
+            );
           }
           if (event === "done") {
             setMessages((prev) => {
@@ -95,7 +150,7 @@ export default function PlaygroundPage() {
             setLoading(false);
           }
           if (event === "error") {
-            const errMsg = String((data as Record<string, unknown>).error ?? "Unknown error");
+            const errMsg = String(d.error ?? "Unknown error");
             setMessages((prev) => [
               ...prev,
               {
@@ -153,9 +208,7 @@ export default function PlaygroundPage() {
           {/* Tenant & Session config */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="text-xs opacity-70 block mb-1">
-                Tenant ID
-              </label>
+              <label className="text-xs opacity-70 block mb-1">Tenant ID</label>
               <Input
                 value={tenantId}
                 onChange={(e) => setTenantId(e.target.value)}
@@ -227,6 +280,98 @@ export default function PlaygroundPage() {
             ))}
             <div ref={scrollRef} />
           </div>
+
+          {/* Debug Panel */}
+          {(usage || toolCalls.length > 0) && (
+            <div className="border border-current/20 rounded-sm overflow-hidden">
+              <button
+                onClick={() => setDebugOpen(!debugOpen)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3" />
+                  Debug Info
+                  {usage && (
+                    <Badge variant="outline" className="text-[10px] h-4 px-1">
+                      {usage.totalTokens} tok
+                    </Badge>
+                  )}
+                  {toolCalls.length > 0 && (
+                    <Badge variant="outline" className="text-[10px] h-4 px-1">
+                      {toolCalls.length} tool
+                      {toolCalls.length > 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                </span>
+                {debugOpen ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </button>
+              {debugOpen && (
+                <div className="p-3 space-y-3 text-xs">
+                  {usage && (
+                    <div>
+                      <h4 className="flex items-center gap-1 opacity-60 mb-1.5">
+                        <Zap className="h-3 w-3" />
+                        Token Usage
+                        {usage.lastModel && (
+                          <span className="opacity-50">· {usage.lastModel}</span>
+                        )}
+                      </h4>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[
+                          { label: "Prompt", value: usage.promptTokens },
+                          { label: "Completion", value: usage.completionTokens },
+                          { label: "Cached", value: usage.cachedPromptTokens },
+                          { label: "Reasoning", value: usage.reasoningTokens },
+                          { label: "Total", value: usage.totalTokens },
+                        ].map(({ label, value }) => (
+                          <div
+                            key={label}
+                            className="bg-current/5 border border-current/10 rounded-sm px-2 py-1.5 text-center"
+                          >
+                            <div className="text-[10px] opacity-50">{label}</div>
+                            <div className="font-mono text-sm">{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {toolCalls.length > 0 && (
+                    <div>
+                      <h4 className="flex items-center gap-1 opacity-60 mb-1.5">
+                        <Wrench className="h-3 w-3" />
+                        Tool Calls
+                      </h4>
+                      <div className="space-y-1">
+                        {toolCalls.map((tc, i) => (
+                          <div
+                            key={i}
+                            className={cn(
+                              "flex items-center justify-between px-2 py-1 rounded-sm border",
+                              tc.ok
+                                ? "bg-green-900/10 border-green-900/20"
+                                : "bg-red-900/10 border-red-900/20",
+                            )}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Wrench className="h-3 w-3 opacity-60" />
+                              {tc.tool}
+                            </span>
+                            <span className="opacity-50 font-mono">
+                              {tc.durationMs}ms
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Input */}
           <div className="flex gap-2">

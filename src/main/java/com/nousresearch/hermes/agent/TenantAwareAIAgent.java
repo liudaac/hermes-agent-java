@@ -285,6 +285,48 @@ public class TenantAwareAIAgent {
     }
 
     /**
+     * Return debug info for the current session (usage + tool calls).
+     * Called by the dashboard playground after a message round.
+     */
+    public Map<String, Object> getSessionDebugInfo() {
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("sessionId", sessionId);
+        info.put("tenantId", tenantId);
+        try {
+            var session = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome())
+                .getSession(sessionId);
+            if (session != null) {
+                var json = session.toJson();
+                info.put("usage", Map.of(
+                    "promptTokens", json.has("promptTokens") ? json.get("promptTokens").asLong() : 0L,
+                    "completionTokens", json.has("completionTokens") ? json.get("completionTokens").asLong() : 0L,
+                    "cachedPromptTokens", json.has("cachedPromptTokens") ? json.get("cachedPromptTokens").asLong() : 0L,
+                    "reasoningTokens", json.has("reasoningTokens") ? json.get("reasoningTokens").asLong() : 0L,
+                    "totalTokens", json.has("totalTokens") ? json.get("totalTokens").asLong() : 0L,
+                    "lastModel", json.has("lastModel") ? json.get("lastModel").asText() : null
+                ));
+                if (json.has("toolCalls")) {
+                    var tcs = json.get("toolCalls");
+                    List<Map<String, Object>> toolList = new ArrayList<>();
+                    for (var tc : tcs) {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("tool", tc.get("tool").asText());
+                        m.put("ok", tc.get("ok").asBoolean());
+                        m.put("durationMs", tc.get("durationMs").asLong());
+                        m.put("timestamp", tc.get("timestamp").asLong());
+                        toolList.add(m);
+                    }
+                    info.put("toolCalls", toolList);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to get session debug info: {}", e.getMessage());
+        }
+        return info;
+    }
+
+    /**
      * 运行交互式 CLI 模式（向后兼容）
      */
     public void runInteractive() {

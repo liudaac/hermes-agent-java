@@ -75,6 +75,13 @@ public class TenantAIAgent {
     }
 
     /**
+     * 获取会话调试信息（usage + tool calls）
+     */
+    public java.util.Map<String, Object> getSessionDebugInfo() {
+        return delegate.getSessionDebugInfo();
+    }
+
+    /**
      * 结束会话
      */
     public void endSession(boolean completed) {
