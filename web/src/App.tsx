@@ -22,6 +22,7 @@ import {
   Code,
   Eye,
   Users,
+  Bot,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -38,12 +39,19 @@ import ToolsPage from "@/pages/ToolsPage";
 import TenantsPage from "@/pages/TenantsPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import PlaygroundPage from "@/pages/PlaygroundPage";
 import { useI18n } from "@/i18n";
 import { usePlugins } from "@/plugins";
 import type { RegisteredPlugin } from "@/plugins";
 
 const BUILTIN_NAV: NavItem[] = [
   { path: "/", labelKey: "status", label: "Status", icon: Activity },
+  {
+    path: "/playground",
+    labelKey: "playground",
+    label: "Playground",
+    icon: Bot,
+  },
   {
     path: "/sessions",
     labelKey: "sessions",
@@ -89,6 +97,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Code,
   Eye,
   Users,
+  Bot,
 };
 
 function resolveIcon(
@@ -234,6 +243,7 @@ export default function App() {
       <main className="relative z-2 mx-auto w-full max-w-[1600px] flex-1 px-3 sm:px-6 pt-16 sm:pt-20 pb-4 sm:pb-8">
         <Routes>
           <Route path="/" element={<StatusPage />} />
+          <Route path="/playground" element={<PlaygroundPage />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/logs" element={<LogsPage />} />

@@ -300,6 +300,62 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
+
+  // Chat playground (GatewayServerV2 SSE)
+  chatStream: async (params: {
+    message: string;
+    tenant_id: string;
+    session_id?: string;
+    user_id?: string;
+    onEvent: (event: string, data: unknown) => void;
+    onError: (err: Error) => void;
+  }): Promise<void> => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            // event name on this line, data on next
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            const raw = line.slice(5).trim();
+            try {
+              const data = JSON.parse(raw);
+              params.onEvent(data.event ?? "message", data);
+            } catch {
+              params.onEvent("message", raw);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      params.onError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      reader.releaseLock();
+    }
+  },
 };
 
 export interface ActionResponse {

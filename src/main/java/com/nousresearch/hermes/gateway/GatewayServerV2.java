@@ -41,6 +41,7 @@ public class GatewayServerV2 {
     private final ScheduledExecutorService sessionCleanupExecutor;
     private Javalin app;
     private volatile boolean running = false;
+    private volatile String sessionToken;
 
     // 用户到租户的映射缓存
     private final ConcurrentHashMap<String, String> userTenantCache = new ConcurrentHashMap<>();
@@ -134,6 +135,15 @@ public class GatewayServerV2 {
         logger.info("Gateway V2 server stopped");
     }
 
+    /**
+     * Share the DashboardServer session token so that /api/chat endpoints
+     * can be protected with the same Bearer token the dashboard UI already has.
+     */
+    public void setSessionToken(String token) {
+        this.sessionToken = token;
+        logger.info("Gateway chat endpoints now protected with shared session token");
+    }
+
     // ==================== Routes Setup ====================
 
     private void setupRoutes() {
@@ -177,16 +187,39 @@ public class GatewayServerV2 {
     }
 
     private void setupMiddleware() {
-        // CORS
+        // CORS — allow dashboard dev server origins
         app.before(ctx -> {
-            ctx.header("Access-Control-Allow-Origin", "*");
+            String origin = ctx.header("Origin");
+            if (origin != null && (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:"))) {
+                ctx.header("Access-Control-Allow-Origin", origin);
+                ctx.header("Access-Control-Allow-Credentials", "true");
+            } else {
+                ctx.header("Access-Control-Allow-Origin", "*");
+            }
             ctx.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
             ctx.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID");
         });
         app.options("/*", ctx -> ctx.status(200));
 
+        // Auth middleware for chat endpoints (share DashboardServer session token)
+        app.before("/api/chat", this::checkChatAuth);
+        app.before("/api/chat/stream", this::checkChatAuth);
+
         // 租户上下文中间件
         app.before("/api/*", this::extractTenantContext);
+    }
+
+    private void checkChatAuth(Context ctx) {
+        String token = sessionToken;
+        if (token == null || token.isBlank()) {
+            return; // no token configured — dev mode, allow all
+        }
+        String auth = ctx.header("Authorization");
+        String expected = "Bearer " + token;
+        if (auth == null || !java.security.MessageDigest.isEqual(auth.getBytes(), expected.getBytes())) {
+            ctx.status(401).json(Map.of("error", "Unauthorized"));
+            ctx.skipRemainingHandlers();
+        }
     }
 
     // ==================== Handler Methods ====================

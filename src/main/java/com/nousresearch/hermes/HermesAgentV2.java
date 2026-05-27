@@ -191,6 +191,12 @@ public class HermesAgentV2 {
             dashboardServer = new DashboardServer(port, host, agentConfig, tenantManager, this::getDashboardRuntimeStatus);
             dashboardServer.start();
             logger.info("Dashboard server started on http://{}:{}", host, port);
+
+            // Share session token with GatewayServerV2 so the dashboard UI
+            // can call /api/chat endpoints with the same Bearer token.
+            if (gatewayServerV2 != null && dashboardServer.getSessionToken() != null) {
+                gatewayServerV2.setSessionToken(dashboardServer.getSessionToken());
+            }
         } catch (Exception e) {
             logger.error("Failed to start dashboard server: {}", e.getMessage(), e);
         }
