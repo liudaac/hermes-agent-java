@@ -429,6 +429,12 @@ public class GatewayServerV2 {
             // 获取或创建 Agent（租户隔离）
             TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
 
+            // 应用自定义系统提示词（如果提供）
+            String customSystemPrompt = body.getString("system_prompt");
+            if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
+                agent.setSystemPrompt(customSystemPrompt);
+            }
+
             // 处理消息
             long startTime = System.currentTimeMillis();
             String response = agent.processMessage(message);
@@ -498,6 +504,12 @@ public class GatewayServerV2 {
 
         // 获取或创建 Agent（租户隔离）
         TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
+
+        // 应用自定义系统提示词（如果提供）
+        String customSystemPrompt = body.getString("system_prompt");
+        if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
+            agent.setSystemPrompt(customSystemPrompt);
+        }
 
         try {
             // 流式处理（当前为简化版，一次性返回后分事件推送）

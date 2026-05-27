@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Wrench,
   Zap,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ export default function PlaygroundPage() {
 
   const [tenantId, setTenantId] = useState("default");
   const [sessionId, setSessionId] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -100,6 +103,7 @@ export default function PlaygroundPage() {
         message: text,
         tenant_id: tenantId,
         session_id: currentSid || undefined,
+        system_prompt: systemPrompt || undefined,
         onEvent: (event, data) => {
           const d = data as Record<string, unknown>;
 
@@ -173,7 +177,7 @@ export default function PlaygroundPage() {
       showToast(err instanceof Error ? err.message : String(err), "error");
       setLoading(false);
     }
-  }, [input, loading, tenantId, sessionId, showToast]);
+  }, [input, loading, tenantId, sessionId, systemPrompt, showToast]);
 
   return (
     <div className="space-y-4">
@@ -228,6 +232,54 @@ export default function PlaygroundPage() {
                 className="h-8 text-sm"
               />
             </div>
+          </div>
+
+          {/* System Prompt */}
+          <div className="border border-current/20 rounded-sm overflow-hidden">
+            <button
+              onClick={() => setSystemPromptOpen(!systemPromptOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
+            >
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-3 w-3" />
+                System Prompt
+                {systemPrompt && (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1">
+                    Custom
+                  </Badge>
+                )}
+              </span>
+              {systemPromptOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </button>
+            {systemPromptOpen && (
+              <div className="p-3">
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Optional: override the default system prompt for this session"
+                  rows={4}
+                  className="w-full bg-black/30 border border-current/20 rounded-sm px-3 py-2 text-xs font-mono leading-relaxed resize-y focus:outline-none focus:border-midground/40"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[10px] opacity-40">
+                    Leave empty to use the default agent identity prompt.
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSystemPrompt("")}
+                    disabled={!systemPrompt}
+                    className="h-6 text-[10px] px-2"
+                  >
+                    Reset
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Messages */}

@@ -75,6 +75,17 @@ public class TenantAIAgent {
     }
 
     /**
+     * 设置/覆盖系统提示词
+     */
+    public void setSystemPrompt(String prompt) {
+        delegate.setSystemPrompt(prompt);
+    }
+
+    public String getSystemPrompt() {
+        return delegate.getSystemPrompt();
+    }
+
+    /**
      * 获取会话调试信息（usage + tool calls）
      */
     public java.util.Map<String, Object> getSessionDebugInfo() {

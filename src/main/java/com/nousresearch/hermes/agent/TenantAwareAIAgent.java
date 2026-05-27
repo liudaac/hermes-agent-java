@@ -48,6 +48,7 @@ public class TenantAwareAIAgent {
     private int turnsSinceMemory = 0;
     private int itersSinceSkill = 0;
     private int userTurnCount = 0;
+    private volatile String customSystemPrompt;
 
     private static final int AUTO_SAVE_INTERVAL = 5;
 
@@ -324,6 +325,24 @@ public class TenantAwareAIAgent {
             logger.debug("Failed to get session debug info: {}", e.getMessage());
         }
         return info;
+    }
+
+    /**
+     * Override the system prompt for this agent instance.
+     * If null/blank, falls back to the default built-in prompt.
+     */
+    public void setSystemPrompt(String prompt) {
+        this.customSystemPrompt = prompt;
+        // Rebuild the first system message in conversation history if present
+        if (!conversationHistory.isEmpty() && "system".equals(conversationHistory.get(0).getRole())) {
+            conversationHistory.set(0, ModelMessage.system(buildSystemPrompt()));
+        }
+    }
+
+    public String getSystemPrompt() {
+        return customSystemPrompt != null && !customSystemPrompt.isBlank()
+            ? customSystemPrompt
+            : buildSystemPrompt();
     }
 
     /**
@@ -718,6 +737,9 @@ public class TenantAwareAIAgent {
     }
 
     private String buildSystemPrompt() {
+        if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
+            return customSystemPrompt;
+        }
         StringBuilder prompt = new StringBuilder();
         prompt.append(com.nousresearch.hermes.config.Constants.DEFAULT_AGENT_IDENTITY).append("\n\n");
         prompt.append(com.nousresearch.hermes.config.Constants.MEMORY_GUIDANCE).append("\n\n");
