@@ -71,7 +71,7 @@ public final class TenantDashboardIntegration {
             .map(entry -> tenantSummary(entry.getKey(), entry.getValue()))
             .collect(Collectors.toList());
 
-        ctx.json(Map.of("tenants", tenants, "total", tenants.size()));
+        ctx.status(200).json(Map.of("tenants", tenants, "total", tenants.size()));
     }
 
     static void createTenant(Context ctx, TenantManager tenantManager) {
@@ -105,7 +105,7 @@ public final class TenantDashboardIntegration {
             response.put("tenantId", tenant.getTenantId());
             response.put("state", tenant.getState().name());
             response.put("message", "Tenant created successfully");
-            ctx.json(response);
+            ctx.status(201).json(response);
 
             logger.info("Tenant created: {}", tenantId);
         } catch (Exception e) {
@@ -122,7 +122,7 @@ public final class TenantDashboardIntegration {
 
         Map<String, Object> info = tenantSummary(ctx.pathParam("tenantId"), tenant);
         info.put("quota", tenant.getQuotaManager().getQuota().toMap());
-        ctx.json(info);
+        ctx.status(200).json(info);
     }
 
     static void deleteTenant(Context ctx, TenantManager tenantManager) {
@@ -139,7 +139,7 @@ public final class TenantDashboardIntegration {
 
         try {
             tenantManager.destroyTenant(tenantId, false);
-            ctx.json(Map.of("ok", true, "success", true, "tenantId", tenantId, "message", "Tenant deleted"));
+            ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenantId, "message", "Tenant deleted"));
             logger.info("Tenant deleted: {}", tenantId);
         } catch (Exception e) {
             logger.error("Failed to delete tenant: {}", tenantId, e);
@@ -160,7 +160,7 @@ public final class TenantDashboardIntegration {
         }
 
         tenantManager.suspendTenant(tenantId, "Suspended via dashboard");
-        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenantId, "state", "SUSPENDED"));
+        ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenantId, "state", "SUSPENDED"));
     }
 
     static void resumeTenant(Context ctx, TenantManager tenantManager) {
@@ -172,7 +172,7 @@ public final class TenantDashboardIntegration {
         }
 
         tenantManager.resumeTenant(tenantId);
-        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenantId, "state", "ACTIVE"));
+        ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenantId, "state", "ACTIVE"));
     }
 
     static void getQuota(Context ctx, TenantManager tenantManager) {
@@ -181,7 +181,7 @@ public final class TenantDashboardIntegration {
             return;
         }
 
-        ctx.json(tenant.getQuotaManager().getQuota().toMap());
+        ctx.status(200).json(tenant.getQuotaManager().getQuota().toMap());
     }
 
     static void updateQuota(Context ctx, TenantManager tenantManager) {
@@ -239,7 +239,7 @@ public final class TenantDashboardIntegration {
         tenant.getQuotaManager().updateQuota(quota);
         tenant.getConfig().set("quota", quota.toMap());
         tenant.getConfig().save();
-        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId(), "quota", quota.toMap()));
+        ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId(), "quota", quota.toMap()));
     }
 
     static void getUsage(Context ctx, TenantManager tenantManager) {
@@ -259,7 +259,7 @@ public final class TenantDashboardIntegration {
         result.put("storageUsage", usage.storageUsage());
         result.put("storage", tenant.getQuotaManager().getStorageUsage());
         result.put("memory", tenant.getQuotaManager().getMemoryUsage());
-        ctx.json(result);
+        ctx.status(200).json(result);
     }
 
     static void getSecurity(Context ctx, TenantManager tenantManager) {
@@ -281,7 +281,7 @@ public final class TenantDashboardIntegration {
         result.put("allowedTools", policy.getAllowedTools());
         result.put("deniedTools", policy.getDeniedTools());
         result.put("deniedPaths", policy.getDeniedPaths());
-        ctx.json(result);
+        ctx.status(200).json(result);
     }
 
     static void updateSecurity(Context ctx, TenantManager tenantManager) {
@@ -331,7 +331,7 @@ public final class TenantDashboardIntegration {
             logger.warn("Failed to save tenant security policy for {}: {}", tenant.getTenantId(), e.getMessage());
         }
 
-        ctx.json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId()));
+        ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId()));
     }
 
     static void getAuditLogs(Context ctx, TenantManager tenantManager) {
@@ -352,7 +352,7 @@ public final class TenantDashboardIntegration {
             })
             .collect(Collectors.toList());
 
-        ctx.json(Map.of("tenantId", tenant.getTenantId(), "logs", events, "events", events, "total", events.size()));
+        ctx.status(200).json(Map.of("tenantId", tenant.getTenantId(), "logs", events, "events", events, "total", events.size()));
     }
 
     static void getSessions(Context ctx, TenantManager tenantManager) {
@@ -361,7 +361,7 @@ public final class TenantDashboardIntegration {
             return;
         }
 
-        ctx.json(Map.of("tenantId", tenant.getTenantId(), "activeSessions", tenant.getActiveSessionCount()));
+        ctx.status(200).json(Map.of("tenantId", tenant.getTenantId(), "activeSessions", tenant.getActiveSessionCount()));
     }
 
     static void getSkills(Context ctx, TenantManager tenantManager) {
@@ -395,7 +395,7 @@ public final class TenantDashboardIntegration {
         response.put("installedSkills", skillNames); // compatibility alias for the previous dashboard response
         response.put("total", skills.size());
         response.put("totalSkills", skills.size()); // compatibility alias
-        ctx.json(response);
+        ctx.status(200).json(response);
     }
 
     static void getMetrics(Context ctx, TenantManager tenantManager) {
@@ -408,7 +408,7 @@ public final class TenantDashboardIntegration {
         metrics.put("tenantId", tenant.getTenantId());
         metrics.put("activeSessions", tenant.getActiveSessionCount());
         metrics.put("activeAgents", tenant.getActiveAgentCount());
-        ctx.json(metrics);
+        ctx.status(200).json(metrics);
     }
 
     static void getTenantConfig(Context ctx, TenantManager tenantManager) {
@@ -417,7 +417,7 @@ public final class TenantDashboardIntegration {
             return;
         }
 
-        ctx.json(tenant.getConfig().getAll());
+        ctx.status(200).json(tenant.getConfig().getAll());
     }
 
     static void updateTenantConfig(Context ctx, TenantManager tenantManager) {
@@ -430,7 +430,7 @@ public final class TenantDashboardIntegration {
             JSONObject body = parseBody(ctx);
             body.forEach((key, value) -> tenant.getConfig().set(key, value));
             tenant.getConfig().save();
-            ctx.json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId()));
+            ctx.status(200).json(Map.of("ok", true, "success", true, "tenantId", tenant.getTenantId()));
         } catch (Exception e) {
             logger.error("Failed to update tenant config for {}", tenant.getTenantId(), e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
