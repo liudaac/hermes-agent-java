@@ -11,6 +11,8 @@ import {
   Zap,
   FileText,
   SlidersHorizontal,
+  Pencil,
+  RotateCcw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ interface ChatMessage {
   content: string;
   timestamp: number;
   streaming?: boolean;
+  editing?: boolean;
 }
 
 interface UsageInfo {
@@ -78,119 +81,172 @@ export default function PlaygroundPage() {
     setToolCalls([]);
   }, []);
 
+  const startEditMessage = useCallback((msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, editing: true } : m)),
+    );
+  }, []);
+
+  const cancelEditMessage = useCallback((msgId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, editing: false } : m)),
+    );
+  }, []);
+
+  const doSend = useCallback(
+    async (text: string, baseMessages?: ChatMessage[]) => {
+      if (!text || loading) return;
+
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "user",
+        content: text,
+        timestamp: Date.now(),
+      };
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        streaming: true,
+      };
+
+      if (baseMessages) {
+        setMessages([...baseMessages, userMsg, assistantMsg]);
+      } else {
+        setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      }
+      setInput("");
+      setLoading(true);
+      setUsage(null);
+      setToolCalls([]);
+
+      let currentSid = sessionId;
+
+      try {
+        const mParams: Record<string, number | boolean | string> = {};
+        if (temperature !== "") mParams.temperature = temperature;
+        if (maxTokens !== "") mParams.max_tokens = maxTokens;
+        if (topP !== "") mParams.top_p = topP;
+        if (reasoning) mParams.reasoning = true;
+
+        await api.chatStream({
+          message: text,
+          tenant_id: tenantId,
+          session_id: currentSid || undefined,
+          system_prompt: systemPrompt || undefined,
+          model_params: Object.keys(mParams).length > 0 ? mParams : undefined,
+          onEvent: (event, data) => {
+            const d = data as Record<string, unknown>;
+
+            if (event === "session" && d.session_id) {
+              currentSid = String(d.session_id);
+              setSessionId(currentSid);
+            }
+            if (event === "message" || event === "delta") {
+              const content = String(d.content ?? "");
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant" && last.streaming) {
+                  return [
+                    ...prev.slice(0, -1),
+                    { ...last, content: last.content + content },
+                  ];
+                }
+                return prev;
+              });
+            }
+            if (event === "usage") {
+              setUsage({
+                promptTokens: Number(d.promptTokens ?? 0),
+                completionTokens: Number(d.completionTokens ?? 0),
+                cachedPromptTokens: Number(d.cachedPromptTokens ?? 0),
+                reasoningTokens: Number(d.reasoningTokens ?? 0),
+                totalTokens: Number(d.totalTokens ?? 0),
+                lastModel: d.lastModel ? String(d.lastModel) : undefined,
+              });
+            }
+            if (event === "tool_chain" && Array.isArray(d.calls)) {
+              setToolCalls(
+                d.calls.map((tc: Record<string, unknown>) => ({
+                  tool: String(tc.tool ?? ""),
+                  ok: Boolean(tc.ok),
+                  durationMs: Number(tc.durationMs ?? 0),
+                  timestamp: Number(tc.timestamp ?? 0),
+                })),
+              );
+            }
+            if (event === "done") {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant") {
+                  return [...prev.slice(0, -1), { ...last, streaming: false }];
+                }
+                return prev;
+              });
+              setLoading(false);
+            }
+            if (event === "error") {
+              const errMsg = String(d.error ?? "Unknown error");
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  role: "error",
+                  content: errMsg,
+                  timestamp: Date.now(),
+                },
+              ]);
+              setLoading(false);
+            }
+          },
+          onError: (err) => {
+            showToast(err.message, "error");
+            setLoading(false);
+          },
+        });
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err), "error");
+        setLoading(false);
+      }
+    },
+    [loading, tenantId, sessionId, systemPrompt, temperature, maxTokens, topP, reasoning, showToast],
+  );
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text) return;
+    await doSend(text);
+  }, [input, doSend]);
 
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: text,
-      timestamp: Date.now(),
-    };
-    const assistantMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "",
-      timestamp: Date.now(),
-      streaming: true,
-    };
-
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    setInput("");
-    setLoading(true);
-    setUsage(null);
-    setToolCalls([]);
-
-    let currentSid = sessionId;
-
-    try {
-      const mParams: Record<string, number | boolean | string> = {};
-      if (temperature !== "") mParams.temperature = temperature;
-      if (maxTokens !== "") mParams.max_tokens = maxTokens;
-      if (topP !== "") mParams.top_p = topP;
-      if (reasoning) mParams.reasoning = true;
-
-      await api.chatStream({
-        message: text,
-        tenant_id: tenantId,
-        session_id: currentSid || undefined,
-        system_prompt: systemPrompt || undefined,
-        model_params: Object.keys(mParams).length > 0 ? mParams : undefined,
-        onEvent: (event, data) => {
-          const d = data as Record<string, unknown>;
-
-          if (event === "session" && d.session_id) {
-            currentSid = String(d.session_id);
-            setSessionId(currentSid);
-          }
-          if (event === "message" || event === "delta") {
-            const content = String(d.content ?? "");
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === "assistant" && last.streaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...last, content: last.content + content },
-                ];
-              }
-              return prev;
-            });
-          }
-          if (event === "usage") {
-            setUsage({
-              promptTokens: Number(d.promptTokens ?? 0),
-              completionTokens: Number(d.completionTokens ?? 0),
-              cachedPromptTokens: Number(d.cachedPromptTokens ?? 0),
-              reasoningTokens: Number(d.reasoningTokens ?? 0),
-              totalTokens: Number(d.totalTokens ?? 0),
-              lastModel: d.lastModel ? String(d.lastModel) : undefined,
-            });
-          }
-          if (event === "tool_chain" && Array.isArray(d.calls)) {
-            setToolCalls(
-              d.calls.map((tc: Record<string, unknown>) => ({
-                tool: String(tc.tool ?? ""),
-                ok: Boolean(tc.ok),
-                durationMs: Number(tc.durationMs ?? 0),
-                timestamp: Number(tc.timestamp ?? 0),
-              })),
-            );
-          }
-          if (event === "done") {
-            setMessages((prev) => {
-              const last = prev[prev.length - 1];
-              if (last?.role === "assistant") {
-                return [...prev.slice(0, -1), { ...last, streaming: false }];
-              }
-              return prev;
-            });
-            setLoading(false);
-          }
-          if (event === "error") {
-            const errMsg = String(d.error ?? "Unknown error");
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: crypto.randomUUID(),
-                role: "error",
-                content: errMsg,
-                timestamp: Date.now(),
-              },
-            ]);
-            setLoading(false);
-          }
-        },
-        onError: (err) => {
-          showToast(err.message, "error");
-          setLoading(false);
-        },
+  const commitEditMessage = useCallback(
+    (msgId: string, newText: string) => {
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === msgId);
+        if (idx < 0) return prev;
+        const truncated = prev.slice(0, idx + 1);
+        truncated[idx] = { ...truncated[idx], content: newText, editing: false };
+        setTimeout(() => doSend(newText, truncated), 0);
+        return truncated;
       });
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err), "error");
-      setLoading(false);
-    }
-  }, [input, loading, tenantId, sessionId, systemPrompt, temperature, maxTokens, topP, reasoning, showToast]);
+    },
+    [doSend],
+  );
+
+  const regenerateMessage = useCallback(
+    (msgId: string) => {
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === msgId);
+        if (idx < 0) return prev;
+        const keep = prev.slice(0, idx);
+        const lastUser = keep.findLast((m) => m.role === "user");
+        if (!lastUser) return prev;
+        setTimeout(() => doSend(lastUser.content, keep), 0);
+        return keep;
+      });
+    },
+    [doSend],
+  );
 
   return (
     <div className="space-y-4">
@@ -432,7 +488,7 @@ export default function PlaygroundPage() {
                 )}
                 <div
                   className={cn(
-                    "max-w-[80%] rounded-sm px-3 py-2 text-sm",
+                    "max-w-[80%] rounded-sm px-3 py-2 text-sm group relative",
                     msg.role === "user"
                       ? "bg-midground/10 text-midground"
                       : msg.role === "error"
@@ -440,7 +496,46 @@ export default function PlaygroundPage() {
                         : "bg-current/5 border border-current/10",
                   )}
                 >
-                  {msg.role === "assistant" ? (
+                  {msg.editing ? (
+                    <div className="space-y-2">
+                      <textarea
+                        defaultValue={msg.content}
+                        autoFocus
+                        className="w-full bg-black/50 border border-current/20 rounded-sm px-2 py-1 text-xs resize-y focus:outline-none focus:border-midground/40"
+                        rows={2}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && e.metaKey) {
+                            const target = e.target as HTMLTextAreaElement;
+                            commitEditMessage(msg.id, target.value);
+                          }
+                          if (e.key === "Escape") {
+                            cancelEditMessage(msg.id);
+                          }
+                        }}
+                      />
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => cancelEditMessage(msg.id)}
+                          className="h-5 text-[10px] px-1.5"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            const textarea = (e.currentTarget.parentElement?.previousElementSibling as HTMLTextAreaElement);
+                            commitEditMessage(msg.id, textarea.value);
+                          }}
+                          className="h-5 text-[10px] px-1.5"
+                        >
+                          Save & Send
+                        </Button>
+                      </div>
+                    </div>
+                  ) : msg.role === "assistant" ? (
                     <div className="text-sm leading-relaxed">
                       <MarkdownRenderer content={msg.content} />
                       {msg.streaming && (
@@ -454,6 +549,30 @@ export default function PlaygroundPage() {
                         <span className="inline-block w-1.5 h-3.5 bg-midground/60 ml-0.5 animate-pulse" />
                       )}
                     </pre>
+                  )}
+
+                  {/* Action buttons */}
+                  {!msg.streaming && !msg.editing && (
+                    <div className="flex items-center gap-1.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {msg.role === "user" && (
+                        <button
+                          onClick={() => startEditMessage(msg.id)}
+                          className="flex items-center gap-0.5 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          Edit
+                        </button>
+                      )}
+                      {msg.role === "assistant" && (
+                        <button
+                          onClick={() => regenerateMessage(msg.id)}
+                          className="flex items-center gap-0.5 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
+                        >
+                          <RotateCcw className="h-2.5 w-2.5" />
+                          Retry
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 {msg.role === "user" && (
