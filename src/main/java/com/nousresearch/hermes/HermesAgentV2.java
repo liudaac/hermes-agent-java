@@ -5,6 +5,8 @@ import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.config.ConfigManager;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.dashboard.DashboardServer;
+import com.nousresearch.hermes.dashboard.GatewayRuntimeStatus;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import com.nousresearch.hermes.gateway.GatewayServerV2;
 import com.nousresearch.hermes.gateway.SessionManager;
@@ -31,6 +33,7 @@ public class HermesAgentV2 {
     private final TenantManager tenantManager;
     private GatewayServer gatewayServer;       // Legacy gateway (V1)
     private GatewayServerV2 gatewayServerV2;   // New tenant-aware gateway (V2)
+    private DashboardServer dashboardServer;   // Dashboard web UI
     private final boolean tenantMode;
     private TenantAwareAIAgent interactiveAgent;  // Persistent agent for interactive mode
     
@@ -144,9 +147,20 @@ public class HermesAgentV2 {
             logger.info("Gateway V1 started (legacy mode)");
         }
 
+        // Start dashboard server
+        startDashboard();
+
         // Add shutdown hook
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Shutting down...");
+            if (dashboardServer != null) {
+                try {
+                    dashboardServer.stop();
+                    logger.info("Dashboard server stopped");
+                } catch (Exception e) {
+                    logger.error("Error stopping dashboard server: {}", e.getMessage());
+                }
+            }
             if (gatewayServerV2 != null) {
                 gatewayServerV2.stop();
             }
@@ -160,6 +174,49 @@ public class HermesAgentV2 {
         }));
 
         logger.info("Hermes Agent V2 started (tenant mode: {})", tenantMode);
+    }
+
+    /**
+     * Start the dashboard server for web UI.
+     */
+    private void startDashboard() {
+        try {
+            int port = Integer.parseInt(System.getenv().getOrDefault("HERMES_DASHBOARD_PORT", "9119"));
+            String host = System.getenv().getOrDefault("HERMES_DASHBOARD_HOST", "127.0.0.1");
+            HermesConfig agentConfig = new HermesConfig(
+                config.getApiKey(),
+                config.getBaseUrl(),
+                config.getModelName()
+            );
+            dashboardServer = new DashboardServer(port, host, agentConfig, tenantManager, this::getDashboardRuntimeStatus);
+            dashboardServer.start();
+            logger.info("Dashboard server started on http://{}:{}", host, port);
+        } catch (Exception e) {
+            logger.error("Failed to start dashboard server: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Provide runtime status for the dashboard.
+     */
+    private GatewayRuntimeStatus getDashboardRuntimeStatus() {
+        boolean gatewayRunning = gatewayServerV2 != null || gatewayServer != null;
+        Integer port = null;
+        if (gatewayServerV2 != null) {
+            // GatewayServerV2 doesn't expose port directly, use config
+            port = config.getInt("gateway.port", 8080);
+        } else if (gatewayServer != null) {
+            port = config.getInt("gateway.port", 8080);
+        }
+        return new GatewayRuntimeStatus(
+            gatewayRunning,
+            port,
+            gatewayRunning ? "RUNNING" : "STOPPED",
+            gatewayRunning && port != null ? "http://127.0.0.1:" + port + "/health" : null,
+            null,
+            System.currentTimeMillis(),
+            java.util.List.of()
+        );
     }
     
     /**
