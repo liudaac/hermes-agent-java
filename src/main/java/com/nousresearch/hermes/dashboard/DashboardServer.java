@@ -416,7 +416,9 @@ public class DashboardServer {
     java.nio.file.Path resolveWebDistPath() {
         String explicit = System.getenv("HERMES_WEB_DIST");
         if (explicit != null && !explicit.isBlank()) {
-            return java.nio.file.Path.of(explicit).toAbsolutePath().normalize();
+            java.nio.file.Path p = java.nio.file.Path.of(explicit).toAbsolutePath().normalize();
+            logger.info("HERMES_WEB_DIST set, using {}", p);
+            return p;
         }
 
         // Try paths relative to the current working directory first.
@@ -428,7 +430,10 @@ public class DashboardServer {
 
         for (java.nio.file.Path candidate : cwdCandidates) {
             java.nio.file.Path normalized = candidate.toAbsolutePath().normalize();
-            if (java.nio.file.Files.exists(normalized.resolve("index.html"))) {
+            boolean exists = java.nio.file.Files.exists(normalized.resolve("index.html"));
+            logger.debug("CWD candidate: {} -> index.html exists={}", normalized, exists);
+            if (exists) {
+                logger.info("Resolved web_dist from CWD: {}", normalized);
                 return normalized;
             }
         }
@@ -439,6 +444,7 @@ public class DashboardServer {
             java.nio.file.Path jarDir = java.nio.file.Path.of(
                 getClass().getProtectionDomain().getCodeSource().getLocation().toURI()
             ).getParent();
+            logger.debug("Jar directory: {}", jarDir);
             if (jarDir != null) {
                 java.util.List<java.nio.file.Path> jarCandidates = java.util.List.of(
                     jarDir.resolve("hermes_cli").resolve("web_dist"),
@@ -447,7 +453,10 @@ public class DashboardServer {
                 );
                 for (java.nio.file.Path candidate : jarCandidates) {
                     java.nio.file.Path normalized = candidate.normalize();
-                    if (java.nio.file.Files.exists(normalized.resolve("index.html"))) {
+                    boolean exists = java.nio.file.Files.exists(normalized.resolve("index.html"));
+                    logger.debug("Jar candidate: {} -> index.html exists={}", normalized, exists);
+                    if (exists) {
+                        logger.info("Resolved web_dist from jar location: {}", normalized);
                         return normalized;
                     }
                 }
@@ -458,7 +467,9 @@ public class DashboardServer {
 
         // Last resort: return the first cwd candidate even if it doesn't exist
         // (caller will log a warning and skip static route registration).
-        return cwdCandidates.get(0).toAbsolutePath().normalize();
+        java.nio.file.Path fallback = cwdCandidates.get(0).toAbsolutePath().normalize();
+        logger.warn("No web_dist found; falling back to {} (static routes will be skipped)", fallback);
+        return fallback;
     }
 
     private void serveStaticFile(Context ctx, java.nio.file.Path basePath) {
