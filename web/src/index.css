@@ -60,12 +60,23 @@ code { font-size: 0.875rem; }
   --color-destructive-foreground: #ffffff;
   --color-success: #4ade80;
   --color-warning: #ffbd38;
+  --color-info: #60a5fa;
   --color-border: color-mix(in srgb, var(--midground-base) 15%, transparent);
   --color-input: color-mix(in srgb, var(--midground-base) 15%, transparent);
   --color-ring: var(--midground);
   --color-popover: color-mix(in srgb, var(--midground-base) 4%, var(--background-base));
   --color-chart-input: var(--midground);
   --color-chart-output: var(--color-success);
+
+  /* Elevation / shadow tokens */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 16px color-mix(in srgb, var(--midground-base) 12%, transparent);
+
+  /* Animation timing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 
@@ -77,6 +88,93 @@ code { font-size: 0.875rem; }
 @keyframes toast-out {
   from { opacity: 1; transform: translateX(0); }
   to   { opacity: 0; transform: translateX(16px); }
+}
+
+/* Fade-in-up entrance animation */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Shimmer for loading skeletons */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Subtle pulse for active/recording states */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
+/* Glow pulse for badges/highlights */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--midground-base) 20%, transparent); }
+  50%      { box-shadow: 0 0 8px 2px color-mix(in srgb, var(--midground-base) 10%, transparent); }
+}
+
+/* Smooth page transitions */
+.page-transition-enter {
+  animation: fade-in-up 0.3s var(--ease-out-expo) forwards;
+}
+
+/* Utility: animated shimmer background */
+.shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--midground-base) 4%, var(--background-base)) 25%,
+    color-mix(in srgb, var(--midground-base) 12%, var(--background-base)) 50%,
+    color-mix(in srgb, var(--midground-base) 4%, var(--background-base)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Global smooth transitions for interactive elements */
+button, a, input, textarea, select {
+  transition: all 0.15s var(--ease-in-out);
+}
+
+/* Focus ring animation */
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible {
+  transition: box-shadow 0.2s var(--ease-out-expo);
+}
+
+/* Card hover lift */
+.card-hover {
+  transition: border-color 0.2s var(--ease-in-out), box-shadow 0.2s var(--ease-in-out), transform 0.2s var(--ease-in-out);
+}
+.card-hover:hover {
+  border-color: color-mix(in srgb, var(--midground-base) 30%, transparent);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+/* Badge glow for important states */
+.badge-glow {
+  animation: glow-pulse 2s infinite;
+}
+
+/* Soft pulse for recording/loading */
+.soft-pulse {
+  animation: soft-pulse 1.5s infinite ease-in-out;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--midground-base) 20%, transparent);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--midground-base) 35%, transparent);
 }
 
 /* Hide scrollbar utility — used by the header's overflow-x nav row. */
