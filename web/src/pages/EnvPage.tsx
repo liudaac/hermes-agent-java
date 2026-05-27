@@ -17,14 +17,13 @@ import {
 import { api } from "@/lib/api";
 import type { EnvVarInfo } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
 import { OAuthProvidersCard } from "@/components/OAuthProvidersCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useI18n } from "@/i18n";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 /* ------------------------------------------------------------------ */
 /*  Provider grouping                                                  */
@@ -359,7 +358,7 @@ export default function EnvPage() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(true); // Show all providers by default
-  const { toast, showToast } = useToast();
+  const { showToast } = useToast();
   const { t } = useI18n();
 
   useEffect(() => {
@@ -478,11 +477,7 @@ export default function EnvPage() {
   }, [vars, showAdvanced, t]);
 
   if (!vars) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const totalProviders = providerGroups.length;
@@ -490,8 +485,6 @@ export default function EnvPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Toast toast={toast} />
-
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">

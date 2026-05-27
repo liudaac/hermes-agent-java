@@ -26,7 +26,6 @@ import type {
   TenantUsage,
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -117,7 +116,7 @@ export default function TenantsPage() {
     deniedTools: "",
     deniedPaths: "",
   });
-  const { toast, showToast } = useToast();
+  const { showToast } = useToast();
 
   const loadTenants = async () => {
     setLoading(true);
@@ -328,8 +327,6 @@ export default function TenantsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Toast toast={toast} />
-
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-muted-foreground" />

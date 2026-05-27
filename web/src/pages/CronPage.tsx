@@ -20,14 +20,13 @@ import type {
   CronSchedulePreview,
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectOption } from "@/components/ui/select";
-import { useI18n } from "@/i18n";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 function formatTime(iso?: string | null): string {
   if (!iso) return "—";
@@ -54,7 +53,7 @@ const PRESETS: { label: string; expr: string }[] = [
 export default function CronPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
-  const { toast, showToast } = useToast();
+  const { showToast } = useToast();
   const { t } = useI18n();
 
   // New job form state
@@ -227,17 +226,11 @@ export default function CronPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <Toast toast={toast} />
-
       {/* Create new job form */}
       <Card>
         <CardHeader>

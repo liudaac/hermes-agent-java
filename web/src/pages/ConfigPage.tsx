@@ -31,13 +31,12 @@ import {
 import { api } from "@/lib/api";
 import { getNestedValue, setNestedValue } from "@/lib/nested";
 import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
 import { AutoField } from "@/components/AutoField";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { useI18n } from "@/i18n";
+import { SidebarLayout } from "@/components/SidebarLayout";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -82,7 +81,7 @@ export default function ConfigPage() {
   const [yamlLoading, setYamlLoading] = useState(false);
   const [yamlSaving, setYamlSaving] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("");
-  const { toast, showToast } = useToast();
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
@@ -142,6 +141,20 @@ export default function ConfigPage() {
     }
     return counts;
   }, [schema]);
+
+  /* ---- Dirty count vs defaults ---- */
+  const dirtyCount = useMemo(() => {
+    if (!schema || !defaults || !config) return 0;
+    let count = 0;
+    for (const key of Object.keys(schema)) {
+      const current = getNestedValue(config, key);
+      const def = getNestedValue(defaults, key);
+      if (JSON.stringify(current) !== JSON.stringify(def)) {
+        count++;
+      }
+    }
+    return count;
+  }, [schema, defaults, config]);
 
   /* ---- Search ---- */
   const isSearching = searchQuery.trim().length > 0;
@@ -229,11 +242,7 @@ export default function ConfigPage() {
 
   /* ---- Loading ---- */
   if (!config || !schema) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   /* ---- Render field list (shared between search & normal) ---- */
@@ -273,7 +282,13 @@ export default function ConfigPage() {
               schemaKey={key}
               schema={s}
               value={getNestedValue(config, key)}
+              defaultValue={defaults ? getNestedValue(defaults, key) : undefined}
               onChange={(v) => setConfig(setNestedValue(config, key, v))}
+              onReset={
+                defaults
+                  ? () => setConfig(setNestedValue(config, key, getNestedValue(defaults, key)))
+                  : undefined
+              }
             />
           </div>
         </div>
@@ -283,8 +298,6 @@ export default function ConfigPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Toast toast={toast} />
-
       {/* ═══════════════ Header Bar ═══════════════ */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
@@ -292,6 +305,11 @@ export default function ConfigPage() {
           <code className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5">
             {t.config.configPath}
           </code>
+          {dirtyCount > 0 && (
+            <Badge variant="warning" className="text-[10px]">
+              {dirtyCount} modified
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <Button variant="ghost" size="sm" onClick={handleExport} title={t.config.exportConfig} aria-label={t.config.exportConfig}>
@@ -351,9 +369,7 @@ export default function ConfigPage() {
           </CardHeader>
           <CardContent className="p-0">
             {yamlLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              </div>
+              <LoadingSpinner size="md" padding="py-12" />
             ) : (
               <textarea
                 className="flex min-h-[600px] w-full bg-transparent px-4 py-3 text-sm font-mono leading-relaxed placeholder:text-muted-foreground focus-visible:outline-none border-t border-border"
@@ -366,7 +382,7 @@ export default function ConfigPage() {
         </Card>
       ) : (
         /* ═══════════════ Form Mode ═══════════════ */
-        <div className="flex flex-col sm:flex-row gap-4" style={{ minHeight: "calc(100vh - 180px)" }}>
+        <div className="flex flex-col sm:flex-row gap-4 layout-with-sidebar">
           {/* ---- Sidebar — horizontal scroll on mobile, fixed column on sm+ ---- */}
           <div className="sm:w-52 sm:shrink-0">
             <div className="sm:sticky sm:top-[72px] flex flex-col gap-1">

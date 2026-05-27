@@ -13,9 +13,18 @@ import { timeAgo } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { useI18n } from "@/i18n";
+import { LiveBadge } from "@/components/LiveBadge";
+import { CardHeaderIcon } from "@/components/CardHeaderIcon";
+import {
+  DataTable,
+  DataTableHeader,
+  DataTableHead,
+  DataTableBody,
+  DataTableRow,
+  DataTableCell,
+} from "@/components/DataTable";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 const PERIODS = [
   { label: "1d", days: 1 },
@@ -81,11 +90,11 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
         </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 bg-[#ffe6cb]" />
+            <div className="h-2.5 w-2.5 bg-chart-input" />
             {t.analytics.input}
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="h-2.5 w-2.5 bg-emerald-500" />
+            <div className="h-2.5 w-2.5 bg-chart-output" />
             {t.analytics.output}
           </div>
         </div>
@@ -113,12 +122,12 @@ function TokenBarChart({ daily }: { daily: AnalyticsDailyEntry[] }) {
                 </div>
                 {/* Input bar */}
                 <div
-                  className="w-full bg-[#ffe6cb]/70"
+                  className="w-full bg-chart-input/70"
                   style={{ height: Math.max(inputH, total > 0 ? 1 : 0) }}
                 />
                 {/* Output bar */}
                 <div
-                  className="w-full bg-emerald-500/70"
+                  className="w-full bg-chart-output/70"
                   style={{ height: Math.max(outputH, d.output_tokens > 0 ? 1 : 0) }}
                 />
               </div>
@@ -146,41 +155,30 @@ function DailyTable({ daily }: { daily: AnalyticsDailyEntry[] }) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">{t.analytics.dailyBreakdown}</CardTitle>
-        </div>
-      </CardHeader>
+      <CardHeaderIcon icon={TrendingUp} title={t.analytics.dailyBreakdown} />
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4 font-medium">{t.analytics.date}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.sessions.title}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.analytics.input}</th>
-                <th className="text-right py-2 pl-4 font-medium">{t.analytics.output}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((d) => {
-                return (
-                  <tr key={d.day} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                    <td className="py-2 pr-4 font-medium">{formatDate(d.day)}</td>
-                    <td className="text-right py-2 px-4 text-muted-foreground">{d.sessions}</td>
-                    <td className="text-right py-2 px-4">
-                      <span className="text-[#ffe6cb]">{formatTokens(d.input_tokens)}</span>
-                    </td>
-                    <td className="text-right py-2 pl-4">
-                      <span className="text-emerald-400">{formatTokens(d.output_tokens)}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <DataTableHead>{t.analytics.date}</DataTableHead>
+            <DataTableHead align="right">{t.sessions.title}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.input}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.output}</DataTableHead>
+          </DataTableHeader>
+          <DataTableBody>
+            {sorted.map((d) => (
+              <DataTableRow key={d.day}>
+                <DataTableCell className="font-medium">{formatDate(d.day)}</DataTableCell>
+                <DataTableCell align="right" className="text-muted-foreground">{d.sessions}</DataTableCell>
+                <DataTableCell align="right">
+                  <span className="text-chart-input">{formatTokens(d.input_tokens)}</span>
+                </DataTableCell>
+                <DataTableCell align="right">
+                  <span className="text-chart-output">{formatTokens(d.output_tokens)}</span>
+                </DataTableCell>
+              </DataTableRow>
+            ))}
+          </DataTableBody>
+        </DataTable>
       </CardContent>
     </Card>
   );
@@ -196,39 +194,30 @@ function ModelTable({ models }: { models: AnalyticsModelEntry[] }) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Cpu className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">{t.analytics.perModelBreakdown}</CardTitle>
-        </div>
-      </CardHeader>
+      <CardHeaderIcon icon={Cpu} title={t.analytics.perModelBreakdown} />
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4 font-medium">{t.analytics.model}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.sessions.title}</th>
-                <th className="text-right py-2 pl-4 font-medium">{t.analytics.tokens}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((m) => (
-                <tr key={m.model} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                  <td className="py-2 pr-4">
-                    <span className="font-mono-ui text-xs">{m.model}</span>
-                  </td>
-                  <td className="text-right py-2 px-4 text-muted-foreground">{m.sessions}</td>
-                  <td className="text-right py-2 pl-4">
-                    <span className="text-[#ffe6cb]">{formatTokens(m.input_tokens)}</span>
-                    {" / "}
-                    <span className="text-emerald-400">{formatTokens(m.output_tokens)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <DataTableHead>{t.analytics.model}</DataTableHead>
+            <DataTableHead align="right">{t.sessions.title}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.tokens}</DataTableHead>
+          </DataTableHeader>
+          <DataTableBody>
+            {sorted.map((m) => (
+              <DataTableRow key={m.model}>
+                <DataTableCell>
+                  <span className="font-mono-ui text-xs">{m.model}</span>
+                </DataTableCell>
+                <DataTableCell align="right" className="text-muted-foreground">{m.sessions}</DataTableCell>
+                <DataTableCell align="right">
+                  <span className="text-chart-input">{formatTokens(m.input_tokens)}</span>
+                  {" / "}
+                  <span className="text-chart-output">{formatTokens(m.output_tokens)}</span>
+                </DataTableCell>
+              </DataTableRow>
+            ))}
+          </DataTableBody>
+        </DataTable>
       </CardContent>
     </Card>
   );
@@ -240,41 +229,32 @@ function SkillTable({ skills }: { skills: AnalyticsSkillEntry[] }) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Brain className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">{t.analytics.topSkills}</CardTitle>
-        </div>
-      </CardHeader>
+      <CardHeaderIcon icon={Brain} title={t.analytics.topSkills} />
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4 font-medium">{t.analytics.skill}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.analytics.loads}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.analytics.edits}</th>
-                <th className="text-right py-2 px-4 font-medium">{t.analytics.total}</th>
-                <th className="text-right py-2 pl-4 font-medium">{t.analytics.lastUsed}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {skills.map((skill) => (
-                <tr key={skill.skill} className="border-b border-border/50 hover:bg-secondary/20 transition-colors">
-                  <td className="py-2 pr-4">
-                    <span className="font-mono-ui text-xs">{skill.skill}</span>
-                  </td>
-                  <td className="text-right py-2 px-4 text-muted-foreground">{skill.view_count}</td>
-                  <td className="text-right py-2 px-4 text-muted-foreground">{skill.manage_count}</td>
-                  <td className="text-right py-2 px-4">{skill.total_count}</td>
-                  <td className="text-right py-2 pl-4 text-muted-foreground">
-                    {skill.last_used_at ? timeAgo(skill.last_used_at) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable>
+          <DataTableHeader>
+            <DataTableHead>{t.analytics.skill}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.loads}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.edits}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.total}</DataTableHead>
+            <DataTableHead align="right">{t.analytics.lastUsed}</DataTableHead>
+          </DataTableHeader>
+          <DataTableBody>
+            {skills.map((skill) => (
+              <DataTableRow key={skill.skill}>
+                <DataTableCell>
+                  <span className="font-mono-ui text-xs">{skill.skill}</span>
+                </DataTableCell>
+                <DataTableCell align="right" className="text-muted-foreground">{skill.view_count}</DataTableCell>
+                <DataTableCell align="right" className="text-muted-foreground">{skill.manage_count}</DataTableCell>
+                <DataTableCell align="right">{skill.total_count}</DataTableCell>
+                <DataTableCell align="right" className="text-muted-foreground">
+                  {skill.last_used_at ? timeAgo(skill.last_used_at) : "—"}
+                </DataTableCell>
+              </DataTableRow>
+            ))}
+          </DataTableBody>
+        </DataTable>
       </CardContent>
     </Card>
   );
@@ -331,10 +311,7 @@ export default function AnalyticsPage() {
             <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} />
             <Label className="text-xs">auto refresh</Label>
             {autoRefresh && (
-              <Badge variant="success" className="text-[10px]">
-                <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                live
-              </Badge>
+              <LiveBadge />
             )}
           </div>
           <Button
@@ -350,11 +327,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {loading && !data && (
-        <div className="flex items-center justify-center py-24">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
-      )}
+      {loading && !data && <LoadingSpinner />}
 
       {error && (
         <Card>

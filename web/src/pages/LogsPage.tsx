@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useI18n } from "@/i18n";
+import { LiveBadge } from "@/components/LiveBadge";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
@@ -256,12 +257,7 @@ export default function LogsPage() {
               disabled={liveTail}
             />
             <Label className="text-xs">{t.logs.autoRefresh}</Label>
-            {autoRefresh && !liveTail && (
-              <Badge variant="success" className="text-[10px]">
-                <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                {t.common.live}
-              </Badge>
-            )}
+            {autoRefresh && !liveTail && <LiveBadge label={t.common.live} />}
           </div>
           <Button
             variant="outline"
@@ -277,10 +273,7 @@ export default function LogsPage() {
       </div>
 
       {/* ═══════════════ Sidebar + Content ═══════════════ */}
-      <div
-        className="flex flex-col sm:flex-row gap-4"
-        style={{ minHeight: "calc(100vh - 180px)" }}
-      >
+      <div className="flex flex-col sm:flex-row gap-4 layout-with-sidebar">
         {/* ---- Sidebar ---- */}
         <div className="sm:w-44 sm:shrink-0">
           <div className="sm:sticky sm:top-[72px] flex flex-col gap-0.5">

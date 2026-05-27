@@ -6,6 +6,8 @@ import { I18nProvider } from "./i18n";
 import { exposePluginSDK } from "./plugins";
 import { ThemeProvider } from "./themes";
 
+import { ToastProvider } from "./hooks/useToast";
+
 // Expose the plugin SDK before rendering so plugins loaded via <script>
 // can access React, components, etc. immediately.
 exposePluginSDK();
@@ -14,7 +16,9 @@ createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
     <I18nProvider>
       <ThemeProvider>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </ThemeProvider>
     </I18nProvider>
   </BrowserRouter>,

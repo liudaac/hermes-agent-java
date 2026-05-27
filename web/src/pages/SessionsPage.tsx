@@ -26,7 +26,8 @@ import { Markdown } from "@/components/Markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useI18n } from "@/i18n";
+import { LiveBadge } from "@/components/LiveBadge";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
   {
@@ -338,8 +339,7 @@ function SessionRow({
               </span>
               {session.is_active && (
                 <Badge variant="success" className="text-[10px] shrink-0">
-                  <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                  {t.common.live}
+                  <LiveBadge />
                 </Badge>
               )}
             </div>
@@ -388,9 +388,7 @@ function SessionRow({
       {isExpanded && (
         <div className="border-t border-border bg-background/50 p-4">
           {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            </div>
+            <LoadingSpinner size="md" padding="py-8" />
           )}
           {error && (
             <p className="text-sm text-destructive py-4 text-center">{error}</p>
@@ -505,11 +503,7 @@ export default function SessionsPage() {
     : sessions;
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (

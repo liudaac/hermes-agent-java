@@ -19,12 +19,11 @@ import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type { SkillInfo, ToolsetInfo } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useI18n } from "@/i18n";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 /* ------------------------------------------------------------------ */
 /*  Types & helpers                                                    */
@@ -96,7 +95,7 @@ export default function SkillsPage() {
   const [view, setView] = useState<"skills" | "toolsets">("skills");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [togglingSkills, setTogglingSkills] = useState<Set<string>>(new Set());
-  const { toast, showToast } = useToast();
+  const { showToast } = useToast();
   const { t } = useI18n();
 
   useEffect(() => {
@@ -194,17 +193,11 @@ export default function SkillsPage() {
 
   /* ---- Loading ---- */
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <Toast toast={toast} />
-
       {/* ═══════════════ Header ═══════════════ */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -219,10 +212,7 @@ export default function SkillsPage() {
       </div>
 
       {/* ═══════════════ Sidebar + Content ═══════════════ */}
-      <div
-        className="flex flex-col sm:flex-row gap-4"
-        style={{ minHeight: "calc(100vh - 180px)" }}
-      >
+      <div className="flex flex-col sm:flex-row gap-4 layout-with-sidebar">
         {/* ---- Sidebar ---- */}
         <div className="sm:w-52 sm:shrink-0">
           <div className="sm:sticky sm:top-[72px] flex flex-col gap-1">

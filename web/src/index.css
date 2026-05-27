@@ -64,7 +64,8 @@ code { font-size: 0.875rem; }
   --color-input: color-mix(in srgb, var(--midground-base) 15%, transparent);
   --color-ring: var(--midground);
   --color-popover: color-mix(in srgb, var(--midground-base) 4%, var(--background-base));
-  --color-popover-foreground: var(--midground);
+  --color-chart-input: var(--midground);
+  --color-chart-output: var(--color-success);
 }
 
 
@@ -97,6 +98,11 @@ code { font-size: 0.875rem; }
    break the grid. */
 .font-mono-ui {
   font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+}
+
+/* Layout utility for pages with a sticky sidebar. */
+.layout-with-sidebar {
+  min-height: calc(100vh - 180px);
 }
 
 /* Subtle grain overlay for badges. */

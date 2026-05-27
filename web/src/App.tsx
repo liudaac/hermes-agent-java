@@ -160,8 +160,7 @@ export default function App() {
             >
               <Cell className="flex items-center !p-0 !px-3 sm:!px-5">
                 <Typography
-                  className="font-bold text-[1.0625rem] sm:text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground"
-                  style={{ mixBlendMode: "plus-lighter" }}
+                  className="font-bold text-[1.0625rem] sm:text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground blend-lighter"
                 >
                   Hermes
                   <br />
@@ -206,8 +205,7 @@ export default function App() {
                         {isActive && (
                           <span
                             aria-hidden
-                            className="absolute bottom-0 left-0 right-0 h-px bg-midground"
-                            style={{ mixBlendMode: "plus-lighter" }}
+                            className="absolute bottom-0 left-0 right-0 h-px bg-midground blend-lighter"
                           />
                         )}
                       </>
@@ -271,8 +269,7 @@ export default function App() {
           <Cell className="flex items-center justify-end !px-3 sm:!px-6 !py-3">
             <Typography
               mondwest
-              className="text-[0.6rem] sm:text-[0.7rem] tracking-[0.15em] text-midground"
-              style={{ mixBlendMode: "plus-lighter" }}
+              className="text-[0.6rem] sm:text-[0.7rem] tracking-[0.15em] text-midground blend-lighter"
             >
               {t.app.footer.org}
             </Typography>

@@ -27,7 +27,10 @@ import { cn, timeAgo, isoTimeAgo } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Toast } from "@/components/Toast";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { LiveBadge } from "@/components/LiveBadge";
+import { CardHeaderIcon } from "@/components/CardHeaderIcon";
+import { useToast } from "@/hooks/useToast";
 import { useI18n } from "@/i18n";
 
 const ACTION_NAMES: Record<"restart" | "update", string> = {
@@ -47,7 +50,7 @@ export default function StatusPage() {
   const [actionStatus, setActionStatus] = useState<ActionStatusResponse | null>(
     null,
   );
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const { showToast } = useToast();
   const logScrollRef = useRef<HTMLPreElement | null>(null);
   const { t } = useI18n();
 
@@ -68,12 +71,6 @@ export default function StatusPage() {
   }, []);
 
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  useEffect(() => {
     if (!activeAction) return;
     const name = ACTION_NAMES[activeAction];
     let cancelled = false;
@@ -85,12 +82,12 @@ export default function StatusPage() {
         setActionStatus(resp);
         if (!resp.running) {
           const ok = resp.exit_code === 0;
-          setToast({
-            type: ok ? "success" : "error",
-            message: ok
+          showToast(
+            ok
               ? t.status.actionFinished
               : `${t.status.actionFailed} (exit ${resp.exit_code ?? "?"})`,
-          });
+            ok ? "success" : "error",
+          );
           return;
         }
       } catch {
@@ -122,10 +119,7 @@ export default function StatusPage() {
       setActiveAction(action);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      setToast({
-        type: "error",
-        message: `${t.status.actionFailed}: ${detail}`,
-      });
+      showToast(`${t.status.actionFailed}: ${detail}`, "error");
     } finally {
       setPendingAction(null);
     }
@@ -137,11 +131,7 @@ export default function StatusPage() {
   };
 
   if (!status) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const PLATFORM_STATE_BADGE: Record<
@@ -242,8 +232,6 @@ export default function StatusPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Toast toast={toast} />
-
       {alerts.length > 0 && (
         <div className="border border-destructive/30 bg-destructive/[0.06] p-4">
           <div className="flex items-start gap-3">
@@ -286,10 +274,8 @@ export default function StatusPage() {
 
             {badgeText && (
               <Badge variant={badgeVariant} className="self-start">
-                {badgeVariant === "success" && (
-                  <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                )}
-                {badgeText}
+                {badgeVariant === "success" && <LiveBadge label={badgeText} />}
+                {badgeVariant !== "success" && badgeText}
               </Badge>
             )}
           </Cell>
@@ -427,14 +413,7 @@ export default function StatusPage() {
 
       {activeSessions.length > 0 && (
         <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-success" />
-              <CardTitle className="text-base">
-                {t.status.activeSessions}
-              </CardTitle>
-            </div>
-          </CardHeader>
+          <CardHeaderIcon icon={Activity} title={t.status.activeSessions} />
 
           <CardContent className="grid gap-3">
             {activeSessions.map((s) => (
@@ -449,8 +428,7 @@ export default function StatusPage() {
                     </span>
 
                     <Badge variant="success" className="text-[10px] shrink-0">
-                      <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                      {t.common.live}
+                      <LiveBadge />
                     </Badge>
                   </div>
 
@@ -470,14 +448,7 @@ export default function StatusPage() {
 
       {recentSessions.length > 0 && (
         <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-base">
-                {t.status.recentSessions}
-              </CardTitle>
-            </div>
-          </CardHeader>
+          <CardHeaderIcon icon={Clock} title={t.status.recentSessions} />
 
           <CardContent className="grid gap-3">
             {recentSessions.map((s) => (
@@ -526,14 +497,7 @@ function PlatformsCard({ platforms, platformStateBadge }: PlatformsCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Radio className="h-5 w-5 text-muted-foreground" />
-          <CardTitle className="text-base">
-            {t.status.connectedPlatforms}
-          </CardTitle>
-        </div>
-      </CardHeader>
+      <CardHeaderIcon icon={Radio} title={t.status.connectedPlatforms} />
 
       <CardContent className="grid gap-3">
         {platforms.map(([name, info]) => {
@@ -587,10 +551,8 @@ function PlatformsCard({ platforms, platformStateBadge }: PlatformsCardProps) {
                 variant={display.variant}
                 className="shrink-0 self-start sm:self-center"
               >
-                {display.variant === "success" && (
-                  <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                )}
-                {display.label}
+                {display.variant === "success" && <LiveBadge label={display.label} />}
+                {display.variant !== "success" && display.label}
               </Badge>
             </div>
           );
@@ -598,11 +560,6 @@ function PlatformsCard({ platforms, platformStateBadge }: PlatformsCardProps) {
       </CardContent>
     </Card>
   );
-}
-
-interface ToastState {
-  message: string;
-  type: "success" | "error";
 }
 
 interface PlatformsCardProps {
