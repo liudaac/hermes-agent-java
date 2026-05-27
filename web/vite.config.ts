@@ -25,6 +25,7 @@ function hermesDevToken(): Plugin {
       try {
         const res = await fetch(BACKEND, { headers: { accept: "text/html" } });
         const html = await res.text();
+        console.log("[hermes] fetch raw response (first 500 chars):\n", html.slice(0, 500));
         const match = html.match(TOKEN_RE);
         if (!match) {
           console.warn(
