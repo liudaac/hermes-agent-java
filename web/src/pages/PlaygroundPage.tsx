@@ -10,6 +10,7 @@ import {
   Wrench,
   Zap,
   FileText,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,11 @@ export default function PlaygroundPage() {
   const [sessionId, setSessionId] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
+  const [modelParamsOpen, setModelParamsOpen] = useState(false);
+  const [temperature, setTemperature] = useState<number | "">("");
+  const [maxTokens, setMaxTokens] = useState<number | "">("");
+  const [topP, setTopP] = useState<number | "">("");
+  const [reasoning, setReasoning] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,11 +105,18 @@ export default function PlaygroundPage() {
     let currentSid = sessionId;
 
     try {
+      const mParams: Record<string, number | boolean | string> = {};
+      if (temperature !== "") mParams.temperature = temperature;
+      if (maxTokens !== "") mParams.max_tokens = maxTokens;
+      if (topP !== "") mParams.top_p = topP;
+      if (reasoning) mParams.reasoning = true;
+
       await api.chatStream({
         message: text,
         tenant_id: tenantId,
         session_id: currentSid || undefined,
         system_prompt: systemPrompt || undefined,
+        model_params: Object.keys(mParams).length > 0 ? mParams : undefined,
         onEvent: (event, data) => {
           const d = data as Record<string, unknown>;
 
@@ -177,7 +190,7 @@ export default function PlaygroundPage() {
       showToast(err instanceof Error ? err.message : String(err), "error");
       setLoading(false);
     }
-  }, [input, loading, tenantId, sessionId, systemPrompt, showToast]);
+  }, [input, loading, tenantId, sessionId, systemPrompt, temperature, maxTokens, topP, reasoning, showToast]);
 
   return (
     <div className="space-y-4">
@@ -232,6 +245,116 @@ export default function PlaygroundPage() {
                 className="h-8 text-sm"
               />
             </div>
+          </div>
+
+          {/* Model Parameters */}
+          <div className="border border-current/20 rounded-sm overflow-hidden">
+            <button
+              onClick={() => setModelParamsOpen(!modelParamsOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
+            >
+              <span className="flex items-center gap-1.5">
+                <SlidersHorizontal className="h-3 w-3" />
+                Model Parameters
+                {(temperature !== "" || maxTokens !== "" || topP !== "" || reasoning) && (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1">
+                    Custom
+                  </Badge>
+                )}
+              </span>
+              {modelParamsOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </button>
+            {modelParamsOpen && (
+              <div className="p-3 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] opacity-60 block mb-1">
+                      Temperature
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={temperature}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTemperature(v === "" ? "" : Number(v));
+                      }}
+                      placeholder="0.7"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] opacity-60 block mb-1">
+                      Max Tokens
+                    </label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={maxTokens}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMaxTokens(v === "" ? "" : Number(v));
+                      }}
+                      placeholder="4096"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] opacity-60 block mb-1">
+                      Top P
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={topP}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setTopP(v === "" ? "" : Number(v));
+                      }}
+                      placeholder="1.0"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="reasoning"
+                    checked={reasoning}
+                    onChange={(e) => setReasoning(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-midground"
+                  />
+                  <label htmlFor="reasoning" className="text-xs opacity-70 cursor-pointer">
+                    Enable reasoning (extended thinking)
+                  </label>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setTemperature("");
+                      setMaxTokens("");
+                      setTopP("");
+                      setReasoning(false);
+                    }}
+                    disabled={temperature === "" && maxTokens === "" && topP === "" && !reasoning}
+                    className="h-6 text-[10px] px-2"
+                  >
+                    Reset Defaults
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* System Prompt */}

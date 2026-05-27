@@ -86,6 +86,17 @@ public class TenantAIAgent {
     }
 
     /**
+     * 设置/覆盖模型参数（temperature, max_tokens 等）
+     */
+    public void setModelParams(java.util.Map<String, Object> params) {
+        delegate.setModelParams(params);
+    }
+
+    public java.util.Map<String, Object> getModelParams() {
+        return delegate.getModelParams();
+    }
+
+    /**
      * 获取会话调试信息（usage + tool calls）
      */
     public java.util.Map<String, Object> getSessionDebugInfo() {

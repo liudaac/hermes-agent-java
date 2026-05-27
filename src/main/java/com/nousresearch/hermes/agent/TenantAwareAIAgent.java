@@ -49,6 +49,7 @@ public class TenantAwareAIAgent {
     private int itersSinceSkill = 0;
     private int userTurnCount = 0;
     private volatile String customSystemPrompt;
+    private volatile Map<String, Object> modelParams;
 
     private static final int AUTO_SAVE_INTERVAL = 5;
 
@@ -346,6 +347,18 @@ public class TenantAwareAIAgent {
     }
 
     /**
+     * Override model parameters (temperature, max_tokens, top_p, etc.)
+     * for the next chat completion call. Pass null to clear overrides.
+     */
+    public void setModelParams(Map<String, Object> params) {
+        this.modelParams = params;
+    }
+
+    public Map<String, Object> getModelParams() {
+        return modelParams;
+    }
+
+    /**
      * 运行交互式 CLI 模式（向后兼容）
      */
     public void runInteractive() {
@@ -426,7 +439,8 @@ public class TenantAwareAIAgent {
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
-                    false
+                    false,
+                    modelParams
                 );
 
                 ModelMessage assistantMessage = response.getMessage();
@@ -534,7 +548,8 @@ public class TenantAwareAIAgent {
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
-                    true
+                    true,
+                    modelParams
                 );
 
                 ModelMessage assistantMessage = response.getMessage();

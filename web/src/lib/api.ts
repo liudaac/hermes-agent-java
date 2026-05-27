@@ -307,6 +307,7 @@ export const api = {
     tenant_id: string;
     session_id?: string;
     system_prompt?: string;
+    model_params?: Record<string, number | boolean | string>;
     user_id?: string;
     onEvent: (event: string, data: unknown) => void;
     onError: (err: Error) => void;

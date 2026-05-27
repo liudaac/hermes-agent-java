@@ -435,6 +435,13 @@ public class GatewayServerV2 {
                 agent.setSystemPrompt(customSystemPrompt);
             }
 
+            // 应用模型参数覆盖（如果提供）
+            if (body.containsKey("model_params") && body.get("model_params") instanceof com.alibaba.fastjson2.JSONObject mp) {
+                java.util.Map<String, Object> params = new java.util.HashMap<>();
+                mp.forEach((k, v) -> params.put(k, v));
+                agent.setModelParams(params);
+            }
+
             // 处理消息
             long startTime = System.currentTimeMillis();
             String response = agent.processMessage(message);
@@ -509,6 +516,13 @@ public class GatewayServerV2 {
         String customSystemPrompt = body.getString("system_prompt");
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             agent.setSystemPrompt(customSystemPrompt);
+        }
+
+        // 应用模型参数覆盖（如果提供）
+        if (body.containsKey("model_params") && body.get("model_params") instanceof com.alibaba.fastjson2.JSONObject mp) {
+            java.util.Map<String, Object> params = new java.util.HashMap<>();
+            mp.forEach((k, v) -> params.put(k, v));
+            agent.setModelParams(params);
         }
 
         try {
