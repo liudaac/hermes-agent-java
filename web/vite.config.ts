@@ -33,6 +33,7 @@ function hermesDevToken(): Plugin {
           );
           return;
         }
+        console.log(`[hermes] Session token acquired (${match[1].length} chars)`);
         return [
           {
             tag: "script",
