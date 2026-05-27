@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { LiveBadge } from "@/components/LiveBadge";
 import { CardHeaderIcon } from "@/components/CardHeaderIcon";
+import { useI18n } from "@/i18n";
 import {
   DataTable,
   DataTableHeader,

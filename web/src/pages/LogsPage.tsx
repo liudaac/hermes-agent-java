@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { LiveBadge } from "@/components/LiveBadge";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { useI18n } from "@/i18n";
 
 const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;

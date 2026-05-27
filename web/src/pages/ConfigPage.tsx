@@ -31,12 +31,13 @@ import {
 import { api } from "@/lib/api";
 import { getNestedValue, setNestedValue } from "@/lib/nested";
 import { useToast } from "@/hooks/useToast";
+import { useI18n } from "@/i18n";
 import { AutoField } from "@/components/AutoField";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { SidebarLayout } from "@/components/SidebarLayout";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */

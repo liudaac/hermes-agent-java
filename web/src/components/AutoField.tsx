@@ -169,7 +169,6 @@ export function AutoField({
 
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     const obj = value as Record<string, unknown>;
-    const defObj = (defaultValue ?? {}) as Record<string, unknown>;
     return (
       <div className="grid gap-3 border border-border p-3">
         <div className="flex items-center gap-1.5">

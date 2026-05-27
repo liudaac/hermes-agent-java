@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LiveBadge } from "@/components/LiveBadge";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { useI18n } from "@/i18n";
 
 const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
   {

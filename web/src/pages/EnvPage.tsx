@@ -17,6 +17,7 @@ import {
 import { api } from "@/lib/api";
 import type { EnvVarInfo } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { useI18n } from "@/i18n";
 import { OAuthProvidersCard } from "@/components/OAuthProvidersCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
