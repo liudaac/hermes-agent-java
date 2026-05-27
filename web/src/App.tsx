@@ -23,6 +23,7 @@ import {
   Eye,
   Users,
   Bot,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ import TenantsPage from "@/pages/TenantsPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import PlaygroundPage from "@/pages/PlaygroundPage";
+import ComparePage from "@/pages/ComparePage";
 import { useI18n } from "@/i18n";
 import { usePlugins } from "@/plugins";
 import type { RegisteredPlugin } from "@/plugins";
@@ -51,6 +53,12 @@ const BUILTIN_NAV: NavItem[] = [
     labelKey: "playground",
     label: "Playground",
     icon: Bot,
+  },
+  {
+    path: "/compare",
+    labelKey: "compare",
+    label: "Compare",
+    icon: ArrowLeftRight,
   },
   {
     path: "/sessions",
@@ -98,6 +106,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Eye,
   Users,
   Bot,
+  ArrowLeftRight,
 };
 
 function resolveIcon(
@@ -244,6 +253,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<StatusPage />} />
           <Route path="/playground" element={<PlaygroundPage />} />
+          <Route path="/compare" element={<ComparePage />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/logs" element={<LogsPage />} />
