@@ -1,4 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+
+// Web Speech API type shims (not in default lib)
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+}
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number;
+  readonly results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: string;
+}
+interface SpeechRecognitionStatic {
+  new (): SpeechRecognition;
+}
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionStatic;
+    webkitSpeechRecognition?: SpeechRecognitionStatic;
+  }
+}
+
 import {
   Send,
   Trash2,
@@ -13,6 +42,8 @@ import {
   SlidersHorizontal,
   Pencil,
   RotateCcw,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,8 +97,66 @@ export default function PlaygroundPage() {
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([]);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recSupported, setRecSupported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+  const recRef = useRef<SpeechRecognition | null>(null);
+
+  useEffect(() => {
+    setRecSupported(!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+  }, []);
+
+  const startRecording = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const rec = new SR();
+    rec.lang = "zh-CN";
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onresult = (e) => {
+      let final = "";
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const transcript = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          final += transcript;
+        } else {
+          interim += transcript;
+        }
+      }
+      setInput((prev) => {
+        const base = prev.trim();
+        const next = final || interim;
+        if (!base) return next;
+        if (final) return base + " " + final;
+        return base + " " + interim;
+      });
+    };
+
+    rec.onerror = (e) => {
+      if (e.error !== "aborted") {
+        showToast(`Speech error: ${e.error}`, "error");
+      }
+      setRecording(false);
+    };
+
+    rec.onend = () => {
+      setRecording(false);
+    };
+
+    rec.start();
+    recRef.current = rec;
+    setRecording(true);
+  }, [showToast]);
+
+  const stopRecording = useCallback(() => {
+    recRef.current?.stop();
+    recRef.current = null;
+    setRecording(false);
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -688,13 +777,29 @@ export default function PlaygroundPage() {
                   sendMessage();
                 }
               }}
-              placeholder="Type a message…"
-              disabled={loading}
+              placeholder={recording ? "Listening…" : "Type a message…"}
+              disabled={loading || recording}
               className="flex-1 h-10"
             />
+            {recSupported && (
+              <Button
+                variant={recording ? "destructive" : "ghost"}
+                size="sm"
+                onClick={recording ? stopRecording : startRecording}
+                disabled={loading}
+                className="h-10 w-10 p-0"
+                title={recording ? "Stop recording" : "Voice input"}
+              >
+                {recording ? (
+                  <MicOff className="h-4 w-4 animate-pulse" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+            )}
             <Button
               onClick={sendMessage}
-              disabled={!input.trim() || loading}
+              disabled={!input.trim() || loading || recording}
               className="h-10 px-4"
             >
               <Send className="h-4 w-4 mr-1.5" />
