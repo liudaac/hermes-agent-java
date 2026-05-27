@@ -381,29 +381,37 @@ public class DashboardServer {
             app.get("/ds-assets/*", ctx -> serveStaticFile(ctx, webDist.resolve("ds-assets")));
 
             // Serve index.html for all other routes (SPA fallback)
+            app.get("/", ctx -> serveIndexHtml(ctx, webDist));
             app.get("/*", ctx -> {
                 String path = ctx.path();
                 if (path.startsWith("/api/") || path.startsWith("/health")) {
                     return; // Let API routes handle
                 }
-
-                java.nio.file.Path indexPath = webDist.resolve("index.html");
-                if (java.nio.file.Files.exists(indexPath)) {
-                    String html = java.nio.file.Files.readString(indexPath);
-                    // Inject session token
-                    html = html.replace("<head>",
-                        "<head><script>window.__HERMES_SESSION_TOKEN__=\"" + sessionToken + "\";</script>");
-                    ctx.contentType("text/html");
-                    ctx.result(html);
-                } else {
-                    ctx.status(404).result("index.html not found");
-                }
+                serveIndexHtml(ctx, webDist);
             });
         } else {
             logger.warn("Web dist directory not found: {}. Static assets will not be served.", webDist);
         }
     }
 
+    private void serveIndexHtml(Context ctx, java.nio.file.Path webDist) {
+        java.nio.file.Path indexPath = webDist.resolve("index.html");
+        if (java.nio.file.Files.exists(indexPath)) {
+            try {
+                String html = java.nio.file.Files.readString(indexPath);
+                // Inject session token
+                html = html.replace("<head>",
+                    "<head><script>window.__HERMES_SESSION_TOKEN__=\"" + sessionToken + "\";</script>");
+                ctx.contentType("text/html");
+                ctx.result(html);
+            } catch (Exception e) {
+                logger.error("Failed to serve index.html", e);
+                ctx.status(500).result("Internal Server Error");
+            }
+        } else {
+            ctx.status(404).result("index.html not found");
+        }
+    }
 
     java.nio.file.Path resolveWebDistPath() {
         String explicit = System.getenv("HERMES_WEB_DIST");
@@ -411,22 +419,46 @@ public class DashboardServer {
             return java.nio.file.Path.of(explicit).toAbsolutePath().normalize();
         }
 
-        java.util.List<java.nio.file.Path> candidates = java.util.List.of(
-            // Canonical React dashboard build output from web/vite.config.ts
+        // Try paths relative to the current working directory first.
+        java.util.List<java.nio.file.Path> cwdCandidates = java.util.List.of(
             java.nio.file.Path.of("hermes_cli", "web_dist"),
-            // Legacy/default locations kept for local compatibility
             java.nio.file.Path.of("web_dist"),
             java.nio.file.Path.of("web", "dist")
         );
 
-        for (java.nio.file.Path candidate : candidates) {
+        for (java.nio.file.Path candidate : cwdCandidates) {
             java.nio.file.Path normalized = candidate.toAbsolutePath().normalize();
             if (java.nio.file.Files.exists(normalized.resolve("index.html"))) {
                 return normalized;
             }
         }
 
-        return candidates.get(0).toAbsolutePath().normalize();
+        // Fallback: try paths relative to the jar / class location so the server
+        // works regardless of the working directory.
+        try {
+            java.nio.file.Path jarDir = java.nio.file.Path.of(
+                getClass().getProtectionDomain().getCodeSource().getLocation().toURI()
+            ).getParent();
+            if (jarDir != null) {
+                java.util.List<java.nio.file.Path> jarCandidates = java.util.List.of(
+                    jarDir.resolve("hermes_cli").resolve("web_dist"),
+                    jarDir.resolve("web_dist"),
+                    jarDir.resolve("web").resolve("dist")
+                );
+                for (java.nio.file.Path candidate : jarCandidates) {
+                    java.nio.file.Path normalized = candidate.normalize();
+                    if (java.nio.file.Files.exists(normalized.resolve("index.html"))) {
+                        return normalized;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not resolve web_dist from jar location: {}", e.getMessage());
+        }
+
+        // Last resort: return the first cwd candidate even if it doesn't exist
+        // (caller will log a warning and skip static route registration).
+        return cwdCandidates.get(0).toAbsolutePath().normalize();
     }
 
     private void serveStaticFile(Context ctx, java.nio.file.Path basePath) {
