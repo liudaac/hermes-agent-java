@@ -1,5 +1,5 @@
 # Hermes 多租户前端集成指南
-> **当前状态说明（2026-05）**：React `web/` 已成为 Dashboard 主线，并已接入 `/tenants` 租户管理页面；旧 Vue Dashboard 已从仓库根迁移到 `legacy/frontend/`，本文中关于 `legacy/frontend/tenant-management.html`、`MultiTenantDashboardServer` 和手动复制到 `web_dist/` 的内容属于历史集成参考，不应作为新功能接入路径。新租户 UI 请优先接入 `web/src/pages/TenantsPage.tsx`，构建输出为 `hermes_cli/web_dist`。
+> **当前状态说明（2026-05）**：React `web/` 已成为 Dashboard 主线，并已接入 `/tenants` 租户管理页面。新租户 UI 请优先接入 `web/src/pages/TenantsPage.tsx`，构建输出为 `hermes_cli/web_dist`。
 
 
 ## 概述
@@ -198,9 +198,7 @@ public void start(int port, String host) {
 hermes-agent-java/
 ├── src/main/java/com/nousresearch/hermes/dashboard/
 │   ├── MultiTenantDashboardServer.java  # 多租户 Dashboard 服务器
-│   └── DashboardServer.java             # 原 Dashboard 服务器（需修改）
-├── frontend/  → 已迁移至 legacy/frontend/
-│   └── tenant-management.html           # 旧 Vue 租户管理前端页面（legacy）
+│   └── DashboardServer.java             # 原 Dashboard 服务器
 └── docs/TENANT_INTEGRATION.md           # 本指南
 ```
 
@@ -213,13 +211,7 @@ cd /root/hermes-agent-java
 mvn compile -DskipTests
 ```
 
-### 2. 复制前端文件
-
-```bash
-cp legacy/frontend/tenant-management.html web_dist/
-```
-
-### 3. 启动服务
+### 2. 启动服务
 
 ```bash
 # 方式1：使用默认配置

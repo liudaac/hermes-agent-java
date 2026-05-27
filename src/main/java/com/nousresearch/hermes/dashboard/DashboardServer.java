@@ -416,10 +416,7 @@ public class DashboardServer {
             java.nio.file.Path.of("hermes_cli", "web_dist"),
             // Legacy/default locations kept for local compatibility
             java.nio.file.Path.of("web_dist"),
-            java.nio.file.Path.of("web", "dist"),
-            // Legacy Vue dashboard fallback (moved under legacy/ in 2026-05)
-            java.nio.file.Path.of("legacy", "frontend", "dist"),
-            java.nio.file.Path.of("frontend", "dist")
+            java.nio.file.Path.of("web", "dist")
         );
 
         for (java.nio.file.Path candidate : candidates) {
