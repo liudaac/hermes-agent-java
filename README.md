@@ -104,7 +104,7 @@ graph TB
     end
 
     subgraph "Storage Layer"
-        LocalFS[Local File System<br/>sandbox/{tenantId}/]
+        LocalFS["Local File System<br/>sandbox/{tenantId}/"]
         GitRepos[Git Repositories]
         MCPServers[MCP Servers]
     end
@@ -903,9 +903,7 @@ graph TB
     end
 
     subgraph "Shared Storage"
-        NFS[NFS/EFS
-        - Tenant File Persistence
-        - /sandbox/{tenantId}/]
+        NFS["NFS/EFS<br/>- Tenant File Persistence<br/>- /sandbox/{tenantId}/"]
         
         Redis[Redis Cluster
         - Session Cache
