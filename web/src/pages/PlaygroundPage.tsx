@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 interface ChatMessage {
   id: string;
@@ -264,12 +265,21 @@ export default function PlaygroundPage() {
                         : "bg-current/5 border border-current/10",
                   )}
                 >
-                  <pre className="whitespace-pre-wrap font-sans leading-relaxed">
-                    {msg.content}
-                    {msg.streaming && (
-                      <span className="inline-block w-1.5 h-3.5 bg-midground/60 ml-0.5 animate-pulse" />
-                    )}
-                  </pre>
+                  {msg.role === "assistant" ? (
+                    <div className="text-sm leading-relaxed">
+                      <MarkdownRenderer content={msg.content} />
+                      {msg.streaming && (
+                        <span className="inline-block w-1.5 h-3.5 bg-midground/60 ml-0.5 animate-pulse" />
+                      )}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans leading-relaxed">
+                      {msg.content}
+                      {msg.streaming && (
+                        <span className="inline-block w-1.5 h-3.5 bg-midground/60 ml-0.5 animate-pulse" />
+                      )}
+                    </pre>
+                  )}
                 </div>
                 {msg.role === "user" && (
                   <div className="mt-1">
