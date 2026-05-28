@@ -38,7 +38,7 @@ public class HermesAgentV2 {
     private TenantAwareAIAgent interactiveAgent;  // Persistent agent for interactive mode
     
     public HermesAgentV2() throws Exception {
-        this(false); // Default to non-tenant mode for backward compatibility
+        this(true); // Default to tenant mode for full feature support
     }
 
     /**

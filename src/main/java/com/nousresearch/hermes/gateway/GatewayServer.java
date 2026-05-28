@@ -57,6 +57,9 @@ public class GatewayServer {
         
         app = Javalin.create(config -> {
             config.showJavalinBanner = false;
+            config.jetty.modifyServletContextHandler(handler ->
+                handler.setDefaultResponseCharacterEncoding("UTF-8")
+            );
         });
         
         // Health check
@@ -328,7 +331,9 @@ public class GatewayServer {
     }
     
     private void handleChatStream(Context ctx) throws IOException {
-        ctx.header("Content-Type", "text/event-stream");
+        var response = ctx.res();
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("text/event-stream");
         ctx.header("Cache-Control", "no-cache");
         ctx.header("Connection", "keep-alive");
         
@@ -340,40 +345,35 @@ public class GatewayServer {
         JSONObject body = JSON.parseObject(ctx.body());
         String message = body.getString("message");
         
-        // Use raw output stream for SSE
-        jakarta.servlet.http.HttpServletResponse response = ctx.res();
-        PrintWriter writer = response.getWriter();
-        
         // Send session info first
-        writer.write("event: session\n");
-        writer.write("data: " + JSON.toJSONString(Map.of("session_id", sessionId)) + "\n\n");
-        writer.flush();
+        sendSseEvent(ctx, "session", Map.of("session_id", sessionId));
         
         try {
             // Process with streaming callback
             AIAgent agent = new AIAgent(config, sessionId);
-            StringBuilder fullResponse = new StringBuilder();
             
             agent.processMessageStream(message, chunk -> {
-                fullResponse.append(chunk);
-                writer.write("event: message\n");
-                writer.write("data: " + JSON.toJSONString(Map.of("content", chunk)) + "\n\n");
-                writer.flush();
+                sendSseEvent(ctx, "delta", Map.of("content", chunk));
             });
             
             // Send completion event
-            writer.write("event: done\n");
-            writer.write("data: " + JSON.toJSONString(Map.of("timestamp", System.currentTimeMillis())) + "\n\n");
-            writer.flush();
+            sendSseEvent(ctx, "done", Map.of("timestamp", System.currentTimeMillis()));
             
         } catch (Exception e) {
             logger.error("SSE chat error: {}", e.getMessage());
-            writer.write("event: error\n");
-            writer.write("data: " + JSON.toJSONString(Map.of("error", e.getMessage())) + "\n\n");
-            writer.flush();
+            sendSseEvent(ctx, "error", Map.of("error", e.getMessage()));
         }
-        
-        writer.close();
+    }
+
+    private void sendSseEvent(Context ctx, String event, Map<String, Object> data) {
+        try {
+            jakarta.servlet.http.HttpServletResponse response = ctx.res();
+            String payload = "event: " + event + "\ndata: " + JSON.toJSONString(data) + "\n\n";
+            response.getOutputStream().write(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            response.getOutputStream().flush();
+        } catch (Exception e) {
+            logger.error("Failed to send SSE event: {}", e.getMessage());
+        }
     }
     
     // ==================== Config Schema API ====================

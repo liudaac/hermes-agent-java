@@ -432,11 +432,16 @@ public class AIAgent {
             }
             
             try {
-                // Call the model with streaming
+                // Call the model with true streaming via onChunk callback
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefinitions,
-                    true  // Enable streaming
+                    true,  // Enable streaming
+                    null,
+                    chunk -> {
+                        chunkConsumer.accept(chunk);
+                        responseBuilder.append(chunk);
+                    }
                 );
                 
                 ModelMessage assistantMessage = response.getMessage();
@@ -448,15 +453,6 @@ public class AIAgent {
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
                 autoSaveSession();
-                
-                // Stream the content chunk by chunk
-                String content = assistantMessage.getContent();
-                if (content != null && !content.isEmpty()) {
-                    // For now, stream the whole content as one chunk
-                    // In a real implementation, this would come from the model's streaming API
-                    chunkConsumer.accept(content);
-                    responseBuilder.append(content);
-                }
                 
                 // Check for tool calls
                 if (response.hasToolCalls()) {
