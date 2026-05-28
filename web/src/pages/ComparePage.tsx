@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
+import { useI18n } from "@/i18n";
 
 interface ChatMessage {
   id: string;
@@ -38,6 +39,7 @@ function createSideState(tenantId: string): SideState {
 
 export default function ComparePage() {
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [left, setLeft] = useState<SideState>(() => createSideState("default"));
   const [right, setRight] = useState<SideState>(() => createSideState("tenant-b"));
@@ -200,13 +202,13 @@ export default function ComparePage() {
       }
     } catch (err) {
       showToast(
-        `Auto chat stopped: ${err instanceof Error ? err.message : String(err)}`,
+        t.compare.autoChatStopped.replace("{error}", err instanceof Error ? err.message : String(err)),
         "error",
       );
     } finally {
       setAutoRunning(false);
     }
-  }, [autoTopic, autoRounds, sendToSideAuto, showToast]);
+  }, [autoTopic, autoRounds, sendToSideAuto, showToast, t]);
 
   const stopAutoChat = useCallback(() => {
     abortAutoRef.current = true;
@@ -230,7 +232,7 @@ export default function ComparePage() {
           onChange={(e) =>
             updateSide(side, (prev) => ({ ...prev, tenantId: e.target.value }))
           }
-          placeholder="Tenant ID"
+          placeholder={t.compare.tenantIdPlaceholder}
           className="h-7 text-xs flex-1"
           disabled={autoRunning}
         />
@@ -244,7 +246,7 @@ export default function ComparePage() {
         {state.messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 opacity-30">
             <Bot className="h-6 w-6 mb-1" />
-            <p className="text-xs">Waiting…</p>
+            <p className="text-xs">{t.compare.waiting}</p>
           </div>
         )}
         {state.messages.map((msg) => (
@@ -309,13 +311,13 @@ export default function ComparePage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base tracking-wide flex items-center gap-2">
               <ArrowLeftRight className="h-4 w-4" />
-              Tenant Comparison
+              {t.compare.title}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
                 {left.tenantId}
               </Badge>
-              <span className="opacity-40 text-xs">vs</span>
+              <span className="opacity-40 text-xs">{t.compare.vs}</span>
               <Badge variant="outline" className="text-xs">
                 {right.tenantId}
               </Badge>
@@ -325,7 +327,7 @@ export default function ComparePage() {
                 onClick={clearAll}
                 disabled={autoRunning}
                 className="h-6 px-1.5"
-                title="Clear both chats"
+                title={t.compare.clearBoth}
               >
                 <RotateCcw className="h-3 w-3" />
               </Button>
@@ -352,19 +354,19 @@ export default function ComparePage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-midground opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-midground" />
                 </span>
-                Auto Chat Running…
+                {t.compare.autoChatRunning}
               </>
             ) : (
               <>
                 <Play className="h-3 w-3" />
-                Auto Chat Mode
+                {t.compare.autoChatMode}
               </>
             )}
           </span>
           {autoModeOpen ? (
-            <span className="text-[10px] opacity-50">Collapse</span>
+            <span className="text-[10px] opacity-50">{t.compare.collapse}</span>
           ) : (
-            <span className="text-[10px] opacity-50">Expand</span>
+            <span className="text-[10px] opacity-50">{t.compare.expand}</span>
           )}
         </button>
         {autoModeOpen && (
@@ -372,19 +374,19 @@ export default function ComparePage() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="text-[10px] opacity-60 block mb-1">
-                  Initial Topic / Prompt
+                  {t.compare.initialTopic}
                 </label>
                 <Input
                   value={autoTopic}
                   onChange={(e) => setAutoTopic(e.target.value)}
-                  placeholder="e.g. Discuss the future of AI"
+                  placeholder={t.compare.initialTopicPlaceholder}
                   disabled={autoRunning}
                   className="h-8 text-xs"
                 />
               </div>
               <div className="w-24">
                 <label className="text-[10px] opacity-60 block mb-1">
-                  Rounds
+                  {t.compare.rounds}
                 </label>
                 <Input
                   type="number"
@@ -399,8 +401,11 @@ export default function ComparePage() {
             </div>
             <div className="flex items-center gap-2 text-[10px] opacity-50">
               <span>
-                {left.tenantId} → {right.tenantId} → {left.tenantId} → …
-                ({autoRounds} rounds = {autoRounds * 2} messages total)
+                {t.compare.roundsHint
+                  .replace("{leftTenant}", left.tenantId)
+                  .replace("{rightTenant}", right.tenantId)
+                  .replace("{rounds}", String(autoRounds))
+                  .replace("{totalMessages}", String(autoRounds * 2))}
               </span>
             </div>
             <div className="flex justify-end gap-2">
@@ -412,7 +417,7 @@ export default function ComparePage() {
                   className="h-7 text-xs px-3"
                 >
                   <Square className="h-3 w-3 mr-1" />
-                  Stop
+                  {t.compare.stop}
                 </Button>
               ) : (
                 <Button
@@ -422,7 +427,7 @@ export default function ComparePage() {
                   className="h-7 text-xs px-3"
                 >
                   <Play className="h-3 w-3 mr-1" />
-                  Start Auto Chat
+                  {t.compare.startAutoChat}
                 </Button>
               )}
             </div>
@@ -441,7 +446,7 @@ export default function ComparePage() {
               sendMessage();
             }
           }}
-          placeholder="Ask both tenants the same question…"
+          placeholder={t.compare.askBoth}
           disabled={sending || autoRunning}
           className="flex-1 h-10"
         />
@@ -451,7 +456,7 @@ export default function ComparePage() {
           className="h-10 px-4"
         >
           <Send className="h-4 w-4 mr-1.5" />
-          Send
+          {t.compare.send}
         </Button>
       </div>
     </div>

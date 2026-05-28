@@ -65,6 +65,8 @@ export interface Translations {
       tenants: string;
       config: string;
       keys: string;
+      playground: string;
+      compare: string;
     };
   };
 
@@ -308,5 +310,69 @@ export interface Translations {
   theme: {
     title: string;
     switchTheme: string;
+  };
+
+  // ── Playground page ──
+  playground: {
+    title: string;
+    tenantId: string;
+    tenantIdPlaceholder: string;
+    sessionId: string;
+    sessionIdPlaceholder: string;
+    modelParams: string;
+    custom: string;
+    temperature: string;
+    temperaturePlaceholder: string;
+    maxTokens: string;
+    maxTokensPlaceholder: string;
+    topP: string;
+    topPPlaceholder: string;
+    enableReasoning: string;
+    resetDefaults: string;
+    systemPrompt: string;
+    systemPromptPlaceholder: string;
+    systemPromptHint: string;
+    reset: string;
+    startConversation: string;
+    edit: string;
+    retry: string;
+    debugInfo: string;
+    tokenUsage: string;
+    prompt: string;
+    completion: string;
+    cached: string;
+    reasoning: string;
+    total: string;
+    toolCalls: string;
+    listening: string;
+    stopRecording: string;
+    voiceInput: string;
+    typeMessage: string;
+    send: string;
+    cancel: string;
+    saveAndSend: string;
+    speechError: string;
+  };
+
+  // ── Compare page ──
+  compare: {
+    title: string;
+    vs: string;
+    clearBoth: string;
+    tenantIdPlaceholder: string;
+    waiting: string;
+    autoChatRunning: string;
+    autoChatMode: string;
+    collapse: string;
+    expand: string;
+    initialTopic: string;
+    initialTopicPlaceholder: string;
+    rounds: string;
+    roundsHint: string;
+    stop: string;
+    startAutoChat: string;
+    askBoth: string;
+    send: string;
+    autoChatStopped: string;
   };
 }

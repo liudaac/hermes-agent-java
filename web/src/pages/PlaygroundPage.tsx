@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
+import { useI18n } from "@/i18n";
 
 interface ChatMessage {
   id: string;
@@ -81,6 +82,7 @@ interface ToolCallInfo {
 
 export default function PlaygroundPage() {
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [tenantId, setTenantId] = useState("default");
   const [sessionId, setSessionId] = useState("");
@@ -138,7 +140,7 @@ export default function PlaygroundPage() {
 
     rec.onerror = (e) => {
       if (e.error !== "aborted") {
-        showToast(`Speech error: ${e.error}`, "error");
+        showToast(t.playground.speechError.replace("{error}", e.error), "error");
       }
       setRecording(false);
     };
@@ -150,7 +152,7 @@ export default function PlaygroundPage() {
     rec.start();
     recRef.current = rec;
     setRecording(true);
-  }, [showToast]);
+  }, [showToast, t]);
 
   const stopRecording = useCallback(() => {
     recRef.current?.stop();
@@ -344,11 +346,11 @@ export default function PlaygroundPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base tracking-wide flex items-center gap-2">
               <Bot className="h-4 w-4" />
-              Chat Playground
+              {t.playground.title}
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                Tenant: {tenantId}
+                {t.common.form}: {tenantId}
               </Badge>
               {sessionId && (
                 <Badge variant="secondary" className="text-xs">
@@ -371,22 +373,22 @@ export default function PlaygroundPage() {
           {/* Tenant & Session config */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="text-xs opacity-70 block mb-1">Tenant ID</label>
+              <label className="text-xs opacity-70 block mb-1">{t.playground.tenantId}</label>
               <Input
                 value={tenantId}
                 onChange={(e) => setTenantId(e.target.value)}
-                placeholder="default"
+                placeholder={t.playground.tenantIdPlaceholder}
                 className="h-8 text-sm"
               />
             </div>
             <div className="flex-1">
               <label className="text-xs opacity-70 block mb-1">
-                Session ID (optional)
+                {t.playground.sessionId}
               </label>
               <Input
                 value={sessionId}
                 onChange={(e) => setSessionId(e.target.value)}
-                placeholder="Auto-generated"
+                placeholder={t.playground.sessionIdPlaceholder}
                 className="h-8 text-sm"
               />
             </div>
@@ -400,10 +402,10 @@ export default function PlaygroundPage() {
             >
               <span className="flex items-center gap-1.5">
                 <SlidersHorizontal className="h-3 w-3" />
-                Model Parameters
+                {t.playground.modelParams}
                 {(temperature !== "" || maxTokens !== "" || topP !== "" || reasoning) && (
                   <Badge variant="outline" className="text-[10px] h-4 px-1">
-                    Custom
+                    {t.playground.custom}
                   </Badge>
                 )}
               </span>
@@ -418,7 +420,7 @@ export default function PlaygroundPage() {
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="text-[10px] opacity-60 block mb-1">
-                      Temperature
+                      {t.playground.temperature}
                     </label>
                     <Input
                       type="number"
@@ -430,13 +432,13 @@ export default function PlaygroundPage() {
                         const v = e.target.value;
                         setTemperature(v === "" ? "" : Number(v));
                       }}
-                      placeholder="0.7"
+                      placeholder={t.playground.temperaturePlaceholder}
                       className="h-7 text-xs"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] opacity-60 block mb-1">
-                      Max Tokens
+                      {t.playground.maxTokens}
                     </label>
                     <Input
                       type="number"
@@ -447,13 +449,13 @@ export default function PlaygroundPage() {
                         const v = e.target.value;
                         setMaxTokens(v === "" ? "" : Number(v));
                       }}
-                      placeholder="4096"
+                      placeholder={t.playground.maxTokensPlaceholder}
                       className="h-7 text-xs"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] opacity-60 block mb-1">
-                      Top P
+                      {t.playground.topP}
                     </label>
                     <Input
                       type="number"
@@ -465,7 +467,7 @@ export default function PlaygroundPage() {
                         const v = e.target.value;
                         setTopP(v === "" ? "" : Number(v));
                       }}
-                      placeholder="1.0"
+                      placeholder={t.playground.topPPlaceholder}
                       className="h-7 text-xs"
                     />
                   </div>
@@ -479,7 +481,7 @@ export default function PlaygroundPage() {
                     className="h-3.5 w-3.5 accent-midground"
                   />
                   <label htmlFor="reasoning" className="text-xs opacity-70 cursor-pointer">
-                    Enable reasoning (extended thinking)
+                    {t.playground.enableReasoning}
                   </label>
                 </div>
                 <div className="flex justify-end">
@@ -495,7 +497,7 @@ export default function PlaygroundPage() {
                     disabled={temperature === "" && maxTokens === "" && topP === "" && !reasoning}
                     className="h-6 text-[10px] px-2"
                   >
-                    Reset Defaults
+                    {t.playground.resetDefaults}
                   </Button>
                 </div>
               </div>
@@ -510,10 +512,10 @@ export default function PlaygroundPage() {
             >
               <span className="flex items-center gap-1.5">
                 <FileText className="h-3 w-3" />
-                System Prompt
+                {t.playground.systemPrompt}
                 {systemPrompt && (
                   <Badge variant="outline" className="text-[10px] h-4 px-1">
-                    Custom
+                    {t.playground.custom}
                   </Badge>
                 )}
               </span>
@@ -528,13 +530,13 @@ export default function PlaygroundPage() {
                 <textarea
                   value={systemPrompt}
                   onChange={(e) => setSystemPrompt(e.target.value)}
-                  placeholder="Optional: override the default system prompt for this session"
+                  placeholder={t.playground.systemPromptPlaceholder}
                   rows={4}
                   className="w-full bg-black/30 border border-current/20 rounded-sm px-3 py-2 text-xs font-mono leading-relaxed resize-y focus:outline-none focus:border-midground/40"
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-[10px] opacity-40">
-                    Leave empty to use the default agent identity prompt.
+                    {t.playground.systemPromptHint}
                   </span>
                   <Button
                     variant="ghost"
@@ -543,7 +545,7 @@ export default function PlaygroundPage() {
                     disabled={!systemPrompt}
                     className="h-6 text-[10px] px-2"
                   >
-                    Reset
+                    {t.playground.reset}
                   </Button>
                 </div>
               </div>
@@ -555,7 +557,7 @@ export default function PlaygroundPage() {
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-48 opacity-40">
                 <Bot className="h-8 w-8 mb-2" />
-                <p className="text-sm">Start a conversation</p>
+                <p className="text-sm">{t.playground.startConversation}</p>
               </div>
             )}
             {messages.map((msg) => (
@@ -609,7 +611,7 @@ export default function PlaygroundPage() {
                           onClick={() => cancelEditMessage(msg.id)}
                           className="h-5 text-[10px] px-1.5"
                         >
-                          Cancel
+                          {t.playground.cancel}
                         </Button>
                         <Button
                           variant="ghost"
@@ -620,7 +622,7 @@ export default function PlaygroundPage() {
                           }}
                           className="h-5 text-[10px] px-1.5"
                         >
-                          Save & Send
+                          {t.playground.saveAndSend}
                         </Button>
                       </div>
                     </div>
@@ -649,7 +651,7 @@ export default function PlaygroundPage() {
                           className="flex items-center gap-0.5 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
                         >
                           <Pencil className="h-2.5 w-2.5" />
-                          Edit
+                          {t.playground.edit}
                         </button>
                       )}
                       {msg.role === "assistant" && (
@@ -658,7 +660,7 @@ export default function PlaygroundPage() {
                           className="flex items-center gap-0.5 text-[10px] opacity-50 hover:opacity-100 transition-opacity"
                         >
                           <RotateCcw className="h-2.5 w-2.5" />
-                          Retry
+                          {t.playground.retry}
                         </button>
                       )}
                     </div>
@@ -683,7 +685,7 @@ export default function PlaygroundPage() {
               >
                 <span className="flex items-center gap-1.5">
                   <Zap className="h-3 w-3" />
-                  Debug Info
+                  {t.playground.debugInfo}
                   {usage && (
                     <Badge variant="outline" className="text-[10px] h-4 px-1">
                       {usage.totalTokens} tok
@@ -691,8 +693,7 @@ export default function PlaygroundPage() {
                   )}
                   {toolCalls.length > 0 && (
                     <Badge variant="outline" className="text-[10px] h-4 px-1">
-                      {toolCalls.length} tool
-                      {toolCalls.length > 1 ? "s" : ""}
+                      {toolCalls.length} {t.common.tools}
                     </Badge>
                   )}
                 </span>
@@ -708,18 +709,18 @@ export default function PlaygroundPage() {
                     <div>
                       <h4 className="flex items-center gap-1 opacity-60 mb-1.5">
                         <Zap className="h-3 w-3" />
-                        Token Usage
+                        {t.playground.tokenUsage}
                         {usage.lastModel && (
                           <span className="opacity-50">· {usage.lastModel}</span>
                         )}
                       </h4>
                       <div className="grid grid-cols-5 gap-2">
                         {[
-                          { label: "Prompt", value: usage.promptTokens },
-                          { label: "Completion", value: usage.completionTokens },
-                          { label: "Cached", value: usage.cachedPromptTokens },
-                          { label: "Reasoning", value: usage.reasoningTokens },
-                          { label: "Total", value: usage.totalTokens },
+                          { label: t.playground.prompt, value: usage.promptTokens },
+                          { label: t.playground.completion, value: usage.completionTokens },
+                          { label: t.playground.cached, value: usage.cachedPromptTokens },
+                          { label: t.playground.reasoning, value: usage.reasoningTokens },
+                          { label: t.playground.total, value: usage.totalTokens },
                         ].map(({ label, value }) => (
                           <div
                             key={label}
@@ -736,7 +737,7 @@ export default function PlaygroundPage() {
                     <div>
                       <h4 className="flex items-center gap-1 opacity-60 mb-1.5">
                         <Wrench className="h-3 w-3" />
-                        Tool Calls
+                        {t.playground.toolCalls}
                       </h4>
                       <div className="space-y-1">
                         {toolCalls.map((tc, i) => (
@@ -777,7 +778,7 @@ export default function PlaygroundPage() {
                   sendMessage();
                 }
               }}
-              placeholder={recording ? "Listening…" : "Type a message…"}
+              placeholder={recording ? t.playground.listening : t.playground.typeMessage}
               disabled={loading || recording}
               className="flex-1 h-10"
             />
@@ -788,7 +789,7 @@ export default function PlaygroundPage() {
                 onClick={recording ? stopRecording : startRecording}
                 disabled={loading}
                 className="h-10 w-10 p-0"
-                title={recording ? "Stop recording" : "Voice input"}
+                title={recording ? t.playground.stopRecording : t.playground.voiceInput}
               >
                 {recording ? (
                   <MicOff className="h-4 w-4 animate-pulse" />
@@ -803,7 +804,7 @@ export default function PlaygroundPage() {
               className="h-10 px-4"
             >
               <Send className="h-4 w-4 mr-1.5" />
-              Send
+              {t.playground.send}
             </Button>
           </div>
         </CardContent>
