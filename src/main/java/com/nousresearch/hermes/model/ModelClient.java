@@ -81,7 +81,11 @@ public class ModelClient {
                 return ChatCompletionResponse.error("API error: " + response.statusCode());
             }
 
-            return parseChatCompletionResponse(response.body());
+            String body = response.body();
+            if (stream) {
+                return parseStreamResponse(body);
+            }
+            return parseChatCompletionResponse(body);
 
         } catch (Exception e) {
             logger.error("Error in chat completion: {}", e.getMessage(), e);
@@ -364,6 +368,102 @@ public class ModelClient {
 
     private String buildToolsJson(List<ToolDefinition> tools) {
         return buildToolsArray(tools).toJSONString();
+    }
+
+    private ChatCompletionResponse parseStreamResponse(String body) {
+        try {
+            StringBuilder contentBuilder = new StringBuilder();
+            StringBuilder reasoningBuilder = new StringBuilder();
+            String finishReason = null;
+            String model = null;
+            long promptTokens = 0;
+            long completionTokens = 0;
+            long cachedTokens = 0;
+            long reasoningTokens = 0;
+            long totalTokens = 0;
+
+            for (String line : body.split("\n")) {
+                line = line.trim();
+                if (!line.startsWith("data:")) continue;
+                String data = line.substring(5).trim();
+                if ("[DONE]".equals(data)) break;
+                if (data.isEmpty()) continue;
+
+                try {
+                    JSONObject chunk = JSONObject.parseObject(data);
+                    if (model == null) {
+                        model = chunk.getString("model");
+                    }
+
+                    JSONArray choices = chunk.getJSONArray("choices");
+                    if (choices == null || choices.isEmpty()) continue;
+
+                    JSONObject choice = choices.getJSONObject(0);
+                    if (choice == null) continue;
+
+                    JSONObject delta = choice.getJSONObject("delta");
+                    if (delta != null) {
+                        String content = delta.getString("content");
+                        if (content != null) {
+                            contentBuilder.append(content);
+                        }
+                        String reasoning = delta.getString("reasoning_content");
+                        if (reasoning != null) {
+                            reasoningBuilder.append(reasoning);
+                        }
+                    }
+
+                    String fr = choice.getString("finish_reason");
+                    if (fr != null) {
+                        finishReason = fr;
+                    }
+
+                    // Parse usage from the final chunk if present
+                    JSONObject usage = chunk.getJSONObject("usage");
+                    if (usage != null) {
+                        promptTokens = usage.getLongValue("prompt_tokens");
+                        completionTokens = usage.getLongValue("completion_tokens");
+                        totalTokens = usage.getLongValue("total_tokens");
+                        JSONObject promptDetails = usage.getJSONObject("prompt_tokens_details");
+                        if (promptDetails != null) {
+                            cachedTokens = promptDetails.getLongValue("cached_tokens");
+                        }
+                        JSONObject completionDetails = usage.getJSONObject("completion_tokens_details");
+                        if (completionDetails != null) {
+                            reasoningTokens = completionDetails.getLongValue("reasoning_tokens");
+                        }
+                    }
+                } catch (Exception e) {
+                    // Skip malformed chunks
+                    logger.debug("Failed to parse SSE chunk: {}", data);
+                }
+            }
+
+            String content = contentBuilder.toString();
+            // Prepend reasoning content if present
+            if (reasoningBuilder.length() > 0) {
+                content = "<think>\n" + reasoningBuilder + "\n</think>\n\n" + content;
+            }
+
+            ModelMessage message = new ModelMessage();
+            message.setRole("assistant");
+            message.setContent(content);
+
+            ChatCompletionResponse.TokenUsage usage = totalTokens > 0
+                ? new ChatCompletionResponse.TokenUsage(promptTokens, completionTokens, cachedTokens, reasoningTokens, totalTokens)
+                : null;
+
+            return new ChatCompletionResponse(
+                message,
+                finishReason != null ? finishReason : "stop",
+                false,
+                usage,
+                model
+            );
+        } catch (Exception e) {
+            logger.error("Error parsing stream response: {}", e.getMessage());
+            return ChatCompletionResponse.error(e.getMessage());
+        }
     }
 
     private ChatCompletionResponse parseChatCompletionResponse(String json) {
