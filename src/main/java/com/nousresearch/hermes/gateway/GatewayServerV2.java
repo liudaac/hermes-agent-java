@@ -179,7 +179,10 @@ public class GatewayServerV2 {
         app.get("/api/tenants/{id}/config", this::handleGetTenantConfig);
         app.put("/api/tenants/{id}/config", this::handleUpdateTenantConfig);
 
-        // Sessions API
+        // Sessions API (global + per-tenant)
+        app.get("/api/sessions", this::handleGetSessions);
+        app.get("/api/sessions/{sessionId}/messages", this::handleGetSessionMessagesGlobal);
+        app.delete("/api/sessions/{sessionId}", this::handleDeleteSessionGlobal);
         app.get("/api/tenants/{tenantId}/sessions", this::handleGetTenantSessions);
         app.get("/api/tenants/{tenantId}/sessions/{sessionId}/messages", this::handleGetSessionMessages);
         app.delete("/api/tenants/{tenantId}/sessions/{sessionId}", this::handleDeleteSession);
@@ -858,6 +861,115 @@ public class GatewayServerV2 {
     }
 
     // ==================== Session API Methods ====================
+
+    /**
+     * Global session list — aggregates sessions from the shared SessionManager.
+     * The tenant-aware agents persist sessions here via TenantAwareAIAgent.persistSession().
+     */
+    private void handleGetSessions(Context ctx) {
+        try {
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome());
+            var ids = sessionMgr.listSessions();
+
+            int limit = Math.min(Math.max(ctx.queryParamAsClass("limit", Integer.class).getOrDefault(20), 100), 1);
+            int offset = Math.max(ctx.queryParamAsClass("offset", Integer.class).getOrDefault(0), 0);
+
+            java.util.List<Map<String, Object>> sessions = new java.util.ArrayList<>();
+            for (String id : ids) {
+                var s = sessionMgr.getSession(id);
+                if (s == null) continue;
+
+                String preview = "";
+                for (var msg : s.messages) {
+                    if ("user".equals(msg.role()) || "assistant".equals(msg.role())) {
+                        preview = msg.content();
+                        break;
+                    }
+                }
+
+                var sessMap = new java.util.HashMap<String, Object>();
+                sessMap.put("id", s.id);
+                sessMap.put("title", s.metadata.getOrDefault("title", ""));
+                sessMap.put("preview", preview.length() > 120 ? preview.substring(0, 120) : preview);
+                sessMap.put("message_count", s.messages.size());
+                sessMap.put("tool_call_count", s.toolCalls.size());
+                sessMap.put("source", s.platform != null ? s.platform : "web");
+                sessMap.put("model", s.lastModel != null ? s.lastModel : "");
+                sessMap.put("last_active", s.lastActivity);
+                sessMap.put("started_at", s.metadata.containsKey("started_at") ? s.metadata.get("started_at") : s.lastActivity);
+                sessMap.put("ended_at", null);
+                sessMap.put("is_active", (System.currentTimeMillis() - s.lastActivity) < 300_000L);
+                sessMap.put("input_tokens", s.promptTokens);
+                sessMap.put("output_tokens", s.completionTokens);
+                sessions.add(sessMap);
+            }
+
+            // Sort by last_activity desc
+            sessions.sort((a, b) -> Long.compare((Long) b.get("last_active"), (Long) a.get("last_active")));
+
+            int total = sessions.size();
+            int from = Math.min(offset, total);
+            int to = Math.min(from + limit, total);
+            var page = sessions.subList(from, to);
+
+            ctx.json(Map.of(
+                "sessions", page,
+                "total", total,
+                "limit", limit,
+                "offset", offset
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to list sessions: {}", e.getMessage(), e);
+            ctx.status(500).json(Map.of("error", "Failed to list sessions: " + e.getMessage()));
+        }
+    }
+
+    private void handleGetSessionMessagesGlobal(Context ctx) {
+        String sessionId = ctx.pathParam("sessionId");
+        try {
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome());
+            var s = sessionMgr.getSession(sessionId);
+            if (s == null) {
+                ctx.status(404).json(Map.of("error", "Session not found"));
+                return;
+            }
+
+            var messages = new java.util.ArrayList<Map<String, Object>>();
+            for (var msg : s.messages) {
+                var m = new java.util.HashMap<String, Object>();
+                m.put("role", msg.role());
+                m.put("content", msg.content());
+                m.put("timestamp", msg.timestamp());
+                messages.add(m);
+            }
+
+            ctx.json(Map.of(
+                "session_id", s.id,
+                "messages", messages
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to get session messages: {}", e.getMessage(), e);
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private void handleDeleteSessionGlobal(Context ctx) {
+        String sessionId = ctx.pathParam("sessionId");
+        try {
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome());
+            sessionMgr.deleteSession(sessionId);
+            ctx.json(Map.of(
+                "id", sessionId,
+                "status", "deleted"
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to delete session: {}", e.getMessage(), e);
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
 
     private void handleGetTenantSessions(Context ctx) {
         String tenantId = ctx.pathParam("tenantId");
