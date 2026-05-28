@@ -164,6 +164,7 @@ public class ModelClient {
                         String reasoning = delta.getString("reasoning_content");
                         if (reasoning != null && !reasoning.isEmpty()) {
                             reasoningBuilder.append(reasoning);
+                            contentBuilder.append(reasoning);
                             onChunk.accept(reasoning);
                         }
                     }
@@ -513,6 +514,7 @@ public class ModelClient {
                         String reasoning = delta.getString("reasoning_content");
                         if (reasoning != null) {
                             reasoningBuilder.append(reasoning);
+                            contentBuilder.append(reasoning);
                         }
                     }
 
