@@ -143,6 +143,26 @@ export default function PlaygroundPage() {
       });
   }, []);
 
+  // Load message history when sessionId is known (on mount or when sessionId changes)
+  useEffect(() => {
+    if (!sessionId) return;
+    api.getSessionMessages(sessionId)
+      .then((resp) => {
+        if (resp.messages && resp.messages.length > 0) {
+          const loaded = resp.messages.map((msg) => ({
+            id: crypto.randomUUID(),
+            role: msg.role as "user" | "assistant" | "system" | "error",
+            content: msg.content ?? "",
+            timestamp: msg.timestamp ?? Date.now(),
+          }));
+          setMessages(loaded);
+        }
+      })
+      .catch(() => {
+        // Session may not exist yet; ignore
+      });
+  }, [sessionId]);
+
   // Persist state to localStorage (exclude messages, loading, usage, etc.)
   useEffect(() => {
     savePlaygroundState({

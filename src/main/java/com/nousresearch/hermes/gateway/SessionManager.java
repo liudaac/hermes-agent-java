@@ -64,9 +64,10 @@ public class SessionManager {
      * Save session to disk.
      */
     public void saveSession(Session session) throws IOException {
+        Files.createDirectories(sessionsDir);
         Path sessionFile = sessionsDir.resolve(session.id + ".json");
         mapper.writeValue(sessionFile.toFile(), session.toJson());
-        logger.debug("Session saved: {}", session.id);
+        logger.info("Session saved: {} ({} messages)", session.id, session.messages.size());
     }
     
     /**

@@ -778,15 +778,15 @@ public class TenantAwareAIAgent {
     }
 
     private void autoSaveSession() {
-        if (conversationHistory.size() % AUTO_SAVE_INTERVAL == 0) {
-            persistSession();
-        }
+        persistSession();
     }
 
     private void persistSession() {
         try {
-            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(
-                com.nousresearch.hermes.config.Constants.getHermesHome());
+            var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+            logger.debug("Persisting session {} to {}", sessionId, hermesHome);
+
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(hermesHome);
             var session = sessionMgr.getSession(sessionId);
 
             // Clear and rebuild messages to avoid duplicates
@@ -804,10 +804,10 @@ public class TenantAwareAIAgent {
             session.lastActivity = System.currentTimeMillis();
 
             sessionMgr.saveSession(session);
-            logger.debug("Session saved: {} ({} messages)", sessionId, session.messages.size());
+            logger.info("Session persisted: {} ({} messages)", sessionId, session.messages.size());
 
         } catch (Exception e) {
-            logger.warn("Failed to save session: {}", e.getMessage());
+            logger.error("Failed to save session {}: {}", sessionId, e.getMessage(), e);
         }
     }
 
