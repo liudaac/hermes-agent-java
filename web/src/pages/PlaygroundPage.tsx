@@ -81,20 +81,40 @@ interface ToolCallInfo {
   timestamp: number;
 }
 
+const STORAGE_KEY = "hermes:playground";
+
+function loadPlaygroundState(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePlaygroundState(state: Record<string, unknown>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export default function PlaygroundPage() {
   const { showToast } = useToast();
   const { t } = useI18n();
+  const saved = loadPlaygroundState();
 
-  const [tenantId, setTenantId] = useState("default");
+  const [tenantId, setTenantId] = useState<string>(saved?.tenantId as string ?? "default");
   const [tenants, setTenants] = useState<string[]>(["default"]);
-  const [sessionId, setSessionId] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
+  const [sessionId, setSessionId] = useState<string>(saved?.sessionId as string ?? "");
+  const [systemPrompt, setSystemPrompt] = useState<string>(saved?.systemPrompt as string ?? "");
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
   const [modelParamsOpen, setModelParamsOpen] = useState(false);
-  const [temperature, setTemperature] = useState<number | "">("");
-  const [maxTokens, setMaxTokens] = useState<number | "">("");
-  const [topP, setTopP] = useState<number | "">("");
-  const [reasoning, setReasoning] = useState(false);
+  const [temperature, setTemperature] = useState<number | "">(saved?.temperature as number ?? "");
+  const [maxTokens, setMaxTokens] = useState<number | "">(saved?.maxTokens as number ?? "");
+  const [topP, setTopP] = useState<number | "">(saved?.topP as number ?? "");
+  const [reasoning, setReasoning] = useState<boolean>(saved?.reasoning as boolean ?? false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -122,6 +142,19 @@ export default function PlaygroundPage() {
         setTenants(["default"]);
       });
   }, []);
+
+  // Persist state to localStorage (exclude messages, loading, usage, etc.)
+  useEffect(() => {
+    savePlaygroundState({
+      tenantId,
+      sessionId,
+      systemPrompt,
+      temperature,
+      maxTokens,
+      topP,
+      reasoning,
+    });
+  }, [tenantId, sessionId, systemPrompt, temperature, maxTokens, topP, reasoning]);
 
   const startRecording = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

@@ -38,20 +38,44 @@ function createSideState(tenantId: string): SideState {
   return { tenantId, sessionId: "", messages: [], loading: false };
 }
 
+const COMPARE_STORAGE_KEY = "hermes:compare";
+
+function loadCompareState(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(COMPARE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCompareState(state: Record<string, unknown>) {
+  try {
+    localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota errors
+  }
+}
+
 export default function ComparePage() {
   const { showToast } = useToast();
   const { t } = useI18n();
+  const saved = loadCompareState();
 
-  const [left, setLeft] = useState<SideState>(() => createSideState("default"));
-  const [right, setRight] = useState<SideState>(() => createSideState("default"));
+  const [left, setLeft] = useState<SideState>(() =>
+    createSideState(saved?.leftTenantId as string ?? "default")
+  );
+  const [right, setRight] = useState<SideState>(() =>
+    createSideState(saved?.rightTenantId as string ?? "default")
+  );
   const [tenants, setTenants] = useState<string[]>(["default"]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
   // Auto-chat state
   const [autoRunning, setAutoRunning] = useState(false);
-  const [autoTopic, setAutoTopic] = useState("");
-  const [autoRounds, setAutoRounds] = useState(3);
+  const [autoTopic, setAutoTopic] = useState<string>(saved?.autoTopic as string ?? "");
+  const [autoRounds, setAutoRounds] = useState<number>(saved?.autoRounds as number ?? 3);
   const [autoModeOpen, setAutoModeOpen] = useState(false);
   const abortAutoRef = useRef(false);
 
@@ -72,9 +96,11 @@ export default function ComparePage() {
         const ids = res.tenants.map((t) => t.tenantId);
         if (ids.length === 0) ids.push("default");
         setTenants(ids);
-        // Initialise sides from fetched tenant list instead of hard-coding "tenant-b"
-        setLeft(createSideState(ids[0] ?? "default"));
-        setRight(createSideState(ids[1] ?? ids[0] ?? "default"));
+        // Validate saved tenant IDs against live list; fall back if no longer valid
+        const savedLeft = saved?.leftTenantId as string;
+        const savedRight = saved?.rightTenantId as string;
+        setLeft(createSideState(ids.includes(savedLeft) ? savedLeft : (ids[0] ?? "default")));
+        setRight(createSideState(ids.includes(savedRight) ? savedRight : (ids[1] ?? ids[0] ?? "default")));
       })
       .catch(() => {
         setTenants(["default"]);
@@ -82,6 +108,16 @@ export default function ComparePage() {
         setRight(createSideState("default"));
       });
   }, []);
+
+  // Persist state to localStorage
+  useEffect(() => {
+    saveCompareState({
+      leftTenantId: left.tenantId,
+      rightTenantId: right.tenantId,
+      autoTopic,
+      autoRounds,
+    });
+  }, [left.tenantId, right.tenantId, autoTopic, autoRounds]);
 
   const updateSide = useCallback(
     (side: "left" | "right", updater: (prev: SideState) => SideState) => {

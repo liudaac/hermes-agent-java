@@ -785,19 +785,26 @@ public class TenantAwareAIAgent {
 
     private void persistSession() {
         try {
-            var session = new com.nousresearch.hermes.gateway.SessionManager(
-                com.nousresearch.hermes.config.Constants.getHermesHome())
-                .getSession(sessionId);
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(
+                com.nousresearch.hermes.config.Constants.getHermesHome());
+            var session = sessionMgr.getSession(sessionId);
 
+            // Clear and rebuild messages to avoid duplicates
+            session.messages.clear();
             for (ModelMessage msg : conversationHistory) {
                 if (msg.getRole() != null && msg.getContent() != null) {
                     session.addMessage(msg.getRole(), msg.getContent());
                 }
             }
 
-            new com.nousresearch.hermes.gateway.SessionManager(
-                com.nousresearch.hermes.config.Constants.getHermesHome())
-                .saveSession(session);
+            // Set source info for dashboard display
+            if (session.platform == null) {
+                session.platform = "web";
+            }
+            session.lastActivity = System.currentTimeMillis();
+
+            sessionMgr.saveSession(session);
+            logger.debug("Session saved: {} ({} messages)", sessionId, session.messages.size());
 
         } catch (Exception e) {
             logger.warn("Failed to save session: {}", e.getMessage());
