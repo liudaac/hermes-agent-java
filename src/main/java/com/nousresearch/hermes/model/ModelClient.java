@@ -73,15 +73,16 @@ public class ModelClient {
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
-            HttpResponse<String> response = httpClient.send(request,
-                HttpResponse.BodyHandlers.ofString());
+            HttpResponse<byte[]> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() != 200) {
-                logger.error("API error: {} - {}", response.statusCode(), response.body());
+                String errorBody = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
+                logger.error("API error: {} - {}", response.statusCode(), errorBody);
                 return ChatCompletionResponse.error("API error: " + response.statusCode());
             }
 
-            String body = response.body();
+            String body = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
             if (stream) {
                 return parseStreamResponse(body);
             }
