@@ -274,6 +274,14 @@ export const api = {
     }),
   getTenantAudit: (tenantId: string, limit = 100) =>
     fetchJSON<TenantAuditResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/audit?limit=${limit}`),
+  getTenantConfig: (tenantId: string) =>
+    fetchJSON<TenantConfigResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/config`),
+  updateTenantConfig: (tenantId: string, config: Partial<TenantConfigPayload>) =>
+    fetchJSON<TenantActionResponse>(`/api/tenants/${encodeURIComponent(tenantId)}/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    }),
 
   // Gateway / update actions
   restartGateway: () =>
@@ -746,6 +754,23 @@ export interface TenantAuditResponse {
   logs: TenantAuditEvent[];
   events: TenantAuditEvent[];
   total: number;
+}
+
+export interface TenantConfigResponse {
+  tenant_id: string;
+  system_prompt: string;
+  temperature: number;
+  max_tokens: number;
+  model: string;
+  provider: string;
+}
+
+export interface TenantConfigPayload {
+  system_prompt?: string;
+  temperature?: number;
+  max_tokens?: number;
+  model?: string;
+  provider?: string;
 }
 
 // ── OAuth provider types ────────────────────────────────────────────────

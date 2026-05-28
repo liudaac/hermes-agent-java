@@ -32,11 +32,10 @@ interface SideState {
   sessionId: string;
   messages: ChatMessage[];
   loading: boolean;
-  systemPrompt: string;
 }
 
 function createSideState(tenantId: string): SideState {
-  return { tenantId, sessionId: "", messages: [], loading: false, systemPrompt: "" };
+  return { tenantId, sessionId: "", messages: [], loading: false };
 }
 
 export default function ComparePage() {
@@ -44,7 +43,7 @@ export default function ComparePage() {
   const { t } = useI18n();
 
   const [left, setLeft] = useState<SideState>(() => createSideState("default"));
-  const [right, setRight] = useState<SideState>(() => createSideState("tenant-b"));
+  const [right, setRight] = useState<SideState>(() => createSideState("default"));
   const [tenants, setTenants] = useState<string[]>(["default"]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -73,9 +72,14 @@ export default function ComparePage() {
         const ids = res.tenants.map((t) => t.tenantId);
         if (ids.length === 0) ids.push("default");
         setTenants(ids);
+        // Initialise sides from fetched tenant list instead of hard-coding "tenant-b"
+        setLeft(createSideState(ids[0] ?? "default"));
+        setRight(createSideState(ids[1] ?? ids[0] ?? "default"));
       })
       .catch(() => {
         setTenants(["default"]);
+        setLeft(createSideState("default"));
+        setRight(createSideState("default"));
       });
   }, []);
 
@@ -121,7 +125,6 @@ export default function ComparePage() {
           message: text,
           tenant_id: state.tenantId,
           session_id: currentSid || undefined,
-          system_prompt: state.systemPrompt || undefined,
           onEvent: (event, data) => {
             const d = data as Record<string, unknown>;
             if (event === "session" && d.session_id) {
@@ -236,11 +239,6 @@ export default function ComparePage() {
     setRight(createSideState(right.tenantId));
   }, [left.tenantId, right.tenantId]);
 
-  const [sysPromptOpen, setSysPromptOpen] = useState<{ left: boolean; right: boolean }>({
-    left: false,
-    right: false,
-  });
-
   const renderPanel = (
     side: "left" | "right",
     state: SideState,
@@ -260,38 +258,12 @@ export default function ComparePage() {
             <SelectOption key={id} value={id}>{id}</SelectOption>
           ))}
         </Select>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            setSysPromptOpen((prev) => ({ ...prev, [side]: !prev[side as "left" | "right"] }))
-          }
-          disabled={autoRunning}
-          className="h-7 px-1.5 text-[10px]"
-          title={t.playground.systemPrompt}
-        >
-          {state.systemPrompt ? "📝" : "📝"}
-        </Button>
         {state.sessionId && (
           <Badge variant="secondary" className="text-[10px] h-5 shrink-0">
             {state.sessionId.slice(0, 6)}…
           </Badge>
         )}
       </div>
-      {sysPromptOpen[side as "left" | "right"] && (
-        <div className="mb-2">
-          <textarea
-            value={state.systemPrompt}
-            onChange={(e) =>
-              updateSide(side, (prev) => ({ ...prev, systemPrompt: e.target.value }))
-            }
-            placeholder={t.playground.systemPromptPlaceholder}
-            rows={2}
-            disabled={autoRunning}
-            className="w-full bg-black/30 border border-current/20 rounded-sm px-2 py-1 text-[10px] font-mono leading-relaxed resize-y focus:outline-none focus:border-midground/40"
-          />
-        </div>
-      )}
       <div className="flex-1 border border-current/20 rounded-sm overflow-y-auto p-2 space-y-2 bg-black/30 min-h-0">
         {state.messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 opacity-30">

@@ -176,6 +176,8 @@ public class GatewayServerV2 {
         app.put("/api/tenants/{id}/quota", this::handleUpdateTenantQuota);
         app.get("/api/tenants/{id}/usage", this::handleGetTenantUsage);
         app.get("/api/tenants/{id}/audit", this::handleGetTenantAudit);
+        app.get("/api/tenants/{id}/config", this::handleGetTenantConfig);
+        app.put("/api/tenants/{id}/config", this::handleUpdateTenantConfig);
 
         // Sessions API
         app.get("/api/tenants/{tenantId}/sessions", this::handleGetTenantSessions);
@@ -432,8 +434,11 @@ public class GatewayServerV2 {
             // 获取或创建 Agent（租户隔离）
             TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
 
-            // 应用自定义系统提示词（如果提供）
+            // 应用系统提示词：请求传入 > 租户配置 > 默认
             String customSystemPrompt = body.getString("system_prompt");
+            if (customSystemPrompt == null || customSystemPrompt.isBlank()) {
+                customSystemPrompt = tenant.getConfig().getString("agent.system_prompt");
+            }
             if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
                 agent.setSystemPrompt(customSystemPrompt);
             }
@@ -517,8 +522,11 @@ public class GatewayServerV2 {
         // 获取或创建 Agent（租户隔离）
         TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
 
-        // 应用自定义系统提示词（如果提供）
+        // 应用系统提示词：请求传入 > 租户配置 > 默认
         String customSystemPrompt = body.getString("system_prompt");
+        if (customSystemPrompt == null || customSystemPrompt.isBlank()) {
+            customSystemPrompt = tenant.getConfig().getString("agent.system_prompt");
+        }
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             agent.setSystemPrompt(customSystemPrompt);
         }
@@ -920,6 +928,68 @@ public class GatewayServerV2 {
             ));
         } catch (Exception e) {
             ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ==================== Tenant Config API ====================
+
+    private void handleGetTenantConfig(Context ctx) {
+        String tenantId = ctx.pathParam("id");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            return;
+        }
+
+        var cfg = tenant.getConfig();
+        ctx.json(Map.of(
+            "tenant_id", tenantId,
+            "system_prompt", cfg.getString("agent.system_prompt", ""),
+            "temperature", cfg.get("model.temperature", 0.7),
+            "max_tokens", cfg.get("model.max_tokens", 4096),
+            "model", cfg.getString("model.model", ""),
+            "provider", cfg.getString("model.provider", "")
+        ));
+    }
+
+    private void handleUpdateTenantConfig(Context ctx) {
+        String tenantId = ctx.pathParam("id");
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+
+        if (tenant == null) {
+            ctx.status(404).json(Map.of("error", "Tenant not found"));
+            return;
+        }
+
+        try {
+            JSONObject body = JSON.parseObject(ctx.body());
+            var cfg = tenant.getConfig();
+
+            if (body.containsKey("system_prompt")) {
+                cfg.set("agent.system_prompt", body.getString("system_prompt"));
+            }
+            if (body.containsKey("temperature")) {
+                cfg.set("model.temperature", body.getDoubleValue("temperature"));
+            }
+            if (body.containsKey("max_tokens")) {
+                cfg.set("model.max_tokens", body.getIntValue("max_tokens"));
+            }
+            if (body.containsKey("model")) {
+                cfg.set("model.model", body.getString("model"));
+            }
+            if (body.containsKey("provider")) {
+                cfg.set("model.provider", body.getString("provider"));
+            }
+
+            cfg.save();
+
+            ctx.json(Map.of(
+                "tenant_id", tenantId,
+                "status", "updated"
+            ));
+        } catch (Exception e) {
+            ctx.status(400).json(Map.of("error", e.getMessage()));
         }
     }
 

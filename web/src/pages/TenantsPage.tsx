@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FileClock,
+  FileText,
   Gauge,
   HardDrive,
   Layers,
@@ -19,6 +20,7 @@ import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type {
   TenantAuditEvent,
+  TenantConfigResponse,
   TenantQuota,
   TenantSecurity,
   TenantSkillInfo,
@@ -96,6 +98,15 @@ export default function TenantsPage() {
   const [creating, setCreating] = useState(false);
   const [savingQuota, setSavingQuota] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
+  const [tenantConfig, setTenantConfig] = useState<TenantConfigResponse | null>(null);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configForm, setConfigForm] = useState({
+    systemPrompt: "",
+    temperature: "",
+    maxTokens: "",
+    model: "",
+    provider: "",
+  });
   const [quotaForm, setQuotaForm] = useState({
     maxDailyRequests: "",
     maxDailyTokens: "",
@@ -136,13 +147,14 @@ export default function TenantsPage() {
   const loadTenantDetails = async (tenantId: string) => {
     setDetailLoading(true);
     try {
-      const [tenant, skills, quota, usage, security, audit] = await Promise.all([
+      const [tenant, skills, quota, usage, security, audit, cfg] = await Promise.all([
         api.getTenant(tenantId),
         api.getTenantSkills(tenantId),
         api.getTenantQuota(tenantId),
         api.getTenantUsage(tenantId),
         api.getTenantSecurity(tenantId),
         api.getTenantAudit(tenantId, 20),
+        api.getTenantConfig(tenantId).catch(() => null),
       ]);
       setSelectedTenant(tenant);
       setTenantSkills(skills.skills ?? []);
@@ -150,6 +162,14 @@ export default function TenantsPage() {
       setTenantUsage(usage);
       setTenantSecurity(security);
       setTenantAudit(audit.events ?? audit.logs ?? []);
+      setTenantConfig(cfg);
+      setConfigForm({
+        systemPrompt: cfg?.system_prompt ?? "",
+        temperature: String(cfg?.temperature ?? ""),
+        maxTokens: String(cfg?.max_tokens ?? ""),
+        model: cfg?.model ?? "",
+        provider: cfg?.provider ?? "",
+      });
       setQuotaForm({
         maxDailyRequests: String(quota.maxDailyRequests ?? ""),
         maxDailyTokens: String(quota.maxDailyTokens ?? ""),
@@ -178,6 +198,7 @@ export default function TenantsPage() {
       setTenantUsage(null);
       setTenantSecurity(null);
       setTenantAudit([]);
+      setTenantConfig(null);
     } finally {
       setDetailLoading(false);
     }
@@ -322,6 +343,26 @@ export default function TenantsPage() {
       showToast(`Failed to update security policy: ${e}`, "error");
     } finally {
       setSavingSecurity(false);
+    }
+  };
+
+  const saveConfig = async () => {
+    if (!selectedTenantId) return;
+    setSavingConfig(true);
+    try {
+      await api.updateTenantConfig(selectedTenantId, {
+        system_prompt: configForm.systemPrompt,
+        temperature: configForm.temperature ? Number(configForm.temperature) : undefined,
+        max_tokens: configForm.maxTokens ? Number(configForm.maxTokens) : undefined,
+        model: configForm.model || undefined,
+        provider: configForm.provider || undefined,
+      });
+      showToast(`Config updated for ${selectedTenantId}`, "success");
+      await loadTenantDetails(selectedTenantId);
+    } catch (e) {
+      showToast(`Failed to update config: ${e}`, "error");
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -608,6 +649,34 @@ export default function TenantsPage() {
                           <TextField label="Denied Paths" value={securityForm.deniedPaths} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedPaths: value }))} placeholder="/etc, /root/.ssh" />
                           <Button size="sm" onClick={saveSecurity} disabled={savingSecurity || !tenantSecurity}>
                             {savingSecurity ? "Saving security…" : "Save Security"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            Agent Config
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 text-xs">
+                          <label className="grid gap-1">
+                            <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">System Prompt</span>
+                            <textarea
+                              value={configForm.systemPrompt}
+                              onChange={(e) => setConfigForm((form) => ({ ...form, systemPrompt: e.target.value }))}
+                              placeholder="Optional: set a custom system prompt for this tenant"
+                              rows={4}
+                              className="w-full bg-background border border-border rounded-sm px-2 py-1 text-xs font-mono leading-relaxed resize-y focus:outline-none focus:border-primary/40"
+                            />
+                          </label>
+                          <TextField label="Model" value={configForm.model} onChange={(value) => setConfigForm((form) => ({ ...form, model: value }))} placeholder="e.g. anthropic/claude-3.5-sonnet" />
+                          <TextField label="Provider" value={configForm.provider} onChange={(value) => setConfigForm((form) => ({ ...form, provider: value }))} placeholder="e.g. openrouter" />
+                          <NumberField label="Temperature" value={configForm.temperature} onChange={(value) => setConfigForm((form) => ({ ...form, temperature: value }))} />
+                          <NumberField label="Max Tokens" value={configForm.maxTokens} onChange={(value) => setConfigForm((form) => ({ ...form, maxTokens: value }))} />
+                          <Button size="sm" onClick={saveConfig} disabled={savingConfig || !tenantConfig}>
+                            {savingConfig ? "Saving config…" : "Save Config"}
                           </Button>
                         </CardContent>
                       </Card>
