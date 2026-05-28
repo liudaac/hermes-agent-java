@@ -466,7 +466,8 @@ public class GatewayServerV2 {
     }
 
     private void handleChatStream(Context ctx) throws IOException {
-        ctx.header("Content-Type", "text/event-stream");
+        ctx.res().setCharacterEncoding("UTF-8");
+        ctx.res().setContentType("text/event-stream; charset=UTF-8");
         ctx.header("Cache-Control", "no-cache");
         ctx.header("Connection", "keep-alive");
 
@@ -526,11 +527,12 @@ public class GatewayServerV2 {
         }
 
         try {
-            // 流式处理（当前为简化版，一次性返回后分事件推送）
-            String response = agent.processMessage(message);
-            sendSseEvent(ctx, "message", Map.of("content", response != null ? response : ""));
+            // True streaming: push each chunk as it arrives from the model
+            agent.processMessageStream(message, chunk -> {
+                sendSseEvent(ctx, "delta", Map.of("content", chunk));
+            });
 
-            // 发送调试事件（usage + tool calls）
+            // Send debug events (usage + tool calls)
             Map<String, Object> debug = agent.getSessionDebugInfo();
             if (debug.containsKey("usage")) {
                 sendSseEvent(ctx, "usage", (Map<String, Object>) debug.get("usage"));
@@ -539,12 +541,12 @@ public class GatewayServerV2 {
                 sendSseEvent(ctx, "tool_chain", Map.of("calls", debug.get("toolCalls")));
             }
 
-            // 发送完成事件
+            // Send completion event
             sendSseEvent(ctx, "done", Map.of(
                 "timestamp", System.currentTimeMillis()
             ));
 
-            // 更新活动状态
+            // Update activity
             tenant.updateActivity();
 
         } catch (Exception e) {
@@ -1067,6 +1069,7 @@ public class GatewayServerV2 {
     private void sendSseEvent(Context ctx, String event, Map<String, Object> data) {
         try {
             jakarta.servlet.http.HttpServletResponse response = ctx.res();
+            response.setCharacterEncoding("UTF-8");
             PrintWriter writer = response.getWriter();
             writer.write("event: " + event + "\n");
             writer.write("data: " + JSON.toJSONString(data) + "\n\n");

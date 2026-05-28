@@ -48,6 +48,20 @@ public class ModelClient {
             List<ToolDefinition> tools,
             boolean stream,
             Map<String, Object> extraParams) {
+        return chatCompletion(messages, tools, stream, extraParams, null);
+    }
+
+    /**
+     * Send a chat completion request with optional parameter overrides and streaming callback.
+     * When {@code stream=true} and {@code onChunk} is provided, the SSE response is read
+     * line-by-line and each content delta is delivered to the callback immediately.
+     */
+    public ChatCompletionResponse chatCompletion(
+            List<ModelMessage> messages,
+            List<ToolDefinition> tools,
+            boolean stream,
+            Map<String, Object> extraParams,
+            java.util.function.Consumer<String> onChunk) {
 
         try {
             JSONObject requestJson = new JSONObject();
@@ -68,10 +82,15 @@ public class ModelClient {
 
             HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(getChatCompletionUrl()))
-                .header("Content-Type", "application/json")
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .header("Accept", stream ? "text/event-stream" : "application/json")
                 .header("Authorization", "Bearer " + modelConfig.getApiKey())
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
+
+            if (stream && onChunk != null) {
+                return chatCompletionStreamInternal(request, onChunk);
+            }
 
             HttpResponse<byte[]> response = httpClient.send(request,
                 HttpResponse.BodyHandlers.ofByteArray());
@@ -92,6 +111,88 @@ public class ModelClient {
             logger.error("Error in chat completion: {}", e.getMessage(), e);
             return ChatCompletionResponse.error(e.getMessage());
         }
+    }
+
+    private ChatCompletionResponse chatCompletionStreamInternal(
+            HttpRequest request,
+            java.util.function.Consumer<String> onChunk) throws Exception {
+
+        HttpResponse<java.io.InputStream> response = httpClient.send(request,
+            HttpResponse.BodyHandlers.ofInputStream());
+
+        if (response.statusCode() != 200) {
+            String errorBody = new String(response.body().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            logger.error("API error: {} - {}", response.statusCode(), errorBody);
+            return ChatCompletionResponse.error("API error: " + response.statusCode());
+        }
+
+        StringBuilder contentBuilder = new StringBuilder();
+        StringBuilder reasoningBuilder = new StringBuilder();
+        String finishReason = null;
+        String model = null;
+
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(response.body(), java.nio.charset.StandardCharsets.UTF_8))) {
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (!line.startsWith("data:")) continue;
+                String data = line.substring(5).trim();
+                if ("[DONE]".equals(data)) break;
+                if (data.isEmpty()) continue;
+
+                try {
+                    JSONObject chunk = JSONObject.parseObject(data);
+                    if (model == null) {
+                        model = chunk.getString("model");
+                    }
+
+                    JSONArray choices = chunk.getJSONArray("choices");
+                    if (choices == null || choices.isEmpty()) continue;
+
+                    JSONObject choice = choices.getJSONObject(0);
+                    if (choice == null) continue;
+
+                    JSONObject delta = choice.getJSONObject("delta");
+                    if (delta != null) {
+                        String content = delta.getString("content");
+                        if (content != null && !content.isEmpty()) {
+                            contentBuilder.append(content);
+                            onChunk.accept(content);
+                        }
+                        String reasoning = delta.getString("reasoning_content");
+                        if (reasoning != null && !reasoning.isEmpty()) {
+                            reasoningBuilder.append(reasoning);
+                        }
+                    }
+
+                    String fr = choice.getString("finish_reason");
+                    if (fr != null) {
+                        finishReason = fr;
+                    }
+                } catch (Exception e) {
+                    logger.debug("Failed to parse SSE chunk: {}", data);
+                }
+            }
+        }
+
+        String fullContent = contentBuilder.toString();
+        if (reasoningBuilder.length() > 0) {
+            fullContent = "<think>\n" + reasoningBuilder + "\n</think>\n\n" + fullContent;
+        }
+
+        ModelMessage message = new ModelMessage();
+        message.setRole("assistant");
+        message.setContent(fullContent);
+
+        return new ChatCompletionResponse(
+            message,
+            finishReason != null ? finishReason : "stop",
+            false,
+            null,
+            model
+        );
     }
 
     /**

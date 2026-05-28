@@ -549,7 +549,8 @@ public class TenantAwareAIAgent {
                     conversationHistory,
                     buildToolDefinitions(),
                     true,
-                    modelParams
+                    modelParams,
+                    chunk -> chunkConsumer.accept(chunk)
                 );
 
                 ModelMessage assistantMessage = response.getMessage();
@@ -562,11 +563,6 @@ public class TenantAwareAIAgent {
 
                 conversationHistory.add(assistantMessage);
                 autoSaveSession();
-
-                String content = assistantMessage.getContent();
-                if (content != null && !content.isEmpty()) {
-                    chunkConsumer.accept(content);
-                }
 
                 if (response.hasToolCalls()) {
                     for (ToolCall toolCall : assistantMessage.getToolCalls()) {

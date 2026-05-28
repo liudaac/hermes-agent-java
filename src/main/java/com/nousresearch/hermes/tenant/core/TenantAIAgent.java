@@ -75,6 +75,23 @@ public class TenantAIAgent {
     }
 
     /**
+     * 流式处理消息 - 委托给 TenantAwareAIAgent
+     */
+    public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
+        if (interrupted) {
+            chunkConsumer.accept("Agent has been interrupted");
+            return;
+        }
+
+        try {
+            delegate.processMessageStream(message, chunkConsumer);
+        } catch (Exception e) {
+            logger.error("Error in stream processing in TenantAIAgent: {}", e.getMessage(), e);
+            chunkConsumer.accept("Error: " + e.getMessage());
+        }
+    }
+
+    /**
      * 设置/覆盖系统提示词
      */
     public void setSystemPrompt(String prompt) {
