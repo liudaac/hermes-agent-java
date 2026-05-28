@@ -466,8 +466,7 @@ public class GatewayServerV2 {
     }
 
     private void handleChatStream(Context ctx) throws IOException {
-        ctx.res().setCharacterEncoding("UTF-8");
-        ctx.res().setContentType("text/event-stream; charset=UTF-8");
+        ctx.contentType("text/event-stream; charset=UTF-8");
         ctx.header("Cache-Control", "no-cache");
         ctx.header("Connection", "keep-alive");
 
