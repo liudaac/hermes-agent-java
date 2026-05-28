@@ -49,6 +49,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectOption } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
@@ -85,6 +86,7 @@ export default function PlaygroundPage() {
   const { t } = useI18n();
 
   const [tenantId, setTenantId] = useState("default");
+  const [tenants, setTenants] = useState<string[]>(["default"]);
   const [sessionId, setSessionId] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [systemPromptOpen, setSystemPromptOpen] = useState(false);
@@ -107,6 +109,18 @@ export default function PlaygroundPage() {
 
   useEffect(() => {
     setRecSupported(!!window.SpeechRecognition || !!window.webkitSpeechRecognition);
+  }, []);
+
+  useEffect(() => {
+    api.getTenants()
+      .then((res) => {
+        const ids = res.tenants.map((t) => t.tenantId);
+        if (ids.length === 0) ids.push("default");
+        setTenants(ids);
+      })
+      .catch(() => {
+        setTenants(["default"]);
+      });
   }, []);
 
   const startRecording = useCallback(() => {
@@ -374,12 +388,15 @@ export default function PlaygroundPage() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs opacity-70 block mb-1">{t.playground.tenantId}</label>
-              <Input
+              <Select
                 value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                placeholder={t.playground.tenantIdPlaceholder}
-                className="h-8 text-sm"
-              />
+                onValueChange={(v) => setTenantId(v)}
+                className="h-8"
+              >
+                {tenants.map((id) => (
+                  <SelectOption key={id} value={id}>{id}</SelectOption>
+                ))}
+              </Select>
             </div>
             <div className="flex-1">
               <label className="text-xs opacity-70 block mb-1">

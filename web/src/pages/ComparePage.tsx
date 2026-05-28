@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectOption } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
@@ -43,6 +44,7 @@ export default function ComparePage() {
 
   const [left, setLeft] = useState<SideState>(() => createSideState("default"));
   const [right, setRight] = useState<SideState>(() => createSideState("tenant-b"));
+  const [tenants, setTenants] = useState<string[]>(["default"]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -63,6 +65,18 @@ export default function ComparePage() {
   useEffect(() => {
     rightScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [right.messages]);
+
+  useEffect(() => {
+    api.getTenants()
+      .then((res) => {
+        const ids = res.tenants.map((t) => t.tenantId);
+        if (ids.length === 0) ids.push("default");
+        setTenants(ids);
+      })
+      .catch(() => {
+        setTenants(["default"]);
+      });
+  }, []);
 
   const updateSide = useCallback(
     (side: "left" | "right", updater: (prev: SideState) => SideState) => {
@@ -227,15 +241,18 @@ export default function ComparePage() {
   ) => (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex items-center gap-2 mb-2">
-        <Input
+        <Select
           value={state.tenantId}
-          onChange={(e) =>
-            updateSide(side, (prev) => ({ ...prev, tenantId: e.target.value }))
+          onValueChange={(v) =>
+            updateSide(side, (prev) => ({ ...prev, tenantId: v }))
           }
-          placeholder={t.compare.tenantIdPlaceholder}
           className="h-7 text-xs flex-1"
           disabled={autoRunning}
-        />
+        >
+          {tenants.map((id) => (
+            <SelectOption key={id} value={id}>{id}</SelectOption>
+          ))}
+        </Select>
         {state.sessionId && (
           <Badge variant="secondary" className="text-[10px] h-5 shrink-0">
             {state.sessionId.slice(0, 6)}…
