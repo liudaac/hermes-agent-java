@@ -86,6 +86,9 @@ public class GatewayServerV2 {
 
         app = Javalin.create(javalinConfig -> {
             javalinConfig.showJavalinBanner = false;
+            javalinConfig.jetty.modifyServletContextHandler(handler ->
+                handler.setDefaultResponseCharacterEncoding("UTF-8")
+            );
         });
 
         setupRoutes();
@@ -466,7 +469,9 @@ public class GatewayServerV2 {
     }
 
     private void handleChatStream(Context ctx) throws IOException {
-        ctx.contentType("text/event-stream; charset=UTF-8");
+        var response = ctx.res();
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("text/event-stream");
         ctx.header("Cache-Control", "no-cache");
         ctx.header("Connection", "keep-alive");
 
