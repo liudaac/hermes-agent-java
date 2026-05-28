@@ -434,7 +434,7 @@ public class TenantManager {
     }
     
     private String sanitizeTenantId(String tenantId) {
-        String sanitized = tenantId.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String sanitized = tenantId.replaceAll("[^\\p{L}\\p{N}_-]", "_");
         if (sanitized.length() > 64) {
             sanitized = sanitized.substring(0, 64);
         }

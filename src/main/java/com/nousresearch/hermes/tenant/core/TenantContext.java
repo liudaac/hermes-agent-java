@@ -631,8 +631,8 @@ public class TenantContext {
     // ============ 工具方法 ============
 
     private static String sanitizeTenantId(String tenantId) {
-        // 只允许字母数字和下划线
-        String sanitized = tenantId.replaceAll("[^a-zA-Z0-9_-]", "_");
+        // 允许 Unicode 字母、数字、中文、下划线和连字符
+        String sanitized = tenantId.replaceAll("[^\\p{L}\\p{N}_-]", "_");
         if (sanitized.length() > 64) {
             sanitized = sanitized.substring(0, 64);
         }
