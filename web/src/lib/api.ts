@@ -329,6 +329,7 @@ export const api = {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let currentEvent = "message";
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -338,16 +339,20 @@ export const api = {
         buffer = lines.pop() ?? "";
         for (const line of lines) {
           if (line.startsWith("event:")) {
-            // event name on this line, data on next
+            currentEvent = line.slice(6).trim();
             continue;
           }
           if (line.startsWith("data:")) {
             const raw = line.slice(5).trim();
+            if (raw === "[DONE]") {
+              params.onEvent("done", {});
+              continue;
+            }
             try {
               const data = JSON.parse(raw);
-              params.onEvent(data.event ?? "message", data);
+              params.onEvent(currentEvent, data);
             } catch {
-              params.onEvent("message", raw);
+              params.onEvent(currentEvent, raw);
             }
           }
         }
