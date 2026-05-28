@@ -53,34 +53,40 @@ public class TenantConfig {
     private static final Pattern ENV_VAR_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
     
     public TenantConfig(Path configDir, Map<String, Object> initialConfig) {
+        this(configDir, initialConfig, true);
+    }
+
+    private TenantConfig(Path configDir, Map<String, Object> initialConfig, boolean autoSave) {
         this.configDir = configDir;
         this.configFile = configDir.resolve(CONFIG_FILE);
         this.secretsFile = configDir.resolve(SECRETS_FILE);
         this.config = new ConcurrentHashMap<>();
         this.secrets = new ConcurrentHashMap<>();
-        
+
         // 加载系统默认值
         loadDefaults();
-        
+
         // 合并初始配置
         if (initialConfig != null) {
             deepMerge(config, initialConfig);
         }
-        
-        // 保存初始配置
-        try {
-            Files.createDirectories(configDir);
-            save();
-        } catch (IOException e) {
-            logger.error("Failed to create config directory", e);
+
+        // 保存初始配置（仅当 autoSave 为 true 时）
+        if (autoSave) {
+            try {
+                Files.createDirectories(configDir);
+                save();
+            } catch (IOException e) {
+                logger.error("Failed to create config directory", e);
+            }
         }
     }
-    
+
     /**
      * 从磁盘加载配置
      */
     public static TenantConfig load(Path configDir) {
-        TenantConfig tenantConfig = new TenantConfig(configDir, null);
+        TenantConfig tenantConfig = new TenantConfig(configDir, null, false);
         tenantConfig.loadFromDisk();
         return tenantConfig;
     }

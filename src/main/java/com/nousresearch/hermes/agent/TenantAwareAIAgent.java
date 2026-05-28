@@ -414,6 +414,11 @@ public class TenantAwareAIAgent {
     private String doProcessMessage(String message) {
         userTurnCount++;
 
+        // Ensure system prompt is present at the start of conversation
+        if (conversationHistory.isEmpty()) {
+            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
+        }
+
         boolean shouldReviewMemory = false;
         if (memoryNudgeInterval > 0) {
             turnsSinceMemory++;
@@ -523,6 +528,11 @@ public class TenantAwareAIAgent {
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
         userTurnCount++;
+
+        // Ensure system prompt is present at the start of conversation
+        if (conversationHistory.isEmpty()) {
+            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
+        }
 
         boolean shouldReviewMemory = false;
         if (memoryNudgeInterval > 0) {
