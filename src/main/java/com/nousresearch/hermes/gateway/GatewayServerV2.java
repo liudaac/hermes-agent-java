@@ -1069,11 +1069,9 @@ public class GatewayServerV2 {
     private void sendSseEvent(Context ctx, String event, Map<String, Object> data) {
         try {
             jakarta.servlet.http.HttpServletResponse response = ctx.res();
-            response.setCharacterEncoding("UTF-8");
-            PrintWriter writer = response.getWriter();
-            writer.write("event: " + event + "\n");
-            writer.write("data: " + JSON.toJSONString(data) + "\n\n");
-            writer.flush();
+            String payload = "event: " + event + "\ndata: " + JSON.toJSONString(data) + "\n\n";
+            response.getOutputStream().write(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            response.getOutputStream().flush();
         } catch (Exception e) {
             logger.error("Failed to send SSE event: {}", e.getMessage());
         }

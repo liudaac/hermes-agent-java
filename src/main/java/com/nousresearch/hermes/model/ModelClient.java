@@ -164,6 +164,7 @@ public class ModelClient {
                         String reasoning = delta.getString("reasoning_content");
                         if (reasoning != null && !reasoning.isEmpty()) {
                             reasoningBuilder.append(reasoning);
+                            onChunk.accept(reasoning);
                         }
                     }
 
