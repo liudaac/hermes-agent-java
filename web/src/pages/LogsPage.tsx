@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { FileText, RefreshCw, ChevronRight, Layers } from "lucide-react";
 import { H2 } from "@nous-research/ui";
-import { api } from "@/lib/api";
+import { api, type LogFileInfo } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { LiveBadge } from "@/components/LiveBadge";
 import { useI18n } from "@/i18n";
 
-const FILES = ["agent", "errors", "gateway"] as const;
 const LEVELS = ["ALL", "DEBUG", "INFO", "WARNING", "ERROR"] as const;
 const COMPONENTS = ["all", "gateway", "agent", "tools", "cli", "cron"] as const;
 const LINE_COUNTS = [50, 100, 200, 500] as const;
@@ -70,7 +69,8 @@ function SidebarItem<T extends string>({
 }
 
 export default function LogsPage() {
-  const [file, setFile] = useState<(typeof FILES)[number]>("agent");
+  const [files, setFiles] = useState<LogFileInfo[]>([]);
+  const [file, setFile] = useState<string>("");
   const [level, setLevel] = useState<(typeof LEVELS)[number]>("ALL");
   const [component, setComponent] =
     useState<(typeof COMPONENTS)[number]>("all");
@@ -89,6 +89,18 @@ export default function LogsPage() {
   const tailSourceRef = useRef<EventSource | null>(null);
   const { t } = useI18n();
 
+  // Load log file list on mount
+  useEffect(() => {
+    api.getLogFiles()
+      .then((resp) => {
+        setFiles(resp.files);
+        if (resp.files.length > 0 && !file) {
+          setFile(resp.files[0].name);
+        }
+      })
+      .catch((err) => setError(`Failed to load file list: ${String(err)}`));
+  }, []);
+
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       if (scrollRef.current) {
@@ -98,12 +110,13 @@ export default function LogsPage() {
   }, []);
 
   const fetchLogs = useCallback(() => {
+    if (!file) return;
     setLoading(true);
     setError(null);
     if (aggregate) {
       api
         .getLogAggregate({
-          files: [`${file}.log`],
+          files: [file],
           lines: lineCount,
           level,
           component,
@@ -152,7 +165,7 @@ export default function LogsPage() {
     (async () => {
       try {
         const source = await api.openLogTail({
-          file: `${file}.log`,
+          file,
           level,
           component,
         });
@@ -221,7 +234,7 @@ export default function LogsPage() {
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           )}
           <Badge variant="secondary" className="text-[10px]">
-            {file} · {level} · {component}
+            {file || "—"} · {level} · {component}
           </Badge>
         </div>
         <div className="flex items-center gap-3">
@@ -278,11 +291,16 @@ export default function LogsPage() {
         <div className="sm:w-44 sm:shrink-0">
           <div className="sm:sticky sm:top-[72px] flex flex-col gap-0.5">
             <SidebarHeading>{t.logs.file}</SidebarHeading>
-            {FILES.map((f) => (
+            {files.length === 0 && (
+              <p className="px-2.5 py-1 text-xs text-muted-foreground">
+                {t.logs.noFiles || "No log files"}
+              </p>
+            )}
+            {files.map((f) => (
               <SidebarItem
-                key={f}
-                label={f}
-                value={f}
+                key={f.name}
+                label={f.name}
+                value={f.name}
                 current={file}
                 onChange={setFile}
               />
@@ -331,7 +349,7 @@ export default function LogsPage() {
             <CardHeader className="py-3 px-4">
               <CardTitle className="text-sm flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                {file}.log
+                {file || t.logs.noFiles || "—"}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">

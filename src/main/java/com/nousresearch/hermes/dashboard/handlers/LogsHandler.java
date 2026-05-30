@@ -147,12 +147,18 @@ public class LogsHandler {
 
         try {
             Path logPath = logsDir.resolve(file);
+            logger.debug("getLogContent: file={}, logsDir={}, resolved={}, exists={}",
+                file, logsDir, logPath, Files.exists(logPath));
+
             if (!Files.exists(logPath)) {
                 // Try hermes home
                 logPath = Path.of(System.getProperty("user.home"), ".hermes", file);
+                logger.debug("getLogContent: fallback to hermes home: {}, exists={}",
+                    logPath, Files.exists(logPath));
             }
 
             if (!Files.exists(logPath)) {
+                logger.warn("Log file not found: {} (logsDir={})", file, logsDir);
                 return List.of("Log file not found: " + file);
             }
 

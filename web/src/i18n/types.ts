@@ -159,6 +159,7 @@ export interface Translations {
     level: string;
     component: string;
     lines: string;
+    noFiles: string;
     noLogLines: string;
   };
 

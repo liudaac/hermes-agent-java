@@ -153,6 +153,7 @@ export const en: Translations = {
     level: "Level",
     component: "Component",
     lines: "Lines",
+    noFiles: "No log files",
     noLogLines: "No log lines found",
   },
 

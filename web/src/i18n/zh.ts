@@ -153,6 +153,7 @@ export const zh: Translations = {
     level: "级别",
     component: "组件",
     lines: "行数",
+    noFiles: "无日志文件",
     noLogLines: "未找到日志记录",
   },
 
