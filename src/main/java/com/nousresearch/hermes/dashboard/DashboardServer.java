@@ -306,6 +306,7 @@ public class DashboardServer {
         // Logs API
         app.get("/api/logs", logsHandler::getLogs);
         app.get("/api/logs/files", logsHandler::getLogFiles);
+        app.delete("/api/logs", logsHandler::deleteLog);
         app.get("/api/logs/aggregate", logsHandler::getAggregate);
         app.sse("/api/logs/tail", logsHandler::tail);
 

@@ -53,6 +53,10 @@ export const api = {
     return fetchJSON<LogsResponse>(`/api/logs?${qs.toString()}`);
   },
   getLogFiles: () => fetchJSON<LogFilesResponse>("/api/logs/files"),
+  deleteLogFile: (file: string) =>
+    fetchJSON<{ ok: boolean; file: string }>(`/api/logs?file=${encodeURIComponent(file)}`, {
+      method: "DELETE",
+    }),
   getLogAggregate: (params: {
     files?: string[];
     lines?: number;

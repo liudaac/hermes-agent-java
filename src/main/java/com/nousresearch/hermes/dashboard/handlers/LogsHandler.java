@@ -86,8 +86,35 @@ public class LogsHandler {
     }
 
     /**
-     * Get list of available log files.
+     * DELETE /api/logs?file=xxx - Delete a log file.
      */
+    public void deleteLog(Context ctx) {
+        try {
+            String file = ctx.queryParam("file");
+            if (file == null || file.isBlank()) {
+                ctx.status(400).json(java.util.Map.of("error", "Missing file parameter"));
+                return;
+            }
+
+            Path logPath = resolveSafe(file);
+            if (logPath == null) {
+                ctx.status(404).json(java.util.Map.of("error", "File not found or access denied"));
+                return;
+            }
+
+            if (!Files.isRegularFile(logPath)) {
+                ctx.status(400).json(java.util.Map.of("error", "Not a regular file"));
+                return;
+            }
+
+            Files.delete(logPath);
+            logger.info("Deleted log file: {}", logPath);
+            ctx.json(java.util.Map.of("ok", true, "file", file));
+        } catch (Exception e) {
+            logger.error("Error deleting log file: {}", e.getMessage());
+            ctx.status(500).json(java.util.Map.of("error", e.getMessage()));
+        }
+    }
     private List<java.util.Map<String, Object>> listLogFiles() {
         List<java.util.Map<String, Object>> files = new ArrayList<>();
 

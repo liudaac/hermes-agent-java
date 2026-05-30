@@ -47,6 +47,7 @@ class LogsHandlerTest {
         handler = new LogsHandler();
         app = Javalin.create()
             .get("/api/logs/aggregate", handler::getAggregate)
+            .delete("/api/logs", handler::deleteLog)
             .sse("/api/logs/tail", handler::tail)
             .start(0);
         port = app.port();
@@ -136,5 +137,39 @@ class LogsHandlerTest {
 
         boolean sawAppended = events.stream().anyMatch(e -> e.contains("appended-line"));
         assertTrue(sawAppended, "Appended line should be delivered; events=" + events);
+    }
+
+    @Test
+    @DisplayName("deleteLog removes a log file and returns ok")
+    void deleteLogRemovesFile() throws Exception {
+        Path logs = tempHome.resolve(".hermes/logs");
+        Path file = logs.resolve("deleteme.log");
+        Files.writeString(file, "2026-01-01 00:00:00 INFO deleteme\n");
+
+        OkHttpClient client = new OkHttpClient();
+        Request req = new Request.Builder()
+            .url("http://localhost:" + port + "/api/logs?file=deleteme.log")
+            .delete()
+            .build();
+        try (Response resp = client.newCall(req).execute()) {
+            assertEquals(200, resp.code());
+            String body = resp.body().string();
+            assertTrue(body.contains("\"ok\":true"), body);
+            assertTrue(body.contains("\"file\":\"deleteme.log\""), body);
+        }
+        assertFalse(Files.exists(file), "File should be deleted");
+    }
+
+    @Test
+    @DisplayName("deleteLog returns 404 for missing file")
+    void deleteLogMissingReturns404() throws Exception {
+        OkHttpClient client = new OkHttpClient();
+        Request req = new Request.Builder()
+            .url("http://localhost:" + port + "/api/logs?file=missing.log")
+            .delete()
+            .build();
+        try (Response resp = client.newCall(req).execute()) {
+            assertEquals(404, resp.code());
+        }
     }
 }

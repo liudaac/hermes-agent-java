@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { FileText, RefreshCw, ChevronRight, Layers } from "lucide-react";
+import { FileText, RefreshCw, ChevronRight, Layers, Trash2 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api, type LogFileInfo } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,23 +48,27 @@ function SidebarItem<T extends string>({
   value,
   current,
   onChange,
+  action,
 }: SidebarItemProps<T>) {
   const isActive = current === value;
   return (
-    <button
-      type="button"
-      onClick={() => onChange(value)}
-      className={`group flex items-center gap-2 px-2.5 py-1 text-left text-xs transition-colors cursor-pointer ${
-        isActive
-          ? "bg-primary/10 text-primary font-medium"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-      }`}
-    >
-      <span className="flex-1 truncate">{label}</span>
-      {isActive && (
-        <ChevronRight className="h-3 w-3 text-primary/50 shrink-0" />
-      )}
-    </button>
+    <div className="group flex items-center">
+      <button
+        type="button"
+        onClick={() => onChange(value)}
+        className={`flex-1 flex items-center gap-2 px-2.5 py-1 text-left text-xs transition-colors cursor-pointer ${
+          isActive
+            ? "bg-primary/10 text-primary font-medium"
+            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+        }`}
+      >
+        <span className="flex-1 truncate">{label}</span>
+        {isActive && (
+          <ChevronRight className="h-3 w-3 text-primary/50 shrink-0" />
+        )}
+      </button>
+      {action}
+    </div>
   );
 }
 
@@ -138,6 +142,20 @@ export default function LogsPage() {
         .finally(() => setLoading(false));
     }
   }, [file, lineCount, level, component, aggregate, scrollToBottom]);
+
+  const handleDeleteFile = useCallback(async (name: string) => {
+    if (!window.confirm(`Delete log file "${name}"? This cannot be undone.`)) return;
+    try {
+      await api.deleteLogFile(name);
+      setFiles((prev) => prev.filter((f) => f.name !== name));
+      if (file === name) {
+        setFile("");
+        setLines([]);
+      }
+    } catch (err) {
+      setError(`Failed to delete file: ${String(err)}`);
+    }
+  }, [file]);
 
   useEffect(() => {
     fetchLogs();
@@ -303,6 +321,19 @@ export default function LogsPage() {
                 value={f.name}
                 current={file}
                 onChange={setFile}
+                action={
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteFile(f.name);
+                    }}
+                    className="px-2 py-1 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                }
               />
             ))}
 
@@ -398,4 +429,5 @@ interface SidebarItemProps<T extends string> {
   value: T;
   current: T;
   onChange: (v: T) => void;
+  action?: React.ReactNode;
 }
