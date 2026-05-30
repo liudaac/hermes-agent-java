@@ -32,13 +32,13 @@ public class SessionHandler {
     public SessionHandler() {
         this(
             Constants.getHermesHome().resolve("sessions.db"),
-            Constants.getHermesHome().resolve("memory").resolve("sessions")
+            Constants.getHermesHome().resolve("tenants")
         );
     }
 
-    public SessionHandler(Path dbPath, Path gatewaySessionsDir) {
+    public SessionHandler(Path dbPath, Path tenantsDir) {
         this.dbPath = dbPath.toAbsolutePath().normalize();
-        this.gatewaySessionsDir = gatewaySessionsDir.toAbsolutePath().normalize();
+        this.gatewaySessionsDir = tenantsDir.toAbsolutePath().normalize();
         initializeDatabase();
     }
 
@@ -374,28 +374,38 @@ public class SessionHandler {
 
 
     /**
-     * Import persisted gateway/agent JSON sessions into the dashboard SQLite DB.
+     * Import persisted tenant JSON sessions into the dashboard SQLite DB.
      *
-     * Agent and gateway code persist conversations under ~/.hermes/memory/sessions/*.json
-     * using gateway.SessionManager. Dashboard pages read ~/.hermes/sessions.db. This
-     * lightweight sync keeps the dashboard backed by real agent sessions without
-     * forcing a larger SessionManager rewrite.
+     * TenantSessionManager persists conversations under ~/.hermes/tenants/{tenantId}/sessions/*.json
+     * Dashboard pages read ~/.hermes/sessions.db. This lightweight sync keeps the dashboard
+     * backed by real agent sessions without forcing a larger SessionManager rewrite.
      */
     void syncGatewaySessions() {
         if (!Files.exists(gatewaySessionsDir)) {
             return;
         }
 
-        try (Stream<Path> stream = Files.list(gatewaySessionsDir)) {
-            for (Path file : stream.filter(path -> path.toString().endsWith(".json")).toList()) {
-                try {
-                    importGatewaySession(file);
+        try (Stream<Path> tenantDirs = Files.list(gatewaySessionsDir)) {
+            for (Path tenantDir : tenantDirs.filter(Files::isDirectory).toList()) {
+                Path sessionsDir = tenantDir.resolve("sessions");
+                if (!Files.exists(sessionsDir) || !Files.isDirectory(sessionsDir)) {
+                    continue;
+                }
+
+                try (Stream<Path> sessionFiles = Files.list(sessionsDir)) {
+                    for (Path file : sessionFiles.filter(path -> path.toString().endsWith(".json")).toList()) {
+                        try {
+                            importGatewaySession(file);
+                        } catch (Exception e) {
+                            logger.warn("Failed to import session {}: {}", file, e.getMessage());
+                        }
+                    }
                 } catch (Exception e) {
-                    logger.warn("Failed to import gateway session {}: {}", file, e.getMessage());
+                    logger.warn("Failed to list sessions in {}: {}", sessionsDir, e.getMessage());
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to list gateway sessions in {}: {}", gatewaySessionsDir, e.getMessage());
+            logger.warn("Failed to scan tenant sessions in {}: {}", gatewaySessionsDir, e.getMessage());
         }
     }
 
