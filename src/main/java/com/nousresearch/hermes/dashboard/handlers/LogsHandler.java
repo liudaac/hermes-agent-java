@@ -61,6 +61,7 @@ public class LogsHandler {
             }
 
             // Get specific log content
+            logger.info("getLogs request: file={}, lines={}, level={}, component={}", file, lines, level, component);
             List<String> logLines = getLogContent(file, lines, level, component);
 
             ctx.json(new java.util.HashMap<String, Object>() {{
@@ -117,6 +118,7 @@ public class LogsHandler {
     }
     private List<java.util.Map<String, Object>> listLogFiles() {
         List<java.util.Map<String, Object>> files = new ArrayList<>();
+        logger.info("listLogFiles: logsDir={}, exists={}, user.home={}", logsDir, Files.exists(logsDir), System.getProperty("user.home"));
 
         try {
             if (Files.exists(logsDir)) {
@@ -162,6 +164,8 @@ public class LogsHandler {
 
         // Sort by modified time descending
         files.sort((a, b) -> Long.compare((Long) b.get("modified"), (Long) a.get("modified")));
+        logger.info("listLogFiles returned {} files: {}", files.size(),
+            files.stream().map(m -> (String) m.get("name")).collect(Collectors.toList()));
 
         return files;
     }
@@ -174,13 +178,13 @@ public class LogsHandler {
 
         try {
             Path logPath = logsDir.resolve(file);
-            logger.debug("getLogContent: file={}, logsDir={}, resolved={}, exists={}",
+            logger.info("getLogContent: file={}, logsDir={}, resolved={}, exists={}",
                 file, logsDir, logPath, Files.exists(logPath));
 
             if (!Files.exists(logPath)) {
                 // Try hermes home
                 logPath = Path.of(System.getProperty("user.home"), ".hermes", file);
-                logger.debug("getLogContent: fallback to hermes home: {}, exists={}",
+                logger.info("getLogContent: fallback to hermes home: {}, exists={}",
                     logPath, Files.exists(logPath));
             }
 
