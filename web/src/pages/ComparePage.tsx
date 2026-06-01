@@ -374,17 +374,25 @@ export default function ComparePage() {
       setActiveRunId(created.run.id);
       applyCompareRun(created.run);
 
-      while (!abortAutoRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        const detail = await api.getCompareRun(created.run.id);
-        applyCompareRun(detail.run);
-        if (["COMPLETED", "FAILED", "STOPPED"].includes(detail.run.status)) {
-          if (detail.run.status === "FAILED") {
-            showToast(detail.run.error ?? "Comparison run failed", "error");
+      await api.streamCompareRun(created.run.id, {
+        onEvent: (event, data) => {
+          const payload = data as Record<string, unknown>;
+          if (event === "run") {
+            applyCompareRun(payload as unknown as CompareRun);
           }
-          break;
-        }
-      }
+          if (event === "done") {
+            applyCompareRun(payload as unknown as CompareRun);
+          }
+          if (event === "error") {
+            showToast(String(payload.error ?? "Comparison stream failed"), "error");
+          }
+        },
+        onError: (err) => {
+          if (!abortAutoRef.current) {
+            showToast(err.message, "error");
+          }
+        },
+      });
     } catch (err) {
       showToast(
         t.compare.autoChatStopped.replace("{error}", err instanceof Error ? err.message : String(err)),

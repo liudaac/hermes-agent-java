@@ -57,6 +57,18 @@ GET /api/compare/runs/{id}
 
 Returns summary plus the event list.
 
+### Stream run updates
+
+```http
+GET /api/compare/runs/{id}/stream
+```
+
+Events:
+
+- `run` — full run detail snapshot when status or event count changes
+- `done` — final run summary when the run reaches `COMPLETED`, `FAILED`, or `STOPPED`
+- `error` — stream or lookup error
+
 ### Stop run
 
 ```http
@@ -89,9 +101,9 @@ On gateway startup, persisted runs are loaded into memory. Runs that were `PENDI
 
 ## Current limitations
 
-- No SSE stream endpoint yet; clients poll `GET /api/compare/runs/{id}`.
+- `GET /api/compare/runs/{id}/stream` provides server-sent events for live run updates.
 - Stop is cooperative and takes effect between turns.
-- Frontend ComparePage now creates server-side runs and polls run details while the task is active.
+- Frontend ComparePage now creates server-side runs and consumes the SSE stream while the task is active.
 - In-flight runs are restored as `STOPPED` after process restart instead of resumed mid-turn.
 
 ## Frontend integration
@@ -99,11 +111,12 @@ On gateway startup, persisted runs are loaded into memory. Runs that were `PENDI
 `ComparePage` uses:
 
 - `POST /api/compare/runs` to start auto-chat
-- `GET /api/compare/runs/{id}` to poll progress
+- `GET /api/compare/runs/{id}/stream` to receive live run updates
+- `GET /api/compare/runs/{id}` as a fallback/detail endpoint
 - `POST /api/compare/runs/{id}/stop` to request cooperative stop
 
 Manual broadcast messages still use the streaming chat API for immediate interactive use.
 
 ## Next step
 
-Persist comparison runs and expose an SSE endpoint so clients can reconnect without polling.
+Add frontend history/reconnect UX around persisted runs so users can reopen completed/stopped/failed comparisons.

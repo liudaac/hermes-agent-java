@@ -343,6 +343,55 @@ export const api = {
     }
     return res.json() as Promise<CompareRunResponse>;
   },
+  streamCompareRun: async (id: string, params: {
+    onEvent: (event: string, data: unknown) => void;
+    onError: (err: Error) => void;
+  }): Promise<void> => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/compare/runs/${encodeURIComponent(id)}/stream`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let currentEvent = "run";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("event:")) {
+            currentEvent = line.slice(6).trim();
+            continue;
+          }
+          if (line.startsWith("data:")) {
+            const raw = line.slice(5).trim();
+            if (raw === "[DONE]") {
+              params.onEvent("done", {});
+              continue;
+            }
+            try {
+              params.onEvent(currentEvent, JSON.parse(raw));
+            } catch {
+              params.onEvent(currentEvent, raw);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      params.onError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      reader.releaseLock();
+    }
+  },
   stopCompareRun: async (id: string) => {
     const token = window.__HERMES_SESSION_TOKEN__;
     const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";

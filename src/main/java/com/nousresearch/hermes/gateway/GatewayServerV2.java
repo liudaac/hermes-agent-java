@@ -174,6 +174,7 @@ public class GatewayServerV2 {
         app.post("/api/compare/runs", this::handleCreateCompareRun);
         app.get("/api/compare/runs", this::handleListCompareRuns);
         app.get("/api/compare/runs/{id}", this::handleGetCompareRun);
+        app.get("/api/compare/runs/{id}/stream", this::handleStreamCompareRun);
         app.post("/api/compare/runs/{id}/stop", this::handleStopCompareRun);
 
         // Tenant API - 真实的实现
@@ -614,6 +615,58 @@ public class GatewayServerV2 {
             return;
         }
         ctx.json(Map.of("ok", true, "run", run.toDetailMap()));
+    }
+
+    private void handleStreamCompareRun(Context ctx) throws IOException {
+        var response = ctx.res();
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("text/event-stream");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("Connection", "keep-alive");
+
+        String id = ctx.pathParam("id");
+        TenantComparisonRun run = comparisonOrchestrator.getRun(id);
+        if (run == null) {
+            sendSseEvent(ctx, "error", Map.of("error", "comparison run not found"));
+            return;
+        }
+
+        int lastEventCount = -1;
+        String lastStatus = null;
+        long deadline = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(30);
+
+        while (System.currentTimeMillis() < deadline) {
+            TenantComparisonRun current = comparisonOrchestrator.getRun(id);
+            if (current == null) {
+                sendSseEvent(ctx, "error", Map.of("error", "comparison run not found"));
+                return;
+            }
+
+            int eventCount = current.getEvents().size();
+            String status = current.getStatus().name();
+            if (eventCount != lastEventCount || !Objects.equals(status, lastStatus)) {
+                sendSseEvent(ctx, "run", current.toDetailMap());
+                lastEventCount = eventCount;
+                lastStatus = status;
+            }
+
+            if (current.getStatus() == TenantComparisonRun.Status.COMPLETED ||
+                current.getStatus() == TenantComparisonRun.Status.FAILED ||
+                current.getStatus() == TenantComparisonRun.Status.STOPPED) {
+                sendSseEvent(ctx, "done", current.toSummaryMap());
+                return;
+            }
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                sendSseEvent(ctx, "error", Map.of("error", "stream interrupted"));
+                return;
+            }
+        }
+
+        sendSseEvent(ctx, "error", Map.of("error", "comparison stream timeout"));
     }
 
     private void handleStopCompareRun(Context ctx) {
