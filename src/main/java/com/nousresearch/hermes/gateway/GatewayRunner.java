@@ -15,7 +15,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Gateway runner - manages messaging platform integrations.
@@ -167,19 +171,73 @@ public class GatewayRunner {
     /**
      * Start gateway as service (background).
      */
+    private static final Path PID_FILE = Path.of(System.getProperty("user.home"), ".hermes", "gateway.pid");
+    
     public void startService() {
-        // TODO: Implement service mode with PID file
-        logger.info("Starting gateway service...");
-        System.out.println("Gateway service started");
+        try {
+            // Check if already running
+            if (Files.exists(PID_FILE)) {
+                String pid = Files.readString(PID_FILE).trim();
+                logger.error("Gateway service already running with PID: {}", pid);
+                System.out.println("Gateway service already running (PID: " + pid + ")");
+                return;
+            }
+            
+            // Create PID file
+            Files.createDirectories(PID_FILE.getParent());
+            long currentPid = ProcessHandle.current().pid();
+            Files.writeString(PID_FILE, String.valueOf(currentPid));
+            logger.info("Starting gateway service with PID: {}", currentPid);
+            
+            // Run in background thread
+            Thread serviceThread = new Thread(() -> {
+                try {
+                    runForeground();
+                } finally {
+                    try { Files.deleteIfExists(PID_FILE); } catch (IOException e) {}
+                }
+            }, "hermes-gateway-service");
+            serviceThread.setDaemon(false);
+            serviceThread.start();
+            
+            System.out.println("Gateway service started (PID: " + currentPid + ")");
+        } catch (Exception e) {
+            logger.error("Failed to start gateway service: {}", e.getMessage(), e);
+            System.out.println("Failed to start gateway service: " + e.getMessage());
+        }
     }
     
     /**
      * Stop gateway service.
      */
     public void stopService() {
-        // TODO: Implement service stop
-        logger.info("Stopping gateway service...");
-        System.out.println("Gateway service stopped");
+        try {
+            if (!Files.exists(PID_FILE)) {
+                logger.warn("No PID file found");
+                System.out.println("Gateway service not running");
+                return;
+            }
+            
+            String pidStr = Files.readString(PID_FILE).trim();
+            long pid = Long.parseLong(pidStr);
+            
+            ProcessHandle.of(pid).ifPresentOrElse(
+                process -> {
+                    logger.info("Sending termination signal to PID: {}", pid);
+                    process.destroy();
+                    System.out.println("Sent termination signal to gateway");
+                    try { Thread.sleep(2000); } catch (InterruptedException e) {}
+                    if (process.isAlive()) process.destroyForcibly();
+                },
+                () -> System.out.println("Process not found")
+            );
+            
+            Files.deleteIfExists(PID_FILE);
+            logger.info("Gateway service stopped");
+        } catch (Exception e) {
+            logger.error("Failed to stop gateway service: {}", e.getMessage(), e);
+            System.out.println("Failed to stop gateway service: " + e.getMessage());
+        }
     }
     
     /**
