@@ -359,6 +359,9 @@ export interface Translations {
   compare: {
     title: string;
     vs: string;
+    participants: string;
+    addParticipant: string;
+    removeParticipant: string;
     clearBoth: string;
     tenantIdPlaceholder: string;
     waiting: string;

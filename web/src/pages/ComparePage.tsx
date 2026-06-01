@@ -8,6 +8,8 @@ import {
   Play,
   Square,
   RotateCcw,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,15 +29,22 @@ interface ChatMessage {
   streaming?: boolean;
 }
 
-interface SideState {
+interface ParticipantState {
+  id: string;
   tenantId: string;
   sessionId: string;
   messages: ChatMessage[];
   loading: boolean;
 }
 
-function createSideState(tenantId: string): SideState {
-  return { tenantId, sessionId: "", messages: [], loading: false };
+function createParticipant(tenantId: string): ParticipantState {
+  return {
+    id: crypto.randomUUID(),
+    tenantId,
+    sessionId: "",
+    messages: [],
+    loading: false,
+  };
 }
 
 const COMPARE_STORAGE_KEY = "hermes:compare";
@@ -57,16 +66,24 @@ function saveCompareState(state: Record<string, unknown>) {
   }
 }
 
+function tenantIdsFromSaved(saved: Record<string, unknown> | null): string[] {
+  const list = saved?.participantTenantIds;
+  if (Array.isArray(list) && list.length > 0) {
+    return list.map(String);
+  }
+  return [
+    (saved?.leftTenantId as string) ?? "default",
+    (saved?.rightTenantId as string) ?? "default",
+  ];
+}
+
 export default function ComparePage() {
   const { showToast } = useToast();
   const { t } = useI18n();
   const saved = loadCompareState();
 
-  const [left, setLeft] = useState<SideState>(() =>
-    createSideState(saved?.leftTenantId as string ?? "default")
-  );
-  const [right, setRight] = useState<SideState>(() =>
-    createSideState(saved?.rightTenantId as string ?? "default")
+  const [participants, setParticipants] = useState<ParticipantState[]>(() =>
+    tenantIdsFromSaved(saved).map(createParticipant),
   );
   const [tenants, setTenants] = useState<string[]>(["default"]);
   const [input, setInput] = useState("");
@@ -74,70 +91,89 @@ export default function ComparePage() {
   const [conclusion, setConclusion] = useState("");
   const [conclusionLoading, setConclusionLoading] = useState(false);
 
-  // Auto-chat state
   const [autoRunning, setAutoRunning] = useState(false);
   const [autoTopic, setAutoTopic] = useState<string>(saved?.autoTopic as string ?? "");
   const [autoRounds, setAutoRounds] = useState<number>(saved?.autoRounds as number ?? 3);
   const [autoModeOpen, setAutoModeOpen] = useState(false);
   const abortAutoRef = useRef(false);
-
-  const leftScrollRef = useRef<HTMLDivElement>(null);
-  const rightScrollRef = useRef<HTMLDivElement>(null);
+  const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    leftScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [left.messages]);
-
-  useEffect(() => {
-    rightScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [right.messages]);
+    participants.forEach((p) => {
+      scrollRefs.current[p.id]?.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
+  }, [participants]);
 
   useEffect(() => {
     api.getTenants()
       .then((res) => {
-        const ids = res.tenants.map((t) => t.tenantId);
+        const ids = res.tenants.map((tenant) => tenant.tenantId);
         if (ids.length === 0) ids.push("default");
         setTenants(ids);
-        // Validate saved tenant IDs against live list; fall back if no longer valid
-        const savedLeft = saved?.leftTenantId as string;
-        const savedRight = saved?.rightTenantId as string;
-        setLeft(createSideState(ids.includes(savedLeft) ? savedLeft : (ids[0] ?? "default")));
-        setRight(createSideState(ids.includes(savedRight) ? savedRight : (ids[1] ?? ids[0] ?? "default")));
+
+        const savedTenantIds = tenantIdsFromSaved(saved);
+        const validTenantIds = savedTenantIds
+          .map((id) => (ids.includes(id) ? id : ids[0] ?? "default"))
+          .slice(0, Math.max(2, savedTenantIds.length));
+
+        if (validTenantIds.length < 2) {
+          validTenantIds.push(ids[1] ?? ids[0] ?? "default");
+        }
+        setParticipants(validTenantIds.map(createParticipant));
       })
       .catch(() => {
         setTenants(["default"]);
-        setLeft(createSideState("default"));
-        setRight(createSideState("default"));
+        setParticipants([createParticipant("default"), createParticipant("default")]);
       });
   }, []);
 
-  // Persist state to localStorage
   useEffect(() => {
     saveCompareState({
-      leftTenantId: left.tenantId,
-      rightTenantId: right.tenantId,
+      participantTenantIds: participants.map((p) => p.tenantId),
       autoTopic,
       autoRounds,
     });
-  }, [left.tenantId, right.tenantId, autoTopic, autoRounds]);
+  }, [participants, autoTopic, autoRounds]);
 
-  const updateSide = useCallback(
-    (side: "left" | "right", updater: (prev: SideState) => SideState) => {
-      if (side === "left") setLeft(updater);
-      else setRight(updater);
+  const updateParticipant = useCallback(
+    (id: string, updater: (prev: ParticipantState) => ParticipantState) => {
+      setParticipants((prev) => prev.map((p) => (p.id === id ? updater(p) : p)));
     },
     [],
   );
 
-  /**
-   * Send a message to one side and return a promise that resolves with
-   * the final assistant response text once streaming is done.
-   */
-  const sendToSideAuto = useCallback(
-    (side: "left" | "right", text: string): Promise<string> => {
+  const resetParticipantTenant = useCallback((id: string, tenantId: string) => {
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...createParticipant(tenantId), id } : p)));
+    setConclusion("");
+  }, []);
+
+  const addParticipant = useCallback(() => {
+    setParticipants((prev) => [...prev, createParticipant(tenants[0] ?? "default")]);
+    setConclusion("");
+  }, [tenants]);
+
+  const removeParticipant = useCallback((id: string) => {
+    setParticipants((prev) => {
+      if (prev.length <= 2) return prev;
+      return prev.filter((p) => p.id !== id);
+    });
+    setConclusion("");
+  }, []);
+
+  const clearAll = useCallback(() => {
+    setParticipants((prev) => prev.map((p) => ({ ...createParticipant(p.tenantId), id: p.id })));
+    setConclusion("");
+  }, []);
+
+  const sendToParticipantAuto = useCallback(
+    (participantId: string, text: string): Promise<string> => {
       return new Promise((resolve, reject) => {
-        const state = side === "left" ? left : right;
-        const setState = side === "left" ? setLeft : setRight;
+        const state = participants.find((p) => p.id === participantId);
+        if (!state) {
+          reject(new Error("Participant not found"));
+          return;
+        }
+
         let currentSid = state.sessionId;
         let finalResponse = "";
 
@@ -153,7 +189,7 @@ export default function ComparePage() {
           streaming: true,
         };
 
-        setState((prev) => ({
+        updateParticipant(participantId, (prev) => ({
           ...prev,
           messages: [...prev.messages, userMsg, assistantMsg],
           loading: true,
@@ -167,12 +203,12 @@ export default function ComparePage() {
             const d = data as Record<string, unknown>;
             if (event === "session" && d.session_id) {
               currentSid = String(d.session_id);
-              setState((prev) => ({ ...prev, sessionId: currentSid }));
+              updateParticipant(participantId, (prev) => ({ ...prev, sessionId: currentSid }));
             }
             if (event === "message" || event === "delta") {
               const content = String(d.content ?? "");
               finalResponse += content;
-              setState((prev) => {
+              updateParticipant(participantId, (prev) => {
                 const last = prev.messages[prev.messages.length - 1];
                 if (last?.role === "assistant" && last.streaming) {
                   const updated = [...prev.messages];
@@ -188,21 +224,18 @@ export default function ComparePage() {
             if (event === "tool_chain") {
               const calls = Array.isArray(d.calls) ? d.calls : [];
               if (calls.length > 0) {
-                const summary = calls.map((c) => {
-                  const call = c as Record<string, unknown>;
-                  return `${call.tool ?? call.name ?? "tool"}: ${call.ok ?? call.status ?? "done"}`;
+                const summary = calls.map((call) => {
+                  const c = call as Record<string, unknown>;
+                  return `${c.tool ?? c.name ?? "tool"}: ${c.ok ?? c.status ?? "done"}`;
                 }).join("\n");
-                setState((prev) => ({
+                updateParticipant(participantId, (prev) => ({
                   ...prev,
-                  messages: [
-                    ...prev.messages,
-                    { id: crypto.randomUUID(), role: "tool", content: summary },
-                  ],
+                  messages: [...prev.messages, { id: crypto.randomUUID(), role: "tool", content: summary }],
                 }));
               }
             }
             if (event === "usage") {
-              setState((prev) => ({
+              updateParticipant(participantId, (prev) => ({
                 ...prev,
                 messages: [
                   ...prev.messages,
@@ -211,7 +244,7 @@ export default function ComparePage() {
               }));
             }
             if (event === "done") {
-              setState((prev) => {
+              updateParticipant(participantId, (prev) => {
                 const last = prev.messages[prev.messages.length - 1];
                 if (last?.role === "assistant") {
                   const updated = [...prev.messages];
@@ -224,65 +257,56 @@ export default function ComparePage() {
             }
             if (event === "error") {
               const errMsg = String(d.error ?? "Unknown error");
-              setState((prev) => ({
+              updateParticipant(participantId, (prev) => ({
                 ...prev,
-                messages: [
-                  ...prev.messages,
-                  { id: crypto.randomUUID(), role: "error", content: errMsg },
-                ],
+                messages: [...prev.messages, { id: crypto.randomUUID(), role: "error", content: errMsg }],
                 loading: false,
               }));
               reject(new Error(errMsg));
             }
           },
           onError: (err) => {
-            showToast(`${side}: ${err.message}`, "error");
-            setState((prev) => ({ ...prev, loading: false }));
+            showToast(`${state.tenantId}: ${err.message}`, "error");
+            updateParticipant(participantId, (prev) => ({ ...prev, loading: false }));
             reject(err);
           },
         }).catch(reject);
       });
     },
-    [left, right, showToast],
-  );
-
-  const sendToSide = useCallback(
-    async (side: "left" | "right", text: string) => {
-      await sendToSideAuto(side, text);
-    },
-    [sendToSideAuto],
+    [participants, showToast, updateParticipant],
   );
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || participants.length === 0) return;
     setSending(true);
     setInput("");
-    await Promise.all([sendToSide("left", text), sendToSide("right", text)]);
-    setSending(false);
-  }, [input, sending, sendToSide]);
+    try {
+      await Promise.all(participants.map((p) => sendToParticipantAuto(p.id, text)));
+    } finally {
+      setSending(false);
+    }
+  }, [input, participants, sending, sendToParticipantAuto]);
 
-  const buildTranscript = useCallback((label: string, state: SideState) => {
+  const buildTranscript = useCallback((state: ParticipantState, index: number) => {
     const body = state.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
       .join("\n\n");
-    return `# ${label} (${state.tenantId})\n${body}`;
+    return `# Participant ${index + 1} (${state.tenantId})\n${body}`;
   }, []);
 
   const synthesizeConclusion = useCallback(async () => {
     if (conclusionLoading) return;
-    const leftTranscript = buildTranscript("Left tenant", left);
-    const rightTranscript = buildTranscript("Right tenant", right);
-    if (!left.messages.length && !right.messages.length) return;
+    if (!participants.some((p) => p.messages.length > 0)) return;
 
     setConclusion("");
     setConclusionLoading(true);
+    const transcripts = participants.map(buildTranscript).join("\n\n---\n\n");
     const prompt = [
-      "You are a neutral evaluator. Compare the two tenant conversations below.",
-      "Return a concise structured conclusion with: consensus, disagreements, strengths, weaknesses, final recommendation, and next actions.",
-      leftTranscript,
-      rightTranscript,
+      "You are a neutral evaluator. Compare all tenant conversations below.",
+      "Return a concise structured conclusion with: consensus, disagreements, each participant's strengths and weaknesses, final recommendation, and next actions.",
+      transcripts,
     ].join("\n\n");
 
     try {
@@ -312,27 +336,24 @@ export default function ComparePage() {
       setConclusionLoading(false);
       showToast(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [buildTranscript, conclusionLoading, left, right, showToast]);
+  }, [buildTranscript, conclusionLoading, participants, showToast]);
 
   const runAutoChat = useCallback(async () => {
     const topic = autoTopic.trim();
-    if (!topic) return;
+    if (!topic || participants.length < 2) return;
     abortAutoRef.current = false;
     setAutoRunning(true);
 
     try {
       let currentMsg = topic;
-      let currentSide: "left" | "right" = "left";
+      const totalTurns = autoRounds * participants.length;
 
-      for (let round = 0; round < autoRounds; round++) {
-        for (let turn = 0; turn < 2; turn++) {
-          if (abortAutoRef.current) break;
-          const response = await sendToSideAuto(currentSide, currentMsg);
-          if (abortAutoRef.current) break;
-          currentSide = currentSide === "left" ? "right" : "left";
-          currentMsg = response;
-        }
+      for (let turn = 0; turn < totalTurns; turn++) {
         if (abortAutoRef.current) break;
+        const participant = participants[turn % participants.length];
+        const response = await sendToParticipantAuto(participant.id, currentMsg);
+        if (abortAutoRef.current) break;
+        currentMsg = response;
       }
 
       if (!abortAutoRef.current) {
@@ -346,31 +367,22 @@ export default function ComparePage() {
     } finally {
       setAutoRunning(false);
     }
-  }, [autoTopic, autoRounds, sendToSideAuto, synthesizeConclusion, showToast, t]);
+  }, [autoTopic, autoRounds, participants, sendToParticipantAuto, synthesizeConclusion, showToast, t]);
 
   const stopAutoChat = useCallback(() => {
     abortAutoRef.current = true;
     setAutoRunning(false);
   }, []);
 
-  const clearAll = useCallback(() => {
-    setLeft(createSideState(left.tenantId));
-    setRight(createSideState(right.tenantId));
-  }, [left.tenantId, right.tenantId]);
-
-  const renderPanel = (
-    side: "left" | "right",
-    state: SideState,
-    scrollRef: React.RefObject<HTMLDivElement | null>,
-  ) => (
-    <div className="flex flex-col h-full min-h-0">
+  const renderPanel = (state: ParticipantState, index: number) => (
+    <div className="flex flex-col h-full min-h-[22rem]">
       <div className="flex items-center gap-2 mb-2">
+        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+          #{index + 1}
+        </Badge>
         <Select
           value={state.tenantId}
-          onValueChange={(v) => {
-            updateSide(side, () => createSideState(v));
-            setConclusion("");
-          }}
+          onValueChange={(v) => resetParticipantTenant(state.id, v)}
           className="h-7 text-xs flex-1"
           disabled={autoRunning}
         >
@@ -383,6 +395,16 @@ export default function ComparePage() {
             {state.sessionId.slice(0, 6)}…
           </Badge>
         )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => removeParticipant(state.id)}
+          disabled={autoRunning || participants.length <= 2}
+          className="h-6 px-1.5"
+          title={t.compare.removeParticipant}
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
       </div>
       <div className="flex-1 border border-current/20 rounded-sm overflow-y-auto p-2 space-y-2 bg-black/30 min-h-0">
         {state.messages.length === 0 && (
@@ -394,10 +416,7 @@ export default function ComparePage() {
         {state.messages.map((msg) => (
           <div
             key={msg.id}
-            className={cn(
-              "flex gap-1.5",
-              msg.role === "user" ? "justify-end" : "justify-start",
-            )}
+            className={cn("flex gap-1.5", msg.role === "user" ? "justify-end" : "justify-start")}
           >
             {msg.role !== "user" && (
               <div className="mt-0.5">
@@ -443,13 +462,15 @@ export default function ComparePage() {
             )}
           </div>
         ))}
-        <div ref={scrollRef} />
+        <div ref={(el) => { scrollRefs.current[state.id] = el; }} />
       </div>
     </div>
   );
 
+  const activeLabels = participants.map((p) => p.tenantId).join(" → ");
+
   return (
-    <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+    <div className="space-y-4 min-h-[calc(100vh-8rem)] flex flex-col">
       <Card className="flex-1 flex flex-col min-h-0">
         <CardHeader className="pb-2 shrink-0">
           <div className="flex items-center justify-between">
@@ -459,12 +480,18 @@ export default function ComparePage() {
             </CardTitle>
             <div className="flex items-center gap-2">
               <Badge variant="outline" className="text-xs">
-                {left.tenantId}
+                {participants.length} {t.compare.participants}
               </Badge>
-              <span className="opacity-40 text-xs">{t.compare.vs}</span>
-              <Badge variant="outline" className="text-xs">
-                {right.tenantId}
-              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={addParticipant}
+                disabled={autoRunning}
+                className="h-7 text-xs px-2"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                {t.compare.addParticipant}
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -478,14 +505,17 @@ export default function ComparePage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-1 flex gap-3 min-h-0 pb-2">
-          <div className="flex-1 min-w-0">{renderPanel("left", left, leftScrollRef)}</div>
-          <div className="w-px bg-current/10 shrink-0" />
-          <div className="flex-1 min-w-0">{renderPanel("right", right, rightScrollRef)}</div>
+        <CardContent className="flex-1 min-h-0 pb-2">
+          <div className="grid gap-3 min-h-0" style={{ gridTemplateColumns: `repeat(${Math.min(participants.length, 3)}, minmax(0, 1fr))` }}>
+            {participants.map((participant, index) => (
+              <div key={participant.id} className="min-w-0">
+                {renderPanel(participant, index)}
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Auto Chat control */}
       <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
         <button
           onClick={() => setAutoModeOpen(!autoModeOpen)}
@@ -546,10 +576,9 @@ export default function ComparePage() {
             <div className="flex items-center gap-2 text-[10px] opacity-50">
               <span>
                 {t.compare.roundsHint
-                  .replace("{leftTenant}", left.tenantId)
-                  .replace("{rightTenant}", right.tenantId)
+                  .replace("{participants}", activeLabels)
                   .replace("{rounds}", String(autoRounds))
-                  .replace("{totalMessages}", String(autoRounds * 2))}
+                  .replace("{totalMessages}", String(autoRounds * participants.length))}
               </span>
             </div>
             <div className="flex justify-end gap-2">
@@ -567,7 +596,7 @@ export default function ComparePage() {
                 <Button
                   size="sm"
                   onClick={runAutoChat}
-                  disabled={!autoTopic.trim()}
+                  disabled={!autoTopic.trim() || participants.length < 2}
                   className="h-7 text-xs px-3"
                 >
                   <Play className="h-3 w-3 mr-1" />
@@ -579,8 +608,7 @@ export default function ComparePage() {
         )}
       </div>
 
-      {/* Conclusion */}
-      {(conclusion || conclusionLoading || left.messages.length > 0 || right.messages.length > 0) && (
+      {(conclusion || conclusionLoading || participants.some((p) => p.messages.length > 0)) && (
         <Card className="shrink-0">
           <CardHeader className="py-2">
             <div className="flex items-center justify-between">
@@ -589,7 +617,7 @@ export default function ComparePage() {
                 variant="outline"
                 size="sm"
                 onClick={synthesizeConclusion}
-                disabled={conclusionLoading || autoRunning || (!left.messages.length && !right.messages.length)}
+                disabled={conclusionLoading || autoRunning || !participants.some((p) => p.messages.length > 0)}
                 className="h-7 text-xs px-3"
               >
                 {conclusionLoading ? t.compare.conclusionLoading : t.compare.generateConclusion}
@@ -604,7 +632,6 @@ export default function ComparePage() {
         </Card>
       )}
 
-      {/* Manual shared input */}
       <div className="flex gap-2 shrink-0">
         <Input
           value={input}
@@ -621,7 +648,7 @@ export default function ComparePage() {
         />
         <Button
           onClick={sendMessage}
-          disabled={!input.trim() || sending || autoRunning}
+          disabled={!input.trim() || sending || autoRunning || participants.length === 0}
           className="h-10 px-4"
         >
           <Send className="h-4 w-4 mr-1.5" />
