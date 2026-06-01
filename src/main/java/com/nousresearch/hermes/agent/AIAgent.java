@@ -51,6 +51,7 @@ public class AIAgent {
     private TrajectoryCollector trajectoryCollector;
     private KnowledgeExtractor knowledgeExtractor;
     private SkillManager skillManager;
+    private String pendingSkillCandidate;
     
     // Nudge intervals for self-improvement (aligned with Python Hermes)
     private int memoryNudgeInterval = 10;      // Nudge every 10 user turns
@@ -852,6 +853,9 @@ public class AIAgent {
             case "/help":
                 printHelp();
                 break;
+            case "/create-skill":
+                createSkillFromPendingCandidate();
+                break;
             default:
                 // Check for skill shortcut: /skill-name
                 if (cmd.startsWith("/") && !cmd.startsWith("//")) {
@@ -875,6 +879,7 @@ public class AIAgent {
         System.out.println("Available commands:");
         System.out.println("  /quit, /exit, exit - Exit the program");
         System.out.println("  /help              - Show this help");
+        System.out.println("  /create-skill      - Save the latest detected skill candidate");
         System.out.println("  /skill-name        - Quick load and execute a skill (e.g., /web-search)");
         System.out.println();
         System.out.println("Available skills:");
@@ -930,6 +935,40 @@ public class AIAgent {
         }
     }
     
+    /**
+     * Create a persistent skill from the latest detected candidate.
+     */
+    private void createSkillFromPendingCandidate() {
+        if (skillManager == null) {
+            System.out.println("Skill manager not available");
+            return;
+        }
+        if (pendingSkillCandidate == null || pendingSkillCandidate.isBlank()) {
+            System.out.println("No pending skill candidate. Complete a reusable workflow first.");
+            return;
+        }
+
+        String name = "workflow_" + java.time.Instant.now().toString()
+            .replaceAll("[^0-9]", "")
+            .substring(0, 14);
+        String description = "Auto-generated skill candidate from session " + sessionId;
+
+        SkillManager.Skill skill = skillManager.createSkill(
+            name,
+            description,
+            pendingSkillCandidate,
+            List.of("auto-generated", "workflow"),
+            Map.of("source", "knowledge-extraction", "sessionId", sessionId)
+        );
+
+        if (skill != null) {
+            System.out.println("Created skill: " + skill.name);
+            pendingSkillCandidate = null;
+        } else {
+            System.out.println("Failed to create skill from candidate");
+        }
+    }
+
     /**
      * Handle skill shortcut command (/skill-name).
      * Loads the skill and injects it into the conversation.
@@ -1000,10 +1039,10 @@ public class AIAgent {
                 if (result.hasSkillCandidate()) {
                     logger.info("Skill candidate extracted (length: {} chars)", 
                         result.getSkillCandidate().length());
-                    // Prompt user to create skill from candidate
-                    String preview = result.getSkillCandidate();
+                    pendingSkillCandidate = result.getSkillCandidate();
+                    String preview = pendingSkillCandidate;
                     int len = Math.min(100, preview.length());
-                    System.out.println("[Skill] Skill pattern detected! Preview: " + preview.substring(0, len) + "... Use /create-skill to save.");
+                    System.out.println("[Skill] Reusable pattern detected: " + preview.substring(0, len) + "... Use /create-skill to save it.");
                 }
                 
             } catch (Exception e) {

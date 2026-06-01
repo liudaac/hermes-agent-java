@@ -520,6 +520,46 @@ public class TenantMetrics implements TenantMetricsMBean {
         sb.append("# TYPE hermes_tenant_active_sessions gauge\n");
         sb.append(String.format("hermes_tenant_active_sessions{tenant=\"%s\"} %d\n", 
             tenantId, getActiveSessions()));
+
+        sb.append("# HELP hermes_tenant_network_requests_per_second Tenant network requests per second\n");
+        sb.append("# TYPE hermes_tenant_network_requests_per_second gauge\n");
+        sb.append(String.format("hermes_tenant_network_requests_per_second{tenant=\"%s\"} %d\n",
+            tenantId, getNetworkRequestsPerSecond()));
+
+        sb.append("# HELP hermes_tenant_storage_used_bytes Tenant storage used in bytes\n");
+        sb.append("# TYPE hermes_tenant_storage_used_bytes gauge\n");
+        sb.append(String.format("hermes_tenant_storage_used_bytes{tenant=\"%s\"} %d\n",
+            tenantId, getStorageUsedBytes()));
+
+        sb.append("# HELP hermes_tenant_storage_quota_bytes Tenant storage quota in bytes\n");
+        sb.append("# TYPE hermes_tenant_storage_quota_bytes gauge\n");
+        sb.append(String.format("hermes_tenant_storage_quota_bytes{tenant=\"%s\"} %d\n",
+            tenantId, getStorageQuotaBytes()));
+
+        sb.append("# HELP hermes_tenant_file_count Tenant file count\n");
+        sb.append("# TYPE hermes_tenant_file_count gauge\n");
+        sb.append(String.format("hermes_tenant_file_count{tenant=\"%s\"} %d\n",
+            tenantId, getFileCount()));
+
+        sb.append("# HELP hermes_tenant_active_processes Active process count\n");
+        sb.append("# TYPE hermes_tenant_active_processes gauge\n");
+        sb.append(String.format("hermes_tenant_active_processes{tenant=\"%s\"} %d\n",
+            tenantId, getActiveProcesses()));
+
+        sb.append("# HELP hermes_tenant_audit_events_last_hour Audit events in the last hour\n");
+        sb.append("# TYPE hermes_tenant_audit_events_last_hour gauge\n");
+        sb.append(String.format("hermes_tenant_audit_events_last_hour{tenant=\"%s\"} %d\n",
+            tenantId, getAuditEventsLastHour()));
+
+        sb.append("# HELP hermes_tenant_quota_warning Tenant quota warning flag\n");
+        sb.append("# TYPE hermes_tenant_quota_warning gauge\n");
+        sb.append(String.format("hermes_tenant_quota_warning{tenant=\"%s\"} %d\n",
+            tenantId, isQuotaWarning() ? 1 : 0));
+
+        sb.append("# HELP hermes_tenant_quota_exceeded Tenant quota exceeded flag\n");
+        sb.append("# TYPE hermes_tenant_quota_exceeded gauge\n");
+        sb.append(String.format("hermes_tenant_quota_exceeded{tenant=\"%s\"} %d\n",
+            tenantId, isQuotaExceeded() ? 1 : 0));
         
         sb.append("# HELP hermes_tenant_state Tenant state (0=DESTROYED, 1=SUSPENDED, 2=ACTIVE)\n");
         sb.append("# TYPE hermes_tenant_state gauge\n");
