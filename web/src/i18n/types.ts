@@ -374,6 +374,9 @@ export interface Translations {
     startAutoChat: string;
     askBoth: string;
     send: string;
+    conclusion: string;
+    generateConclusion: string;
+    conclusionLoading: string;
     autoChatStopped: string;
   };
 }

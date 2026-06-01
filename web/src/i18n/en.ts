@@ -359,6 +359,9 @@ export const en: Translations = {
     startAutoChat: "Start Auto Chat",
     askBoth: "Ask both tenants the same question…",
     send: "Send",
+    conclusion: "Conclusion",
+    generateConclusion: "Generate conclusion",
+    conclusionLoading: "Generating conclusion…",
     autoChatStopped: "Auto chat stopped: {error}",
   },
 };

@@ -22,7 +22,7 @@ import { useI18n } from "@/i18n";
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "error";
+  role: "user" | "assistant" | "error" | "tool";
   content: string;
   streaming?: boolean;
 }
@@ -71,6 +71,8 @@ export default function ComparePage() {
   const [tenants, setTenants] = useState<string[]>(["default"]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [conclusion, setConclusion] = useState("");
+  const [conclusionLoading, setConclusionLoading] = useState(false);
 
   // Auto-chat state
   const [autoRunning, setAutoRunning] = useState(false);
@@ -183,6 +185,31 @@ export default function ComparePage() {
                 return prev;
               });
             }
+            if (event === "tool_chain") {
+              const calls = Array.isArray(d.calls) ? d.calls : [];
+              if (calls.length > 0) {
+                const summary = calls.map((c) => {
+                  const call = c as Record<string, unknown>;
+                  return `${call.tool ?? call.name ?? "tool"}: ${call.ok ?? call.status ?? "done"}`;
+                }).join("\n");
+                setState((prev) => ({
+                  ...prev,
+                  messages: [
+                    ...prev.messages,
+                    { id: crypto.randomUUID(), role: "tool", content: summary },
+                  ],
+                }));
+              }
+            }
+            if (event === "usage") {
+              setState((prev) => ({
+                ...prev,
+                messages: [
+                  ...prev.messages,
+                  { id: crypto.randomUUID(), role: "tool", content: `Usage: ${JSON.stringify(d)}` },
+                ],
+              }));
+            }
             if (event === "done") {
               setState((prev) => {
                 const last = prev.messages[prev.messages.length - 1];
@@ -235,6 +262,58 @@ export default function ComparePage() {
     setSending(false);
   }, [input, sending, sendToSide]);
 
+  const buildTranscript = useCallback((label: string, state: SideState) => {
+    const body = state.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+      .join("\n\n");
+    return `# ${label} (${state.tenantId})\n${body}`;
+  }, []);
+
+  const synthesizeConclusion = useCallback(async () => {
+    if (conclusionLoading) return;
+    const leftTranscript = buildTranscript("Left tenant", left);
+    const rightTranscript = buildTranscript("Right tenant", right);
+    if (!left.messages.length && !right.messages.length) return;
+
+    setConclusion("");
+    setConclusionLoading(true);
+    const prompt = [
+      "You are a neutral evaluator. Compare the two tenant conversations below.",
+      "Return a concise structured conclusion with: consensus, disagreements, strengths, weaknesses, final recommendation, and next actions.",
+      leftTranscript,
+      rightTranscript,
+    ].join("\n\n");
+
+    try {
+      await api.chatStream({
+        message: prompt,
+        tenant_id: "default",
+        session_id: `compare-summary-${Date.now()}`,
+        onEvent: (event, data) => {
+          const d = data as Record<string, unknown>;
+          if (event === "message" || event === "delta") {
+            setConclusion((prev) => prev + String(d.content ?? ""));
+          }
+          if (event === "done") {
+            setConclusionLoading(false);
+          }
+          if (event === "error") {
+            setConclusionLoading(false);
+            showToast(String(d.error ?? "Conclusion generation failed"), "error");
+          }
+        },
+        onError: (err) => {
+          setConclusionLoading(false);
+          showToast(err.message, "error");
+        },
+      });
+    } catch (err) {
+      setConclusionLoading(false);
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [buildTranscript, conclusionLoading, left, right, showToast]);
+
   const runAutoChat = useCallback(async () => {
     const topic = autoTopic.trim();
     if (!topic) return;
@@ -255,6 +334,10 @@ export default function ComparePage() {
         }
         if (abortAutoRef.current) break;
       }
+
+      if (!abortAutoRef.current) {
+        await synthesizeConclusion();
+      }
     } catch (err) {
       showToast(
         t.compare.autoChatStopped.replace("{error}", err instanceof Error ? err.message : String(err)),
@@ -263,7 +346,7 @@ export default function ComparePage() {
     } finally {
       setAutoRunning(false);
     }
-  }, [autoTopic, autoRounds, sendToSideAuto, showToast, t]);
+  }, [autoTopic, autoRounds, sendToSideAuto, synthesizeConclusion, showToast, t]);
 
   const stopAutoChat = useCallback(() => {
     abortAutoRef.current = true;
@@ -284,9 +367,10 @@ export default function ComparePage() {
       <div className="flex items-center gap-2 mb-2">
         <Select
           value={state.tenantId}
-          onValueChange={(v) =>
-            updateSide(side, (prev) => ({ ...prev, tenantId: v }))
-          }
+          onValueChange={(v) => {
+            updateSide(side, () => createSideState(v));
+            setConclusion("");
+          }}
           className="h-7 text-xs flex-1"
           disabled={autoRunning}
         >
@@ -331,7 +415,9 @@ export default function ComparePage() {
                   ? "bg-midground/10 text-midground"
                   : msg.role === "error"
                     ? "bg-red-900/20 text-red-300 border border-red-900/40"
-                    : "bg-current/5 border border-current/10",
+                    : msg.role === "tool"
+                      ? "bg-blue-900/20 text-blue-200 border border-blue-900/40 font-mono"
+                      : "bg-current/5 border border-current/10",
               )}
             >
               {msg.role === "assistant" ? (
@@ -492,6 +578,31 @@ export default function ComparePage() {
           </div>
         )}
       </div>
+
+      {/* Conclusion */}
+      {(conclusion || conclusionLoading || left.messages.length > 0 || right.messages.length > 0) && (
+        <Card className="shrink-0">
+          <CardHeader className="py-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">{t.compare.conclusion}</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={synthesizeConclusion}
+                disabled={conclusionLoading || autoRunning || (!left.messages.length && !right.messages.length)}
+                className="h-7 text-xs px-3"
+              >
+                {conclusionLoading ? t.compare.conclusionLoading : t.compare.generateConclusion}
+              </Button>
+            </div>
+          </CardHeader>
+          {(conclusion || conclusionLoading) && (
+            <CardContent className="pt-0 text-xs max-h-48 overflow-y-auto">
+              <MarkdownRenderer content={conclusion || t.compare.conclusionLoading} />
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Manual shared input */}
       <div className="flex gap-2 shrink-0">

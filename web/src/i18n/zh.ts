@@ -359,6 +359,9 @@ export const zh: Translations = {
     startAutoChat: "开始自动对话",
     askBoth: "向两个租户提问相同的问题…",
     send: "发送",
+    conclusion: "结论",
+    generateConclusion: "生成结论",
+    conclusionLoading: "正在生成结论…",
     autoChatStopped: "自动对话已停止：{error}",
   },
 };

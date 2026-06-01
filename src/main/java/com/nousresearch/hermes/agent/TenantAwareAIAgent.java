@@ -48,6 +48,7 @@ public class TenantAwareAIAgent {
     private int turnsSinceMemory = 0;
     private int itersSinceSkill = 0;
     private int userTurnCount = 0;
+    private volatile boolean autoSkillsLoaded = false;
     private volatile String customSystemPrompt;
     private volatile Map<String, Object> modelParams;
 
@@ -226,7 +227,10 @@ public class TenantAwareAIAgent {
             tenantContext.updateActivity();
         }
 
-        // 4. 执行核心处理逻辑
+        // 4. 确保 Web/Gateway 路径也加载租户自动技能
+        ensureAutoSkillsLoaded("web");
+
+        // 5. 执行核心处理逻辑
         return doProcessMessage(message);
     }
 
@@ -249,6 +253,7 @@ public class TenantAwareAIAgent {
             tenantContext.updateActivity();
         }
 
+        ensureAutoSkillsLoaded("web-stream");
         doProcessMessageStream(message, chunkConsumer);
     }
 
@@ -372,7 +377,7 @@ public class TenantAwareAIAgent {
 
         conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
 
-        loadAutoSkills("cli");
+        ensureAutoSkillsLoaded("cli");
 
         try (java.io.BufferedReader reader = new java.io.BufferedReader(
                 new java.io.InputStreamReader(System.in))) {
@@ -808,6 +813,19 @@ public class TenantAwareAIAgent {
 
         } catch (Exception e) {
             logger.error("Failed to save session {}: {}", sessionId, e.getMessage(), e);
+        }
+    }
+
+    private void ensureAutoSkillsLoaded(String channelId) {
+        if (autoSkillsLoaded) {
+            return;
+        }
+        synchronized (this) {
+            if (autoSkillsLoaded) {
+                return;
+            }
+            loadAutoSkills(channelId);
+            autoSkillsLoaded = true;
         }
     }
 
