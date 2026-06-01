@@ -65,8 +65,7 @@ public class FileSystemTenantRepository implements TenantStateRepository {
             retryPolicy.execute("loadState-" + tid, () -> {
                 try {
                     Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
-                    if (!Files.exists(p)) return Optional.empty();
-                    return Optional.of(MAPPER.readValue(p.toFile(), TenantStateSnapshot.class));
+                    return readJsonWithBackup(p, TenantStateSnapshot.class);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -97,16 +96,24 @@ public class FileSystemTenantRepository implements TenantStateRepository {
     }
 
     public CompletableFuture<Boolean> exists(String tid) {
-        return CompletableFuture.supplyAsync(() ->
-            Files.exists(baseDir.resolve("tenants").resolve(tid).resolve("state.json")), exec);
+        return CompletableFuture.supplyAsync(() -> {
+            Path state = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
+            return Files.exists(state) || Files.exists(backupPath(state));
+        }, exec);
     }
 
     public CompletableFuture<Optional<Instant>> getLastUpdated(String tid) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
-                if (!Files.exists(p)) return Optional.empty();
-                return Optional.of(Files.getLastModifiedTime(p).toInstant());
+                if (Files.exists(p)) {
+                    return Optional.of(Files.getLastModifiedTime(p).toInstant());
+                }
+                Path backup = backupPath(p);
+                if (Files.exists(backup)) {
+                    return Optional.of(Files.getLastModifiedTime(backup).toInstant());
+                }
+                return Optional.empty();
             } catch (Exception e) {
                 return Optional.empty();
             }
@@ -132,8 +139,7 @@ public class FileSystemTenantRepository implements TenantStateRepository {
             retryPolicy.execute("loadSession-" + tid + "-" + sid, () -> {
                 try {
                     Path p = baseDir.resolve("sessions").resolve(tid).resolve(sid + ".json");
-                    if (!Files.exists(p)) return Optional.empty();
-                    return Optional.of(MAPPER.readValue(p.toFile(), SessionState.class));
+                    return readJsonWithBackup(p, SessionState.class);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -182,12 +188,23 @@ public class FileSystemTenantRepository implements TenantStateRepository {
     /**
      * Write JSON through a temporary file and then atomically move it into place.
      * This prevents corrupted partial JSON files when the process is interrupted
-     * during persistence.
+     * during persistence. The previous good version is kept as a .bak file.
      */
     private void writeJsonAtomically(Path target, Object value) throws IOException {
         Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        Path backup = backupPath(target);
         try {
             MAPPER.writeValue(tmp.toFile(), value);
+
+            // Preserve the last known-good version before replacing it.
+            if (Files.exists(target)) {
+                try {
+                    Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    log.warn("Failed to create backup for {}: {}", target, e.getMessage());
+                }
+            }
+
             try {
                 Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             } catch (AtomicMoveNotSupportedException e) {
@@ -196,6 +213,46 @@ public class FileSystemTenantRepository implements TenantStateRepository {
         } finally {
             Files.deleteIfExists(tmp);
         }
+    }
+
+    /**
+     * Read JSON from the primary file and fall back to .bak if the primary file
+     * is missing or corrupted.
+     */
+    private <T> Optional<T> readJsonWithBackup(Path target, Class<T> type) throws IOException {
+        IOException primaryError = null;
+
+        if (Files.exists(target)) {
+            try {
+                return Optional.of(MAPPER.readValue(target.toFile(), type));
+            } catch (IOException e) {
+                primaryError = e;
+                log.warn("Failed to read primary JSON {}, trying backup: {}", target, e.getMessage());
+            }
+        }
+
+        Path backup = backupPath(target);
+        if (Files.exists(backup)) {
+            try {
+                T recovered = MAPPER.readValue(backup.toFile(), type);
+                log.warn("Recovered JSON from backup: {}", backup);
+                return Optional.of(recovered);
+            } catch (IOException backupError) {
+                if (primaryError != null) {
+                    backupError.addSuppressed(primaryError);
+                }
+                throw backupError;
+            }
+        }
+
+        if (primaryError != null) {
+            throw primaryError;
+        }
+        return Optional.empty();
+    }
+
+    private Path backupPath(Path target) {
+        return target.resolveSibling(target.getFileName() + ".bak");
     }
 
     private void delTree(Path p) throws IOException {
