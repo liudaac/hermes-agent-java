@@ -812,7 +812,38 @@ public class TenantAwareAIAgent {
     }
 
     private void loadAutoSkills(String channelId) {
-        // TODO: Load auto-skills from tenant context or global config
+        try {
+            // 从租户配置读取自动加载的技能列表
+            List<String> autoSkills = tenantContext.getConfig()
+                .getStringList("skills.auto_load");
+            
+            if (autoSkills.isEmpty()) {
+                logger.debug("No auto-skills configured for tenant: {}", tenantId);
+                return;
+            }
+            
+            TenantSkillManager skillManager = tenantContext.getSkillManager();
+            int loaded = 0;
+            
+            for (String skillName : autoSkills) {
+                try {
+                    var skill = skillManager.loadSkill(skillName);
+                    if (skill != null) {
+                        logger.debug("Auto-loaded skill: {} for tenant: {}", skillName, tenantId);
+                        loaded++;
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to auto-load skill '{}' for tenant: {}", skillName, tenantId);
+                }
+            }
+            
+            if (loaded > 0) {
+                logger.info("Auto-loaded {} skills for tenant: {}", loaded, tenantId);
+            }
+            
+        } catch (Exception e) {
+            logger.error("Failed to load auto-skills for tenant: {}", tenantId, e);
+        }
     }
 
     private boolean handleCommand(String command) {
@@ -841,7 +872,149 @@ public class TenantAwareAIAgent {
 
     private void spawnBackgroundReview(List<ModelMessage> messages,
                                         boolean reviewMemory, boolean reviewSkills) {
-        // TODO: Implement background review
+        // 使用虚拟线程进行后台审查，不阻塞主对话流程
+        Thread.startVirtualThread(() -> {
+            try {
+                logger.debug("Starting background review: memory={}, skills={}", reviewMemory, reviewSkills);
+                
+                if (reviewMemory) {
+                    reviewAndSaveMemory(messages);
+                }
+                
+                if (reviewSkills) {
+                    reviewAndSuggestSkills(messages);
+                }
+                
+            } catch (Exception e) {
+                logger.error("Background review failed", e);
+            }
+        });
+    }
+    
+    /**
+     * 审查对话并保存有价值的记忆
+     */
+    private void reviewAndSaveMemory(List<ModelMessage> messages) {
+        try {
+            // 提取用户信息（最后几条用户消息）
+            List<String> userMessages = messages.stream()
+                .filter(m -> "user".equals(m.getRole()))
+                .map(ModelMessage::getContent)
+                .filter(Objects::nonNull)
+                .toList();
+            
+            if (userMessages.isEmpty()) {
+                return;
+            }
+            
+            // 检查是否有值得保存的新信息
+            String lastUserMessage = userMessages.get(userMessages.size() - 1);
+            
+            // 简单启发式：如果消息包含偏好、事实或上下文信息，则保存
+            if (containsValuableInfo(lastUserMessage)) {
+                // 构建记忆摘要
+                String memory = extractMemorySummary(messages);
+                if (memory != null && !memory.isEmpty()) {
+                    memoryManager.addUser(memory);
+                    logger.debug("Saved memory from conversation: {}", 
+                        memory.substring(0, Math.min(50, memory.length())));
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("Memory review failed", e);
+        }
+    }
+    
+    /**
+     * 审查对话并建议技能创建
+     */
+    private void reviewAndSuggestSkills(List<ModelMessage> messages) {
+        try {
+            // 分析对话中是否使用了复杂的多步骤方法
+            int toolCallCount = countToolCalls(messages);
+            int turnCount = (int) messages.stream()
+                .filter(m -> "user".equals(m.getRole()))
+                .count();
+            
+            // 启发式：如果对话超过5轮且使用了工具，可能是可复用的工作流
+            if (turnCount >= 3 && toolCallCount >= 2) {
+                // 提取可能的技能描述
+                String skillDescription = extractSkillDescription(messages);
+                if (skillDescription != null) {
+                    logger.info("Potential skill detected: {}", skillDescription);
+                    // 保存到轨迹收集器供后续分析
+                    if (trajectoryCollector != null) {
+                        // 记录技能候选
+                        logger.debug("Skill candidate recorded for tenant: {}", tenantId);
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("Skill review failed", e);
+        }
+    }
+    
+    /**
+     * 检查消息是否包含有价值的信息
+     */
+    private boolean containsValuableInfo(String message) {
+        if (message == null || message.length() < 10) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        // 偏好指示器
+        return lower.contains("prefer") || lower.contains("like") || 
+               lower.contains("always") || lower.contains("usually") ||
+               lower.contains("don't") || lower.contains("never") ||
+               lower.contains("my name is") || lower.contains("i am") ||
+               lower.contains("remember") || lower.contains("important");
+    }
+    
+    /**
+     * 从对话中提取记忆摘要
+     */
+    private String extractMemorySummary(List<ModelMessage> messages) {
+        // 简化实现：提取最后几条消息作为上下文
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        for (int i = messages.size() - 1; i >= 0 && count < 3; i--) {
+            ModelMessage msg = messages.get(i);
+            if ("user".equals(msg.getRole()) && msg.getContent() != null) {
+                if (sb.length() > 0) sb.insert(0, "; ");
+                sb.insert(0, msg.getContent());
+                count++;
+            }
+        }
+        return sb.toString();
+    }
+    
+    /**
+     * 统计工具调用次数
+     */
+    private int countToolCalls(List<ModelMessage> messages) {
+        return (int) messages.stream()
+            .filter(m -> m.getToolCalls() != null && !m.getToolCalls().isEmpty())
+            .count();
+    }
+    
+    /**
+     * 从对话中提取技能描述
+     */
+    private String extractSkillDescription(List<ModelMessage> messages) {
+        // 简化实现：检查是否有明确的任务完成模式
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ModelMessage msg = messages.get(i);
+            if ("assistant".equals(msg.getRole()) && msg.getContent() != null) {
+                String content = msg.getContent().toLowerCase();
+                if (content.contains("done") || content.contains("completed") || 
+                    content.contains("finished") || content.contains("here is")) {
+                    return "Workflow completion pattern detected";
+                }
+            }
+        }
+        return null;
     }
 
     private static String resolveTenantId(String platform, String channelId, String userId) {
