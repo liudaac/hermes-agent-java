@@ -175,12 +175,22 @@ public class GatewayRunner {
     
     public void startService() {
         try {
-            // Check if already running
+            // Check if already running, and self-heal stale PID files.
             if (Files.exists(PID_FILE)) {
-                String pid = Files.readString(PID_FILE).trim();
-                logger.error("Gateway service already running with PID: {}", pid);
-                System.out.println("Gateway service already running (PID: " + pid + ")");
-                return;
+                String pidText = Files.readString(PID_FILE).trim();
+                try {
+                    long existingPid = Long.parseLong(pidText);
+                    if (ProcessHandle.of(existingPid).map(ProcessHandle::isAlive).orElse(false)) {
+                        logger.error("Gateway service already running with PID: {}", existingPid);
+                        System.out.println("Gateway service already running (PID: " + existingPid + ")");
+                        return;
+                    }
+                    logger.warn("Removing stale gateway PID file for non-running PID: {}", existingPid);
+                    Files.deleteIfExists(PID_FILE);
+                } catch (NumberFormatException e) {
+                    logger.warn("Removing invalid gateway PID file content: {}", pidText);
+                    Files.deleteIfExists(PID_FILE);
+                }
             }
             
             // Create PID file

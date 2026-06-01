@@ -55,5 +55,5 @@ WantedBy=multi-user.target
 ## Notes
 
 - If the JVM exits normally, the PID file is removed.
-- If the process is killed abruptly, remove stale PID files manually if needed.
+- If the process is killed abruptly, the next `start` checks whether the PID is still alive and automatically removes stale or invalid PID files.
 - The gateway still handles graceful shutdown by stopping adapters, API server, dashboard, and tenant manager.
