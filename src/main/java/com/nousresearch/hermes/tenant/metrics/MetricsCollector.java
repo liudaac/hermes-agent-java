@@ -154,7 +154,7 @@ public class MetricsCollector {
      * 获取 Prometheus 格式的所有指标
      */
     public String exportPrometheusMetrics() {
-        return prometheusExporter.exportAll(tenantManager.getAllTenants());
+        return prometheusExporter.exportAll(tenantManager.getAllTenants(), alertManager);
     }
     
     /**
@@ -172,6 +172,12 @@ public class MetricsCollector {
         private final ConcurrentHashMap<String, Instant> lastAlertTime = new ConcurrentHashMap<>();
         private static final Duration ALERT_COOLDOWN = Duration.ofMinutes(5);
         private final java.util.List<AlertChannel> channels = new java.util.ArrayList<>();
+        private final java.util.concurrent.atomic.AtomicLong alertsFired = new java.util.concurrent.atomic.AtomicLong(0);
+        private final java.util.concurrent.atomic.AtomicLong alertsSuppressed = new java.util.concurrent.atomic.AtomicLong(0);
+        private final java.util.concurrent.atomic.AtomicLong deliveriesSucceeded = new java.util.concurrent.atomic.AtomicLong(0);
+        private final java.util.concurrent.atomic.AtomicLong deliveriesFailed = new java.util.concurrent.atomic.AtomicLong(0);
+        private final ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> channelSuccess = new ConcurrentHashMap<>();
+        private final ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> channelFailure = new ConcurrentHashMap<>();
         
         public AlertManager() {
             // 注册默认渠道
@@ -185,6 +191,8 @@ public class MetricsCollector {
         public void registerChannel(AlertChannel channel) {
             if (channel.isAvailable()) {
                 channels.add(channel);
+                channelSuccess.putIfAbsent(channel.getName(), new java.util.concurrent.atomic.AtomicLong(0));
+                channelFailure.putIfAbsent(channel.getName(), new java.util.concurrent.atomic.AtomicLong(0));
                 logger.info("Registered alert channel: {}", channel.getName());
             } else {
                 logger.debug("Alert channel not available: {}", channel.getName());
@@ -201,10 +209,12 @@ public class MetricsCollector {
             
             // 冷却期检查
             if (lastFired != null && Duration.between(lastFired, now).compareTo(ALERT_COOLDOWN) < 0) {
+                alertsSuppressed.incrementAndGet();
                 return; // 冷却期内不重复告警
             }
             
             lastAlertTime.put(alertKey, now);
+            alertsFired.incrementAndGet();
             
             // 记录告警
             String fullMessage = String.format("[%s] Tenant: %s, Type: %s, Message: %s",
@@ -222,6 +232,7 @@ public class MetricsCollector {
         
         private void sendExternalAlert(AlertLevel level, String tenantId, String type, String message) {
             if (channels.isEmpty()) {
+                deliveriesFailed.incrementAndGet();
                 logger.debug("No alert channels configured");
                 return;
             }
@@ -229,10 +240,18 @@ public class MetricsCollector {
             int success = 0;
             for (AlertChannel channel : channels) {
                 try {
-                    if (channel.send(level, tenantId, type, message)) {
+                    boolean sent = channel.send(level, tenantId, type, message);
+                    if (sent) {
                         success++;
+                        deliveriesSucceeded.incrementAndGet();
+                        channelSuccess.get(channel.getName()).incrementAndGet();
+                    } else {
+                        deliveriesFailed.incrementAndGet();
+                        channelFailure.get(channel.getName()).incrementAndGet();
                     }
                 } catch (Exception e) {
+                    deliveriesFailed.incrementAndGet();
+                    channelFailure.get(channel.getName()).incrementAndGet();
                     logger.error("Alert channel {} failed: {}", channel.getName(), e.getMessage());
                 }
             }
@@ -240,6 +259,35 @@ public class MetricsCollector {
             if (success == 0) {
                 logger.warn("All alert channels failed for: {} - {}", type, tenantId);
             }
+        }
+
+        public String exportPrometheusMetrics() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("# HELP hermes_alerts_fired_total Alerts fired after cooldown filtering\n");
+            sb.append("# TYPE hermes_alerts_fired_total counter\n");
+            sb.append("hermes_alerts_fired_total ").append(alertsFired.get()).append("\n");
+
+            sb.append("# HELP hermes_alerts_suppressed_total Alerts suppressed by cooldown\n");
+            sb.append("# TYPE hermes_alerts_suppressed_total counter\n");
+            sb.append("hermes_alerts_suppressed_total ").append(alertsSuppressed.get()).append("\n");
+
+            sb.append("# HELP hermes_alert_deliveries_succeeded_total Alert delivery successes\n");
+            sb.append("# TYPE hermes_alert_deliveries_succeeded_total counter\n");
+            sb.append("hermes_alert_deliveries_succeeded_total ").append(deliveriesSucceeded.get()).append("\n");
+
+            sb.append("# HELP hermes_alert_deliveries_failed_total Alert delivery failures\n");
+            sb.append("# TYPE hermes_alert_deliveries_failed_total counter\n");
+            sb.append("hermes_alert_deliveries_failed_total ").append(deliveriesFailed.get()).append("\n");
+
+            for (Map.Entry<String, java.util.concurrent.atomic.AtomicLong> entry : channelSuccess.entrySet()) {
+                sb.append(String.format("hermes_alert_channel_deliveries_succeeded_total{channel=\"%s\"} %d\n",
+                    entry.getKey(), entry.getValue().get()));
+            }
+            for (Map.Entry<String, java.util.concurrent.atomic.AtomicLong> entry : channelFailure.entrySet()) {
+                sb.append(String.format("hermes_alert_channel_deliveries_failed_total{channel=\"%s\"} %d\n",
+                    entry.getKey(), entry.getValue().get()));
+            }
+            return sb.toString();
         }
     }
     
@@ -251,7 +299,7 @@ public class MetricsCollector {
         /**
          * 导出所有租户指标
          */
-        public String exportAll(Map<String, TenantContext> tenants) {
+        public String exportAll(Map<String, TenantContext> tenants, AlertManager alertManager) {
             StringBuilder sb = new StringBuilder();
             
             // 系统级指标
@@ -265,6 +313,10 @@ public class MetricsCollector {
                 if (metrics != null) {
                     sb.append(metrics.exportPrometheusMetrics());
                 }
+            }
+
+            if (alertManager != null) {
+                sb.append(alertManager.exportPrometheusMetrics());
             }
             
             return sb.toString();
