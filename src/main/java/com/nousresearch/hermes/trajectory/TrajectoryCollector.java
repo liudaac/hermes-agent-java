@@ -35,6 +35,11 @@ public class TrajectoryCollector {
     private final Path completedFile;
     private final Path failedFile;
     private final Path compressedDir;
+    private final Path insightsFile;
+    
+    // Processing components
+    private final TrajectoryCompressor compressor = new TrajectoryCompressor();
+    private final InsightExtractor extractor = new InsightExtractor();
     
     // Background processing queue
     private final BlockingQueue<TrajectoryEntry> pendingTrajectories = new LinkedBlockingQueue<>();
@@ -49,6 +54,7 @@ public class TrajectoryCollector {
         this.completedFile = trajectoriesDir.resolve("trajectory_samples.jsonl");
         this.failedFile = trajectoriesDir.resolve("failed_trajectories.jsonl");
         this.compressedDir = trajectoriesDir.resolve("compressed");
+        this.insightsFile = trajectoriesDir.resolve("insights.jsonl");
         
         try {
             Files.createDirectories(trajectoriesDir);
@@ -89,6 +95,63 @@ public class TrajectoryCollector {
             pendingTrajectories.offer(entry);
             logger.debug("Queued trajectory for session: {} (completed={})", sessionId, completed);
         }
+    }
+    
+    /**
+     * Save compressed trajectory to separate directory.
+     */
+    private void saveCompressedTrajectory(TrajectoryEntry entry) {
+        try {
+            Path file = compressedDir.resolve(entry.getId() + ".json");
+            mapper.writeValue(file.toFile(), entry);
+        } catch (Exception e) {
+            logger.error("Failed to save compressed trajectory: {}", entry.getId(), e);
+        }
+    }
+    
+    /**
+     * Save extracted insights.
+     */
+    private void saveInsights(String trajectoryId, List<String> insights) {
+        try {
+            Map<String, Object> record = new LinkedHashMap<>();
+            record.put("trajectory_id", trajectoryId);
+            record.put("timestamp", Instant.now().toString());
+            record.put("insights", insights);
+            
+            String json = mapper.writeValueAsString(record);
+            Files.writeString(insightsFile, json + "\n", StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Exception e) {
+            logger.error("Failed to save insights for trajectory: {}", trajectoryId, e);
+        }
+    }
+    
+    /**
+     * Load insights for analysis.
+     */
+    public List<Map<String, Object>> loadInsights(int limit) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        
+        if (!Files.exists(insightsFile)) {
+            return results;
+        }
+        
+        try (Stream<String> lines = Files.lines(insightsFile)) {
+            lines.limit(limit)
+                .forEach(line -> {
+                    try {
+                        Map<String, Object> record = mapper.readValue(line, LinkedHashMap.class);
+                        results.add(record);
+                    } catch (Exception e) {
+                        logger.debug("Failed to parse insight entry: {}", e.getMessage());
+                    }
+                });
+        } catch (Exception e) {
+            logger.error("Failed to load insights: {}", e.getMessage());
+        }
+        
+        return results;
     }
     
     /**
@@ -195,10 +258,37 @@ public class TrajectoryCollector {
     }
     
     private void processTrajectory(TrajectoryEntry entry) {
-        // TODO: Apply compression if needed
-        // TODO: Extract insights
-        // For now, just save
-        saveTrajectory(entry);
+        try {
+            // 1. 压缩轨迹
+            entry = compressor.compress(entry);
+            
+            // 2. 提取知识
+            List<String> insights = extractor.extract(entry);
+            entry.setExtractedInsights(insights);
+            
+            // 3. 保存压缩后的轨迹
+            saveCompressedTrajectory(entry);
+            
+            // 4. 保存知识
+            if (!insights.isEmpty()) {
+                saveInsights(entry.getId(), insights);
+            }
+            
+            // 5. 同时保存原始轨迹用于分析
+            saveTrajectory(entry);
+            
+            logger.info("Processed trajectory {}: compressed {}->{} tokens, extracted {} insights",
+                entry.getId(),
+                entry.getOriginalTokenCount(),
+                entry.getCompressedTokenCount(),
+                insights.size()
+            );
+            
+        } catch (Exception e) {
+            logger.error("Failed to process trajectory: {}", entry.getId(), e);
+            // Fallback: save unprocessed
+            saveTrajectory(entry);
+        }
     }
     
     private List<TrajectoryEntry> loadFromFile(Path file, int limit) {
