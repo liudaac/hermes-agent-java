@@ -3,6 +3,8 @@ package com.nousresearch.hermes.gateway;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.compare.TenantComparisonOrchestrator;
+import com.nousresearch.hermes.compare.TenantComparisonRun;
 import com.nousresearch.hermes.tenant.core.TenantAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -39,6 +41,7 @@ public class GatewayServerV2 {
     private final Map<String, com.nousresearch.hermes.gateway.PlatformAdapter> adapters;
     private final ExecutorService executor;
     private final ScheduledExecutorService sessionCleanupExecutor;
+    private final TenantComparisonOrchestrator comparisonOrchestrator;
     private Javalin app;
     private volatile boolean running = false;
     private volatile String sessionToken;
@@ -70,6 +73,7 @@ public class GatewayServerV2 {
             t.setDaemon(true);
             return t;
         });
+        this.comparisonOrchestrator = new TenantComparisonOrchestrator(tenantManager, this.config);
     }
 
     /**
@@ -113,6 +117,7 @@ public class GatewayServerV2 {
             app.stop();
         }
 
+        comparisonOrchestrator.close();
         executor.shutdown();
         sessionCleanupExecutor.shutdown();
 
@@ -164,6 +169,12 @@ public class GatewayServerV2 {
         // Chat API
         app.post("/api/chat", this::handleChat);
         app.post("/api/chat/stream", this::handleChatStream);
+
+        // Comparison API
+        app.post("/api/compare/runs", this::handleCreateCompareRun);
+        app.get("/api/compare/runs", this::handleListCompareRuns);
+        app.get("/api/compare/runs/{id}", this::handleGetCompareRun);
+        app.post("/api/compare/runs/{id}/stop", this::handleStopCompareRun);
 
         // Tenant API - 真实的实现
         app.get("/api/tenants", this::handleGetTenants);
@@ -571,6 +582,49 @@ public class GatewayServerV2 {
     }
 
     // ==================== Tenant API Methods ====================
+
+    private void handleCreateCompareRun(Context ctx) {
+        try {
+            JSONObject body = JSON.parseObject(ctx.body());
+            String topic = body.getString("topic");
+            int rounds = body.getIntValue("rounds", 3);
+            List<String> tenantIds = body.getJSONArray("tenant_ids") == null
+                ? List.of()
+                : body.getJSONArray("tenant_ids").toJavaList(String.class);
+
+            TenantComparisonRun run = comparisonOrchestrator.createRun(topic, rounds, tenantIds);
+            ctx.json(Map.of("ok", true, "run", run.toSummaryMap()));
+        } catch (IllegalArgumentException e) {
+            ctx.status(400).json(Map.of("ok", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to create comparison run", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage()));
+        }
+    }
+
+    private void handleListCompareRuns(Context ctx) {
+        ctx.json(Map.of("ok", true, "runs", comparisonOrchestrator.listRuns()));
+    }
+
+    private void handleGetCompareRun(Context ctx) {
+        String id = ctx.pathParam("id");
+        TenantComparisonRun run = comparisonOrchestrator.getRun(id);
+        if (run == null) {
+            ctx.status(404).json(Map.of("ok", false, "error", "comparison run not found"));
+            return;
+        }
+        ctx.json(Map.of("ok", true, "run", run.toDetailMap()));
+    }
+
+    private void handleStopCompareRun(Context ctx) {
+        String id = ctx.pathParam("id");
+        boolean stopped = comparisonOrchestrator.stopRun(id);
+        if (!stopped) {
+            ctx.status(404).json(Map.of("ok", false, "error", "comparison run not found"));
+            return;
+        }
+        ctx.json(Map.of("ok", true));
+    }
 
     private void handleGetTenants(Context ctx) {
         var stats = tenantManager.getStats();
