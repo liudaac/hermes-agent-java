@@ -52,7 +52,7 @@ public class FileSystemTenantRepository implements TenantStateRepository {
                 try {
                     Path p = baseDir.resolve("tenants").resolve(tid);
                     Files.createDirectories(p);
-                    MAPPER.writeValue(p.resolve("state.json").toFile(), s);
+                    writeJsonAtomically(p.resolve("state.json"), s);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -119,7 +119,7 @@ public class FileSystemTenantRepository implements TenantStateRepository {
                 try {
                     Path p = baseDir.resolve("sessions").resolve(tid);
                     Files.createDirectories(p);
-                    MAPPER.writeValue(p.resolve(sid + ".json").toFile(), s);
+                    writeJsonAtomically(p.resolve(sid + ".json"), s);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -169,6 +169,33 @@ public class FileSystemTenantRepository implements TenantStateRepository {
 
     public void close() {
         exec.shutdown();
+        try {
+            if (!exec.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                exec.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            exec.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Write JSON through a temporary file and then atomically move it into place.
+     * This prevents corrupted partial JSON files when the process is interrupted
+     * during persistence.
+     */
+    private void writeJsonAtomically(Path target, Object value) throws IOException {
+        Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            MAPPER.writeValue(tmp.toFile(), value);
+            try {
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
     }
 
     private void delTree(Path p) throws IOException {

@@ -44,6 +44,10 @@ public class TenantMetrics implements TenantMetricsMBean {
     // 存储使用情况（由外部设置）
     private volatile long currentStorageUsage = 0;
 
+    // 网络 RPS 滑动采样
+    private volatile int lastNetworkRequestSample = 0;
+    private volatile long lastNetworkRequestSampleTime = System.currentTimeMillis();
+
     // 告警阈值
     private static final double MEMORY_WARNING_THRESHOLD = 0.8;
     private static final double MEMORY_CRITICAL_THRESHOLD = 0.95;
@@ -278,9 +282,20 @@ public class TenantMetrics implements TenantMetricsMBean {
     }
 
     @Override
-    public int getNetworkRequestsPerSecond() {
-        // 简化实现：返回总请求数作为参考（实际 RPS 需要滑动窗口计算）
-        return getNetworkTotalRequests();
+    public synchronized int getNetworkRequestsPerSecond() {
+        int current = getNetworkTotalRequests();
+        long now = System.currentTimeMillis();
+        long elapsedMs = now - lastNetworkRequestSampleTime;
+        if (elapsedMs <= 0) {
+            return 0;
+        }
+
+        int delta = Math.max(0, current - lastNetworkRequestSample);
+        int rps = (int) Math.round(delta * 1000.0 / elapsedMs);
+
+        lastNetworkRequestSample = current;
+        lastNetworkRequestSampleTime = now;
+        return rps;
     }
 
     @Override
@@ -313,6 +328,14 @@ public class TenantMetrics implements TenantMetricsMBean {
     @Override
     public long getStorageUsedBytes() {
         if (context == null) return currentStorageUsage;
+        TenantFileSandbox sandbox = context.getFileSandbox();
+        if (sandbox != null) {
+            try {
+                return sandbox.getStorageUsage().usedBytes();
+            } catch (Exception e) {
+                logger.debug("Failed to read sandbox storage usage for tenant {}: {}", tenantId, e.getMessage());
+            }
+        }
         var quota = context.getQuotaManager();
         if (quota != null) {
             return quota.getStorageUsage();
@@ -336,13 +359,14 @@ public class TenantMetrics implements TenantMetricsMBean {
     
     @Override
     public int getFileCount() {
-        // 简化实现：从配额管理器获取存储使用信息
         if (context == null) return 0;
-        var quota = context.getQuotaManager();
-        if (quota != null) {
-            // 估算文件数（假设平均文件 4KB）
-            long usage = quota.getStorageUsage();
-            return usage > 0 ? (int) (usage / 4096) + 1 : 0;
+        TenantFileSandbox sandbox = context.getFileSandbox();
+        if (sandbox != null) {
+            try {
+                return sandbox.getStorageUsage().fileCount();
+            } catch (Exception e) {
+                logger.debug("Failed to read sandbox file count for tenant {}: {}", tenantId, e.getMessage());
+            }
         }
         return 0;
     }
@@ -373,8 +397,10 @@ public class TenantMetrics implements TenantMetricsMBean {
     
     @Override
     public long getAuditEventsLastHour() {
-        // 简化实现：返回总审计事件数（实际应统计最近1小时）
-        return getTotalAuditEvents();
+        if (context == null || context.getAuditLogger() == null) {
+            return 0;
+        }
+        return context.getAuditLogger().getEventCountLastHour();
     }
     
     // ============ 配额指标 ============

@@ -177,6 +177,38 @@ public class TenantAuditLogger {
         // 实际实现应该根据 tenantId 过滤
         return getRecentEvents(limit);
     }
+
+    /**
+     * Count audit events written during the last hour.
+     */
+    public long getEventCountLastHour() {
+        if (!Files.exists(auditLogFile)) {
+            return 0;
+        }
+
+        Instant cutoff = Instant.now().minus(java.time.Duration.ofHours(1));
+        try (java.util.stream.Stream<String> lines = Files.lines(auditLogFile)) {
+            return lines
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .filter(line -> {
+                    try {
+                        int bracket = line.indexOf('[');
+                        if (bracket <= 0) {
+                            return false;
+                        }
+                        Instant timestamp = Instant.parse(line.substring(0, bracket).trim());
+                        return !timestamp.isBefore(cutoff);
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .count();
+        } catch (IOException e) {
+            logger.error("Failed to count audit events", e);
+            return 0;
+        }
+    }
     
     // ============ 记录类 ============
     
