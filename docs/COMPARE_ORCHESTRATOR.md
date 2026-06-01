@@ -77,12 +77,22 @@ for `R` cycles, feeding each response as the next participant's input.
 
 After all turns finish, the orchestrator asks the default tenant to generate a neutral conclusion from all run events.
 
+## Persistence
+
+Comparison runs are persisted as JSON files under:
+
+```text
+~/.hermes/compare/runs/{runId}.json
+```
+
+On gateway startup, persisted runs are loaded into memory. Runs that were `PENDING` or `RUNNING` at shutdown are marked as `STOPPED`, because turn-level execution is not resumed yet.
+
 ## Current limitations
 
-- Run state is in-memory only.
 - No SSE stream endpoint yet; clients poll `GET /api/compare/runs/{id}`.
 - Stop is cooperative and takes effect between turns.
 - Frontend ComparePage now creates server-side runs and polls run details while the task is active.
+- In-flight runs are restored as `STOPPED` after process restart instead of resumed mid-turn.
 
 ## Frontend integration
 

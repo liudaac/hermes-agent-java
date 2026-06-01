@@ -1,5 +1,9 @@
 package com.nousresearch.hermes.compare;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.tenant.core.TenantAIAgent;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -8,6 +12,10 @@ import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,8 +30,13 @@ import java.util.concurrent.Executors;
 public class TenantComparisonOrchestrator implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(TenantComparisonOrchestrator.class);
 
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
     private final TenantManager tenantManager;
     private final HermesConfig config;
+    private final Path runsDir;
     private final ConcurrentHashMap<String, TenantComparisonRun> runs = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
         Thread t = new Thread(r, "compare-runner");
@@ -34,6 +47,13 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
     public TenantComparisonOrchestrator(TenantManager tenantManager, HermesConfig config) {
         this.tenantManager = tenantManager;
         this.config = config;
+        this.runsDir = Constants.getHermesHome().resolve("compare").resolve("runs");
+        try {
+            Files.createDirectories(runsDir);
+            loadPersistedRuns();
+        } catch (IOException e) {
+            logger.error("Failed to initialize comparison persistence", e);
+        }
     }
 
     public TenantComparisonRun createRun(String topic, int rounds, List<String> tenantIds) {
@@ -55,6 +75,7 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
 
         TenantComparisonRun run = new TenantComparisonRun(topic.trim(), rounds, cleanedTenantIds);
         runs.put(run.getId(), run);
+        persistRun(run);
         executor.submit(() -> execute(run));
         return run;
     }
@@ -76,11 +97,13 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
             return false;
         }
         run.requestStop();
+        persistRun(run);
         return true;
     }
 
     private void execute(TenantComparisonRun run) {
         run.markRunning();
+        persistRun(run);
         try {
             String currentMessage = run.getTopic();
             List<TenantComparisonRun.Participant> participants = run.getParticipants();
@@ -89,12 +112,13 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
             for (int turn = 0; turn < totalTurns; turn++) {
                 if (run.isStopRequested()) {
                     run.markStopped();
+                    persistRun(run);
                     return;
                 }
 
                 TenantComparisonRun.Participant participant = participants.get(turn % participants.size());
                 String tenantId = participant.getTenantId();
-                run.addEvent(tenantId, "user", currentMessage);
+                recordEvent(run, tenantId, "user", currentMessage);
 
                 TenantContext context = tenantManager.getOrCreateTenant(
                     tenantId,
@@ -105,20 +129,23 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
                 );
                 TenantAIAgent agent = context.getOrCreateAgent(participant.getSessionId(), config);
                 String response = agent.processMessage(currentMessage);
-                run.addEvent(tenantId, "assistant", response);
+                recordEvent(run, tenantId, "assistant", response);
                 currentMessage = response;
             }
 
             if (run.isStopRequested()) {
                 run.markStopped();
+                persistRun(run);
                 return;
             }
 
             String conclusion = generateConclusion(run);
             run.markCompleted(conclusion);
+            persistRun(run);
         } catch (Exception e) {
             logger.error("Comparison run failed: {}", run.getId(), e);
             run.markFailed(e.getMessage());
+            persistRun(run);
         }
     }
 
@@ -156,6 +183,48 @@ public class TenantComparisonOrchestrator implements AutoCloseable {
             sb.append("---\n\n");
         }
         return sb.toString();
+    }
+
+    private void recordEvent(TenantComparisonRun run, String tenantId, String role, String content) {
+        run.addEvent(tenantId, role, content);
+        persistRun(run);
+    }
+
+    private void loadPersistedRuns() throws IOException {
+        if (!Files.exists(runsDir)) {
+            return;
+        }
+        try (var stream = Files.list(runsDir)) {
+            stream
+                .filter(path -> path.getFileName().toString().endsWith(".json"))
+                .forEach(path -> {
+                    try {
+                        TenantComparisonRun run = MAPPER.readValue(path.toFile(), TenantComparisonRun.class);
+                        // In-flight runs cannot be resumed safely yet; mark them stopped.
+                        if (run.getStatus() == TenantComparisonRun.Status.RUNNING ||
+                            run.getStatus() == TenantComparisonRun.Status.PENDING) {
+                            run.markStopped();
+                            persistRun(run);
+                        }
+                        runs.put(run.getId(), run);
+                    } catch (Exception e) {
+                        logger.warn("Failed to load comparison run {}: {}", path, e.getMessage());
+                    }
+                });
+        }
+        logger.info("Loaded {} persisted comparison runs", runs.size());
+    }
+
+    private void persistRun(TenantComparisonRun run) {
+        try {
+            Files.createDirectories(runsDir);
+            Path target = runsDir.resolve(run.getId() + ".json");
+            Path tmp = runsDir.resolve(run.getId() + ".json.tmp");
+            MAPPER.writeValue(tmp.toFile(), run);
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
+            logger.warn("Failed to persist comparison run {}: {}", run.getId(), e.getMessage());
+        }
     }
 
     @Override

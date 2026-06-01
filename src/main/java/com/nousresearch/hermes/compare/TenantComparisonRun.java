@@ -1,5 +1,9 @@
 package com.nousresearch.hermes.compare;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -44,6 +48,33 @@ public class TenantComparisonRun {
         this.updatedAt = this.createdAt;
     }
 
+    @JsonCreator
+    public TenantComparisonRun(
+        @JsonProperty("id") String id,
+        @JsonProperty("topic") String topic,
+        @JsonProperty("rounds") int rounds,
+        @JsonProperty("participants") List<Participant> participants,
+        @JsonProperty("events") List<Event> events,
+        @JsonProperty("status") Status status,
+        @JsonProperty("conclusion") String conclusion,
+        @JsonProperty("error") String error,
+        @JsonProperty("createdAt") Instant createdAt,
+        @JsonProperty("updatedAt") Instant updatedAt
+    ) {
+        this.id = id != null ? id : UUID.randomUUID().toString();
+        this.topic = topic != null ? topic : "";
+        this.rounds = Math.max(1, rounds);
+        this.participants = participants != null ? new ArrayList<>(participants) : new ArrayList<>();
+        if (events != null) {
+            this.events.addAll(events);
+        }
+        this.status = status != null ? status : Status.PENDING;
+        this.conclusion = conclusion != null ? conclusion : "";
+        this.error = error;
+        this.createdAt = createdAt != null ? createdAt : Instant.now();
+        this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
+    }
+
     public String getId() { return id; }
     public String getTopic() { return topic; }
     public int getRounds() { return rounds; }
@@ -53,6 +84,7 @@ public class TenantComparisonRun {
     public String getError() { return error; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    @JsonIgnore
     public boolean isStopRequested() { return stopRequested.get(); }
 
     public void markRunning() { setStatus(Status.RUNNING); }
@@ -107,6 +139,15 @@ public class TenantComparisonRun {
         public Participant(String tenantId) {
             this.tenantId = tenantId;
             this.sessionId = "compare-" + UUID.randomUUID();
+        }
+
+        @JsonCreator
+        public Participant(
+            @JsonProperty("tenantId") String tenantId,
+            @JsonProperty("sessionId") String sessionId
+        ) {
+            this.tenantId = tenantId;
+            this.sessionId = sessionId != null ? sessionId : "compare-" + UUID.randomUUID();
         }
 
         public String getTenantId() { return tenantId; }
