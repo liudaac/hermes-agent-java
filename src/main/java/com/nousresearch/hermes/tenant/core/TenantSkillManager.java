@@ -318,10 +318,32 @@ public class TenantSkillManager {
                 return loadSkillPackageFromCache(cachedSkill, skillId, version);
             }
             
-            // TODO: Implement actual HTTP download when registry API is available
-            // For now, return null to indicate skill not found
-            logger.warn("Registry download not implemented. Skill not found in cache: {}", skillId);
-            return null;
+            // Build download URL
+            String downloadUrl = registryUrl + "/skills/" + skillId + "/download?v=" + version;
+            logger.info("Downloading skill from registry: {}", downloadUrl);
+            
+            // Use Java HttpClient to download
+            var client = java.net.http.HttpClient.newBuilder()
+                .connectTimeout(java.time.Duration.ofSeconds(30))
+                .build();
+            
+            var request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(downloadUrl))
+                .header("Accept", "application/zip")
+                .timeout(java.time.Duration.ofSeconds(120))
+                .GET()
+                .build();
+            
+            var response = client.send(request, 
+                java.net.http.HttpResponse.BodyHandlers.ofFile(cachedSkill));
+            
+            if (response.statusCode() == 200) {
+                logger.info("Successfully downloaded skill: {}@{}", skillId, version);
+                return loadSkillPackageFromCache(cachedSkill, skillId, version);
+            } else {
+                logger.warn("Failed to download skill: HTTP {}", response.statusCode());
+                return null;
+            }
             
         } catch (Exception e) {
             logger.error("Failed to download skill from registry: {}", e.getMessage());

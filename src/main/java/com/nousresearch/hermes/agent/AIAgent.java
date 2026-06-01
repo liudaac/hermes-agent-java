@@ -1000,7 +1000,10 @@ public class AIAgent {
                 if (result.hasSkillCandidate()) {
                     logger.info("Skill candidate extracted (length: {} chars)", 
                         result.getSkillCandidate().length());
-                    // TODO: Prompt user to create skill from candidate
+                    // Prompt user to create skill from candidate
+                    String preview = result.getSkillCandidate();
+                    int len = Math.min(100, preview.length());
+                    System.out.println("[Skill] Skill pattern detected! Preview: " + preview.substring(0, len) + "... Use /create-skill to save.");
                 }
                 
             } catch (Exception e) {
