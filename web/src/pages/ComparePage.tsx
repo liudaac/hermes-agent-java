@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectOption } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import { api, type CompareRun } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { useI18n } from "@/i18n";
@@ -92,6 +92,7 @@ export default function ComparePage() {
   const [conclusionLoading, setConclusionLoading] = useState(false);
 
   const [autoRunning, setAutoRunning] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [autoTopic, setAutoTopic] = useState<string>(saved?.autoTopic as string ?? "");
   const [autoRounds, setAutoRounds] = useState<number>(saved?.autoRounds as number ?? 3);
   const [autoModeOpen, setAutoModeOpen] = useState(false);
@@ -338,26 +339,51 @@ export default function ComparePage() {
     }
   }, [buildTranscript, conclusionLoading, participants, showToast]);
 
+  const applyCompareRun = useCallback((run: CompareRun) => {
+    const byTenant = new Map<string, ChatMessage[]>();
+    for (const event of run.events ?? []) {
+      const role = event.role === "user" || event.role === "assistant" ? event.role : "tool";
+      const messages = byTenant.get(event.tenant_id) ?? [];
+      messages.push({
+        id: `${run.id}-${event.timestamp}-${messages.length}`,
+        role,
+        content: event.content,
+      });
+      byTenant.set(event.tenant_id, messages);
+    }
+
+    setParticipants((prev) => prev.map((participant) => ({
+      ...participant,
+      sessionId: run.participants.find((p) => p.tenant_id === participant.tenantId)?.session_id ?? participant.sessionId,
+      messages: byTenant.get(participant.tenantId) ?? participant.messages,
+      loading: run.status === "RUNNING" || run.status === "PENDING",
+    })));
+    setConclusion(run.conclusion ?? "");
+  }, []);
+
   const runAutoChat = useCallback(async () => {
     const topic = autoTopic.trim();
     if (!topic || participants.length < 2) return;
     abortAutoRef.current = false;
     setAutoRunning(true);
+    setConclusion("");
 
     try {
-      let currentMsg = topic;
-      const totalTurns = autoRounds * participants.length;
+      const tenantIds = participants.map((p) => p.tenantId);
+      const created = await api.createCompareRun({ topic, rounds: autoRounds, tenant_ids: tenantIds });
+      setActiveRunId(created.run.id);
+      applyCompareRun(created.run);
 
-      for (let turn = 0; turn < totalTurns; turn++) {
-        if (abortAutoRef.current) break;
-        const participant = participants[turn % participants.length];
-        const response = await sendToParticipantAuto(participant.id, currentMsg);
-        if (abortAutoRef.current) break;
-        currentMsg = response;
-      }
-
-      if (!abortAutoRef.current) {
-        await synthesizeConclusion();
+      while (!abortAutoRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        const detail = await api.getCompareRun(created.run.id);
+        applyCompareRun(detail.run);
+        if (["COMPLETED", "FAILED", "STOPPED"].includes(detail.run.status)) {
+          if (detail.run.status === "FAILED") {
+            showToast(detail.run.error ?? "Comparison run failed", "error");
+          }
+          break;
+        }
       }
     } catch (err) {
       showToast(
@@ -366,13 +392,21 @@ export default function ComparePage() {
       );
     } finally {
       setAutoRunning(false);
+      setActiveRunId(null);
     }
-  }, [autoTopic, autoRounds, participants, sendToParticipantAuto, synthesizeConclusion, showToast, t]);
+  }, [applyCompareRun, autoTopic, autoRounds, participants, showToast, t]);
 
-  const stopAutoChat = useCallback(() => {
+  const stopAutoChat = useCallback(async () => {
     abortAutoRef.current = true;
+    if (activeRunId) {
+      try {
+        await api.stopCompareRun(activeRunId);
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err), "error");
+      }
+    }
     setAutoRunning(false);
-  }, []);
+  }, [activeRunId, showToast]);
 
   const renderPanel = (state: ParticipantState, index: number) => (
     <div className="flex flex-col h-full min-h-[22rem]">

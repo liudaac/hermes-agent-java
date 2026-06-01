@@ -313,6 +313,50 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  // Server-side tenant comparison runs (GatewayServerV2)
+  createCompareRun: async (params: { topic: string; rounds: number; tenant_ids: string[] }) => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/compare/runs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<CompareRunResponse>;
+  },
+  getCompareRun: async (id: string) => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/compare/runs/${encodeURIComponent(id)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<CompareRunResponse>;
+  },
+  stopCompareRun: async (id: string) => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/compare/runs/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<{ ok: boolean }>;
+  },
+
   // Chat playground (GatewayServerV2 SSE)
   chatStream: async (params: {
     message: string;
@@ -376,6 +420,38 @@ export const api = {
     }
   },
 };
+
+export interface CompareRunParticipant {
+  tenant_id: string;
+  session_id: string;
+}
+
+export interface CompareRunEvent {
+  tenant_id: string;
+  role: "user" | "assistant" | "error" | string;
+  content: string;
+  timestamp: string;
+}
+
+export interface CompareRun {
+  id: string;
+  topic: string;
+  rounds: number;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "STOPPED" | "FAILED";
+  participants: CompareRunParticipant[];
+  events?: CompareRunEvent[];
+  conclusion?: string;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+  event_count: number;
+}
+
+export interface CompareRunResponse {
+  ok: boolean;
+  run: CompareRun;
+  error?: string;
+}
 
 export interface ActionResponse {
   name: string;

@@ -82,8 +82,18 @@ After all turns finish, the orchestrator asks the default tenant to generate a n
 - Run state is in-memory only.
 - No SSE stream endpoint yet; clients poll `GET /api/compare/runs/{id}`.
 - Stop is cooperative and takes effect between turns.
-- Frontend ComparePage still uses browser-side orchestration; backend API is ready for the next integration step.
+- Frontend ComparePage now creates server-side runs and polls run details while the task is active.
+
+## Frontend integration
+
+`ComparePage` uses:
+
+- `POST /api/compare/runs` to start auto-chat
+- `GET /api/compare/runs/{id}` to poll progress
+- `POST /api/compare/runs/{id}/stop` to request cooperative stop
+
+Manual broadcast messages still use the streaming chat API for immediate interactive use.
 
 ## Next step
 
-Wire ComparePage to `/api/compare/runs` so browser refreshes do not interrupt comparison runs.
+Persist comparison runs and expose an SSE endpoint so clients can reconnect without polling.
