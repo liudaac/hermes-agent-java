@@ -3,6 +3,7 @@ package com.nousresearch.hermes.tenant.persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.nousresearch.hermes.utils.RetryPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +24,7 @@ public class FileSystemTenantRepository implements TenantStateRepository {
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     
     private final Path baseDir;
+    private final RetryPolicy retryPolicy;
     private final ExecutorService exec = Executors.newFixedThreadPool(2, r -> {
         Thread t = new Thread(r, "fs-repo");
         t.setDaemon(true);
@@ -30,7 +32,12 @@ public class FileSystemTenantRepository implements TenantStateRepository {
     });
 
     public FileSystemTenantRepository(Path dir) {
+        this(dir, RetryPolicy.defaults());
+    }
+
+    public FileSystemTenantRepository(Path dir, RetryPolicy retryPolicy) {
         this.baseDir = dir.toAbsolutePath().normalize();
+        this.retryPolicy = retryPolicy;
         try {
             Files.createDirectories(baseDir.resolve("tenants"));
             Files.createDirectories(baseDir.resolve("sessions"));
@@ -41,27 +48,29 @@ public class FileSystemTenantRepository implements TenantStateRepository {
 
     public CompletableFuture<Void> saveState(String tid, TenantStateSnapshot s) {
         return CompletableFuture.runAsync(() -> {
-            try {
-                Path p = baseDir.resolve("tenants").resolve(tid);
-                Files.createDirectories(p);
-                MAPPER.writeValue(p.resolve("state.json").toFile(), s);
-            } catch (Exception e) {
-                log.error("saveState {}", tid, e);
-            }
+            retryPolicy.executeVoid("saveState-" + tid, () -> {
+                try {
+                    Path p = baseDir.resolve("tenants").resolve(tid);
+                    Files.createDirectories(p);
+                    MAPPER.writeValue(p.resolve("state.json").toFile(), s);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }, exec);
     }
 
     public CompletableFuture<Optional<TenantStateSnapshot>> loadState(String tid) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
-                if (!Files.exists(p)) return Optional.empty();
-                return Optional.of(MAPPER.readValue(p.toFile(), TenantStateSnapshot.class));
-            } catch (Exception e) {
-                log.error("loadState {}", tid, e);
-                return Optional.empty();
-            }
-        }, exec);
+        return CompletableFuture.supplyAsync(() ->
+            retryPolicy.execute("loadState-" + tid, () -> {
+                try {
+                    Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
+                    if (!Files.exists(p)) return Optional.empty();
+                    return Optional.of(MAPPER.readValue(p.toFile(), TenantStateSnapshot.class));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }), exec);
     }
 
     public CompletableFuture<Void> deleteState(String tid) {
@@ -106,26 +115,29 @@ public class FileSystemTenantRepository implements TenantStateRepository {
 
     public CompletableFuture<Void> saveSession(String tid, String sid, SessionState s) {
         return CompletableFuture.runAsync(() -> {
-            try {
-                Path p = baseDir.resolve("sessions").resolve(tid);
-                Files.createDirectories(p);
-                MAPPER.writeValue(p.resolve(sid + ".json").toFile(), s);
-            } catch (Exception e) {
-                log.error("saveSession {} {}", tid, sid, e);
-            }
+            retryPolicy.executeVoid("saveSession-" + tid + "-" + sid, () -> {
+                try {
+                    Path p = baseDir.resolve("sessions").resolve(tid);
+                    Files.createDirectories(p);
+                    MAPPER.writeValue(p.resolve(sid + ".json").toFile(), s);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }, exec);
     }
 
     public CompletableFuture<Optional<SessionState>> loadSession(String tid, String sid) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Path p = baseDir.resolve("sessions").resolve(tid).resolve(sid + ".json");
-                if (!Files.exists(p)) return Optional.empty();
-                return Optional.of(MAPPER.readValue(p.toFile(), SessionState.class));
-            } catch (Exception e) {
-                return Optional.empty();
-            }
-        }, exec);
+        return CompletableFuture.supplyAsync(() ->
+            retryPolicy.execute("loadSession-" + tid + "-" + sid, () -> {
+                try {
+                    Path p = baseDir.resolve("sessions").resolve(tid).resolve(sid + ".json");
+                    if (!Files.exists(p)) return Optional.empty();
+                    return Optional.of(MAPPER.readValue(p.toFile(), SessionState.class));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }), exec);
     }
 
     public CompletableFuture<List<String>> listSessions(String tid) {
