@@ -171,6 +171,25 @@ public class MetricsCollector {
         
         private final ConcurrentHashMap<String, Instant> lastAlertTime = new ConcurrentHashMap<>();
         private static final Duration ALERT_COOLDOWN = Duration.ofMinutes(5);
+        private final java.util.List<AlertChannel> channels = new java.util.ArrayList<>();
+        
+        public AlertManager() {
+            // 注册默认渠道
+            registerChannel(new EmailAlertChannel());
+            registerChannel(new WebhookAlertChannel());
+        }
+        
+        /**
+         * 注册告警渠道
+         */
+        public void registerChannel(AlertChannel channel) {
+            if (channel.isAvailable()) {
+                channels.add(channel);
+                logger.info("Registered alert channel: {}", channel.getName());
+            } else {
+                logger.debug("Alert channel not available: {}", channel.getName());
+            }
+        }
         
         /**
          * 触发告警
@@ -197,13 +216,30 @@ public class MetricsCollector {
                 case INFO -> logger.info(fullMessage);
             }
             
-            // TODO: 发送告警到外部系统（钉钉/飞书/邮件等）
+            // 发送到外部系统
             sendExternalAlert(level, tenantId, type, message);
         }
         
         private void sendExternalAlert(AlertLevel level, String tenantId, String type, String message) {
-            // 实现外部告警发送
-            // 例如：钉钉 webhook、飞书 bot、邮件等
+            if (channels.isEmpty()) {
+                logger.debug("No alert channels configured");
+                return;
+            }
+            
+            int success = 0;
+            for (AlertChannel channel : channels) {
+                try {
+                    if (channel.send(level, tenantId, type, message)) {
+                        success++;
+                    }
+                } catch (Exception e) {
+                    logger.error("Alert channel {} failed: {}", channel.getName(), e.getMessage());
+                }
+            }
+            
+            if (success == 0) {
+                logger.warn("All alert channels failed for: {} - {}", type, tenantId);
+            }
         }
     }
     
