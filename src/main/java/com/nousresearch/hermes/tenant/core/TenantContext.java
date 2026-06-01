@@ -20,6 +20,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -73,6 +75,10 @@ public class TenantContext {
     // 运行时 Agent 管理
     private final ConcurrentHashMap<String, TenantAIAgent> activeAgents = new ConcurrentHashMap<>();
     private volatile Instant lastActivity = Instant.now();
+    
+    // 自动保存调度器
+    private volatile ScheduledExecutorService autoSaveScheduler;
+    private static final long AUTO_SAVE_INTERVAL_SECONDS = 300; // 5分钟
 
     public enum State {
         INITIALIZING,
@@ -418,6 +424,93 @@ public class TenantContext {
     // ============ 生命周期管理 ============
 
     /**
+     * 统一保存租户所有组件状态
+     */
+    public void save() {
+        lifecycleLock.readLock().lock();
+        try {
+            logger.debug("Saving tenant context: {}", tenantId);
+            
+            // 保存会话
+            if (sessionManager != null) {
+                sessionManager.persistAll();
+            }
+            
+            // 保存配额使用量
+            if (quotaManager != null) {
+                quotaManager.saveUsage();
+            }
+            
+            // 保存配置
+            if (config != null) {
+                config.save();
+            }
+            
+            // 保存安全策略
+            if (securityPolicy != null) {
+                try {
+                    securityPolicy.save(tenantDir.resolve("config"));
+                } catch (IOException e) {
+                    logger.error("Failed to save security policy", e);
+                }
+            }
+            
+            // 更新最后活动时间
+            lastActivity = Instant.now();
+            
+            logger.debug("Tenant context saved: {}", tenantId);
+            
+        } finally {
+            lifecycleLock.readLock().unlock();
+        }
+    }
+
+    /**
+     * 启用自动保存（每5分钟自动持久化）
+     */
+    public void enableAutoSave() {
+        if (autoSaveScheduler != null && !autoSaveScheduler.isShutdown()) {
+            return;
+        }
+        autoSaveScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "autosave-" + tenantId);
+            t.setDaemon(true);
+            return t;
+        });
+        autoSaveScheduler.scheduleAtFixedRate(
+            () -> {
+                try {
+                    save();
+                } catch (Exception e) {
+                    logger.error("Auto-save failed for tenant: {}", tenantId, e);
+                }
+            },
+            AUTO_SAVE_INTERVAL_SECONDS,
+            AUTO_SAVE_INTERVAL_SECONDS,
+            TimeUnit.SECONDS
+        );
+        logger.info("Auto-save enabled for tenant: {}", tenantId);
+    }
+    
+    /**
+     * 禁用自动保存
+     */
+    public void disableAutoSave() {
+        if (autoSaveScheduler != null) {
+            autoSaveScheduler.shutdown();
+            try {
+                if (!autoSaveScheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    autoSaveScheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                autoSaveScheduler.shutdownNow();
+            }
+            autoSaveScheduler = null;
+            logger.info("Auto-save disabled for tenant: {}", tenantId);
+        }
+    }
+
+    /**
      * 销毁租户
      */
     public void destroy(boolean preserveData) {
@@ -429,6 +522,9 @@ public class TenantContext {
 
             state.set(State.CLEANING_UP);
             logger.info("Destroying tenant context: {}", tenantId);
+            
+            // 停止自动保存
+            disableAutoSave();
 
             // 1. 停止所有 Agent
             logger.debug("Stopping {} active agents", activeAgents.size());
@@ -463,6 +559,12 @@ public class TenantContext {
             // 3. 持久化最终状态
             if (sessionManager != null) {
                 sessionManager.persistAll();
+            }
+            if (quotaManager != null) {
+                quotaManager.saveUsage();
+            }
+            if (config != null) {
+                config.save();
             }
 
             // 4. 记录审计

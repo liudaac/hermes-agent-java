@@ -1,0 +1,175 @@
+package com.nousresearch.hermes.tenant.persistence;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class FileSystemTenantRepository implements TenantStateRepository {
+    private static final Logger log = LoggerFactory.getLogger(FileSystemTenantRepository.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+        .registerModule(new JavaTimeModule())
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    
+    private final Path baseDir;
+    private final ExecutorService exec = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "fs-repo");
+        t.setDaemon(true);
+        return t;
+    });
+
+    public FileSystemTenantRepository(Path dir) {
+        this.baseDir = dir.toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(baseDir.resolve("tenants"));
+            Files.createDirectories(baseDir.resolve("sessions"));
+        } catch (IOException e) {
+            log.error("Init error", e);
+        }
+    }
+
+    public CompletableFuture<Void> saveState(String tid, TenantStateSnapshot s) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                Path p = baseDir.resolve("tenants").resolve(tid);
+                Files.createDirectories(p);
+                MAPPER.writeValue(p.resolve("state.json").toFile(), s);
+            } catch (Exception e) {
+                log.error("saveState {}", tid, e);
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<Optional<TenantStateSnapshot>> loadState(String tid) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
+                if (!Files.exists(p)) return Optional.empty();
+                return Optional.of(MAPPER.readValue(p.toFile(), TenantStateSnapshot.class));
+            } catch (Exception e) {
+                log.error("loadState {}", tid, e);
+                return Optional.empty();
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<Void> deleteState(String tid) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                delTree(baseDir.resolve("tenants").resolve(tid));
+            } catch (Exception e) {
+                log.error("delState {}", tid, e);
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<List<String>> listTenants() {
+        return CompletableFuture.supplyAsync(() -> {
+            List<String> l = new ArrayList<>();
+            try (var s = Files.list(baseDir.resolve("tenants"))) {
+                s.filter(Files::isDirectory)
+                 .map(p -> p.getFileName().toString())
+                 .forEach(l::add);
+            } catch (Exception e) {
+            }
+            return l;
+        }, exec);
+    }
+
+    public CompletableFuture<Boolean> exists(String tid) {
+        return CompletableFuture.supplyAsync(() ->
+            Files.exists(baseDir.resolve("tenants").resolve(tid).resolve("state.json")), exec);
+    }
+
+    public CompletableFuture<Optional<Instant>> getLastUpdated(String tid) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Path p = baseDir.resolve("tenants").resolve(tid).resolve("state.json");
+                if (!Files.exists(p)) return Optional.empty();
+                return Optional.of(Files.getLastModifiedTime(p).toInstant());
+            } catch (Exception e) {
+                return Optional.empty();
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<Void> saveSession(String tid, String sid, SessionState s) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                Path p = baseDir.resolve("sessions").resolve(tid);
+                Files.createDirectories(p);
+                MAPPER.writeValue(p.resolve(sid + ".json").toFile(), s);
+            } catch (Exception e) {
+                log.error("saveSession {} {}", tid, sid, e);
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<Optional<SessionState>> loadSession(String tid, String sid) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Path p = baseDir.resolve("sessions").resolve(tid).resolve(sid + ".json");
+                if (!Files.exists(p)) return Optional.empty();
+                return Optional.of(MAPPER.readValue(p.toFile(), SessionState.class));
+            } catch (Exception e) {
+                return Optional.empty();
+            }
+        }, exec);
+    }
+
+    public CompletableFuture<List<String>> listSessions(String tid) {
+        return CompletableFuture.supplyAsync(() -> {
+            List<String> l = new ArrayList<>();
+            try {
+                Path d = baseDir.resolve("sessions").resolve(tid);
+                if (Files.exists(d)) {
+                    try (var s = Files.list(d)) {
+                        s.filter(p -> p.toString().endsWith(".json"))
+                         .map(p -> p.getFileName().toString().replace(".json", ""))
+                         .forEach(l::add);
+                    }
+                }
+            } catch (Exception e) {
+            }
+            return l;
+        }, exec);
+    }
+
+    public CompletableFuture<Void> deleteSession(String tid, String sid) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                Files.deleteIfExists(baseDir.resolve("sessions").resolve(tid).resolve(sid + ".json"));
+            } catch (Exception e) {
+            }
+        }, exec);
+    }
+
+    public void close() {
+        exec.shutdown();
+    }
+
+    private void delTree(Path p) throws IOException {
+        if (Files.exists(p)) {
+            try (var s = Files.walk(p)) {
+                s.sorted((a, b) -> b.compareTo(a))
+                 .forEach(x -> {
+                     try {
+                         Files.delete(x);
+                     } catch (IOException e) {
+                     }
+                 });
+            }
+        }
+    }
+}

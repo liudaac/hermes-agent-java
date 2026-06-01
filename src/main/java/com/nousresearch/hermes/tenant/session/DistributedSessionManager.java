@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * - 会话在节点间迁移
  * - 会话过期检查
  * - 心跳保活
+ * - 消息历史序列化与恢复
  */
 public class DistributedSessionManager {
 
@@ -29,6 +31,7 @@ public class DistributedSessionManager {
     private final TenantContext context;
     private final TenantStateRepository repository;
     private final String nodeId;
+    private final SessionSerializer serializer;
     
     // 本地会话缓存
     private final ConcurrentHashMap<String, SessionHolder> localSessions = new ConcurrentHashMap<>();
@@ -44,9 +47,20 @@ public class DistributedSessionManager {
     public DistributedSessionManager(TenantContext context, 
                                      TenantStateRepository repository,
                                      String nodeId) {
+        this(context, repository, nodeId, new JsonSessionSerializer());
+    }
+    
+    /**
+     * 构造器（支持自定义序列化器）
+     */
+    public DistributedSessionManager(TenantContext context, 
+                                     TenantStateRepository repository,
+                                     String nodeId,
+                                     SessionSerializer serializer) {
         this.context = context;
         this.repository = repository;
         this.nodeId = nodeId;
+        this.serializer = serializer;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "session-manager-" + context.getTenantId());
             t.setDaemon(true);
@@ -140,6 +154,36 @@ public class DistributedSessionManager {
     }
     
     /**
+     * 添加消息到会话
+     */
+    public CompletableFuture<Void> addMessage(String sessionId, SessionSerializer.ConversationMessage message) {
+        return CompletableFuture.runAsync(() -> {
+            SessionHolder holder = localSessions.get(sessionId);
+            if (holder != null) {
+                holder.session.addMessage(message);
+                holder.updateLastAccess();
+                // 定期持久化，而非每次消息都持久化
+                if (holder.session.getMessageCount() % 5 == 0) {
+                    persistSession(holder.session);
+                }
+            }
+        });
+    }
+    
+    /**
+     * 获取会话消息历史
+     */
+    public CompletableFuture<List<SessionSerializer.ConversationMessage>> getMessages(String sessionId) {
+        return CompletableFuture.supplyAsync(() -> {
+            SessionHolder holder = localSessions.get(sessionId);
+            if (holder != null) {
+                return holder.session.getMessages();
+            }
+            return List.of();
+        });
+    }
+    
+    /**
      * 释放会话（保留在数据库中）
      */
     public CompletableFuture<Void> releaseSession(String sessionId) {
@@ -213,13 +257,28 @@ public class DistributedSessionManager {
     
     private void persistSession(Session session) {
         try {
+            // 使用序列化器将会话转换为 SessionData
+            SessionSerializer.SessionData sessionData = new SessionSerializer.SessionData(
+                session.getSessionId(),
+                session.getTenantId(),
+                session.getNodeId(),
+                session.getCreatedAt(),
+                session.getLastActivity(),
+                session.getMetadata(),
+                session.isActive(),
+                session.getMessages()
+            );
+            
+            // 序列化
+            byte[] serializedContext = serializer.serialize(sessionData);
+            
             TenantStateRepository.SessionState state = new TenantStateRepository.SessionState(
                 session.getSessionId(),
                 session.getTenantId(),
                 session.getCreatedAt(),
                 session.getLastActivity(),
                 session.getMetadata(),
-                serializeSession(session)
+                serializedContext
             );
             
             repository.saveSession(context.getTenantId(), session.getSessionId(), state).get();
@@ -230,18 +289,55 @@ public class DistributedSessionManager {
     }
     
     private byte[] serializeSession(Session session) {
-        // TODO: 实现会话序列化
-        return new byte[0];
+        try {
+            SessionSerializer.SessionData sessionData = new SessionSerializer.SessionData(
+                session.getSessionId(),
+                session.getTenantId(),
+                session.getNodeId(),
+                session.getCreatedAt(),
+                session.getLastActivity(),
+                session.getMetadata(),
+                session.isActive(),
+                session.getMessages()
+            );
+            return serializer.serialize(sessionData);
+        } catch (Exception e) {
+            logger.error("Failed to serialize session: {}", session.getSessionId(), e);
+            return new byte[0];
+        }
     }
     
     private Session migrateSession(TenantStateRepository.SessionState state) {
-        return new Session(
+        // 反序列化会话数据
+        List<SessionSerializer.ConversationMessage> messages = List.of();
+        Map<String, Object> metadata = state.metadata();
+        
+        if (state.serializedContext() != null && state.serializedContext().length > 0) {
+            try {
+                SessionSerializer.SessionData sessionData = serializer.deserialize(state.serializedContext());
+                if (sessionData != null) {
+                    messages = sessionData.messages() != null ? sessionData.messages() : List.of();
+                    metadata = sessionData.metadata() != null ? sessionData.metadata() : Map.of();
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to deserialize session context for: {}, using empty messages", 
+                    state.sessionId(), e);
+            }
+        }
+        
+        Session session = new Session(
             state.sessionId(),
             state.tenantId(),
             nodeId,  // 更新到当前节点
             state.createdAt(),
-            state.metadata()
+            metadata,
+            messages
         );
+        
+        // 设置最后活动时间
+        session.updateLastActivity(state.lastActivity());
+        
+        return session;
     }
     
     private boolean isSessionExpired(TenantStateRepository.SessionState state) {
@@ -313,7 +409,7 @@ public class DistributedSessionManager {
     }
     
     /**
-     * 会话
+     * 会话 - 支持消息历史
      */
     public static class Session {
         private final String sessionId;
@@ -324,14 +420,24 @@ public class DistributedSessionManager {
         private final Map<String, Object> metadata;
         private final AtomicBoolean active = new AtomicBoolean(true);
         
-        Session(String sessionId, String tenantId, String nodeId, 
+        // 消息历史列表
+        private final ConcurrentLinkedQueue<SessionSerializer.ConversationMessage> messages;
+        
+        public Session(String sessionId, String tenantId, String nodeId, 
                 Instant createdAt, Map<String, Object> metadata) {
+            this(sessionId, tenantId, nodeId, createdAt, metadata, List.of());
+        }
+        
+        public Session(String sessionId, String tenantId, String nodeId, 
+                Instant createdAt, Map<String, Object> metadata,
+                List<SessionSerializer.ConversationMessage> messages) {
             this.sessionId = sessionId;
             this.tenantId = tenantId;
             this.nodeId = nodeId;
             this.createdAt = createdAt;
             this.lastActivity = createdAt;
             this.metadata = new ConcurrentHashMap<>(metadata);
+            this.messages = new ConcurrentLinkedQueue<>(messages);
         }
         
         public String getSessionId() { return sessionId; }
@@ -341,9 +447,31 @@ public class DistributedSessionManager {
         public Instant getLastActivity() { return lastActivity; }
         public Map<String, Object> getMetadata() { return Map.copyOf(metadata); }
         public boolean isActive() { return active.get(); }
+        public int getMessageCount() { return messages.size(); }
+        
+        /**
+         * 获取消息列表的副本
+         */
+        public List<SessionSerializer.ConversationMessage> getMessages() {
+            return messages.stream().toList();
+        }
+        
+        /**
+         * 添加消息
+         */
+        public void addMessage(SessionSerializer.ConversationMessage message) {
+            if (message != null) {
+                messages.add(message);
+                updateLastActivity();
+            }
+        }
         
         void updateLastActivity() {
             this.lastActivity = Instant.now();
+        }
+        
+        void updateLastActivity(Instant time) {
+            this.lastActivity = time;
         }
         
         void updateMetadata(Map<String, Object> updates) {
