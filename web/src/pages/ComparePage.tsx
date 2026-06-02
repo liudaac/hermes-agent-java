@@ -382,6 +382,39 @@ export default function ComparePage() {
     setConclusion(run.conclusion ?? "");
   }, []);
 
+  const watchCompareRun = useCallback(async (runId: string) => {
+    abortAutoRef.current = false;
+    setAutoRunning(true);
+    setActiveRunId(runId);
+    try {
+      await api.streamCompareRun(runId, {
+        onEvent: (event, data) => {
+          const payload = data as Record<string, unknown>;
+          if (event === "run" || event === "done") {
+            applyCompareRun(payload as unknown as CompareRun);
+          }
+          if (event === "error") {
+            showToast(String(payload.error ?? "Comparison stream failed"), "error");
+          }
+        },
+        onError: (err) => {
+          if (!abortAutoRef.current) {
+            showToast(err.message, "error");
+          }
+        },
+      });
+    } catch (err) {
+      showToast(
+        t.compare.autoChatStopped.replace("{error}", err instanceof Error ? err.message : String(err)),
+        "error",
+      );
+    } finally {
+      setAutoRunning(false);
+      setActiveRunId(null);
+      loadHistoryRuns();
+    }
+  }, [applyCompareRun, loadHistoryRuns, showToast, t]);
+
   const loadRunFromHistory = useCallback(async (runId: string) => {
     try {
       const res = await api.getCompareRun(runId);
@@ -406,55 +439,30 @@ export default function ComparePage() {
       setHistoryOpen(false);
       if (inFlight) {
         showToast(t.compare.runningRunRestoreNotice, "success");
+        await watchCompareRun(run.id);
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [showToast, t]);
+  }, [showToast, t, watchCompareRun]);
 
   const runAutoChat = useCallback(async () => {
     const topic = autoTopic.trim();
     if (!topic || participants.length < 2) return;
-    abortAutoRef.current = false;
-    setAutoRunning(true);
     setConclusion("");
 
     try {
       const tenantIds = participants.map((p) => p.tenantId);
       const created = await api.createCompareRun({ topic, rounds: autoRounds, tenant_ids: tenantIds });
-      setActiveRunId(created.run.id);
       applyCompareRun(created.run);
-
-      await api.streamCompareRun(created.run.id, {
-        onEvent: (event, data) => {
-          const payload = data as Record<string, unknown>;
-          if (event === "run") {
-            applyCompareRun(payload as unknown as CompareRun);
-          }
-          if (event === "done") {
-            applyCompareRun(payload as unknown as CompareRun);
-          }
-          if (event === "error") {
-            showToast(String(payload.error ?? "Comparison stream failed"), "error");
-          }
-        },
-        onError: (err) => {
-          if (!abortAutoRef.current) {
-            showToast(err.message, "error");
-          }
-        },
-      });
+      await watchCompareRun(created.run.id);
     } catch (err) {
       showToast(
         t.compare.autoChatStopped.replace("{error}", err instanceof Error ? err.message : String(err)),
         "error",
       );
-    } finally {
-      setAutoRunning(false);
-      setActiveRunId(null);
-      loadHistoryRuns();
     }
-  }, [applyCompareRun, autoTopic, autoRounds, loadHistoryRuns, participants, showToast, t]);
+  }, [autoTopic, autoRounds, applyCompareRun, participants, showToast, t, watchCompareRun]);
 
   const stopAutoChat = useCallback(async () => {
     abortAutoRef.current = true;
