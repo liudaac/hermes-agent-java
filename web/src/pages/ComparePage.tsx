@@ -10,6 +10,8 @@ import {
   RotateCcw,
   Plus,
   Trash2,
+  RefreshCw,
+  Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,6 +92,9 @@ export default function ComparePage() {
   const [sending, setSending] = useState(false);
   const [conclusion, setConclusion] = useState("");
   const [conclusionLoading, setConclusionLoading] = useState(false);
+  const [historyRuns, setHistoryRuns] = useState<CompareRun[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [autoRunning, setAutoRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -135,6 +140,22 @@ export default function ComparePage() {
       autoRounds,
     });
   }, [participants, autoTopic, autoRounds]);
+
+  const loadHistoryRuns = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.listCompareRuns();
+      setHistoryRuns(res.runs ?? []);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    loadHistoryRuns();
+  }, [loadHistoryRuns]);
 
   const updateParticipant = useCallback(
     (id: string, updater: (prev: ParticipantState) => ParticipantState) => {
@@ -361,6 +382,36 @@ export default function ComparePage() {
     setConclusion(run.conclusion ?? "");
   }, []);
 
+  const loadRunFromHistory = useCallback(async (runId: string) => {
+    try {
+      const res = await api.getCompareRun(runId);
+      const run = res.run;
+      const byTenant = new Map<string, ChatMessage[]>();
+      for (const event of run.events ?? []) {
+        const role = event.role === "user" || event.role === "assistant" ? event.role : "tool";
+        const messages = byTenant.get(event.tenant_id) ?? [];
+        messages.push({ id: `${run.id}-${event.timestamp}-${messages.length}`, role, content: event.content });
+        byTenant.set(event.tenant_id, messages);
+      }
+      const inFlight = run.status === "RUNNING" || run.status === "PENDING";
+      setParticipants(run.participants.map((p) => ({
+        id: crypto.randomUUID(),
+        tenantId: p.tenant_id,
+        sessionId: p.session_id,
+        messages: byTenant.get(p.tenant_id) ?? [],
+        loading: inFlight,
+      })));
+      setConclusion(run.conclusion ?? "");
+      setActiveRunId(inFlight ? run.id : null);
+      setHistoryOpen(false);
+      if (inFlight) {
+        showToast(t.compare.runningRunRestoreNotice, "success");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [showToast, t]);
+
   const runAutoChat = useCallback(async () => {
     const topic = autoTopic.trim();
     if (!topic || participants.length < 2) return;
@@ -401,8 +452,9 @@ export default function ComparePage() {
     } finally {
       setAutoRunning(false);
       setActiveRunId(null);
+      loadHistoryRuns();
     }
-  }, [applyCompareRun, autoTopic, autoRounds, participants, showToast, t]);
+  }, [applyCompareRun, autoTopic, autoRounds, loadHistoryRuns, participants, showToast, t]);
 
   const stopAutoChat = useCallback(async () => {
     abortAutoRef.current = true;
@@ -415,6 +467,20 @@ export default function ComparePage() {
     }
     setAutoRunning(false);
   }, [activeRunId, showToast]);
+
+
+  const formatRunTime = useCallback((value: string) => {
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value));
+    } catch {
+      return value;
+    }
+  }, []);
 
   const renderPanel = (state: ParticipantState, index: number) => (
     <div className="flex flex-col h-full min-h-[22rem]">
@@ -557,6 +623,65 @@ export default function ComparePage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
+        <button
+          onClick={() => setHistoryOpen(!historyOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
+        >
+          <span>{t.compare.history}</span>
+          <span className="text-[10px] opacity-50">{historyOpen ? t.compare.collapse : t.compare.expand}</span>
+        </button>
+        {historyOpen && (
+          <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] opacity-50">{historyRuns.length} runs</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loadHistoryRuns}
+                disabled={historyLoading}
+                className="h-6 px-2 text-[10px]"
+                title={t.compare.refreshHistory}
+              >
+                <RefreshCw className={cn("h-3 w-3 mr-1", historyLoading && "animate-spin")} />
+                {t.compare.refreshHistory}
+              </Button>
+            </div>
+            {historyRuns.length === 0 && (
+              <div className="text-xs opacity-50">{t.compare.noHistory}</div>
+            )}
+            {historyRuns.slice(0, 20).map((run) => (
+              <button
+                key={run.id}
+                onClick={() => loadRunFromHistory(run.id)}
+                className="w-full text-left border border-current/10 hover:border-current/30 rounded-sm px-2 py-1.5 text-xs transition-colors"
+                title={t.compare.openRun}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium">{run.topic}</span>
+                  <Badge variant="outline" className="text-[10px] h-5 shrink-0">{run.status}</Badge>
+                </div>
+                <div className="opacity-50 mt-1 truncate">
+                  {run.participants.map((p) => p.tenant_id).join(" → ")} · {run.event_count} {t.compare.runEvents}
+                </div>
+                <div className="opacity-45 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {t.compare.runCreated}: {formatRunTime(run.created_at)}
+                  </span>
+                  <span>{t.compare.runUpdated}: {formatRunTime(run.updated_at)}</span>
+                </div>
+                {run.error && (
+                  <div className="mt-1 text-red-300 truncate">
+                    {t.compare.runError}: {run.error}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
         <button

@@ -314,6 +314,7 @@ export const api = {
     }),
 
   // Server-side tenant comparison runs (GatewayServerV2)
+  listCompareRuns: () => fetchJSON<{ ok: boolean; runs: CompareRun[] }>("/api/compare/runs"),
   createCompareRun: async (params: { topic: string; rounds: number; tenant_ids: string[] }) => {
     const token = window.__HERMES_SESSION_TOKEN__;
     const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";

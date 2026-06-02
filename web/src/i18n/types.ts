@@ -380,6 +380,15 @@ export interface Translations {
     conclusion: string;
     generateConclusion: string;
     conclusionLoading: string;
+    history: string;
+    refreshHistory: string;
+    openRun: string;
+    runCreated: string;
+    runUpdated: string;
+    runEvents: string;
+    runError: string;
+    noHistory: string;
+    runningRunRestoreNotice: string;
     autoChatStopped: string;
   };
 }
