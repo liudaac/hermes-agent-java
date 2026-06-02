@@ -28,8 +28,9 @@ class SessionHandlerGatewaySyncTest {
     @DisplayName("Dashboard sessions should import persisted gateway JSON sessions")
     void importsGatewaySessionsIntoDashboardDatabase() throws Exception {
         Path gatewaySessions = tempDir.resolve("memory").resolve("sessions");
-        Files.createDirectories(gatewaySessions);
-        Files.writeString(gatewaySessions.resolve("cli_test.json"), """
+        Path sessionsDir = gatewaySessions.resolve("default").resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        Files.writeString(sessionsDir.resolve("cli_test.json"), """
             {
               "id": "cli_test",
               "lastActivity": 1700000003000,
@@ -99,8 +100,9 @@ class SessionHandlerGatewaySyncTest {
     @org.junit.jupiter.api.DisplayName("Dashboard sessions should prefer real token usage from gateway JSON")
     void prefersRealUsageOverEstimates() throws Exception {
         Path gatewaySessions = tempDir.resolve("memory").resolve("sessions");
-        Files.createDirectories(gatewaySessions);
-        Files.writeString(gatewaySessions.resolve("usage_test.json"), """
+        Path sessionsDir = gatewaySessions.resolve("default").resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        Files.writeString(sessionsDir.resolve("usage_test.json"), """
             {
               "id": "usage_test",
               "lastActivity": 1700000005000,

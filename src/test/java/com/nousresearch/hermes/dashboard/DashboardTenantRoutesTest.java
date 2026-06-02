@@ -44,7 +44,7 @@ class DashboardTenantRoutesTest {
                 .uri(URI.create(baseUrl + "/api/tenants"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"id\":\"" + tenantId + "\",\"createdBy\":\"test\"}"))
                 .header("Content-Type", "application/json"));
-            assertEquals(200, create.statusCode());
+            assertEquals(201, create.statusCode());
             JSONObject created = JSON.parseObject(create.body());
             assertTrue(created.getBooleanValue("success"));
             assertEquals(tenantId, created.getString("tenantId"));
@@ -120,7 +120,7 @@ class DashboardTenantRoutesTest {
                 .uri(URI.create(baseUrl + "/api/tenants"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"tenantId\":\"" + tenantId + "\"}"))
                 .header("Content-Type", "application/json"));
-            assertEquals(200, create.statusCode());
+            assertEquals(201, create.statusCode());
 
             HttpResponse<String> suspend = send(client, token, HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/suspend"))
@@ -185,7 +185,7 @@ class DashboardTenantRoutesTest {
                 .uri(URI.create(baseUrl + "/api/tenants"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"tenantId\":\"" + tenantId + "\"}"))
                 .header("Content-Type", "application/json"));
-            assertEquals(200, create.statusCode());
+            assertEquals(201, create.statusCode());
 
             HttpResponse<String> quotaUpdate = send(client, token, HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/tenants/" + tenantId + "/quota"))
