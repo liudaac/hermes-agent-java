@@ -68,7 +68,21 @@ public class MemoryManager {
     );
     
     public MemoryManager() {
-        this.memoriesDir = Constants.getHermesHome().resolve("memories");
+        this(Constants.getHermesHome().resolve("memories"));
+    }
+
+    /**
+     * Tenant-aware constructor. Stores memories under a tenant-specific
+     * subdirectory so different tenants do not share memory state.
+     */
+    public MemoryManager(String tenantId) {
+        this(Constants.getHermesHome().resolve("tenants")
+            .resolve(sanitizeTenantId(tenantId))
+            .resolve("memories"));
+    }
+
+    private MemoryManager(Path memoriesDir) {
+        this.memoriesDir = memoriesDir;
         this.memoryFile = memoriesDir.resolve("MEMORY.md");
         this.userFile = memoriesDir.resolve("USER.md");
         
@@ -382,5 +396,10 @@ public class MemoryManager {
     private String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private static String sanitizeTenantId(String id) {
+        if (id == null || id.isBlank()) return "default";
+        return id.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
 }

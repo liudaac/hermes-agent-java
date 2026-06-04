@@ -160,10 +160,11 @@ public class TenantAwareAIAgent {
 
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
-        this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
         initMemoryCardIntegrator();
         this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
-            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("state"));
+            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants")
+                .resolve(tenantId).resolve("state"));
         this.conversationHistory = new ArrayList<>();
         this.cognitiveTraceCollector = new CognitiveTraceCollector(
             this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
@@ -197,10 +198,10 @@ public class TenantAwareAIAgent {
         // 初始化核心组件
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
-        this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
         initMemoryCardIntegrator();
         this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
-            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("state"));
+            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants").resolve(tenantId).resolve("state"));
         this.cognitiveTraceCollector = new CognitiveTraceCollector(
             this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
         this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
