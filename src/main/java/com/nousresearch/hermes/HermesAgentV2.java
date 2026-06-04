@@ -10,9 +10,11 @@ import com.nousresearch.hermes.dashboard.GatewayRuntimeStatus;
 import com.nousresearch.hermes.gateway.GatewayServer;
 import com.nousresearch.hermes.gateway.GatewayServerV2;
 import com.nousresearch.hermes.gateway.SessionManager;
-import com.nousresearch.hermes.gateway.platforms.*;
+import com.nousresearch.hermes.plugin.PluginManager;
+import com.nousresearch.hermes.plugin.registry.PlatformEntry;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tools.ToolRegistry;
+import com.nousresearch.hermes.tools.ToolInitializerV2;
 import com.nousresearch.hermes.tools.ToolInitializerV2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +33,7 @@ public class HermesAgentV2 {
     private final ToolRegistry toolRegistry;
     private final SessionManager sessionManager;
     private final TenantManager tenantManager;
+    private final PluginManager pluginManager;
     private GatewayServer gatewayServer;       // Legacy gateway (V1)
     private GatewayServerV2 gatewayServerV2;   // New tenant-aware gateway (V2)
     private DashboardServer dashboardServer;   // Dashboard web UI
@@ -71,6 +74,16 @@ public class HermesAgentV2 {
             logger.info("Tenant mode initialized with default tenant");
         }
 
+        // Initialize plugin system
+        HermesConfig pluginConfig = HermesConfig.load();
+        this.pluginManager = new PluginManager(pluginConfig);
+        this.pluginManager.discoverAndLoad();
+        logger.info("Plugin system initialized: {} plugins loaded",
+                pluginManager.getPlugins().size());
+
+        // Register built-in providers (backends)
+        registerBuiltinProviders();
+
         // Initialize gateway server based on mode
         int gatewayPort = config.getInt("gateway.port", 8080);
         HermesConfig agentConfig = new HermesConfig(
@@ -82,55 +95,78 @@ public class HermesAgentV2 {
         if (tenantMode) {
             this.gatewayServerV2 = new GatewayServerV2(gatewayPort, agentConfig);
             this.gatewayServer = null;
-            // Register platform adapters for V2
             registerAdaptersV2();
         } else {
             this.gatewayServer = new GatewayServer(gatewayPort, agentConfig);
             this.gatewayServerV2 = null;
-            // Register platform adapters for V1
             registerAdapters();
         }
 
         logger.info("Hermes Agent V2 initialized (tenant mode: {})", tenantMode);
     }
-    
+
+    @SuppressWarnings("unchecked")
+    private void registerBuiltinProviders() {
+        // Register built-in web search backends
+        var webSearchRegistry = (com.nousresearch.hermes.plugin.registry.ProviderRegistry<
+                com.nousresearch.hermes.tools.impl.web.WebSearchBackend>) pluginManager
+                .getProviderRegistry("web_search");
+        webSearchRegistry.registerBuiltin(new com.nousresearch.hermes.tools.impl.web.BraveBackend());
+        webSearchRegistry.registerBuiltin(new com.nousresearch.hermes.tools.impl.web.TavilyBackend());
+        webSearchRegistry.registerBuiltin(new com.nousresearch.hermes.tools.impl.web.ExaBackend());
+        webSearchRegistry.registerBuiltin(new com.nousresearch.hermes.tools.impl.web.FirecrawlBackend());
+        logger.info("Registered {} built-in web search providers", webSearchRegistry.listAll().size());
+
+        // Register built-in image generation providers
+        var imageGenRegistry = (com.nousresearch.hermes.plugin.registry.ProviderRegistry<
+                com.nousresearch.hermes.tools.provider.ImageGenProvider>) pluginManager
+                .getProviderRegistry("image_gen");
+        imageGenRegistry.registerBuiltin(new com.nousresearch.hermes.tools.provider.OpenAIImageGenProvider());
+        imageGenRegistry.registerBuiltin(new com.nousresearch.hermes.tools.provider.StabilityImageGenProvider());
+        logger.info("Registered {} built-in image generation providers", imageGenRegistry.listAll().size());
+
+        // Register built-in TTS providers
+        var ttsRegistry = (com.nousresearch.hermes.plugin.registry.ProviderRegistry<
+                com.nousresearch.hermes.tools.provider.TTSProvider>) pluginManager
+                .getProviderRegistry("tts");
+        ttsRegistry.registerBuiltin(new com.nousresearch.hermes.tools.provider.OpenAITTSProvider());
+        ttsRegistry.registerBuiltin(new com.nousresearch.hermes.tools.provider.ElevenLabsTTSProvider());
+        logger.info("Registered {} built-in TTS providers", ttsRegistry.listAll().size());
+
+        // Register built-in model transport providers
+        var transportRegistry = (com.nousresearch.hermes.plugin.registry.ProviderRegistry<
+                com.nousresearch.hermes.agent.transports.TransportProvider>) pluginManager
+                .getProviderRegistry("model_transport");
+        transportRegistry.registerBuiltin(new com.nousresearch.hermes.plugin.builtin.transport.OpenAITransportProvider());
+        transportRegistry.registerBuiltin(new com.nousresearch.hermes.plugin.builtin.transport.AnthropicTransportProvider());
+        transportRegistry.registerBuiltin(new com.nousresearch.hermes.plugin.builtin.transport.BedrockTransportProvider());
+        transportRegistry.registerBuiltin(new com.nousresearch.hermes.plugin.builtin.transport.CodexTransportProvider());
+        logger.info("Registered {} built-in model transport providers", transportRegistry.listAll().size());
+    }
+
     private void registerAdapters() {
-        // Feishu
-        if (System.getenv("FEISHU_APP_ID") != null) {
-            gatewayServer.registerAdapter(new FeishuAdapterV2());
-            logger.info("Feishu adapter registered");
-        }
-
-        // Telegram
-        if (System.getenv("TELEGRAM_BOT_TOKEN") != null) {
-            gatewayServer.registerAdapter(new TelegramAdapter());
-            logger.info("Telegram adapter registered");
-        }
-
-        // Discord
-        if (System.getenv("DISCORD_BOT_TOKEN") != null) {
-            gatewayServer.registerAdapter(new DiscordAdapter());
-            logger.info("Discord adapter registered");
+        for (PlatformEntry entry : pluginManager.getPlatformRegistryFacade().listAll()) {
+            if (entry.getCheckFn().get()) {
+                Object adapter = pluginManager.getPlatformRegistryFacade()
+                        .createAdapter(entry.getName(), null).orElse(null);
+                if (adapter instanceof com.nousresearch.hermes.gateway.PlatformAdapter platformAdapter) {
+                    gatewayServer.registerAdapter(platformAdapter);
+                    logger.info("Platform adapter registered: {} ({})", entry.getName(), entry.getLabel());
+                }
+            }
         }
     }
 
     private void registerAdaptersV2() {
-        // Feishu (V2 with tenant support)
-        if (System.getenv("FEISHU_APP_ID") != null) {
-            gatewayServerV2.registerAdapter(new FeishuAdapterV2());
-            logger.info("Feishu adapter registered (V2)");
-        }
-
-        // Telegram (V2 with tenant support)
-        if (System.getenv("TELEGRAM_BOT_TOKEN") != null) {
-            gatewayServerV2.registerAdapter(new TelegramAdapter());
-            logger.info("Telegram adapter registered (V2)");
-        }
-
-        // Discord (V2 with tenant support)
-        if (System.getenv("DISCORD_BOT_TOKEN") != null) {
-            gatewayServerV2.registerAdapter(new DiscordAdapter());
-            logger.info("Discord adapter registered (V2)");
+        for (PlatformEntry entry : pluginManager.getPlatformRegistryFacade().listAll()) {
+            if (entry.getCheckFn().get()) {
+                Object adapter = pluginManager.getPlatformRegistryFacade()
+                        .createAdapter(entry.getName(), null).orElse(null);
+                if (adapter instanceof com.nousresearch.hermes.gateway.PlatformAdapter platformAdapter) {
+                    gatewayServerV2.registerAdapter(platformAdapter);
+                    logger.info("Platform adapter registered (V2): {} ({})", entry.getName(), entry.getLabel());
+                }
+            }
         }
     }
     

@@ -1,0 +1,16 @@
+name: qqbot
+label: QQ Bot
+kind: platform
+version: 1.0.0
+description: >
+  QQ Bot platform adapter for Hermes Agent.
+  Uses Official QQ Bot API (v2).
+author: NousResearch
+requires_env:
+  - name: QQBOT_APP_ID
+    description: "QQ Bot app ID"
+    prompt: "QQ Bot app ID"
+  - name: QQBOT_SECRET
+    description: "QQ Bot client secret"
+    prompt: "QQ Bot secret"
+    password: true

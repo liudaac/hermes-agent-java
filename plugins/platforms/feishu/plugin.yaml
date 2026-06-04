@@ -1,0 +1,16 @@
+name: feishu
+label: Feishu
+kind: platform
+version: 1.0.0
+description: >
+  Feishu (Lark) gateway adapter for Hermes Agent.
+  Supports messaging, group chats, and @mentions.
+author: NousResearch
+requires_env:
+  - name: FEISHU_APP_ID
+    description: "Feishu app ID"
+    prompt: "Feishu app ID"
+  - name: FEISHU_APP_SECRET
+    description: "Feishu app secret"
+    prompt: "Feishu app secret"
+    password: true

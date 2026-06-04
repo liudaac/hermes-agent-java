@@ -279,6 +279,17 @@ public class ConfigManager {
     }
     
     /**
+     * Get double value at path.
+     */
+    public double getDouble(String path, double defaultValue) {
+        JsonNode node = getNodeAtPath(path);
+        if (node != null && node.isNumber()) {
+            return node.asDouble();
+        }
+        return defaultValue;
+    }
+
+    /**
      * Get boolean value at path.
      */
     public boolean getBoolean(String path, boolean defaultValue) {

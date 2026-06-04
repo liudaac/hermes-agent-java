@@ -1,0 +1,12 @@
+name: codex
+label: OpenAI Codex / Responses API
+kind: model-provider
+version: 1.0.0
+description: >
+  OpenAI Codex / Responses API transport for GPT-5 and codex models.
+author: NousResearch
+requires_env:
+  - name: OPENAI_API_KEY
+    description: "OpenAI API key (or CODEX_API_KEY)"
+    prompt: "API key"
+    password: true

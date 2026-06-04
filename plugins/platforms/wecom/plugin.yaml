@@ -1,0 +1,18 @@
+name: wecom
+label: WeCom
+kind: platform
+version: 1.0.0
+description: >
+  WeCom (Enterprise WeChat) callback platform adapter for Hermes Agent.
+author: NousResearch
+requires_env:
+  - name: WECOM_CORP_ID
+    description: "WeCom Corp ID"
+    prompt: "WeCom Corp ID"
+  - name: WECOM_SECRET
+    description: "WeCom app secret"
+    prompt: "WeCom secret"
+    password: true
+  - name: WECOM_AGENT_ID
+    description: "WeCom agent ID"
+    prompt: "WeCom agent ID"

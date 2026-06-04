@@ -1,0 +1,18 @@
+name: bedrock
+label: AWS Bedrock
+kind: model-provider
+version: 1.0.0
+description: >
+  AWS Bedrock transport. Supports Claude, Llama, Mistral, and Amazon Titan models.
+author: NousResearch
+requires_env:
+  - name: AWS_ACCESS_KEY_ID
+    description: "AWS access key ID"
+    prompt: "AWS access key"
+  - name: AWS_SECRET_ACCESS_KEY
+    description: "AWS secret access key"
+    prompt: "AWS secret"
+    password: true
+optional_env:
+  - name: AWS_REGION
+    description: "AWS region (default: us-east-1)"

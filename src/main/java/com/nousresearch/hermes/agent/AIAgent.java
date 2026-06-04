@@ -30,48 +30,57 @@ import java.util.LinkedHashSet;
  */
 public class AIAgent {
     private static final Logger logger = LoggerFactory.getLogger(AIAgent.class);
-    
+
     private final HermesConfig config;
     private final ModelClient modelClient;
     private final ToolRegistry toolRegistry;
     private final IterationBudget iterationBudget;
     private MemoryManager memoryManager;  // Non-final for sharing with review agents
+    private com.nousresearch.hermes.memory.MemoryCardIntegrator memoryCardIntegrator;
+    private SessionScratchpad sessionScratchpad;
+    private final boolean smartMemoryCardEnabled;
+    private final com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
+    private CognitiveTraceCollector cognitiveTraceCollector;
+    private com.nousresearch.hermes.learning.CuriosityEngine curiosityEngine;
+    private ConfidenceCalibrator confidenceCalibrator;
+    private final com.nousresearch.hermes.monitoring.AgentEvalMetrics evalMetrics;
     private final List<ModelMessage> conversationHistory;
     private final AtomicBoolean interrupted;
     private final com.nousresearch.hermes.gateway.SessionManager sessionManager;
     private final String sessionId;
-    
+
     // Tool definitions cache
     private List<ToolDefinition> toolDefinitions;
-    
+
     // Auto-save settings
     private static final int AUTO_SAVE_INTERVAL = 5; // Save every 5 messages
-    
+
     // Learning components
     private TrajectoryCollector trajectoryCollector;
     private KnowledgeExtractor knowledgeExtractor;
+    private ReflectionEngine reflectionEngine;
     private SkillManager skillManager;
     private String pendingSkillCandidate;
-    
+
     // Nudge intervals for self-improvement (aligned with Python Hermes)
     private int memoryNudgeInterval = 10;      // Nudge every 10 user turns
     private int skillNudgeInterval = 10;       // Nudge every 10 tool iterations
     private int turnsSinceMemory = 0;          // Counter for memory nudge
     private int itersSinceSkill = 0;           // Counter for skill nudge
     private int userTurnCount = 0;             // Total user turns in session
-    
+
     // Background review prompts (aligned with Python Hermes)
-    private static final String MEMORY_REVIEW_PROMPT = 
+    private static final String MEMORY_REVIEW_PROMPT =
         "Review the conversation above and consider saving to memory if appropriate.\n\n" +
         "Focus on:\n" +
-        "1. Has the user revealed things about themselves — their persona, desires, " +
+        "1. Has the user revealed things about themselves - their persona, desires, " +
         "preferences, or personal details worth remembering?\n" +
         "2. Has the user expressed expectations about how you should behave, their work " +
         "style, or ways they want you to operate?\n\n" +
         "If something stands out, save it using the memory tool. " +
         "If nothing is worth saving, just say 'Nothing to save.' and stop.";
-    
-    private static final String SKILL_REVIEW_PROMPT = 
+
+    private static final String SKILL_REVIEW_PROMPT =
         "Review the conversation above and consider saving or updating a skill if appropriate.\n\n" +
         "Focus on: was a non-trivial approach used to complete a task that required trial " +
         "and error, or changing course due to experiential findings along the way, or did " +
@@ -79,10 +88,10 @@ public class AIAgent {
         "If a relevant skill already exists, update it with what you learned. " +
         "Otherwise, create a new skill if the approach is reusable.\n" +
         "If nothing is worth saving, just say 'Nothing to save.' and stop.";
-    
-    private static final String COMBINED_REVIEW_PROMPT = 
+
+    private static final String COMBINED_REVIEW_PROMPT =
         "Review the conversation above and consider two things:\n\n" +
-        "**Memory**: Has the user revealed things about themselves — their persona, " +
+        "**Memory**: Has the user revealed things about themselves - their persona, " +
         "desires, preferences, or personal details? Has the user expressed expectations " +
         "about how you should behave, their work style, or ways they want you to operate? " +
         "If so, save using the memory tool.\n\n" +
@@ -92,7 +101,7 @@ public class AIAgent {
         "already exists, update it. Otherwise, create a new one if the approach is reusable.\n\n" +
         "Only act if there's something genuinely worth saving. " +
         "If nothing stands out, just say 'Nothing to save.' and stop.";
-    
+
     public AIAgent(HermesConfig config) {
         this.config = config;
         this.modelClient = new ModelClient(config.getModelConfig());
@@ -105,19 +114,35 @@ public class AIAgent {
             Constants.getHermesHome().resolve("memory")
         );
         this.sessionId = "cli_" + UUID.randomUUID().toString().substring(0, 8);
-        
+        this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
+            Constants.getHermesHome().resolve("state"));
+        this.cognitiveTraceCollector = new CognitiveTraceCollector(
+            this.sessionId, Constants.getHermesHome().resolve("trajectory"));
+        this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
+
+        // Smart memory card (relevance-ranked memory injection) - on by default.
+        com.nousresearch.hermes.config.ConfigManager cfg =
+            com.nousresearch.hermes.config.ConfigManager.getInstance();
+        this.smartMemoryCardEnabled = cfg.getBoolean("memory.smart_card.enabled", true);
+        if (smartMemoryCardEnabled) {
+            int topK = cfg.getInt("memory.smart_card.top_k", 6);
+            boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
+            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.MemoryCardIntegrator(
+                memoryManager, topK, alwaysProfile);
+        }
+
         // Initialize learning components
         initializeLearningComponents();
-        
+
         // Initialize tools
         initializeTools();
-        
+
         // Start trajectory tracking
         if (trajectoryCollector != null) {
             trajectoryCollector.startSession(this.sessionId, config.getCurrentModel());
         }
     }
-    
+
     /**
      * Constructor with session ID for gateway mode.
      */
@@ -133,19 +158,35 @@ public class AIAgent {
             Constants.getHermesHome().resolve("memory")
         );
         this.sessionId = sessionId;
-        
+        this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
+            Constants.getHermesHome().resolve("state"));
+        this.cognitiveTraceCollector = new CognitiveTraceCollector(
+            this.sessionId, Constants.getHermesHome().resolve("trajectory"));
+        this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
+
+        // Smart memory card - on by default; controlled by memory.smart_card.* config.
+        com.nousresearch.hermes.config.ConfigManager cfg =
+            com.nousresearch.hermes.config.ConfigManager.getInstance();
+        this.smartMemoryCardEnabled = cfg.getBoolean("memory.smart_card.enabled", true);
+        if (smartMemoryCardEnabled) {
+            int topK = cfg.getInt("memory.smart_card.top_k", 6);
+            boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
+            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.MemoryCardIntegrator(
+                memoryManager, topK, alwaysProfile);
+        }
+
         // Initialize learning components
         initializeLearningComponents();
-        
+
         // Initialize tools
         initializeTools();
-        
+
         // Start trajectory tracking
         if (trajectoryCollector != null) {
             trajectoryCollector.startSession(this.sessionId, config.getCurrentModel());
         }
     }
-    
+
     /**
      * Initialize learning components for the self-improvement loop.
      */
@@ -153,13 +194,18 @@ public class AIAgent {
         this.trajectoryCollector = new TrajectoryCollector();
         this.skillManager = new SkillManager();
         this.knowledgeExtractor = new KnowledgeExtractor(memoryManager, skillManager);
-        
+        this.reflectionEngine = new ReflectionEngine(modelClient, memoryManager);
+        this.curiosityEngine = new com.nousresearch.hermes.learning.CuriosityEngine(
+            modelClient, memoryManager, trajectoryCollector);
+        this.confidenceCalibrator = new ConfidenceCalibrator();
+        this.sessionScratchpad = new SessionScratchpad();
+
         // Load nudge intervals from config (aligned with Python Hermes)
         loadNudgeConfig();
-        
+
         logger.debug("Initialized learning components");
     }
-    
+
     /**
      * Load nudge interval configuration from config.
      * Mirrors Python: mem_config.get("nudge_interval", 10) and skills_config.get("creation_nudge_interval", 10)
@@ -167,34 +213,34 @@ public class AIAgent {
     private void loadNudgeConfig() {
         try {
             // Try to load from ConfigManager if available
-            com.nousresearch.hermes.config.ConfigManager cfgMgr = 
+            com.nousresearch.hermes.config.ConfigManager cfgMgr =
                 com.nousresearch.hermes.config.ConfigManager.getInstance();
             if (cfgMgr != null) {
                 // Memory nudge interval - use getInt with path
                 this.memoryNudgeInterval = cfgMgr.getInt("memory.nudge_interval", 10);
-                
+
                 // Skill nudge interval - use getInt with path
                 this.skillNudgeInterval = cfgMgr.getInt("skills.creation_nudge_interval", 10);
             }
         } catch (Exception e) {
             logger.debug("Failed to load nudge config, using defaults: {}", e.getMessage());
         }
-        
+
         logger.debug("Nudge intervals: memory={}, skill={}", memoryNudgeInterval, skillNudgeInterval);
     }
-    
+
     /**
      * Initialize available tools.
      */
     private void initializeTools() {
         // Register all built-in tools
         ToolInitializer.initialize();
-        
+
         // Build tool definitions for the model
         toolDefinitions = buildToolDefinitions();
         logger.debug("Initialized with {} tools", toolDefinitions.size());
     }
-    
+
     /**
      * Build tool definitions from registry.
      * Loads all registered tools from ToolRegistry.
@@ -202,15 +248,15 @@ public class AIAgent {
     private List<ToolDefinition> buildToolDefinitions() {
         // Get all registered tool names from the registry
         List<String> allTools = toolRegistry.getAllToolNames();
-        
+
         // Convert to Set for getDefinitions
         Set<String> toolNames = new HashSet<>(allTools);
-        
+
         logger.debug("Building tool definitions for {} tools: {}", toolNames.size(), toolNames);
-        
+
         return toolRegistry.getToolDefinitions(toolNames);
     }
-    
+
     /**
      * Run interactive CLI mode.
      */
@@ -224,24 +270,24 @@ public class AIAgent {
         System.out.println("Type 'exit' or '/quit' to exit");
         System.out.println("Type '/help' for commands");
         System.out.println();
-        
+
         // Add system message
         conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
-        
+
         // Auto-load skills for CLI mode
         loadAutoSkills("cli");
-        
+
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        
+
         while (!interrupted.get()) {
             try {
                 System.out.print("\nYou: ");
                 String input = reader.readLine();
-                
+
                 if (input == null || input.trim().isEmpty()) {
                     continue;
                 }
-                
+
                 // Handle commands
                 if (input.startsWith("/")) {
                     if (handleCommand(input)) {
@@ -249,19 +295,19 @@ public class AIAgent {
                     }
                     continue;
                 }
-                
+
                 // Process user message
                 processUserMessage(input);
-                
+
             } catch (IOException e) {
                 logger.error("IO error: {}", e.getMessage());
                 break;
             }
         }
-        
+
         System.out.println("\nGoodbye!");
     }
-    
+
     /**
      * Process a message and return the response (for programmatic use).
      * @param message The user message
@@ -270,7 +316,7 @@ public class AIAgent {
     public String processMessage(String message) {
         // Track user turns for nudge logic (aligned with Python Hermes)
         userTurnCount++;
-        
+
         // Check memory nudge trigger (turn-based)
         boolean shouldReviewMemory = false;
         if (memoryNudgeInterval > 0 && hasTool("memory")) {
@@ -280,15 +326,28 @@ public class AIAgent {
                 turnsSinceMemory = 0;
             }
         }
-        
+
         // Add user message to history
         conversationHistory.add(ModelMessage.user(message));
-        
+
+        // Cognitive trace: observe user input
+        if (cognitiveTraceCollector != null) {
+            cognitiveTraceCollector.observe(userTurnCount, message);
+        }
+
+        // Refresh smart memory card based on current user message
+        if (smartMemoryCardEnabled && memoryCardIntegrator != null) {
+            int cardSize = memoryCardIntegrator.beforeTurn(conversationHistory, message);
+            if (evalMetrics != null) {
+                evalMetrics.recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
+            }
+        }
+
         // Auto-save session periodically
         autoSaveSession();
-        
+
         StringBuilder responseBuilder = new StringBuilder();
-        
+
         // Conversation loop
         boolean continueLoop = true;
         while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
@@ -296,14 +355,32 @@ public class AIAgent {
                 responseBuilder.append("\n[Reached maximum iterations]");
                 break;
             }
-            
+
             try {
                 // Call the model
+                // Cognitive trace: orient — form goal/hypothesis before LLM call
+                if (cognitiveTraceCollector != null) {
+                    String goal = "Respond to user turn " + userTurnCount;
+                    String hypothesis = "Based on conversation history, determine next action";
+                    cognitiveTraceCollector.orient(userTurnCount, goal, hypothesis);
+                }
+
+                long llmStart = System.currentTimeMillis();
                 ChatCompletionResponse response = modelClient.chatCompletion(
                     conversationHistory,
                     toolDefinitions,
                     false
                 );
+                long llmDuration = System.currentTimeMillis() - llmStart;
+
+                // Cognitive trace: decide — LLM produced output
+                if (cognitiveTraceCollector != null) {
+                    String action = response.getMessage() != null ? response.getMessage().getContent() : "";
+                    String toolUsed = response.hasToolCalls() && response.getMessage().getToolCalls() != null 
+                        ? response.getMessage().getToolCalls().get(0).getFunction().getName() 
+                        : null;
+                    cognitiveTraceCollector.decide(userTurnCount, action, toolUsed, llmDuration);
+                }
 
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
@@ -313,10 +390,10 @@ public class AIAgent {
 
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
-                
+
                 // Auto-save after each assistant response
                 autoSaveSession();
-                
+
                 // Check for tool calls
                 if (response.hasToolCalls()) {
                     // Add assistant's reasoning to response
@@ -326,7 +403,7 @@ public class AIAgent {
                         }
                         responseBuilder.append(assistantMessage.getContent());
                     }
-                    
+
                     // Execute tool calls
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     for (ToolCall toolCall : toolCalls) {
@@ -341,17 +418,22 @@ public class AIAgent {
                         } finally {
                             recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
                         }
-                        
+
                         // Add tool result to conversation
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
+                        // Cognitive trace: evaluate tool result
+                        if (cognitiveTraceCollector != null) {
+                            cognitiveTraceCollector.evaluate(userTurnCount,
+                                "Tool " + toolCall.getFunction().getName() + " returned: " + result.substring(0, Math.min(100, result.length())));
+                        }
                     }
-                    
+
                     // Track tool-calling iterations for skill nudge (aligned with Python Hermes)
                     // Counter resets when skill_manage is actually used
                     if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
                         itersSinceSkill++;
                     }
-                    
+
                     // Continue loop for next iteration
                     continueLoop = true;
                 } else {
@@ -365,22 +447,22 @@ public class AIAgent {
                     }
                     continueLoop = false;
                 }
-                
+
                 // Check finish reason
                 if ("stop".equals(response.getFinishReason())) {
                     continueLoop = false;
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Error in conversation loop: {}", e.getMessage());
                 responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
                 break;
             }
         }
-        
+
         // Final save after conversation
         persistSession();
-        
+
         // Check skill trigger NOW - based on how many tool iterations THIS turn used
         // (aligned with Python Hermes)
         boolean shouldReviewSkills = false;
@@ -388,17 +470,32 @@ public class AIAgent {
             shouldReviewSkills = true;
             itersSinceSkill = 0;
         }
-        
+
         // Background memory/skill review - runs AFTER the response is delivered
         // so it never competes with the user's task for model attention
         String finalResponse = responseBuilder.toString();
+
+        // Calibrate confidence before returning
+        if (confidenceCalibrator != null && !finalResponse.isEmpty()) {
+            int toolsUsed = countToolsUsedThisTurn();
+            boolean hasSearch = conversationHistory.stream()
+                .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
+            var calibrated = confidenceCalibrator.calibrate(finalResponse, toolsUsed, hasSearch);
+            if (evalMetrics != null) {
+                evalMetrics.recordCalibration(calibrated.action());
+            }
+            if (calibrated.action() != ConfidenceCalibrator.Action.DIRECT) {
+                finalResponse = calibrated.adjustedText();
+            }
+        }
+
         if (!finalResponse.isEmpty() && !interrupted.get() && (shouldReviewMemory || shouldReviewSkills)) {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
         }
-        
+
         return finalResponse;
     }
-    
+
     /**
      * Process a message with streaming output for SSE.
      * @param message User message
@@ -407,7 +504,7 @@ public class AIAgent {
     public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
         // Track user turns
         userTurnCount++;
-        
+
         // Check memory nudge trigger
         boolean shouldReviewMemory = false;
         if (memoryNudgeInterval > 0 && hasTool("memory")) {
@@ -417,13 +514,16 @@ public class AIAgent {
                 turnsSinceMemory = 0;
             }
         }
-        
+
         // Add user message to history
         conversationHistory.add(ModelMessage.user(message));
+        if (smartMemoryCardEnabled && memoryCardIntegrator != null) {
+            memoryCardIntegrator.beforeTurn(conversationHistory, message);
+        }
         autoSaveSession();
-        
+
         StringBuilder responseBuilder = new StringBuilder();
-        
+
         // Conversation loop
         boolean continueLoop = true;
         while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
@@ -431,7 +531,7 @@ public class AIAgent {
                 chunkConsumer.accept("\n[Reached maximum iterations]");
                 break;
             }
-            
+
             try {
                 // Call the model with true streaming via onChunk callback
                 var response = modelClient.chatCompletion(
@@ -444,17 +544,17 @@ public class AIAgent {
                         responseBuilder.append(chunk);
                     }
                 );
-                
+
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
                     chunkConsumer.accept("\n[No response from model]");
                     break;
                 }
-                
+
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
                 autoSaveSession();
-                
+
                 // Check for tool calls
                 if (response.hasToolCalls()) {
                     // Execute tool calls
@@ -464,51 +564,51 @@ public class AIAgent {
                         String result = executeToolCall(toolCall);
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
-                    
+
                     // Track skill nudge
                     if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
                         itersSinceSkill++;
                     }
-                    
+
                     continueLoop = true;
                 } else {
                     continueLoop = false;
                 }
-                
+
                 if ("stop".equals(response.getFinishReason())) {
                     continueLoop = false;
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Error in stream conversation loop: {}", e.getMessage());
                 chunkConsumer.accept("\n[Error: " + e.getMessage() + "]");
                 break;
             }
         }
-        
+
         // Final save
         persistSession();
-        
+
         // Check skill trigger
         boolean shouldReviewSkills = false;
         if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval && hasTool("skill_manage")) {
             shouldReviewSkills = true;
             itersSinceSkill = 0;
         }
-        
+
         // Background review
         if (shouldReviewMemory || shouldReviewSkills) {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
         }
     }
-    
+
     /**
      * Process a user message through the conversation loop (interactive CLI mode).
      */
     private void processUserMessage(String userInput) {
         // Track user turns for nudge logic (aligned with Python Hermes)
         userTurnCount++;
-        
+
         // Check memory nudge trigger (turn-based)
         boolean shouldReviewMemory = false;
         if (memoryNudgeInterval > 0 && hasTool("memory")) {
@@ -518,13 +618,13 @@ public class AIAgent {
                 turnsSinceMemory = 0;
             }
         }
-        
+
         // Add user message to history
         conversationHistory.add(ModelMessage.user(userInput));
-        
+
         // Auto-save session periodically
         autoSaveSession();
-        
+
         // Conversation loop
         boolean continueLoop = true;
         while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
@@ -532,7 +632,7 @@ public class AIAgent {
                 System.out.println("\n[Reached maximum iterations]");
                 break;
             }
-            
+
             try {
                 // Call the model
                 ChatCompletionResponse response = modelClient.chatCompletion(
@@ -551,17 +651,17 @@ public class AIAgent {
 
                 // Add assistant message to history
                 conversationHistory.add(assistantMessage);
-                
+
                 // Auto-save after each assistant response
                 autoSaveSession();
-                
+
                 // Check for tool calls
                 if (response.hasToolCalls()) {
                     // Display assistant's reasoning
                     if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
                         System.out.println("\nAssistant: " + assistantMessage.getContent());
                     }
-                    
+
                     // Execute tool calls
                     List<ToolCall> toolCalls = assistantMessage.getToolCalls();
                     for (ToolCall toolCall : toolCalls) {
@@ -576,17 +676,17 @@ public class AIAgent {
                         } finally {
                             recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
                         }
-                        
+
                         // Add tool result to conversation
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
-                    
+
                     // Track tool-calling iterations for skill nudge (aligned with Python Hermes)
                     // Counter resets when skill_manage is actually used
                     if (skillNudgeInterval > 0 && hasTool("skill_manage")) {
                         itersSinceSkill++;
                     }
-                    
+
                     // Continue loop for next iteration
                     continueLoop = true;
                 } else {
@@ -599,22 +699,22 @@ public class AIAgent {
                     }
                     continueLoop = false;
                 }
-                
+
                 // Check finish reason
                 if ("stop".equals(response.getFinishReason())) {
                     continueLoop = false;
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Error in conversation loop: {}", e.getMessage());
                 System.out.println("\n[Error: " + e.getMessage() + "]");
                 break;
             }
         }
-        
+
         // Final save after conversation
         persistSession();
-        
+
         // Check skill trigger NOW - based on how many tool iterations THIS turn used
         // (aligned with Python Hermes)
         boolean shouldReviewSkills = false;
@@ -622,14 +722,14 @@ public class AIAgent {
             shouldReviewSkills = true;
             itersSinceSkill = 0;
         }
-        
+
         // Background memory/skill review - runs AFTER the response is delivered
         // so it never competes with the user's task for model attention
         if (!interrupted.get() && (shouldReviewMemory || shouldReviewSkills)) {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
         }
     }
-    
+
     /**
      * Auto-save session periodically.
      */
@@ -638,29 +738,29 @@ public class AIAgent {
             persistSession();
         }
     }
-    
+
     /**
      * Persist session to disk.
      */
     private void persistSession() {
         try {
-            com.nousresearch.hermes.gateway.SessionManager.Session session = 
+            com.nousresearch.hermes.gateway.SessionManager.Session session =
                 sessionManager.getSession(sessionId);
-            
+
             // Copy conversation history to session
             for (ModelMessage msg : conversationHistory) {
                 if (msg.getRole() != null && msg.getContent() != null) {
                     session.addMessage(msg.getRole(), msg.getContent());
                 }
             }
-            
+
             sessionManager.saveSession(session);
             logger.debug("Session saved: {}", sessionId);
         } catch (Exception e) {
             logger.warn("Failed to save session: {}", e.getMessage());
         }
     }
-    
+
 
     private void recordModelUsage(ChatCompletionResponse response) {
         if (response == null || response.getUsage() == null) {
@@ -688,9 +788,35 @@ public class AIAgent {
             com.nousresearch.hermes.gateway.SessionManager.Session session =
                 sessionManager.getSession(sessionId);
             session.recordToolCall(toolCall.getFunction().getName(), ok, durationMs);
+            if (toolPerformanceTracker != null) {
+                toolPerformanceTracker.record(toolCall.getFunction().getName(), ok, durationMs);
+            }
+            if (evalMetrics != null) {
+                evalMetrics.recordToolCall(ok, durationMs);
+            }
         } catch (Exception e) {
             logger.debug("Failed to record tool call: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Count how many tool-result messages appear after the last user message
+     * in the current turn.
+     */
+    private int countToolsUsedThisTurn() {
+        int count = 0;
+        boolean afterLastUser = false;
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            ModelMessage m = conversationHistory.get(i);
+            if ("user".equals(m.getRole())) {
+                afterLastUser = true;
+                break;
+            }
+            if ("tool".equals(m.getRole())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -699,60 +825,73 @@ public class AIAgent {
     private String executeToolCall(ToolCall toolCall) {
         String toolName = toolCall.getFunction().getName();
         String arguments = toolCall.getFunction().getArguments();
-        
+
         System.out.println("  [Tool: " + toolName + "]");
-        
+
         try {
             // Parse arguments
             @SuppressWarnings("unchecked")
             Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readValue(arguments, Map.class);
-            
+
             // Dispatch to tool registry
             return toolRegistry.dispatch(toolName, args);
-            
+
         } catch (Exception e) {
             logger.error("Failed to execute tool {}: {}", toolName, e.getMessage());
             return ToolRegistry.toolError("Failed to parse arguments: " + e.getMessage());
         }
     }
-    
+
     /**
      * Build the system prompt.
      */
     private String buildSystemPrompt() {
         StringBuilder prompt = new StringBuilder();
-        
+
         // Agent identity
         prompt.append(Constants.DEFAULT_AGENT_IDENTITY).append("\n\n");
-        
+
         // Memory guidance
         prompt.append(Constants.MEMORY_GUIDANCE).append("\n\n");
-        
+
         // Tool enforcement - CRITICAL for proper tool usage
         prompt.append(Constants.TOOL_USE_ENFORCEMENT_GUIDANCE).append("\n\n");
-        
+
         // Execution discipline - CRITICAL for correct behavior
         prompt.append(Constants.EXECUTION_DISCIPLINE_GUIDANCE).append("\n\n");
-        
+
         // Session search guidance
         prompt.append(Constants.SESSION_SEARCH_GUIDANCE).append("\n\n");
-        
+
         // Skills guidance
         prompt.append(Constants.SKILLS_GUIDANCE).append("\n\n");
-        
+
         // Platform hint (CLI mode)
         String platformHint = Constants.PLATFORM_HINTS.get("cli");
         if (platformHint != null) {
             prompt.append(platformHint).append("\n\n");
         }
-        
-        // Add memory context
+
+        // Session scratchpad (L2 rolling summary + key facts)
+        if (sessionScratchpad != null && !sessionScratchpad.isEmpty()) {
+            prompt.append(sessionScratchpad.buildScratchpadText()).append("\n");
+        }
+
+        // Add memory context (L3 long-term memory)
         String memoryContext = memoryManager.getSystemPromptSnapshot();
         if (!memoryContext.isEmpty()) {
             prompt.append(memoryContext).append("\n\n");
         }
-        
+
+        // Tool performance hints (learned from past usage)
+        if (toolPerformanceTracker != null) {
+            String hints = toolPerformanceTracker.buildHintBlock();
+            if (!hints.isEmpty()) {
+                prompt.append(hints).append("\n");
+            }
+        }
+
         // Add available tools info
         prompt.append("## Available Tools\n\n");
         for (ToolDefinition tool : toolDefinitions) {
@@ -767,13 +906,13 @@ public class AIAgent {
             }
             prompt.append("\n");
         }
-        
+
         // Add available skills info
         prompt.append("\n").append(buildSkillsPrompt());
-        
+
         return prompt.toString();
     }
-    
+
     /**
      * Build the skills section of the system prompt.
      * Injects available skills list to guide the agent to use them.
@@ -782,12 +921,12 @@ public class AIAgent {
         if (skillManager == null) {
             return "";
         }
-        
+
         List<SkillManager.Skill> skills = skillManager.listSkills();
         if (skills.isEmpty()) {
             return "";
         }
-        
+
         StringBuilder sb = new StringBuilder();
         sb.append("## Skills (mandatory)\n\n");
         sb.append("Before replying, scan the skills below. If one clearly matches your task, ");
@@ -796,25 +935,25 @@ public class AIAgent {
         sb.append("After difficult/iterative tasks, offer to save as a skill.\n");
         sb.append("If a skill you loaded was missing steps, had wrong commands, or needed ");
         sb.append("pitfalls you discovered, update it before finishing.\n\n");
-        
+
         sb.append("<available_skills>\n");
-        
+
         // Group by category (using tags as categories)
         Map<String, List<SkillManager.Skill>> byCategory = new HashMap<>();
         for (SkillManager.Skill skill : skills) {
             String category = skill.tags.isEmpty() ? "general" : skill.tags.get(0);
             byCategory.computeIfAbsent(category, k -> new ArrayList<>()).add(skill);
         }
-        
+
         // Sort categories and skills
         List<String> categories = new ArrayList<>(byCategory.keySet());
         Collections.sort(categories);
-        
+
         for (String category : categories) {
             sb.append("  ").append(category).append(":\n");
             List<SkillManager.Skill> catSkills = byCategory.get(category);
             catSkills.sort(Comparator.comparing(s -> s.name));
-            
+
             for (SkillManager.Skill skill : catSkills) {
                 sb.append("    - ").append(skill.name);
                 if (skill.description != null && !skill.description.isEmpty()) {
@@ -827,13 +966,13 @@ public class AIAgent {
                 sb.append("\n");
             }
         }
-        
+
         sb.append("</available_skills>\n\n");
         sb.append("If none match, proceed normally without loading a skill.");
-        
+
         return sb.toString();
     }
-    
+
     /**
      * Handle slash commands.
      * Supports:
@@ -844,7 +983,7 @@ public class AIAgent {
      */
     private boolean handleCommand(String command) {
         String cmd = command.toLowerCase().trim();
-        
+
         switch (cmd) {
             case "/quit":
             case "/exit":
@@ -868,10 +1007,10 @@ public class AIAgent {
                 System.out.println("Unknown command: " + cmd);
                 break;
         }
-        
+
         return false;
     }
-    
+
     /**
      * Print help information.
      */
@@ -889,13 +1028,13 @@ public class AIAgent {
                 System.out.println("  (No skills available)");
             } else {
                 for (SkillManager.Skill skill : skills) {
-                    System.out.println("  /" + skill.name + " - " + 
+                    System.out.println("  /" + skill.name + " - " +
                         (skill.description != null ? skill.description : "No description"));
                 }
             }
         }
     }
-    
+
     /**
      * Load auto-skills for a channel/session.
      * Called during initialization to preload configured skills.
@@ -904,14 +1043,14 @@ public class AIAgent {
         if (skillManager == null || config == null) {
             return;
         }
-        
+
         List<String> autoSkills = config.getAutoSkills(channelId);
         if (autoSkills.isEmpty()) {
             return;
         }
-        
+
         logger.info("Auto-loading {} skills for {}", autoSkills.size(), channelId);
-        
+
         for (String skillName : autoSkills) {
             SkillManager.Skill skill = skillManager.loadSkill(skillName);
             if (skill != null) {
@@ -923,18 +1062,18 @@ public class AIAgent {
                 }
                 skillPrompt.append(skill.content);
                 skillPrompt.append("\n\n=== END SKILL ===");
-                
+
                 // Add as system message
                 conversationHistory.add(ModelMessage.system(skillPrompt.toString()));
                 skillManager.recordUsage(skillName);
-                
+
                 logger.debug("Auto-loaded skill: {}", skillName);
             } else {
                 logger.warn("Auto-skill not found: {}", skillName);
             }
         }
     }
-    
+
     /**
      * Create a persistent skill from the latest detected candidate.
      */
@@ -978,19 +1117,19 @@ public class AIAgent {
             System.out.println("Skill manager not available");
             return;
         }
-        
+
         SkillManager.Skill skill = skillManager.loadSkill(skillName);
         if (skill == null) {
             System.out.println("Skill not found: " + skillName);
             System.out.println("Use /help to see available skills");
             return;
         }
-        
+
         System.out.println("Loading skill: " + skill.name);
-        
+
         // Record usage
         skillManager.recordUsage(skillName);
-        
+
         // Build skill instruction message
         StringBuilder skillPrompt = new StringBuilder();
         skillPrompt.append("=== SKILL: ").append(skill.name).append(" ===\n\n");
@@ -999,20 +1138,20 @@ public class AIAgent {
         }
         skillPrompt.append(skill.content);
         skillPrompt.append("\n\n=== END SKILL ===");
-        
+
         // Add as system message
         conversationHistory.add(ModelMessage.system(skillPrompt.toString()));
-        
+
         System.out.println("Skill loaded. You can now ask me to perform tasks using this skill.");
     }
-    
+
     /**
      * End the session and perform knowledge extraction.
      * Called when the conversation ends naturally or via /exit.
      */
     public void endSession(boolean completed) {
         logger.info("Ending session: {} (completed={})", sessionId, completed);
-        
+
         // Save trajectory
         if (trajectoryCollector != null) {
             // Add all messages to trajectory
@@ -1021,58 +1160,103 @@ public class AIAgent {
             }
             trajectoryCollector.endSession(sessionId, completed);
         }
-        
+
         // Extract knowledge from session
         if (knowledgeExtractor != null && completed) {
             try {
-                KnowledgeExtractor.ExtractionResult result = 
+                KnowledgeExtractor.ExtractionResult result =
                     knowledgeExtractor.onSessionEnd(sessionId, conversationHistory);
-                
+
                 if (!result.getInsights().isEmpty()) {
                     logger.info("Extracted {} insights from session", result.getInsights().size());
                 }
-                
+
                 if (!result.getMemoriesSaved().isEmpty()) {
                     logger.info("Saved {} memories", result.getMemoriesSaved().size());
                 }
-                
+                if (evalMetrics != null) {
+                    evalMetrics.recordKnowledgeExtraction(result.getInsights().size());
+                }
+
                 if (result.hasSkillCandidate()) {
-                    logger.info("Skill candidate extracted (length: {} chars)", 
+                    logger.info("Skill candidate extracted (length: {} chars)",
                         result.getSkillCandidate().length());
                     pendingSkillCandidate = result.getSkillCandidate();
                     String preview = pendingSkillCandidate;
                     int len = Math.min(100, preview.length());
                     System.out.println("[Skill] Reusable pattern detected: " + preview.substring(0, len) + "... Use /create-skill to save it.");
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Knowledge extraction failed: {}", e.getMessage());
             }
         }
-        
+
+        // Reflection / self-critique (after knowledge extraction so we reflect on the full picture)
+        if (reflectionEngine != null && completed) {
+            try {
+                ReflectionEngine.ReflectionResult rr =
+                    reflectionEngine.reflect(sessionId, conversationHistory, completed);
+                if ("ok".equals(rr.status) && !rr.lessons.isEmpty()) {
+                    logger.info("Reflection: score={:.1f}, {} lessons, {} anti-patterns",
+                        rr.taskScore, rr.lessons.size(), rr.antiPatterns.size());
+                }
+                if (evalMetrics != null) {
+                    evalMetrics.recordReflection(rr.taskScore);
+                }
+            } catch (Exception e) {
+                logger.error("Reflection failed: {}", e.getMessage());
+            }
+        }
+
+        // Curiosity-driven learning: proactively research weak topics
+        if (curiosityEngine != null && completed) {
+            try {
+                int stored = curiosityEngine.run();
+                if (stored > 0) {
+                    logger.info("Curiosity engine stored {} new findings", stored);
+                }
+                if (evalMetrics != null) {
+                    evalMetrics.recordCuriosityRun(stored);
+                }
+            } catch (Exception e) {
+                logger.warn("Curiosity engine failed: {}", e.getMessage());
+            }
+        }
+
         // Persist session
         persistSession();
-        
+
         // Shutdown trajectory collector
         if (trajectoryCollector != null) {
             trajectoryCollector.shutdown();
         }
+
+        // Flush cognitive traces
+        if (cognitiveTraceCollector != null) {
+            cognitiveTraceCollector.close();
+        }
+
+        // Log eval snapshot
+        if (evalMetrics != null) {
+            evalMetrics.logSnapshot();
+        }
     }
-    
+
     /**
      * Get the trajectory collector for external access.
      */
     public TrajectoryCollector getTrajectoryCollector() {
         return trajectoryCollector;
     }
-    
+
     /**
      * Get the knowledge extractor for external access.
      */
     public KnowledgeExtractor getKnowledgeExtractor() {
         return knowledgeExtractor;
     }
-    
+
     /**
      * Check if a tool is available in the tool registry.
      * @param toolName The name of the tool to check
@@ -1089,15 +1273,15 @@ public class AIAgent {
         }
         return false;
     }
-    
+
     /**
      * Spawn a background thread to review the conversation for memory/skill saves.
      * Mirrors Python Hermes: _spawn_background_review()
-     * 
+     *
      * Creates a forked AIAgent with the same model and context. The review prompt
      * is appended as the next user turn. Writes directly to shared memory/skill stores.
      * Never modifies the main conversation history or produces user-visible output.
-     * 
+     *
      * @param messagesSnapshot Copy of conversation history to review
      * @param reviewMemory Whether to review for memory saves
      * @param reviewSkills Whether to review for skill saves
@@ -1116,20 +1300,20 @@ public class AIAgent {
         } else {
             prompt = SKILL_REVIEW_PROMPT;
         }
-        
+
         // Spawn background thread
         Thread reviewThread = new Thread(() -> {
             try {
                 logger.debug("Starting background review (memory={}, skills={})", reviewMemory, reviewSkills);
-                
+
                 // Create a quiet review agent with same config but limited iterations
                 // Clone the current config and override max turns
                 HermesConfig reviewConfig = HermesConfig.load();
                 reviewConfig.setModelOverride(config.getCurrentModel());
                 // Note: max_turns is controlled by IterationBudget, not HermesConfig directly
-                
+
                 AIAgent reviewAgent = new AIAgent(reviewConfig, "review_" + sessionId);
-                
+
                 // Share memory and skill stores with main agent
                 reviewAgent.memoryManager = this.memoryManager;
                 reviewAgent.skillManager = this.skillManager;
@@ -1137,10 +1321,10 @@ public class AIAgent {
                 reviewAgent.skillNudgeInterval = 0;
                 // Override iteration budget for review agent (max 8 iterations)
                 reviewAgent.iterationBudget.setMaxIterations(8);
-                
+
                 // Run review conversation
                 reviewAgent.processMessage(prompt);
-                
+
                 // Scan review agent's messages for successful tool actions
                 List<String> actions = new ArrayList<>();
                 for (ModelMessage msg : reviewAgent.conversationHistory) {
@@ -1151,12 +1335,12 @@ public class AIAgent {
                     if (content == null || content.isEmpty()) {
                         continue;
                     }
-                    
+
                     // Check for success indicators in tool results
                     String lowerContent = content.toLowerCase();
-                    if (lowerContent.contains("\"success\": true") || 
+                    if (lowerContent.contains("\"success\": true") ||
                         lowerContent.contains("\"success\":true")) {
-                        
+
                         // Extract action message
                         if (lowerContent.contains("created")) {
                             actions.add(extractActionMessage(content, "created"));
@@ -1169,7 +1353,7 @@ public class AIAgent {
                         }
                     }
                 }
-                
+
                 // Surface summary to user if actions were taken
                 if (!actions.isEmpty()) {
                     // Remove duplicates while preserving order
@@ -1180,16 +1364,16 @@ public class AIAgent {
                 } else {
                     logger.debug("Background review completed - no actions taken");
                 }
-                
+
             } catch (Exception e) {
                 logger.debug("Background memory/skill review failed: {}", e.getMessage());
             }
         }, "bg-review");
-        
+
         reviewThread.setDaemon(true);
         reviewThread.start();
     }
-    
+
     /**
      * Extract action message from tool result content.
      * Helper for background review summary.
@@ -1200,12 +1384,12 @@ public class AIAgent {
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             @SuppressWarnings("unchecked")
             Map<String, Object> result = mapper.readValue(content, Map.class);
-            
+
             String message = (String) result.get("message");
             if (message != null && !message.isEmpty()) {
                 return message;
             }
-            
+
             // Fallback: construct message from target
             String target = (String) result.get("target");
             if ("memory".equals(target)) {

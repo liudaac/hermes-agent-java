@@ -3,6 +3,9 @@ package com.nousresearch.hermes.agent;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
+import com.nousresearch.hermes.plugin.PluginManager;
+import com.nousresearch.hermes.plugin.hook.HookEngine;
+import com.nousresearch.hermes.plugin.hook.HookType;
 import com.nousresearch.hermes.tenant.core.*;
 import com.nousresearch.hermes.tenant.quota.QuotaExceededException;
 import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
@@ -39,8 +42,16 @@ public class TenantAwareAIAgent {
 
     // 租户隔离的子组件
     private final com.nousresearch.hermes.memory.MemoryManager memoryManager;
+    private com.nousresearch.hermes.memory.MemoryCardIntegrator memoryCardIntegrator;
+    private boolean smartMemoryCardEnabled;
     private com.nousresearch.hermes.trajectory.TrajectoryCollector trajectoryCollector;
     private com.nousresearch.hermes.learning.KnowledgeExtractor knowledgeExtractor;
+    private ReflectionEngine reflectionEngine;
+    private com.nousresearch.hermes.learning.CuriosityEngine curiosityEngine;
+    private ConfidenceCalibrator confidenceCalibrator;
+    private com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
+    private CognitiveTraceCollector cognitiveTraceCollector;
+    private com.nousresearch.hermes.monitoring.AgentEvalMetrics evalMetrics;
 
     // Nudge intervals
     private int memoryNudgeInterval = 10;
@@ -150,7 +161,13 @@ public class TenantAwareAIAgent {
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        initMemoryCardIntegrator();
+        this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
+            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("state"));
         this.conversationHistory = new ArrayList<>();
+        this.cognitiveTraceCollector = new CognitiveTraceCollector(
+            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
+        this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.interrupted = new AtomicBoolean(false);
 
         initializeLearningComponents();
@@ -181,6 +198,12 @@ public class TenantAwareAIAgent {
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        initMemoryCardIntegrator();
+        this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
+            com.nousresearch.hermes.config.Constants.getHermesHome().resolve("state"));
+        this.cognitiveTraceCollector = new CognitiveTraceCollector(
+            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
+        this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.conversationHistory = new ArrayList<>();
         this.interrupted = new AtomicBoolean(false);
 
@@ -273,8 +296,36 @@ public class TenantAwareAIAgent {
             try {
                 var result = knowledgeExtractor.onSessionEnd(sessionId, conversationHistory);
                 logger.info("Extracted {} insights from session", result.getInsights().size());
+                if (evalMetrics != null) evalMetrics.recordKnowledgeExtraction(result.getInsights().size());
             } catch (Exception e) {
                 logger.error("Knowledge extraction failed: {}", e.getMessage());
+            }
+        }
+
+        // 反思 / 自我批评
+        if (reflectionEngine != null && completed) {
+            try {
+                var rr = reflectionEngine.reflect(sessionId, conversationHistory, completed);
+                if ("ok".equals(rr.status) && !rr.lessons.isEmpty()) {
+                    logger.info("Reflection: score={}, lessons={}, anti_patterns={}",
+                        rr.taskScore, rr.lessons.size(), rr.antiPatterns.size());
+                if (evalMetrics != null) evalMetrics.recordReflection(rr.taskScore);
+                }
+            } catch (Exception e) {
+                logger.error("Reflection failed: {}", e.getMessage());
+            }
+        }
+
+        // 主动学习：识别弱话题并补充知识
+        if (curiosityEngine != null && completed) {
+            try {
+                int stored = curiosityEngine.run();
+                if (stored > 0) {
+                    logger.info("Curiosity engine stored {} new findings", stored);
+                if (evalMetrics != null) evalMetrics.recordCuriosityRun(stored);
+                }
+            } catch (Exception e) {
+                logger.warn("Curiosity engine failed: {}", e.getMessage());
             }
         }
 
@@ -288,6 +339,15 @@ public class TenantAwareAIAgent {
 
         if (trajectoryCollector != null) {
             trajectoryCollector.shutdown();
+        }
+
+        // Flush cognitive traces
+        if (cognitiveTraceCollector != null) {
+            cognitiveTraceCollector.close();
+        }
+
+        if (evalMetrics != null) {
+            evalMetrics.logSnapshot();
         }
     }
 
@@ -419,6 +479,16 @@ public class TenantAwareAIAgent {
     private String doProcessMessage(String message) {
         userTurnCount++;
 
+        // --- Plugin hook: on_session_start (first user message) ---
+        HookEngine hookEngine = getHookEngine();
+        if (hookEngine != null && userTurnCount == 1) {
+            Map<String, Object> sessionCtx = new HashMap<>();
+            sessionCtx.put("session_id", sessionId);
+            sessionCtx.put("tenant_id", tenantId);
+            sessionCtx.put("message", message);
+            hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
+        }
+
         // Ensure system prompt is present at the start of conversation
         if (conversationHistory.isEmpty()) {
             conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
@@ -434,6 +504,16 @@ public class TenantAwareAIAgent {
         }
 
         conversationHistory.add(ModelMessage.user(message));
+
+        // Cognitive trace: observe user input
+        if (cognitiveTraceCollector != null) {
+            cognitiveTraceCollector.observe(userTurnCount, message);
+        }
+
+        if (smartMemoryCardEnabled && memoryCardIntegrator != null) {
+            int cardSize = memoryCardIntegrator.beforeTurn(conversationHistory, message);
+            if (evalMetrics != null) evalMetrics.recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
+        }
         autoSaveSession();
 
         StringBuilder responseBuilder = new StringBuilder();
@@ -446,12 +526,56 @@ public class TenantAwareAIAgent {
             }
 
             try {
+                // --- Plugin hook: pre_llm_call ---
+                if (hookEngine != null) {
+                    Map<String, Object> preCtx = new HashMap<>();
+                    preCtx.put("messages", new ArrayList<>(conversationHistory));
+                    preCtx.put("session_id", sessionId);
+                    preCtx.put("tenant_id", tenantId);
+                    preCtx.put("turn", userTurnCount);
+                    List<Object> injects = hookEngine.invoke(HookType.PRE_LLM_CALL, preCtx);
+                    for (Object inj : injects) {
+                        if (inj instanceof String s && !s.isEmpty()) {
+                            conversationHistory.add(ModelMessage.system(s));
+                            logger.debug("Plugin injected context into conversation");
+                        }
+                    }
+                }
+
+                // Cognitive trace: orient — form goal/hypothesis before LLM call
+                if (cognitiveTraceCollector != null) {
+                    String goal = "Respond to user turn " + userTurnCount;
+                    String hypothesis = "Based on conversation history, determine next action";
+                    cognitiveTraceCollector.orient(userTurnCount, goal, hypothesis);
+                }
+
+                long llmStart = System.currentTimeMillis();
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
                     false,
                     modelParams
                 );
+                long llmDuration = System.currentTimeMillis() - llmStart;
+
+                // Cognitive trace: decide — LLM produced output
+                if (cognitiveTraceCollector != null) {
+                    String action = response.getMessage() != null ? response.getMessage().getContent() : "";
+                    String toolUsed = response.hasToolCalls() && response.getMessage().getToolCalls() != null
+                        ? response.getMessage().getToolCalls().get(0).getFunction().getName()
+                        : null;
+                    cognitiveTraceCollector.decide(userTurnCount, action, toolUsed, llmDuration);
+                }
+
+                // --- Plugin hook: post_llm_call ---
+                if (hookEngine != null) {
+                    Map<String, Object> postCtx = new HashMap<>();
+                    postCtx.put("message", response.getMessage());
+                    postCtx.put("finish_reason", response.getFinishReason());
+                    postCtx.put("session_id", sessionId);
+                    postCtx.put("tenant_id", tenantId);
+                    hookEngine.invoke(HookType.POST_LLM_CALL, postCtx);
+                }
 
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
@@ -485,6 +609,12 @@ public class TenantAwareAIAgent {
                             recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
                         }
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
+
+                        // Cognitive trace: evaluate tool result
+                        if (cognitiveTraceCollector != null) {
+                            cognitiveTraceCollector.evaluate(userTurnCount,
+                                "Tool " + toolCall.getFunction().getName() + " returned: " + result.substring(0, Math.min(100, result.length())));
+                        }
                     }
 
                     if (skillNudgeInterval > 0) {
@@ -523,9 +653,37 @@ public class TenantAwareAIAgent {
         }
 
         String finalResponse = responseBuilder.toString();
+
+        // Calibrate confidence before returning
+        if (confidenceCalibrator != null && !finalResponse.isEmpty()) {
+            int toolsUsed = countToolsUsedThisTurn();
+            boolean hasSearch = conversationHistory.stream()
+                .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
+            var calibrated = confidenceCalibrator.calibrate(finalResponse, toolsUsed, hasSearch);
+            if (evalMetrics != null) evalMetrics.recordCalibration(calibrated.action());
+            if (calibrated.action() != ConfidenceCalibrator.Action.DIRECT) {
+                finalResponse = calibrated.adjustedText();
+            }
+        }
+
         if (!finalResponse.isEmpty() && !interrupted.get() &&
             (shouldReviewMemory || shouldReviewSkills)) {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
+        }
+
+        // --- Plugin hook: transform_llm_output ---
+        if (hookEngine != null && !finalResponse.isEmpty()) {
+            Map<String, Object> outCtx = new HashMap<>();
+            outCtx.put("text", finalResponse);
+            outCtx.put("session_id", sessionId);
+            outCtx.put("tenant_id", tenantId);
+            List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_LLM_OUTPUT, outCtx);
+            for (Object t : transforms) {
+                if (t instanceof String s && !s.isEmpty()) {
+                    finalResponse = s;
+                    logger.debug("LLM output transformed by plugin");
+                }
+            }
         }
 
         return finalResponse;
@@ -560,6 +718,22 @@ public class TenantAwareAIAgent {
             }
 
             try {
+                // --- Plugin hook: pre_llm_call (stream) ---
+                HookEngine hookEngineStream = getHookEngine();
+                if (hookEngineStream != null) {
+                    Map<String, Object> preCtx = new HashMap<>();
+                    preCtx.put("messages", new ArrayList<>(conversationHistory));
+                    preCtx.put("session_id", sessionId);
+                    preCtx.put("tenant_id", tenantId);
+                    preCtx.put("turn", userTurnCount);
+                    List<Object> injects = hookEngineStream.invoke(HookType.PRE_LLM_CALL, preCtx);
+                    for (Object inj : injects) {
+                        if (inj instanceof String s && !s.isEmpty()) {
+                            conversationHistory.add(ModelMessage.system(s));
+                        }
+                    }
+                }
+
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
@@ -567,6 +741,16 @@ public class TenantAwareAIAgent {
                     modelParams,
                     chunk -> chunkConsumer.accept(chunk)
                 );
+
+                // --- Plugin hook: post_llm_call (stream) ---
+                if (hookEngineStream != null) {
+                    Map<String, Object> postCtx = new HashMap<>();
+                    postCtx.put("message", response.getMessage());
+                    postCtx.put("finish_reason", response.getFinishReason());
+                    postCtx.put("session_id", sessionId);
+                    postCtx.put("tenant_id", tenantId);
+                    hookEngineStream.invoke(HookType.POST_LLM_CALL, postCtx);
+                }
 
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
@@ -658,9 +842,28 @@ public class TenantAwareAIAgent {
                 com.nousresearch.hermes.config.Constants.getHermesHome())
                 .getSession(sessionId);
             session.recordToolCall(toolCall.getFunction().getName(), ok, durationMs);
+            if (toolPerformanceTracker != null) {
+                toolPerformanceTracker.record(toolCall.getFunction().getName(), ok, durationMs);
+            }
+            if (evalMetrics != null) {
+                evalMetrics.recordToolCall(ok, durationMs);
+            }
         } catch (Exception e) {
             logger.debug("Failed to record tool call: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Count how many tool-result messages appear after the last user message.
+     */
+    private int countToolsUsedThisTurn() {
+        int count = 0;
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            ModelMessage m = conversationHistory.get(i);
+            if ("user".equals(m.getRole())) break;
+            if ("tool".equals(m.getRole())) count++;
+        }
+        return count;
     }
 
     // ==================== Tool Execution ====================
@@ -704,6 +907,18 @@ public class TenantAwareAIAgent {
 
     // ==================== Helper Methods ====================
 
+    private void initMemoryCardIntegrator() {
+        com.nousresearch.hermes.config.ConfigManager cfg =
+            com.nousresearch.hermes.config.ConfigManager.getInstance();
+        this.smartMemoryCardEnabled = cfg.getBoolean("memory.smart_card.enabled", true);
+        if (smartMemoryCardEnabled) {
+            int topK = cfg.getInt("memory.smart_card.top_k", 6);
+            boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
+            this.memoryCardIntegrator =
+                new com.nousresearch.hermes.memory.MemoryCardIntegrator(memoryManager, topK, alwaysProfile);
+        }
+    }
+
     private void initializeLearningComponents() {
         this.trajectoryCollector = new com.nousresearch.hermes.trajectory.TrajectoryCollector();
         var skillManager = tenantContext != null
@@ -711,6 +926,10 @@ public class TenantAwareAIAgent {
             : new com.nousresearch.hermes.skills.SkillManager();
         this.knowledgeExtractor = new com.nousresearch.hermes.learning.KnowledgeExtractor(
             memoryManager, skillManager);
+        this.reflectionEngine = new ReflectionEngine(modelClient, memoryManager);
+        this.curiosityEngine = new com.nousresearch.hermes.learning.CuriosityEngine(
+            modelClient, memoryManager, trajectoryCollector);
+        this.confidenceCalibrator = new ConfidenceCalibrator();
 
         try {
             var cfgMgr = com.nousresearch.hermes.config.ConfigManager.getInstance();
@@ -777,6 +996,14 @@ public class TenantAwareAIAgent {
         String memoryContext = memoryManager.getSystemPromptSnapshot();
         if (!memoryContext.isEmpty()) {
             prompt.append(memoryContext).append("\n\n");
+        }
+
+        // Tool performance hints (learned from past usage)
+        if (toolPerformanceTracker != null) {
+            String hints = toolPerformanceTracker.buildHintBlock();
+            if (!hints.isEmpty()) {
+                prompt.append(hints).append("\n");
+            }
         }
 
         return prompt.toString();
@@ -1056,4 +1283,9 @@ public class TenantAwareAIAgent {
     public String getTenantId() { return tenantId; }
     public String getSessionId() { return sessionId; }
     public TenantContext getTenantContext() { return tenantContext; }
+
+    private HookEngine getHookEngine() {
+        PluginManager pm = PluginManager.getInstance();
+        return pm != null ? pm.getHookEngineFacade() : null;
+    }
 }

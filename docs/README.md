@@ -33,4 +33,5 @@
 ## 子目录文档
 
 - [web](../web/README.md)
+- [插件开发指南](PLUGIN_DEVELOPMENT.md) - 从零开始写一个 Hermes Java 插件
 - [ui-tui](../ui-tui/README.md)

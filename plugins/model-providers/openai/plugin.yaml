@@ -1,0 +1,16 @@
+name: openai
+label: OpenAI
+kind: model-provider
+version: 1.0.0
+description: >
+  OpenAI Chat Completions API transport (GPT-3.5/4/4o, o1).
+  Also supports OpenAI-compatible endpoints.
+author: NousResearch
+requires_env:
+  - name: OPENAI_API_KEY
+    description: "OpenAI API key"
+    prompt: "OpenAI API key"
+    password: true
+optional_env:
+  - name: OPENAI_BASE_URL
+    description: "Custom base URL (for compatible endpoints)"

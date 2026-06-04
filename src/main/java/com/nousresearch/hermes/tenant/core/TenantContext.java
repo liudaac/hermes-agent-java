@@ -74,6 +74,7 @@ public class TenantContext {
 
     // 运行时 Agent 管理
     private final ConcurrentHashMap<String, TenantAIAgent> activeAgents = new ConcurrentHashMap<>();
+    private volatile SharedBlackboard sharedBlackboard;
     private volatile Instant lastActivity = Instant.now();
     
     // 自动保存调度器
@@ -724,6 +725,17 @@ public class TenantContext {
     public TenantAuditLogger getAuditLogger() { return auditLogger; }
     public TenantSecurityPolicy getSecurityPolicy() { return securityPolicy; }
     public void setSecurityPolicy(TenantSecurityPolicy policy) { this.securityPolicy = policy; }
+
+    public SharedBlackboard getSharedBlackboard() {
+        if (sharedBlackboard == null) {
+            synchronized (this) {
+                if (sharedBlackboard == null) {
+                    sharedBlackboard = new SharedBlackboard(tenantId);
+                }
+            }
+        }
+        return sharedBlackboard;
+    }
     public TenantResourceMonitor getResourceMonitor() { return resourceMonitor; }
 
     public Map<String, TenantAIAgent> getActiveAgents() {

@@ -1,5 +1,8 @@
 package com.nousresearch.hermes.tools;
 
+import com.nousresearch.hermes.plugin.PluginManager;
+import com.nousresearch.hermes.plugin.hook.HookEngine;
+import com.nousresearch.hermes.plugin.hook.HookType;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.sandbox.ProcessOptions;
 import com.nousresearch.hermes.tenant.sandbox.ProcessResult;
@@ -21,6 +24,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * FIXED: Tenant-aware tool dispatcher that routes all tool calls through tenant sandbox.
@@ -41,6 +45,23 @@ public class TenantAwareToolDispatcher {
         Map<String, Object> safeArgs = args != null ? args : Map.of();
         logger.debug("Dispatching tool: {} for tenant: {}", toolName, tenantContext.getTenantId());
 
+        // --- Plugin hook: pre_tool_call ---
+        HookEngine hookEngine = getHookEngine();
+        if (hookEngine != null) {
+            Optional<String> blocked = hookEngine.checkToolBlocked(
+                    toolName, safeArgs,
+                    tenantContext.getTenantId(),  // task_id (reused as tenant_id)
+                    tenantContext.getTenantId(),  // session_id (reused as tenant_id)
+                    ""  // tool_call_id not available at this layer
+            );
+            if (blocked.isPresent()) {
+                logger.info("Tool '{}' blocked by plugin hook: {}", toolName, blocked.get());
+                String result = ToolRegistry.toolError("Blocked by policy: " + blocked.get());
+                tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, result);
+                return result;
+            }
+        }
+
         var permission = tenantContext.getToolRegistry().checkPermission(toolName, safeArgs);
         if (!permission.isAllowed()) {
             return ToolRegistry.toolError(permission.getReason());
@@ -59,6 +80,34 @@ public class TenantAwareToolDispatcher {
         } catch (Exception e) {
             logger.error("Error dispatching tool: {}", toolName, e);
             result = ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
+        }
+
+        // --- Plugin hook: post_tool_call ---
+        if (hookEngine != null) {
+            Map<String, Object> postCtx = new HashMap<>();
+            postCtx.put("tool_name", toolName);
+            postCtx.put("args", safeArgs);
+            postCtx.put("result", result);
+            postCtx.put("task_id", tenantContext.getTenantId());
+            postCtx.put("session_id", tenantContext.getTenantId());
+            hookEngine.invoke(HookType.POST_TOOL_CALL, postCtx);
+        }
+
+        // --- Plugin hook: transform_tool_result ---
+        if (hookEngine != null) {
+            Map<String, Object> transformCtx = new HashMap<>();
+            transformCtx.put("tool_name", toolName);
+            transformCtx.put("args", safeArgs);
+            transformCtx.put("result", result);
+            transformCtx.put("task_id", tenantContext.getTenantId());
+            transformCtx.put("session_id", tenantContext.getTenantId());
+            List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_TOOL_RESULT, transformCtx);
+            for (Object t : transforms) {
+                if (t instanceof String s && !s.isEmpty()) {
+                    result = s;
+                    logger.debug("Tool result transformed by plugin for '{}'", toolName);
+                }
+            }
         }
 
         tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, result);
@@ -328,5 +377,10 @@ public class TenantAwareToolDispatcher {
         } catch (Exception e) {
             return ToolRegistry.toolError("Process sandbox execution failed: " + e.getMessage());
         }
+    }
+
+    private HookEngine getHookEngine() {
+        PluginManager pm = PluginManager.getInstance();
+        return pm != null ? pm.getHookEngineFacade() : null;
     }
 }

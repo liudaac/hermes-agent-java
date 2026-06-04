@@ -5,6 +5,9 @@ import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.compare.TenantComparisonOrchestrator;
 import com.nousresearch.hermes.compare.TenantComparisonRun;
+import com.nousresearch.hermes.plugin.PluginManager;
+import com.nousresearch.hermes.plugin.hook.HookEngine;
+import com.nousresearch.hermes.plugin.hook.HookType;
 import com.nousresearch.hermes.tenant.core.TenantAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -1253,6 +1256,30 @@ public class GatewayServerV2 {
                                 String explicitTenantId) {
         String tenantId = resolveTenantId(message, adapter, explicitTenantId);
 
+        // --- Plugin hook: pre_gateway_dispatch ---
+        HookEngine hookEngine = getHookEngine();
+        if (hookEngine != null) {
+            Map<String, Object> event = new HashMap<>();
+            event.put("content", message.content());
+            event.put("sender", message.sender());
+            event.put("channel", message.channel());
+            event.put("platform", adapter.getPlatformName());
+            event.put("tenant_id", tenantId);
+            event.put("session_id", message.id());
+
+            var action = hookEngine.checkGatewayDispatch(event, this, null);
+            if (action.isSkip()) {
+                logger.info("Message skipped by plugin hook: {}", action.reason());
+                return;
+            }
+            if (action.isRewrite()) {
+                logger.debug("Message rewritten by plugin hook");
+                message = new com.nousresearch.hermes.gateway.IncomingMessage(
+                        message.id(), message.channel(), message.sender(),
+                        action.text(), message.timestamp(), message.isGroup());
+            }
+        }
+
         try {
             logger.info("Processing message from {} on {} for tenant {}",
                 message.sender(), adapter.getPlatformName(), tenantId);
@@ -1386,6 +1413,11 @@ public class GatewayServerV2 {
     public void registerAdapter(com.nousresearch.hermes.gateway.PlatformAdapter adapter) {
         adapters.put(adapter.getPlatformName(), adapter);
         logger.info("Registered adapter: {}", adapter.getPlatformName());
+    }
+
+    private HookEngine getHookEngine() {
+        PluginManager pm = PluginManager.getInstance();
+        return pm != null ? pm.getHookEngineFacade() : null;
     }
 
     // ==================== Data Classes ====================

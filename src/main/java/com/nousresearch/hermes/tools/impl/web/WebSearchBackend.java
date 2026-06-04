@@ -1,12 +1,15 @@
 package com.nousresearch.hermes.tools.impl.web;
 
+import com.nousresearch.hermes.plugin.registry.NamedProvider;
+
 import java.util.List;
 import java.util.Map;
 
 /**
  * Interface for web search backends.
+ * Also acts as a NamedProvider for plugin registry integration.
  */
-public interface WebSearchBackend {
+public interface WebSearchBackend extends NamedProvider {
     
     /**
      * Search the web.

@@ -1,0 +1,13 @@
+name: telegram
+label: Telegram
+kind: platform
+version: 1.0.0
+description: >
+  Telegram gateway adapter for Hermes Agent.
+  Supports bots, groups, and channels via Bot API.
+author: NousResearch
+requires_env:
+  - name: TELEGRAM_BOT_TOKEN
+    description: "Telegram bot token from @BotFather"
+    prompt: "Telegram bot token"
+    password: true

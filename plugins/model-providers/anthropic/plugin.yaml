@@ -1,0 +1,12 @@
+name: anthropic
+label: Anthropic Claude
+kind: model-provider
+version: 1.0.0
+description: >
+  Anthropic Claude API transport (Claude 3, 3.5 Sonnet/Haiku/Opus).
+author: NousResearch
+requires_env:
+  - name: ANTHROPIC_API_KEY
+    description: "Anthropic API key"
+    prompt: "Anthropic API key"
+    password: true

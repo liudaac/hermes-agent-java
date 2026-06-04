@@ -404,6 +404,26 @@ public class HermesConfig {
         }
     }
 
+    /**
+     * Get a raw nested config value by dot-separated path.
+     * Public access for plugin system and other consumers.
+     */
+    @SuppressWarnings("unchecked")
+    public Object getConfigValue(String path) {
+        String[] parts = path.split("\\.");
+        Map<String, Object> current = config;
+        
+        for (int i = 0; i < parts.length - 1; i++) {
+            Object next = current.get(parts[i]);
+            if (!(next instanceof Map)) {
+                return null;
+            }
+            current = (Map<String, Object>) next;
+        }
+        
+        return current.get(parts[parts.length - 1]);
+    }
+
     // Helper methods for nested access
     @SuppressWarnings("unchecked")
     private <T> T getNested(String path, T defaultValue) {
