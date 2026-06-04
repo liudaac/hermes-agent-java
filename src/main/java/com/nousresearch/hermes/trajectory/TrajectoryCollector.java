@@ -50,7 +50,17 @@ public class TrajectoryCollector {
     private final Map<String, TrajectorySession> activeSessions = new HashMap<>();
     
     public TrajectoryCollector() {
-        this.trajectoriesDir = Constants.getHermesHome().resolve("trajectories");
+        this(Constants.getHermesHome().resolve("trajectories"));
+    }
+
+    public TrajectoryCollector(String tenantId) {
+        this(Constants.getHermesHome().resolve("tenants")
+            .resolve(tenantId.replaceAll("[^a-zA-Z0-9_-]", "_"))
+            .resolve("trajectories"));
+    }
+
+    private TrajectoryCollector(Path trajectoriesDir) {
+        this.trajectoriesDir = trajectoriesDir;
         this.completedFile = trajectoriesDir.resolve("trajectory_samples.jsonl");
         this.failedFile = trajectoriesDir.resolve("failed_trajectories.jsonl");
         this.compressedDir = trajectoriesDir.resolve("compressed");

@@ -167,7 +167,7 @@ public class TenantAwareAIAgent {
                 .resolve(tenantId).resolve("state"));
         this.conversationHistory = new ArrayList<>();
         this.cognitiveTraceCollector = new CognitiveTraceCollector(
-            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
+            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants").resolve(tenantId).resolve("trajectory"));
         this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.interrupted = new AtomicBoolean(false);
 
@@ -203,7 +203,7 @@ public class TenantAwareAIAgent {
         this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
             com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants").resolve(tenantId).resolve("state"));
         this.cognitiveTraceCollector = new CognitiveTraceCollector(
-            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("trajectory"));
+            this.sessionId, com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants").resolve(tenantId).resolve("trajectory"));
         this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.conversationHistory = new ArrayList<>();
         this.interrupted = new AtomicBoolean(false);
@@ -921,7 +921,7 @@ public class TenantAwareAIAgent {
     }
 
     private void initializeLearningComponents() {
-        this.trajectoryCollector = new com.nousresearch.hermes.trajectory.TrajectoryCollector();
+        this.trajectoryCollector = new com.nousresearch.hermes.trajectory.TrajectoryCollector(tenantId);
         var skillManager = tenantContext != null
             ? new com.nousresearch.hermes.skills.SkillManager()
             : new com.nousresearch.hermes.skills.SkillManager();
