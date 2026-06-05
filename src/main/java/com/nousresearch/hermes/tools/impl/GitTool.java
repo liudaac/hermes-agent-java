@@ -31,6 +31,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string", "description", "Repository path")),
                     "required", List.of("path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
+            .requiresApproval(false)
             .handler(this::gitStatus).emoji("📊").build());
         
         registry.register(new ToolEntry.Builder()
@@ -40,6 +42,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string"), "files", Map.of("type", "string")),
                     "required", List.of("path", "files"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .handler(this::gitAdd).emoji("➕").build());
         
         registry.register(new ToolEntry.Builder()
@@ -49,6 +53,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string"), "message", Map.of("type", "string")),
                     "required", List.of("path", "message"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .handler(this::gitCommit).emoji("💾").build());
         
         registry.register(new ToolEntry.Builder()
@@ -58,6 +64,10 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string"), "remote", Map.of("type", "string", "default", "origin"), "branch", Map.of("type", "string")),
                     "required", List.of("path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.MEDIUM)
+            .requiresApproval(true)
+            .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
+            .approvalMessageTemplate("Push to remote")
             .handler(this::gitPush).emoji("🚀").build());
         
         registry.register(new ToolEntry.Builder()
@@ -67,6 +77,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string")),
                     "required", List.of("path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .handler(this::gitPull).emoji("⬇️").build());
         
         registry.register(new ToolEntry.Builder()
@@ -76,6 +88,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string"), "limit", Map.of("type", "integer", "default", 10)),
                     "required", List.of("path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
+            .requiresApproval(false)
             .handler(this::gitLog).emoji("📜").build());
         
         registry.register(new ToolEntry.Builder()
@@ -85,6 +99,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("path", Map.of("type", "string"), "create", Map.of("type", "string"), "switch", Map.of("type", "string")),
                     "required", List.of("path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
+            .requiresApproval(false)
             .handler(this::gitBranch).emoji("🌿").build());
         
         registry.register(new ToolEntry.Builder()
@@ -94,6 +110,8 @@ public class GitTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("url", Map.of("type", "string"), "path", Map.of("type", "string")),
                     "required", List.of("url", "path"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .handler(this::gitClone).emoji("📥").build());
     }
     

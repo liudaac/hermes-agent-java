@@ -1,5 +1,8 @@
 package com.nousresearch.hermes.tools;
 
+import com.nousresearch.hermes.approval.ApprovalSystem;
+import com.nousresearch.hermes.approval.ToolRisk;
+
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -19,6 +22,12 @@ public class ToolEntry {
     private final String emoji;
     private final Long maxResultSizeChars;
     
+    // Approval / risk fields
+    private final ToolRisk risk;
+    private final boolean requiresApproval;
+    private final String approvalMessageTemplate;
+    private final ApprovalSystem.ApprovalType approvalType;
+    
     public ToolEntry(
             String name,
             String toolset,
@@ -28,7 +37,11 @@ public class ToolEntry {
             boolean async,
             String description,
             String emoji,
-            Long maxResultSizeChars) {
+            Long maxResultSizeChars,
+            ToolRisk risk,
+            boolean requiresApproval,
+            String approvalMessageTemplate,
+            ApprovalSystem.ApprovalType approvalType) {
         this.name = name;
         this.toolset = toolset;
         this.schema = schema;
@@ -38,6 +51,10 @@ public class ToolEntry {
         this.description = description;
         this.emoji = emoji;
         this.maxResultSizeChars = maxResultSizeChars;
+        this.risk = risk != null ? risk : ToolRisk.NONE;
+        this.requiresApproval = requiresApproval;
+        this.approvalMessageTemplate = approvalMessageTemplate != null ? approvalMessageTemplate : "";
+        this.approvalType = approvalType != null ? approvalType : ApprovalSystem.ApprovalType.TERMINAL_COMMAND;
     }
     
     // Getters
@@ -50,6 +67,10 @@ public class ToolEntry {
     public String getDescription() { return description; }
     public String getEmoji() { return emoji; }
     public Long getMaxResultSizeChars() { return maxResultSizeChars; }
+    public ToolRisk getRisk() { return risk; }
+    public boolean requiresApproval() { return requiresApproval; }
+    public String getApprovalMessageTemplate() { return approvalMessageTemplate; }
+    public ApprovalSystem.ApprovalType getApprovalType() { return approvalType; }
     
     /**
      * Builder for ToolEntry.
@@ -64,6 +85,10 @@ public class ToolEntry {
         private String description = "";
         private String emoji = "⚡";
         private Long maxResultSizeChars = null;
+        private ToolRisk risk = ToolRisk.NONE;
+        private boolean requiresApproval = false;
+        private String approvalMessageTemplate = "";
+        private ApprovalSystem.ApprovalType approvalType = null;
         
         public Builder name(String name) {
             this.name = name;
@@ -110,12 +135,33 @@ public class ToolEntry {
             return this;
         }
         
+        public Builder risk(ToolRisk risk) {
+            this.risk = risk;
+            return this;
+        }
+        
+        public Builder requiresApproval(boolean requiresApproval) {
+            this.requiresApproval = requiresApproval;
+            return this;
+        }
+        
+        public Builder approvalMessageTemplate(String approvalMessageTemplate) {
+            this.approvalMessageTemplate = approvalMessageTemplate;
+            return this;
+        }
+        
+        public Builder approvalType(ApprovalSystem.ApprovalType approvalType) {
+            this.approvalType = approvalType;
+            return this;
+        }
+        
         public ToolEntry build() {
             if (name == null || toolset == null || schema == null || handler == null) {
                 throw new IllegalStateException("name, toolset, schema, and handler are required");
             }
             return new ToolEntry(name, toolset, schema, handler, requiresEnv, 
-                async, description, emoji, maxResultSizeChars);
+                async, description, emoji, maxResultSizeChars,
+                risk, requiresApproval, approvalMessageTemplate, approvalType);
         }
     }
 }

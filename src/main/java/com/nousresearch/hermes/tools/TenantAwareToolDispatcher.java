@@ -29,6 +29,10 @@ import java.util.Optional;
 /**
  * FIXED: Tenant-aware tool dispatcher that routes all tool calls through tenant sandbox.
  */
+import com.nousresearch.hermes.approval.ApprovalMessageHandler;
+import com.nousresearch.hermes.approval.ApprovalResult;
+import com.nousresearch.hermes.approval.ApprovalSystem;
+
 public class TenantAwareToolDispatcher {
     private static final Logger logger = LoggerFactory.getLogger(TenantAwareToolDispatcher.class);
     private static final int MAX_SEARCH_RESULTS = 100;
@@ -36,9 +40,21 @@ public class TenantAwareToolDispatcher {
     private final TenantContext tenantContext;
     private final ToolRegistry globalRegistry;
     
+    // Per-tenant approval system (NOT shared across tenants)
+    private ApprovalSystem approvalSystem;
+    private ApprovalMessageHandler approvalMessageHandler;
+    
     public TenantAwareToolDispatcher(TenantContext tenantContext, ToolRegistry globalRegistry) {
         this.tenantContext = tenantContext;
         this.globalRegistry = globalRegistry;
+    }
+    
+    public void setApprovalSystem(ApprovalSystem approvalSystem) {
+        this.approvalSystem = approvalSystem;
+    }
+    
+    public void setApprovalMessageHandler(ApprovalMessageHandler handler) {
+        this.approvalMessageHandler = handler;
     }
     
     public String dispatch(String toolName, Map<String, Object> args) {
@@ -65,6 +81,46 @@ public class TenantAwareToolDispatcher {
         var permission = tenantContext.getToolRegistry().checkPermission(toolName, safeArgs);
         if (!permission.isAllowed()) {
             return ToolRegistry.toolError(permission.getReason());
+        }
+
+        // Per-tenant approval check BEFORE execution
+        if (approvalSystem != null) {
+            var optEntry = globalRegistry.getAllTools().stream()
+                .filter(t -> t.getName().equals(toolName))
+                .findFirst();
+            if (optEntry.isPresent() && optEntry.get().requiresApproval()) {
+                var entry = optEntry.get();
+                String operation = entry.getApprovalMessageTemplate();
+                if (operation == null || operation.isEmpty()) {
+                    operation = toolName + " with args: " + safeArgs;
+                } else {
+                    for (var ae : safeArgs.entrySet()) {
+                        String val = String.valueOf(ae.getValue());
+                        if (val.length() > 100) val = val.substring(0, 97) + "...";
+                        operation = operation.replace("{" + ae.getKey() + "}", val);
+                    }
+                }
+                String details = "Tenant: " + tenantContext.getTenantId()
+                    + ", Tool: " + toolName + " (risk: " + entry.getRisk() + ")";
+                
+                approvalSystem.setMode(entry.getApprovalType(), entry.getRisk().toDefaultMode());
+                
+                if (approvalMessageHandler != null) {
+                    final String op = operation;
+                    approvalSystem.setExternalApprover(request ->
+                        approvalMessageHandler.registerRequest(tenantContext.getTenantId(),
+                            (com.nousresearch.hermes.approval.ApprovalRequest) request));
+                }
+                
+                ApprovalResult approval = approvalSystem.requestApproval(
+                    entry.getApprovalType(), operation, details);
+                
+                if (!approval.isApproved()) {
+                    String denied = ToolRegistry.toolError("Approval denied: " + approval.getReason());
+                    tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, denied);
+                    return denied;
+                }
+            }
         }
 
         String result;

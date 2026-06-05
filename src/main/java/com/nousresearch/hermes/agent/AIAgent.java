@@ -61,6 +61,10 @@ public class AIAgent {
     private ReflectionEngine reflectionEngine;
     private SkillManager skillManager;
     private String pendingSkillCandidate;
+    
+    // Approval system
+    private com.nousresearch.hermes.approval.ApprovalSystem approvalSystem;
+    private com.nousresearch.hermes.approval.ApprovalMessageHandler approvalMessageHandler;
 
     // Nudge intervals for self-improvement (aligned with Python Hermes)
     private int memoryNudgeInterval = 10;      // Nudge every 10 user turns
@@ -190,6 +194,24 @@ public class AIAgent {
     /**
      * Initialize learning components for the self-improvement loop.
      */
+    /**
+     * Initialize the approval system for human-in-the-loop safety.
+     */
+    private void initApprovalSystem() {
+        this.approvalSystem = new com.nousresearch.hermes.approval.ApprovalSystem();
+        this.approvalMessageHandler = new com.nousresearch.hermes.approval.ApprovalMessageHandler();
+        
+        int timeoutSec = com.nousresearch.hermes.config.ConfigManager.getInstance()
+            .getInt("approval.timeout_seconds", 300);
+        
+        // Approval is per-agent, NOT on the global ToolRegistry singleton.
+        // Each agent/tenant checks approval in its own executeToolCall.
+        
+        logger.info("Approval system initialized for agent {} (timeout={}s)", sessionId, timeoutSec);
+        
+        // Wire sub-agent shared memory callback
+    }
+
     private void initializeLearningComponents() {
         this.trajectoryCollector = new TrajectoryCollector();
         this.skillManager = new SkillManager();
@@ -834,6 +856,49 @@ public class AIAgent {
             Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readValue(arguments, Map.class);
 
+            // Per-agent approval check (tenant-safe: each agent has its own ApprovalSystem)
+            if (approvalSystem != null) {
+                var optEntry = toolRegistry.getAllTools().stream()
+                    .filter(t -> t.getName().equals(toolName))
+                    .findFirst();
+                if (optEntry.isPresent()) {
+                    var entry = optEntry.get();
+                    if (entry.requiresApproval()) {
+                        String operation = entry.getApprovalMessageTemplate();
+                        if (operation == null || operation.isEmpty()) {
+                            operation = toolName + " with args: " + args;
+                        } else {
+                            for (Map.Entry<String, Object> ae : args.entrySet()) {
+                                String val = String.valueOf(ae.getValue());
+                                if (val.length() > 100) val = val.substring(0, 97) + "...";
+                                operation = operation.replace("{" + ae.getKey() + "}", val);
+                            }
+                        }
+                        String details = "Tool: " + toolName + " (risk: " + entry.getRisk() + ")";
+                        
+                        approvalSystem.setMode(entry.getApprovalType(), entry.getRisk().toDefaultMode());
+                        
+                        if (approvalMessageHandler != null) {
+                            final String op = operation;
+                            approvalSystem.setExternalApprover(request -> {
+                                String uid = com.nousresearch.hermes.config.ConfigManager.getInstance()
+                                    .getString("approval.user_id", sessionId);
+                                approvalMessageHandler.registerRequest(uid,
+                                    (com.nousresearch.hermes.approval.ApprovalRequest) request);
+                            });
+                        }
+                        
+                        com.nousresearch.hermes.approval.ApprovalResult result =
+                            approvalSystem.requestApproval(
+                                entry.getApprovalType(), operation, details);
+                        
+                        if (!result.isApproved()) {
+                            return ToolRegistry.toolError("Approval denied: " + result.getReason());
+                        }
+                    }
+                }
+            }
+
             // Dispatch to tool registry
             return toolRegistry.dispatch(toolName, args);
 
@@ -992,6 +1057,13 @@ public class AIAgent {
             case "/help":
                 printHelp();
                 break;
+            case "/approve":
+            case "/deny":
+            case "/approve-session":
+            case "/allow-once":
+            case "/allow-always":
+                handleApprovalCommand(command);
+                break;
             case "/create-skill":
                 createSkillFromPendingCandidate();
                 break;
@@ -1009,6 +1081,31 @@ public class AIAgent {
         }
 
         return false;
+    }
+
+    /**
+     * Handle approval commands from the user.
+     */
+    private void handleApprovalCommand(String rawCommand) {
+        if (approvalMessageHandler == null) {
+            System.out.println("Approval system not initialized.");
+            return;
+        }
+        
+        String cmd = rawCommand.trim().toLowerCase();
+        String response;
+        
+        if (cmd.startsWith("/allow-once") || cmd.startsWith("/approve")) {
+            response = approvalMessageHandler.handleApproveCommand("cli-user", rawCommand);
+        } else if (cmd.startsWith("/allow-always") || cmd.startsWith("/approve-session")) {
+            response = approvalMessageHandler.handleApproveSessionCommand("cli-user", rawCommand);
+        } else if (cmd.startsWith("/deny")) {
+            response = approvalMessageHandler.handleDenyCommand("cli-user", rawCommand);
+        } else {
+            response = "Unknown approval command.";
+        }
+        
+        System.out.println(response);
     }
 
     /**

@@ -35,12 +35,18 @@ public class CronjobTool {
                         "command", Map.of("type", "string"),
                         "timezone", Map.of("type", "string", "default", "UTC")),
                     "required", List.of("name", "schedule", "command"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
+            .requiresApproval(true)
+            .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
+            .approvalMessageTemplate("Add cron job: {command}")
             .handler(this::addJob).emoji("⏰").build());
         
         registry.register(new ToolEntry.Builder()
             .name("cronjob_list")
             .toolset("cronjob")
             .schema(Map.of("description", "List scheduled jobs"))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
+            .requiresApproval(false)
             .handler(args -> listJobs()).emoji("📋").build());
         
         registry.register(new ToolEntry.Builder()
@@ -50,6 +56,10 @@ public class CronjobTool {
                 "parameters", Map.of("type", "object",
                     "properties", Map.of("name", Map.of("type", "string")),
                     "required", List.of("name"))))
+            .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
+            .requiresApproval(true)
+            .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
+            .approvalMessageTemplate("Remove cron job")
             .handler(this::removeJob).emoji("🗑️").build());
     }
     

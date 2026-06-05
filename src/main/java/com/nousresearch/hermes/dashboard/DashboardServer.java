@@ -3,6 +3,8 @@ package com.nousresearch.hermes.dashboard;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
+import java.util.function.Supplier;
+import java.util.Map;
 import com.nousresearch.hermes.config.HermesConfig;
 import java.nio.file.Path;
 import com.nousresearch.hermes.tenant.core.TenantManager;
@@ -21,6 +23,7 @@ import java.util.Base64;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.Map;
 
 /**
  * Hermes Dashboard Web Server.
@@ -66,10 +69,12 @@ public class DashboardServer {
     private final CronHandler cronHandler;
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
+    private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     
     // Tenant Manager
     private final TenantManager tenantManager;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
+    private Supplier<Map<String, Object>> orgStatsSupplier;
 
     public DashboardServer(int port, String host, HermesConfig config) {
         this(port, host, config, new TenantManager(), GatewayRuntimeStatus::disconnected);

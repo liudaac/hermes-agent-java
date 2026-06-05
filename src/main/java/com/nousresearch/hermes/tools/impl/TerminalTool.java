@@ -58,6 +58,10 @@ public class TerminalTool {
             ))
             .handler(TerminalTool::execute)
             .emoji("⚡")
+            .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
+            .requiresApproval(true)
+            .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
+            .approvalMessageTemplate("Terminal command: {command}")
             .build());
     }
     

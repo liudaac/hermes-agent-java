@@ -9,6 +9,8 @@ import com.nousresearch.hermes.plugin.hook.HookType;
 import com.nousresearch.hermes.tenant.core.*;
 import com.nousresearch.hermes.tenant.quota.QuotaExceededException;
 import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
+import com.nousresearch.hermes.approval.ApprovalMessageHandler;
+import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +34,13 @@ public class TenantAwareAIAgent {
     private final String tenantId;
     private final String sessionId;
     private final TenantContext tenantContext;
+    
+    // Persistent tool dispatcher (created once, reused for all calls)
+    private TenantAwareToolDispatcher toolDispatcher;
+    
+    // Per-tenant approval system
+    private ApprovalSystem approvalSystem;
+    private ApprovalMessageHandler approvalMessageHandler;
     private final HermesConfig config;
 
     // 核心组件（复用现有逻辑）
@@ -157,6 +166,7 @@ public class TenantAwareAIAgent {
         this.sessionId = explicitSessionId != null ? explicitSessionId
             : "cli_" + UUID.randomUUID().toString().substring(0, 8);
         this.tenantContext = context;
+        this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
 
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
@@ -173,6 +183,7 @@ public class TenantAwareAIAgent {
 
         initializeLearningComponents();
         initializeTools();
+        initTenantApproval();
 
         logger.info("Created TenantAwareAIAgent for existing tenant context: {}, session: {}",
             this.tenantId, this.sessionId);
@@ -193,6 +204,7 @@ public class TenantAwareAIAgent {
         } else {
             // Fallback for non-tenant mode
             this.tenantContext = null;
+        this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
         }
 
         // 初始化核心组件
@@ -213,6 +225,7 @@ public class TenantAwareAIAgent {
 
         // 初始化工具
         initializeTools();
+        initTenantApproval();
 
         logger.info("Created TenantAwareAIAgent for tenant: {}, session: {}", tenantId, this.sessionId);
     }
@@ -867,6 +880,26 @@ public class TenantAwareAIAgent {
         return count;
     }
 
+    // ==================== Approval ====================
+    
+    /**
+     * Initialize per-tenant approval system and wire into the tool dispatcher.
+     */
+    private void initTenantApproval() {
+        this.approvalSystem = new ApprovalSystem();
+        this.approvalMessageHandler = new ApprovalMessageHandler();
+        
+        // Wire to the persistent tool dispatcher
+        if (toolDispatcher != null) {
+            toolDispatcher.setApprovalSystem(approvalSystem);
+            toolDispatcher.setApprovalMessageHandler(approvalMessageHandler);
+        }
+        
+        // Wire sub-agent shared memory callback for this tenant
+        
+        logger.info("Tenant approval system initialized for: {}", tenantId);
+    }
+    
     // ==================== Tool Execution ====================
 
     private String executeToolCall(ToolCall toolCall) {
@@ -880,11 +913,9 @@ public class TenantAwareAIAgent {
             Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readValue(arguments, Map.class);
 
-            // Use TenantAwareToolDispatcher for proper sandbox isolation
-            if (tenantContext != null) {
-                TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(
-                    tenantContext, ToolRegistry.getInstance());
-                return dispatcher.dispatch(toolName, args);
+            // Use persistent TenantAwareToolDispatcher (approval-aware)
+            if (toolDispatcher != null) {
+                return toolDispatcher.dispatch(toolName, args);
             } else {
                 // Fallback to global registry (non-tenant mode)
                 var entry = ToolRegistry.getInstance().getAllTools().stream()

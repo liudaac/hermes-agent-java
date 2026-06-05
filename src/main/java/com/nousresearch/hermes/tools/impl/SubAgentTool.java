@@ -47,6 +47,8 @@ public class SubAgentTool {
             ))
             .handler(SubAgentTool::spawnSubAgent)
             .emoji("🤖")
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .build());
         
         // subagent_spawn_parallel
@@ -78,6 +80,8 @@ public class SubAgentTool {
             ))
             .handler(SubAgentTool::spawnParallel)
             .emoji("🤖🤖")
+            .risk(com.nousresearch.hermes.approval.ToolRisk.LOW)
+            .requiresApproval(false)
             .build());
     }
     
@@ -116,6 +120,8 @@ public class SubAgentTool {
             return ToolRegistry.toolError("Spawn failed: " + e.getMessage());
         }
     }
+    
+
     
     /**
      * Spawn multiple sub-agents in parallel.

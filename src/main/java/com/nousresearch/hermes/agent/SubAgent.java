@@ -113,8 +113,29 @@ public class SubAgent implements Callable<SubAgentResult> {
             
             long duration = System.currentTimeMillis() - startTime;
             
+            // Extract insights from sub-agent's work for shared memory
+            java.util.List<String> insights = new java.util.ArrayList<>();
+            java.util.List<String> memories = new java.util.ArrayList<>();
+            try {
+                com.nousresearch.hermes.trajectory.InsightExtractor extractor = 
+                    new com.nousresearch.hermes.trajectory.InsightExtractor();
+                var entry = new com.nousresearch.hermes.trajectory.TrajectoryEntry();
+                entry.setConversations(new java.util.ArrayList<>(conversationHistory));
+                entry.setCompleted(completed);
+                insights = extractor.extract(entry);
+                for (String insight : insights) {
+                    if (insight.startsWith("Tools used:") || insight.startsWith("User preference:") 
+                        || insight.startsWith("Memory hint:")) {
+                        memories.add(insight);
+                    }
+                }
+                logger.info("[SubAgent {}] Extracted {} insights, {} memories", id, insights.size(), memories.size());
+            } catch (Exception ex) {
+                logger.debug("[SubAgent {}] Insight extraction skipped: {}", id, ex.getMessage());
+            }
+            
             result = new SubAgentResult(id, task, output.toString(), completed, 
-                completed, null, budget.getUsed(), duration);
+                completed, null, budget.getUsed(), duration, insights, memories);
             
             logger.info("[SubAgent {}] Completed in {}ms ({} iterations)", 
                 id, duration, budget.getUsed());
