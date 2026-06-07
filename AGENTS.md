@@ -196,6 +196,35 @@ skills/
 
 ---
 
+## AI 组织原生化 (org module) 🆕
+
+**时间**: 2026-06-07
+**状态**: 编译通过 ✅ | 测试通过 ✅ (29/29)
+
+### 已交付模块
+
+| 优先级 | 模块 | 核心能力 | 文件 |
+|--------|------|---------|------|
+| 🔴 P0 | `org/identity/` | Agent 身份、API Key/OAuth/TLS 凭证、HMAC 消息签名 | 3 |
+| 🔴 P0 | `org/handoff/` | 人机交接协议、SLA 监控（4级优先级）、自动升级链路 | 2 |
+| 🔴 P0 | `org/auth/` | RBAC(4预置角色+自定义) + ABAC(6内置策略) + 统一权限引擎 | 3 |
+| 🟡 P1 | `org/knowledge/` | 组织知识库、全文/标签/语义搜索、RAG 上下文构建、向量检索集成点 | 2 |
+| 🟡 P1 | `org/workflow/` | 持久化工作流引擎、DAG依赖解析、Saga补偿、人工检查点 | 3 |
+| 🟡 P1 | `org/eval/` | Agent 评估框架、A/B 对比、性能漂移检测、多维度评分 | 1 |
+| 🟢 P2 | `org/market/` | Agent 模板市场(5内置模板)、一键安装、成本归因+预算+模型比价 | 3 |
+
+### 预定义 Agent 模板
+
+| 模板 | ID | 类别 | 核心能力 |
+|------|-----|------|---------|
+| 🔍 Code Review Bot | `code-review` | dev | PR 审查、安全检查、代码风格 |
+| 🚀 Release Manager | `release-manager` | devops | CI/CD、变更日志、部署编排 |
+| 💬 Customer Support | `customer-support` | support | 知识库问答、工单升级 |
+| 🛡️ Security Auditor | `security-auditor` | security | 漏洞扫描、合规检查 |
+| 📊 Data Analyst | `data-analyst` | analytics | 数据分析、报表、可视化 |
+
+---
+
 ## 架构概览
 
 ```
