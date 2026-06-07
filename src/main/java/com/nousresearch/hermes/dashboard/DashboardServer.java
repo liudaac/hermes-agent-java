@@ -70,6 +70,7 @@ public class DashboardServer {
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
+    private final OrgApiHandler orgApiHandler = new OrgApiHandler();
     
     // Tenant Manager
     private final TenantManager tenantManager;
@@ -99,6 +100,8 @@ public class DashboardServer {
         // Initialize handlers
         this.configHandler = new ConfigHandler(config);
         this.sessionHandler = new SessionHandler();
+        // Wire AI-native org overview to real tenant data
+        this.orgOverviewHandler.setTenantManager(tenantManager);
         this.envHandler = new EnvHandler();
         this.logsHandler = new LogsHandler();
         this.skillsHandler = new SkillsHandler();
@@ -345,6 +348,37 @@ public class DashboardServer {
 
         // ========== Tenant Management APIs ==========
         TenantDashboardIntegration.registerRoutes(app, tenantManager);
+
+        // ========== AI原生组织 API ==========
+        app.get("/api/organization/overview", orgOverviewHandler::getOverview);
+        app.get("/api/organization/agents", orgOverviewHandler::getAgents);
+        app.get("/api/organization/health", orgOverviewHandler::getHealth);
+
+        // --- AI-Native Org API (P0-P3 modules) ---
+        app.get("/api/org/summary", orgApiHandler::fullOrgSummary);
+        app.get("/api/org/identity", orgApiHandler::identitySummary);
+        app.get("/api/org/identity/list", orgApiHandler::identityList);
+        app.get("/api/org/identity/warnings", orgApiHandler::identityWarnings);
+        app.get("/api/org/handoff", orgApiHandler::handoffSummary);
+        app.get("/api/org/handoff/pending", orgApiHandler::handoffPending);
+        app.get("/api/org/auth", orgApiHandler::authSummary);
+        app.get("/api/org/auth/subjects", orgApiHandler::authSubjects);
+        app.get("/api/org/knowledge", orgApiHandler::knowledgeSummary);
+        app.get("/api/org/knowledge/search", orgApiHandler::knowledgeSearch);
+        app.get("/api/org/workflow", orgApiHandler::workflowSummary);
+        app.get("/api/org/workflow/list", orgApiHandler::workflowList);
+        app.get("/api/org/workflow/waiting", orgApiHandler::workflowWaiting);
+        app.get("/api/org/market", orgApiHandler::marketSummary);
+        app.get("/api/org/market/templates", orgApiHandler::marketTemplates);
+        app.get("/api/org/cost", orgApiHandler::costSummary);
+        app.get("/api/org/observe", orgApiHandler::observeSummary);
+        app.get("/api/org/observe/anomalies", orgApiHandler::observeAnomalies);
+        app.get("/api/org/distributed", orgApiHandler::distributedSummary);
+        app.get("/api/org/distributed/nodes", orgApiHandler::distributedNodes);
+        app.get("/api/org/evolution", orgApiHandler::evolutionSummary);
+        app.get("/api/org/evolution/failures", orgApiHandler::evolutionFailures);
+        app.get("/api/org/evolution/patterns", orgApiHandler::evolutionPatterns);
+        app.get("/api/org/compliance", orgApiHandler::complianceSummary);
 
         // Dashboard themes API
         app.get("/api/dashboard/themes", ctx -> {

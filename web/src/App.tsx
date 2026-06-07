@@ -23,7 +23,9 @@ import {
   Eye,
   Users,
   Bot,
+  Layout,
   ArrowLeftRight,
+  Layout,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -38,6 +40,7 @@ import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
 import ToolsPage from "@/pages/ToolsPage";
 import TenantsPage from "@/pages/TenantsPage";
+import OrgPage from "@/pages/OrgPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import PlaygroundPage from "@/pages/PlaygroundPage";
@@ -261,9 +264,11 @@ export default function App() {
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
+  { path: "/org", label: "Org", icon: Layout },
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 
+          <Route path="/org" element={<OrgPage />} />
           {plugins.map(({ manifest, component: PluginComponent }) => (
             <Route
               key={manifest.name}
