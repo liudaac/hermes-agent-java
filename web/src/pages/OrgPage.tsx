@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useI18n } from "@/i18n";
 
 interface OrgSummary {
   [key: string]: any;
@@ -32,21 +33,20 @@ interface AnomalyItem {
   type: string; agent: string; message: string; time: string;
 }
 
-const MODULES = [
-  { id: "overview", icon: Layout, label: "Overview" },
-  { id: "identity", icon: Users, label: "Identity" },
-  { id: "handoff", icon: Clipboard, label: "Handoffs" },
-  { id: "auth", icon: Shield, label: "Auth" },
-  { id: "knowledge", icon: BookOpen, label: "Knowledge" },
-  { id: "workflow", icon: GitBranch, label: "Workflows" },
-  { id: "market", icon: Store, label: "Market" },
-  { id: "observe", icon: Activity, label: "Observe" },
-  { id: "distributed", icon: Network, label: "Distributed" },
-  { id: "evolution", icon: Brain, label: "Evolution" },
-  { id: "compliance", icon: Monitor, label: "Compliance" },
-];
+const TAB_KEYS = [
+  "overview", "identity", "handoff", "auth", "knowledge",
+  "workflow", "market", "observe", "distributed", "evolution", "compliance"
+] as const;
+
+const TAB_ICONS: Record<string, any> = {
+  overview: Layout, identity: Users, handoff: Clipboard,
+  auth: Shield, knowledge: BookOpen, workflow: GitBranch,
+  market: Store, observe: Activity, distributed: Network,
+  evolution: Brain, compliance: Monitor,
+};
 
 export default function OrgPage() {
+  const { t } = useI18n();
   const [summary, setSummary] = useState<OrgSummary>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -71,7 +71,7 @@ export default function OrgPage() {
 
   const fetchNodes = async () => { try { const r = await fetchJSON<any>("/api/org/distributed/nodes"); setNodes(r.nodes || []); } catch {} };
   const fetchHandoffs = async () => { try { const r = await fetchJSON<any>("/api/org/handoff/pending"); setHandoffs(r.handoffs || []); } catch {} };
-  const fetchTemplates = async () => { try { const r = await fetchJSON<any>("/api/org/market/templates"); setTemplates(r.templates || []); } catch {} };
+  const fetchTemplates = async () => { try { const r = await fetchJSON<any>("/api/org/templates"); setTemplates(r.templates || []); } catch {} };
   const fetchAnomalies = async () => { try { const r = await fetchJSON<any>("/api/org/observe/anomalies?n=10"); setAnomalies(r.anomalies || []); } catch {} };
 
   useEffect(() => { fetchOrg(); }, [fetchOrg]);
@@ -89,7 +89,7 @@ export default function OrgPage() {
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <WifiOff className="h-12 w-12 text-muted-foreground" />
         <p className="text-muted-foreground">{error}</p>
-        <p className="text-xs text-muted-foreground">Wire modules via DashboardServer to enable org features</p>
+        <p className="text-xs text-muted-foreground">{t.org.wireHint}</p>
       </div>
     );
   }
@@ -98,11 +98,11 @@ export default function OrgPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">AI-Native Organization</h1>
-          <p className="text-muted-foreground text-sm">Real-time organizational intelligence dashboard</p>
+          <h1 className="text-2xl font-bold">{t.org.title}</h1>
+          <p className="text-muted-foreground text-sm">{t.org.subtitle}</p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchOrg}>
-          <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+          <RefreshCw className="h-4 w-4 mr-2" /> {t.org.refresh}
         </Button>
       </div>
 
@@ -110,18 +110,21 @@ export default function OrgPage() {
         {(active, setActive) => (
           <>
             <TabsList className="w-full overflow-x-auto">
-              {MODULES.map(m => (
-                <TabsTrigger
-                  key={m.id}
-                  active={active === m.id}
-                  value={m.id}
-                  onClick={() => setActive(m.id)}
-                  className="gap-1.5"
-                >
-                  <m.icon className="h-3.5 w-3.5" />
-                  {m.label}
-                </TabsTrigger>
-              ))}
+              {TAB_KEYS.map(k => {
+                const Icon = TAB_ICONS[k];
+                return (
+                  <TabsTrigger
+                    key={k}
+                    active={active === k}
+                    value={k}
+                    onClick={() => setActive(k)}
+                    className="gap-1.5"
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {(t.org.tabs as any)[k]}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
 
             {active === "overview" && <OverviewTab summary={summary} />}
@@ -143,6 +146,7 @@ export default function OrgPage() {
 }
 
 function OverviewTab({ summary }: { summary: any }) {
+  const { t } = useI18n();
   const items = Object.entries(summary).map(([k, v]) => ({ key: k, data: v }));
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
@@ -159,45 +163,47 @@ function OverviewTab({ summary }: { summary: any }) {
         </Card>
       ))}
       {items.length === 0 && (
-        <p className="text-muted-foreground col-span-3 text-center py-12">No modules wired. Wire org module instances via DashboardServer.</p>
+        <p className="text-muted-foreground col-span-3 text-center py-12">{t.org.noModules}</p>
       )}
     </div>
   );
 }
 
 function IdentityTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-      <StatCard label="Total Identities" value={data.total_identities} />
-      <StatCard label="Active" value={data.active} />
-      <StatCard label="Deactivated" value={data.deactivated} />
-      <StatCard label="OIDC Bound" value={data.with_oidc} />
-      <StatCard label="Expiring Credentials" value={data.expiring_credentials} color="text-orange-500" />
+      <StatCard label={t.org.totalIdentities} value={data.total_identities} />
+      <StatCard label={t.org.active} value={data.active} />
+      <StatCard label={t.org.deactivated} value={data.deactivated} />
+      <StatCard label={t.org.oidcBound} value={data.with_oidc} />
+      <StatCard label={t.org.expiringCredentials} value={data.expiring_credentials} color="text-orange-500" />
     </div>
   );
 }
 
 function HandoffTab({ data, handoffs, onLoad }: { data: any; handoffs: HandoffItem[]; onLoad: () => void }) {
+  const { t } = useI18n();
   useEffect(() => { if (!handoffs.length) onLoad(); }, []);
   if (!data) return <EmptyModule />;
   return (
     <div className="space-y-4 mt-4">
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Pending" value={data.pending} color="text-yellow-500" />
-        <StatCard label="Acknowledged" value={data.acknowledged} />
-        <StatCard label="Escalated" value={data.escalated} color="text-red-500" />
-        <StatCard label="Resolved" value={data.total_resolved} />
+        <StatCard label={t.org.pending} value={data.pending} color="text-yellow-500" />
+        <StatCard label={t.org.acknowledged} value={data.acknowledged} />
+        <StatCard label={t.org.escalated} value={data.escalated} color="text-red-500" />
+        <StatCard label={t.org.resolved} value={data.total_resolved} />
       </div>
       {handoffs.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Pending Handoffs</h3>
+          <h3 className="text-sm font-medium">{t.org.pendingHandoffs}</h3>
           {handoffs.map(h => (
             <Card key={h.id} className="p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{h.summary}</p>
-                  <p className="text-xs text-muted-foreground">{h.agent} · <Clock className="h-3 w-3 inline" /> {new Date(h.created).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{h.agent} <Clock className="h-3 w-3 inline" /> {new Date(h.created).toLocaleString()}</p>
                 </div>
                 <Badge variant={h.priority === "CRITICAL" ? "destructive" : "outline"}>{h.priority}</Badge>
               </div>
@@ -210,57 +216,61 @@ function HandoffTab({ data, handoffs, onLoad }: { data: any; handoffs: HandoffIt
 }
 
 function AuthTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
-      <StatCard label="Subjects" value={data.rbac?.subjects} />
-      <StatCard label="Custom Roles" value={data.rbac?.custom_roles} />
-      <StatCard label="ABAC Policies" value={data.abac_policies} />
-      <StatCard label="Overrides" value={data.overrides} />
+      <StatCard label={t.org.subjects} value={data.rbac?.subjects} />
+      <StatCard label={t.org.customRoles} value={data.rbac?.custom_roles} />
+      <StatCard label={t.org.abacPolicies} value={data.abac_policies} />
+      <StatCard label={t.org.overrides} value={data.overrides} />
     </div>
   );
 }
 
 function KnowledgeTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-      <StatCard label="Total Entries" value={data.total_entries} />
-      <StatCard label="Unique Tags" value={data.unique_tags} />
-      <StatCard label="Unique Topics" value={data.unique_topics} />
-      <StatCard label="Stale Entries" value={data.stale_count} color={data.stale_count > 0 ? "text-orange-500" : ""} />
+      <StatCard label={t.org.totalEntries} value={data.total_entries} />
+      <StatCard label={t.org.uniqueTags} value={data.unique_tags} />
+      <StatCard label={t.org.uniqueTopics} value={data.unique_topics} />
+      <StatCard label={t.org.staleEntries} value={data.stale_count} color={data.stale_count > 0 ? "text-orange-500" : ""} />
     </div>
   );
 }
 
 function WorkflowTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-      <StatCard label="Active" value={data.active_workflows} color="text-blue-500" />
-      <StatCard label="Waiting Human" value={data.waiting_for_human} color="text-yellow-500" />
-      <StatCard label="Completed" value={data.completed} />
-      <StatCard label="Failed" value={data.failed} color="text-red-500" />
-      <StatCard label="Templates" value={data.template_count} />
-      <StatCard label="Compensated" value={data.compensated} />
+      <StatCard label={t.org.activeWorkflows} value={data.active_workflows} color="text-blue-500" />
+      <StatCard label={t.org.waitingHuman} value={data.waiting_for_human} color="text-yellow-500" />
+      <StatCard label={t.org.completed} value={data.completed} />
+      <StatCard label={t.org.failed} value={data.failed} color="text-red-500" />
+      <StatCard label={t.org.workflowTemplates} value={data.template_count} />
+      <StatCard label={t.org.compensated} value={data.compensated} />
     </div>
   );
 }
 
 function MarketTab({ data, cost, templates, onLoad }: { data: any; cost: any; templates: TemplateItem[]; onLoad: () => void }) {
+  const { t } = useI18n();
   useEffect(() => { if (!templates.length) onLoad(); }, []);
   return (
     <div className="space-y-4 mt-4">
       {cost && (
         <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Today" value={cost.today} icon={DollarSign} />
-          <StatCard label="This Month" value={cost.this_month} icon={TrendingUp} />
-          <StatCard label="Forecast" value={cost.forecast} icon={TrendingUp} />
+          <StatCard label={t.org.today} value={cost.today} icon={DollarSign} />
+          <StatCard label={t.org.thisMonth} value={cost.this_month} icon={TrendingUp} />
+          <StatCard label={t.org.forecast} value={cost.forecast} icon={TrendingUp} />
         </div>
       )}
       {templates.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Templates ({data?.total || 0})</h3>
+          <h3 className="text-sm font-medium">{t.org.templateTemplates.replace("{count}", String(data?.total || 0))}</h3>
           {templates.map(t => (
             <Card key={t.id} className="p-3">
               <div className="flex items-center justify-between">
@@ -279,8 +289,8 @@ function MarketTab({ data, cost, templates, onLoad }: { data: any; cost: any; te
       )}
       {data && (
         <div className="grid grid-cols-2 gap-4">
-          <StatCard label="Total Templates" value={data.total} icon={Store} />
-          <StatCard label="Total Installs" value={data.installs} icon={TrendingUp} />
+          <StatCard label={t.org.totalTemplates} value={data.total} icon={Store} />
+          <StatCard label={t.org.totalInstalls} value={data.installs} icon={TrendingUp} />
         </div>
       )}
     </div>
@@ -288,24 +298,25 @@ function MarketTab({ data, cost, templates, onLoad }: { data: any; cost: any; te
 }
 
 function ObserveTab({ data, anomalies, onLoad }: { data: any; anomalies: AnomalyItem[]; onLoad: () => void }) {
+  const { t } = useI18n();
   useEffect(() => { if (!anomalies.length) onLoad(); }, []);
   if (!data) return <EmptyModule />;
   return (
     <div className="space-y-4 mt-4">
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Active Traces" value={data.active_traces} color="text-blue-500" />
-        <StatCard label="Total Traces" value={data.total_traces} />
-        <StatCard label="Agents Tracked" value={data.agents_tracked} />
+        <StatCard label={t.org.activeTraces} value={data.active_traces} color="text-blue-500" />
+        <StatCard label={t.org.totalTraces} value={data.total_traces} />
+        <StatCard label={t.org.agentsTracked} value={data.agents_tracked} />
       </div>
       {anomalies.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 text-orange-500" /> Recent Anomalies</h3>
+          <h3 className="text-sm font-medium flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 text-orange-500" /> {t.org.recentAnomalies}</h3>
           {anomalies.map((a, i) => (
             <Card key={i} className="p-3 border-l-4 border-l-orange-500">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm">{a.message}</p>
-                  <p className="text-xs text-muted-foreground">{a.agent} · {new Date(a.time).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">{a.agent} {new Date(a.time).toLocaleString()}</p>
                 </div>
                 <Badge variant="outline">{a.type}</Badge>
               </div>
@@ -318,28 +329,29 @@ function ObserveTab({ data, anomalies, onLoad }: { data: any; anomalies: Anomaly
 }
 
 function DistributedTab({ data, nodes, onLoad }: { data: any; nodes: AgentNode[]; onLoad: () => void }) {
+  const { t } = useI18n();
   useEffect(() => { if (!nodes.length) onLoad(); }, []);
   if (!data) return <EmptyModule />;
   return (
     <div className="space-y-4 mt-4">
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Total Agents" value={data.total_agents} />
-        <StatCard label="Total Nodes" value={data.total_nodes} />
-        <StatCard label="Capabilities" value={data.capabilities?.length || 0} />
+        <StatCard label={t.org.totalAgents} value={data.total_agents} />
+        <StatCard label={t.org.totalNodes} value={data.total_nodes} />
+        <StatCard label={t.org.capabilities} value={data.capabilities?.length || 0} />
       </div>
       {nodes.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Registered Nodes</h3>
+          <h3 className="text-sm font-medium">{t.org.registeredNodes}</h3>
           {nodes.map(n => (
             <Card key={n.id} className="p-3">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium">{n.id}</p>
-                  <p className="text-xs text-muted-foreground">{n.address} · load: {n.load}</p>
+                  <p className="text-xs text-muted-foreground">{n.address} {t.org.load}: {n.load}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={n.healthy ? "default" : "destructive"} className="text-xs">{n.healthy ? "OK" : "DOWN"}</Badge>
-                  {n.tags.slice(0,3).map(t => <Badge key={t} variant="outline" className="text-xs">{t}</Badge>)}
+                  <Badge variant={n.healthy ? "default" : "destructive"} className="text-xs">{n.healthy ? t.org.ok : t.org.down}</Badge>
+                  {n.tags.slice(0,3).map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
                 </div>
               </div>
             </Card>
@@ -351,23 +363,25 @@ function DistributedTab({ data, nodes, onLoad }: { data: any; nodes: AgentNode[]
 }
 
 function EvolutionTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-      <StatCard label="Total Failures" value={data.total_failures} />
-      <StatCard label="Resolved" value={data.resolved} />
-      <StatCard label="Resolution Rate" value={data.resolution_rate} />
-      <StatCard label="Pending Suggestions" value={data.pending_suggestions} />
+      <StatCard label={t.org.totalFailures} value={data.total_failures} />
+      <StatCard label={t.org.resolved} value={data.resolved} />
+      <StatCard label={t.org.resolutionRate} value={data.resolution_rate} />
+      <StatCard label={t.org.pendingSuggestions} value={data.pending_suggestions} />
     </div>
   );
 }
 
 function ComplianceTab({ data }: { data: any }) {
+  const { t } = useI18n();
   if (!data) return <EmptyModule />;
   return (
     <div className="grid grid-cols-2 gap-4 mt-4">
-      <StatCard label="Residency Rules" value={data.residency_rules} />
-      <StatCard label="Agents w/ Regions" value={data.agents_with_regions} />
+      <StatCard label={t.org.residencyRules} value={data.residency_rules} />
+      <StatCard label={t.org.agentsWithRegions} value={data.agents_with_regions} />
     </div>
   );
 }
@@ -387,11 +401,12 @@ function StatCard({ label, value, color, icon: Icon }: { label: string; value: a
 }
 
 function EmptyModule() {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col items-center justify-center h-48 mt-4 text-center">
       <Network className="h-10 w-10 text-muted-foreground/30 mb-3" />
-      <p className="text-muted-foreground">Module not yet wired</p>
-      <p className="text-xs text-muted-foreground">Wire via orgApiHandler.with("moduleName", instance)</p>
+      <p className="text-muted-foreground">{t.org.notWired}</p>
+      <p className="text-xs text-muted-foreground">{t.org.wireEmpty}</p>
     </div>
   );
 }
