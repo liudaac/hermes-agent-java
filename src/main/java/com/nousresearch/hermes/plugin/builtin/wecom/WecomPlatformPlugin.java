@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Built-in WeCom (Enterprise WeChat) platform adapter plugin.
  */
-public class WeComPlatformPlugin implements Plugin {
-    private static final Logger logger = LoggerFactory.getLogger(WeComPlatformPlugin.class);
+public class WecomPlatformPlugin implements Plugin {
+    private static final Logger logger = LoggerFactory.getLogger(WecomPlatformPlugin.class);
 
     @Override
     public void register(PluginContext ctx) {
