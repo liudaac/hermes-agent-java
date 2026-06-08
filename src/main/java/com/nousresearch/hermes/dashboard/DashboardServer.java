@@ -3,6 +3,17 @@ package com.nousresearch.hermes.dashboard;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
+import com.nousresearch.hermes.org.auth.PermissionPolicy;
+import com.nousresearch.hermes.org.compliance.ComplianceFramework;
+import com.nousresearch.hermes.org.distributed.AgentRegistry;
+import com.nousresearch.hermes.org.evolution.SelfEvolutionEngine;
+import com.nousresearch.hermes.org.handoff.HandoffProtocol;
+import com.nousresearch.hermes.org.identity.AgentIdentityManager;
+import com.nousresearch.hermes.org.knowledge.OrganizationalKnowledgeBase;
+import com.nousresearch.hermes.org.market.AgentMarketplace;
+import com.nousresearch.hermes.org.market.CostAttribution;
+import com.nousresearch.hermes.org.observe.AgentObservability;
+import com.nousresearch.hermes.org.workflow.WorkflowEngine;
 import java.util.function.Supplier;
 import java.util.Map;
 import com.nousresearch.hermes.config.HermesConfig;
@@ -70,7 +81,18 @@ public class DashboardServer {
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
-    private final OrgApiHandler orgApiHandler = new OrgApiHandler();
+    private final OrgApiHandler orgApiHandler = new OrgApiHandler()
+            .with("identity", new AgentIdentityManager())
+            .with("handoff", new HandoffProtocol())
+            .with("auth", new PermissionPolicy())
+            .with("knowledge", new OrganizationalKnowledgeBase())
+            .with("workflow", new WorkflowEngine(java.nio.file.Paths.get(System.getProperty("user.home"), ".hermes", "workflows")))
+            .with("market", new AgentMarketplace())
+            .with("cost", new CostAttribution())
+            .with("observe", new AgentObservability())
+            .with("distributed", new AgentRegistry())
+            .with("evolution", new SelfEvolutionEngine())
+            .with("compliance", new ComplianceFramework());
     
     // Tenant Manager
     private final TenantManager tenantManager;
