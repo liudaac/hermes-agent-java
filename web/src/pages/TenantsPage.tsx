@@ -28,13 +28,14 @@ import type {
   TenantUsage,
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
+import { useI18n } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 function formatTime(value?: string): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
@@ -53,12 +54,12 @@ function stateIcon(state: string) {
 }
 
 function formatNumber(value: number | undefined): string {
-  if (value === undefined || Number.isNaN(value)) return "—";
+  if (value === undefined || Number.isNaN(value)) return "-";
   return new Intl.NumberFormat().format(value);
 }
 
 function formatBytes(value: number | undefined): string {
-  if (value === undefined || Number.isNaN(value)) return "—";
+  if (value === undefined || Number.isNaN(value)) return "-";
   if (value < 1024) return `${value} B`;
   const units = ["KB", "MB", "GB", "TB"];
   let current = value / 1024;
@@ -127,6 +128,7 @@ export default function TenantsPage() {
     deniedTools: "",
     deniedPaths: "",
   });
+  const { t } = useI18n();
   const { showToast } = useToast();
 
   const loadTenants = async () => {
@@ -138,7 +140,7 @@ export default function TenantsPage() {
         setSelectedTenantId(response.tenants[0].tenantId);
       }
     } catch (e) {
-      showToast(`Failed to load tenants: ${e}`, "error");
+      showToast(t.tenants.toastFailedLoad.replace("{error}", String(e)), "error");
     } finally {
       setLoading(false);
     }
@@ -191,7 +193,7 @@ export default function TenantsPage() {
         deniedPaths: listToCsv(security.deniedPaths),
       });
     } catch (e) {
-      showToast(`Failed to load tenant details: ${e}`, "error");
+      showToast(t.tenants.toastFailedLoad.replace("{error}", String(e)), "error");
       setSelectedTenant(null);
       setTenantSkills([]);
       setTenantQuota(null);
@@ -244,10 +246,10 @@ export default function TenantsPage() {
       await api.createTenant(tenantId);
       setNewTenantId("");
       setSelectedTenantId(tenantId);
-      showToast(`Tenant ${tenantId} created`, "success");
+      showToast(t.tenants.toastCreated.replace("{id}", tenantId), "success");
       await loadTenants();
     } catch (e) {
-      showToast(`Failed to create tenant: ${e}`, "error");
+      showToast(t.tenants.toastCreateFailed.replace("{error}", String(e)), "error");
     } finally {
       setCreating(false);
     }
@@ -257,7 +259,7 @@ export default function TenantsPage() {
     tenantId: string,
     action: "suspend" | "resume" | "delete",
   ) => {
-    if (action === "delete" && !confirm(`Delete tenant "${tenantId}"?`)) {
+    if (action === "delete" && !confirm(t.tenants.deleteConfirm.replace("{id}", tenantId))) {
       return;
     }
 
@@ -286,7 +288,7 @@ export default function TenantsPage() {
         await loadTenantDetails(tenantId);
       }
     } catch (e) {
-      showToast(`Failed to ${action} tenant: ${e}`, "error");
+      showToast(t.tenants.toastActionFailed.replace("{action}", action).replace("{error}", String(e)), "error");
     } finally {
       setBusyTenantId(null);
     }
@@ -305,10 +307,10 @@ export default function TenantsPage() {
         maxStorageBytes: Number(quotaForm.maxStorageBytes),
         maxMemoryBytes: Number(quotaForm.maxMemoryBytes),
       });
-      showToast(`Quota updated for ${selectedTenantId}`, "success");
+      showToast(t.tenants.toastQuotaSaved.replace("{id}", selectedTenantId), "success");
       await loadTenantDetails(selectedTenantId);
     } catch (e) {
-      showToast(`Failed to update quota: ${e}`, "error");
+      showToast(t.tenants.toastQuotaSaveFailed.replace("{error}", String(e)), "error");
     } finally {
       setSavingQuota(false);
     }
@@ -316,10 +318,10 @@ export default function TenantsPage() {
 
   const saveSecurity = async () => {
     if (!selectedTenantId) return;
-    if (securityForm.allowCodeExecution && !confirm("Allowing code execution can increase tenant risk. Continue?")) {
+    if (securityForm.allowCodeExecution && !confirm(t.tenants.codeExecutionConfirm)) {
       return;
     }
-    if (securityForm.allowNetworkAccess && !confirm("Allowing network access can expose external resources. Continue?")) {
+    if (securityForm.allowNetworkAccess && !confirm(t.tenants.networkAccessConfirm)) {
       return;
     }
 
@@ -337,10 +339,10 @@ export default function TenantsPage() {
         deniedTools: csvToList(securityForm.deniedTools),
         deniedPaths: csvToList(securityForm.deniedPaths),
       });
-      showToast(`Security policy updated for ${selectedTenantId}`, "success");
+      showToast(t.tenants.toastSecuritySaved.replace("{id}", selectedTenantId), "success");
       await loadTenantDetails(selectedTenantId);
     } catch (e) {
-      showToast(`Failed to update security policy: ${e}`, "error");
+      showToast(t.tenants.toastSecuritySaveFailed.replace("{error}", String(e)), "error");
     } finally {
       setSavingSecurity(false);
     }
@@ -357,10 +359,10 @@ export default function TenantsPage() {
         model: configForm.model || undefined,
         provider: configForm.provider || undefined,
       });
-      showToast(`Config updated for ${selectedTenantId}`, "success");
+      showToast(t.tenants.toastConfigSaved.replace("{id}", selectedTenantId), "success");
       await loadTenantDetails(selectedTenantId);
     } catch (e) {
-      showToast(`Failed to update config: ${e}`, "error");
+      showToast(t.tenants.toastConfigSaveFailed.replace("{error}", String(e)), "error");
     } finally {
       setSavingConfig(false);
     }
@@ -371,14 +373,14 @@ export default function TenantsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-muted-foreground" />
-          <H2 variant="sm">Tenants</H2>
+          <H2 variant="sm">{t.tenants.title}</H2>
           <span className="text-xs text-muted-foreground">
-            {tenants.length} total · {activeCount} active · {suspendedCount} suspended
+            {t.tenants.countSummary.replace("{count}", String(tenants.length)).replace("{active}", String(activeCount)).replace("{suspended}", String(suspendedCount))}
           </span>
         </div>
         <Button variant="outline" size="sm" onClick={loadTenants} disabled={loading}>
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
+          {t.tenants.refresh}
         </Button>
       </div>
 
@@ -386,25 +388,25 @@ export default function TenantsPage() {
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Create Tenant</CardTitle>
+              <CardTitle className="text-sm">{t.tenants.createTenant}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <Input
                 value={newTenantId}
                 onChange={(e) => setNewTenantId(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createTenant()}
-                placeholder="tenant-id"
+                placeholder={t.tenants.tenantIdPlaceholder}
                 disabled={creating}
               />
               <Button onClick={createTenant} disabled={!newTenantId.trim() || creating}>
-                {creating ? "Creating…" : "Create"}
+                {creating ? t.tenants.creating : t.tenants.create}
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Tenant List</CardTitle>
+              <CardTitle className="text-sm">{t.tenants.tenantList}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <div className="relative">
@@ -413,16 +415,16 @@ export default function TenantsPage() {
                   className="pl-8"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search tenants..."
+                  placeholder={t.tenants.searchPlaceholder}
                 />
               </div>
 
               <div className="flex max-h-[560px] flex-col gap-2 overflow-y-auto pr-1">
                 {loading && (
-                  <div className="py-8 text-center text-xs text-muted-foreground">Loading tenants…</div>
+                  <div className="py-8 text-center text-xs text-muted-foreground">{t.tenants.loading}</div>
                 )}
                 {!loading && filteredTenants.length === 0 && (
-                  <div className="py-8 text-center text-xs text-muted-foreground">No tenants found</div>
+                  <div className="py-8 text-center text-xs text-muted-foreground">{t.tenants.noTenantsFound}</div>
                 )}
                 {filteredTenants.map((tenant) => {
                   const StateIcon = stateIcon(tenant.state);
@@ -444,7 +446,7 @@ export default function TenantsPage() {
                             {tenant.tenantId}
                           </div>
                           <div className="mt-1 text-[11px] text-muted-foreground">
-                            {tenant.activeAgents} agents · {tenant.activeSessions} sessions
+                            {t.tenants.agentsSessions.replace("{agents}", String(tenant.activeAgents)).replace("{sessions}", String(tenant.activeSessions))}
                           </div>
                         </div>
                         <Badge variant={stateVariant(tenant.state)} className="shrink-0">
@@ -464,7 +466,7 @@ export default function TenantsPage() {
           {!selectedTenantId && (
             <Card>
               <CardContent className="py-16 text-center text-sm text-muted-foreground">
-                Select a tenant to inspect details.
+                {t.tenants.selectHint}
               </CardContent>
             </Card>
           )}
@@ -479,14 +481,14 @@ export default function TenantsPage() {
                       {selectedTenant?.tenantId ?? selectedTenantId}
                     </CardTitle>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Canonical tenantId view backed by /api/tenants/{"{tenantId}"}
+                      {t.tenants.apiHint.replace("{tenantId}", selectedTenantId)} 
                     </p>
                   </div>
                   {selectedTenant && (
                     <div className="flex flex-wrap gap-2">
                       {selectedTenant.tenantId === "default" && (
                         <Badge variant="outline" className="text-[10px]">
-                          Protected
+                          {t.tenants.protected}
                         </Badge>
                       )}
                       {selectedTenant.state === "ACTIVE" ? (
@@ -500,12 +502,12 @@ export default function TenantsPage() {
                           }
                           title={
                             selectedTenant.tenantId === "default"
-                              ? "Cannot suspend the system default tenant"
+                              ? t.tenants.cannotSuspendDefault
                               : undefined
                           }
                         >
                           <Pause className="h-3.5 w-3.5" />
-                          Suspend
+                          {t.tenants.suspend}
                         </Button>
                       ) : (
                         <Button
@@ -515,7 +517,7 @@ export default function TenantsPage() {
                           disabled={busyTenantId === selectedTenant.tenantId}
                         >
                           <Play className="h-3.5 w-3.5" />
-                          Resume
+                          {t.tenants.resume}
                         </Button>
                       )}
                       <Button
@@ -528,12 +530,12 @@ export default function TenantsPage() {
                         }
                         title={
                           selectedTenant.tenantId === "default"
-                            ? "Cannot delete the system default tenant"
+                            ? t.tenants.cannotDeleteDefault
                             : undefined
                         }
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        Delete
+                        {t.tenants.delete}
                       </Button>
                     </div>
                   )}
@@ -541,21 +543,21 @@ export default function TenantsPage() {
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 {detailLoading && (
-                  <div className="py-10 text-center text-xs text-muted-foreground">Loading details…</div>
+                  <div className="py-10 text-center text-xs text-muted-foreground">{t.tenants.loadingDetails}</div>
                 )}
 
                 {!detailLoading && selectedTenant && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard label="State" value={selectedTenant.state} />
-                      <MetricCard label="Active Agents" value={String(selectedTenant.activeAgents)} />
-                      <MetricCard label="Active Sessions" value={String(selectedTenant.activeSessions)} />
-                      <MetricCard label="Tenant Skills" value={String(tenantSkills.length)} />
+                      <MetricCard label={t.tenants.state} value={selectedTenant.state} />
+                      <MetricCard label={t.tenants.activeAgents} value={String(selectedTenant.activeAgents)} />
+                      <MetricCard label={t.tenants.activeSessions} value={String(selectedTenant.activeSessions)} />
+                      <MetricCard label={t.tenants.tenantSkills} value={String(tenantSkills.length)} />
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <InfoRow label="Created" value={formatTime(selectedTenant.createdAt)} />
-                      <InfoRow label="Last Activity" value={formatTime(selectedTenant.lastActivity)} />
+                      <InfoRow label={t.tenants.created} value={formatTime(selectedTenant.createdAt)} />
+                      <InfoRow label={t.tenants.lastActivity} value={formatTime(selectedTenant.lastActivity)} />
                     </div>
 
                     <div className="grid gap-4 xl:grid-cols-3">
@@ -563,37 +565,37 @@ export default function TenantsPage() {
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2 text-sm">
                             <Gauge className="h-4 w-4 text-muted-foreground" />
-                            Usage
+                            {t.tenants.usage}
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="grid gap-3 text-xs">
                           {tenantUsage && (
                             <>
                               <QuotaBar
-                                label="Daily Requests"
+                                label={t.tenants.dailyRequests}
                                 used={tenantUsage.dailyRequests}
                                 max={tenantUsage.maxDailyRequests}
                               />
                               <QuotaBar
-                                label="Daily Tokens"
+                                label={t.tenants.dailyTokens}
                                 used={tenantUsage.dailyTokens}
                                 max={tenantUsage.maxDailyTokens}
                               />
                               <QuotaBar
-                                label="Storage"
+                                label={t.tenants.storage}
                                 used={tenantUsage.storage ?? tenantUsage.storageUsage ?? 0}
                                 max={tenantQuota?.maxStorageBytes ?? 0}
                                 unit="bytes"
                               />
                               <QuotaBar
-                                label="Memory"
+                                label={t.tenants.memory}
                                 used={tenantUsage.memory ?? 0}
                                 max={tenantQuota?.maxMemoryBytes ?? 0}
                                 unit="bytes"
                               />
                               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
                                 <span className="text-muted-foreground uppercase tracking-wider">
-                                  Active Agents
+                                  {t.tenants.activeAgents}
                                 </span>
                                 <span className="font-mono">
                                   {formatNumber(tenantUsage.activeAgents)}
@@ -603,7 +605,7 @@ export default function TenantsPage() {
                           )}
                           {!tenantUsage && (
                             <div className="text-muted-foreground text-center py-4">
-                              No usage data
+                              {t.tenants.noUsageData}
                             </div>
                           )}
                         </CardContent>
@@ -613,18 +615,18 @@ export default function TenantsPage() {
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2 text-sm">
                             <HardDrive className="h-4 w-4 text-muted-foreground" />
-                            Quota
+                            {t.tenants.quota}
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="grid gap-3 text-xs">
-                          <NumberField label="Max Daily Requests" value={quotaForm.maxDailyRequests} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyRequests: value }))} />
-                          <NumberField label="Max Daily Tokens" value={quotaForm.maxDailyTokens} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyTokens: value }))} />
-                          <NumberField label="Concurrent Agents" value={quotaForm.maxConcurrentAgents} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentAgents: value }))} />
-                          <NumberField label="Concurrent Sessions" value={quotaForm.maxConcurrentSessions} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentSessions: value }))} />
-                          <NumberField label="Max Storage Bytes" value={quotaForm.maxStorageBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxStorageBytes: value }))} hint={formatBytes(Number(quotaForm.maxStorageBytes))} />
-                          <NumberField label="Max Memory Bytes" value={quotaForm.maxMemoryBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxMemoryBytes: value }))} hint={formatBytes(Number(quotaForm.maxMemoryBytes))} />
+                          <NumberField label={t.tenants.maxDailyRequests} value={quotaForm.maxDailyRequests} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyRequests: value }))} />
+                          <NumberField label={t.tenants.maxDailyTokens} value={quotaForm.maxDailyTokens} onChange={(value) => setQuotaForm((form) => ({ ...form, maxDailyTokens: value }))} />
+                          <NumberField label={t.tenants.concurrentAgents} value={quotaForm.maxConcurrentAgents} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentAgents: value }))} />
+                          <NumberField label={t.tenants.concurrentSessions} value={quotaForm.maxConcurrentSessions} onChange={(value) => setQuotaForm((form) => ({ ...form, maxConcurrentSessions: value }))} />
+                          <NumberField label={t.tenants.maxStorageBytes} value={quotaForm.maxStorageBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxStorageBytes: value }))} hint={formatBytes(Number(quotaForm.maxStorageBytes))} />
+                          <NumberField label={t.tenants.maxMemoryBytes} value={quotaForm.maxMemoryBytes} onChange={(value) => setQuotaForm((form) => ({ ...form, maxMemoryBytes: value }))} hint={formatBytes(Number(quotaForm.maxMemoryBytes))} />
                           <Button size="sm" onClick={saveQuota} disabled={savingQuota || !tenantQuota}>
-                            {savingQuota ? "Saving quota…" : "Save Quota"}
+                            {savingQuota ? t.tenants.savingQuota : t.tenants.saveQuota}
                           </Button>
                         </CardContent>
                       </Card>
@@ -633,22 +635,22 @@ export default function TenantsPage() {
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2 text-sm">
                             <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-                            Security
+                            {t.tenants.security}
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="grid gap-3 text-xs">
-                          <CheckField label="Code Execution" checked={securityForm.allowCodeExecution} onChange={(value) => setSecurityForm((form) => ({ ...form, allowCodeExecution: value }))} danger />
-                          <CheckField label="Sandbox Required" checked={securityForm.requireSandbox} onChange={(value) => setSecurityForm((form) => ({ ...form, requireSandbox: value }))} />
-                          <CheckField label="Network Access" checked={securityForm.allowNetworkAccess} onChange={(value) => setSecurityForm((form) => ({ ...form, allowNetworkAccess: value }))} danger />
-                          <CheckField label="File Read" checked={securityForm.allowFileRead} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileRead: value }))} />
-                          <CheckField label="File Write" checked={securityForm.allowFileWrite} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileWrite: value }))} />
-                          <TextField label="Allowed Languages" value={securityForm.allowedLanguages} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedLanguages: value }))} placeholder="python, javascript" />
-                          <TextField label="Allowed Hosts" value={securityForm.allowedHosts} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedHosts: value }))} placeholder="example.com" />
-                          <TextField label="Allowed Tools" value={securityForm.allowedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedTools: value }))} placeholder="empty = all except denied" />
-                          <TextField label="Denied Tools" value={securityForm.deniedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedTools: value }))} />
-                          <TextField label="Denied Paths" value={securityForm.deniedPaths} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedPaths: value }))} placeholder="/etc, /root/.ssh" />
+                          <CheckField label={t.tenants.codeExecution} checked={securityForm.allowCodeExecution} onChange={(value) => setSecurityForm((form) => ({ ...form, allowCodeExecution: value }))} danger />
+                          <CheckField label={t.tenants.sandboxRequired} checked={securityForm.requireSandbox} onChange={(value) => setSecurityForm((form) => ({ ...form, requireSandbox: value }))} />
+                          <CheckField label={t.tenants.networkAccess} checked={securityForm.allowNetworkAccess} onChange={(value) => setSecurityForm((form) => ({ ...form, allowNetworkAccess: value }))} danger />
+                          <CheckField label={t.tenants.fileRead} checked={securityForm.allowFileRead} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileRead: value }))} />
+                          <CheckField label={t.tenants.fileWrite} checked={securityForm.allowFileWrite} onChange={(value) => setSecurityForm((form) => ({ ...form, allowFileWrite: value }))} />
+                          <TextField label={t.tenants.allowedLanguages} value={securityForm.allowedLanguages} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedLanguages: value }))} placeholder="python, javascript" />
+                          <TextField label={t.tenants.allowedHosts} value={securityForm.allowedHosts} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedHosts: value }))} placeholder="example.com" />
+                          <TextField label={t.tenants.allowedTools} value={securityForm.allowedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, allowedTools: value }))} placeholder={t.tenants.allowedToolsHint} />
+                          <TextField label={t.tenants.deniedTools} value={securityForm.deniedTools} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedTools: value }))} />
+                          <TextField label={t.tenants.deniedPaths} value={securityForm.deniedPaths} onChange={(value) => setSecurityForm((form) => ({ ...form, deniedPaths: value }))} placeholder={t.tenants.deniedPathsHint} />
                           <Button size="sm" onClick={saveSecurity} disabled={savingSecurity || !tenantSecurity}>
-                            {savingSecurity ? "Saving security…" : "Save Security"}
+                            {savingSecurity ? t.tenants.savingSecurity : t.tenants.saveSecurity}
                           </Button>
                         </CardContent>
                       </Card>
@@ -657,26 +659,26 @@ export default function TenantsPage() {
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2 text-sm">
                             <FileText className="h-4 w-4 text-muted-foreground" />
-                            Agent Config
+                            {t.tenants.agentConfig}
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="grid gap-3 text-xs">
                           <label className="grid gap-1">
-                            <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">System Prompt</span>
+                            <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{t.tenants.systemPrompt}</span>
                             <textarea
                               value={configForm.systemPrompt}
                               onChange={(e) => setConfigForm((form) => ({ ...form, systemPrompt: e.target.value }))}
-                              placeholder="Optional: set a custom system prompt for this tenant"
+                              placeholder={t.tenants.systemPromptPlaceholder}
                               rows={4}
                               className="w-full bg-background border border-border rounded-sm px-2 py-1 text-xs font-mono leading-relaxed resize-y focus:outline-none focus:border-primary/40"
                             />
                           </label>
-                          <TextField label="Model" value={configForm.model} onChange={(value) => setConfigForm((form) => ({ ...form, model: value }))} placeholder="e.g. anthropic/claude-3.5-sonnet" />
-                          <TextField label="Provider" value={configForm.provider} onChange={(value) => setConfigForm((form) => ({ ...form, provider: value }))} placeholder="e.g. openrouter" />
-                          <NumberField label="Temperature" value={configForm.temperature} onChange={(value) => setConfigForm((form) => ({ ...form, temperature: value }))} />
-                          <NumberField label="Max Tokens" value={configForm.maxTokens} onChange={(value) => setConfigForm((form) => ({ ...form, maxTokens: value }))} />
+                          <TextField label={t.tenants.model} value={configForm.model} onChange={(value) => setConfigForm((form) => ({ ...form, model: value }))} placeholder="e.g. anthropic/claude-3.5-sonnet" />
+                          <TextField label={t.tenants.provider} value={configForm.provider} onChange={(value) => setConfigForm((form) => ({ ...form, provider: value }))} placeholder="e.g. openrouter" />
+                          <NumberField label={t.tenants.temperature} value={configForm.temperature} onChange={(value) => setConfigForm((form) => ({ ...form, temperature: value }))} />
+                          <NumberField label={t.tenants.maxTokens} value={configForm.maxTokens} onChange={(value) => setConfigForm((form) => ({ ...form, maxTokens: value }))} />
                           <Button size="sm" onClick={saveConfig} disabled={savingConfig || !tenantConfig}>
-                            {savingConfig ? "Saving config…" : "Save Config"}
+                            {savingConfig ? t.tenants.savingConfig : t.tenants.saveConfig}
                           </Button>
                         </CardContent>
                       </Card>
@@ -686,13 +688,13 @@ export default function TenantsPage() {
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-sm">
                           <Layers className="h-4 w-4 text-muted-foreground" />
-                          Tenant Skills
+                          {t.tenants.tenantSkills}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         {tenantSkills.length === 0 ? (
                           <div className="py-6 text-center text-xs text-muted-foreground">
-                            No tenant-scoped skills installed.
+                            {t.tenants.noSkillsInstalled}
                           </div>
                         ) : (
                           <div className="grid gap-2 md:grid-cols-2">
@@ -704,10 +706,10 @@ export default function TenantsPage() {
                                       {skill.name}
                                     </div>
                                     <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                      {skill.description || "No description available."}
+                                      {skill.description || t.tenants.noDescription}
                                     </p>
                                   </div>
-                                  {skill.readOnly && <Badge variant="outline">Read-only</Badge>}
+                                  {skill.readOnly && <Badge variant="outline">{t.tenants.readOnly}</Badge>}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                                   {skill.version && <span>v{skill.version}</span>}
@@ -725,13 +727,13 @@ export default function TenantsPage() {
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-sm">
                           <FileClock className="h-4 w-4 text-muted-foreground" />
-                          Recent Audit Events
+                          {t.tenants.recentAudit}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
                         {tenantAudit.length === 0 ? (
                           <div className="py-6 text-center text-xs text-muted-foreground">
-                            No audit events found.
+                            {t.tenants.noAuditEvents}
                           </div>
                         ) : (
                           <div className="flex flex-col divide-y divide-border border border-border">
@@ -767,7 +769,7 @@ function NumberField({ label, value, onChange, hint }: { label: string; value: s
     <label className="grid gap-1">
       <span className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">{label}</span>
       <Input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} />
-      {hint && hint !== "—" && <span className="text-[10px] text-muted-foreground normal-case">{hint}</span>}
+      {hint && hint !== "-" && <span className="text-[10px] text-muted-foreground normal-case">{hint}</span>}
     </label>
   );
 }
