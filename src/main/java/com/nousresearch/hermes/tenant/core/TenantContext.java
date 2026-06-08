@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.tenant.core;
 
 import com.nousresearch.hermes.config.Constants;
+import com.nousresearch.hermes.collaboration.*;
 import com.nousresearch.hermes.tenant.core.TenantConfig;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
@@ -23,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -76,6 +78,21 @@ public class TenantContext {
     private final ConcurrentHashMap<String, TenantAIAgent> activeAgents = new ConcurrentHashMap<>();
     private volatile SharedBlackboard sharedBlackboard;
     private volatile Instant lastActivity = Instant.now();
+
+    // ======== AI原生组织：协作组件 ========
+    // 租户内 Agent 角色注册表（agentId → Role）
+    private final ConcurrentHashMap<String, AgentRole> agentRoles = new ConcurrentHashMap<>();
+    // 租户级治理策略（token 预算、故障暂停等）
+    private volatile GovernancePolicy governancePolicy;
+    // Agent 间消息总线
+    private volatile TenantBus tenantBus;
+    // DAG 任务编排器
+    private volatile TaskOrchestrator taskOrchestrator;
+    // Agent 间协商引擎
+    private volatile Negotiator negotiator;
+    // 组织健康检查器
+    private volatile OrgHealthChecker orgHealthChecker;
+    private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
     private volatile ScheduledExecutorService autoSaveScheduler;
@@ -736,6 +753,105 @@ public class TenantContext {
         }
         return sharedBlackboard;
     }
+
+    // ======== AI原生组织：协作组件 getter ========
+
+    /** 注册或更新 Agent 角色 */
+    public void registerAgentRole(String agentId, AgentRole role) {
+        agentRoles.put(agentId, role);
+        logger.info("Tenant {}: registered role '{}' for agent {}", tenantId, role.getRoleName(), agentId);
+    }
+
+    /** 获取 Agent 角色 */
+    public AgentRole getAgentRole(String agentId) {
+        return agentRoles.get(agentId);
+    }
+
+    /** 列出所有角色 */
+    public Map<String, AgentRole> listAgentRoles() {
+        return new ConcurrentHashMap<>(agentRoles);
+    }
+
+    /** 获取治理策略（懒加载） */
+    public GovernancePolicy getGovernancePolicy() {
+        if (governancePolicy == null) {
+            synchronized (this) {
+                if (governancePolicy == null) {
+                    governancePolicy = new GovernancePolicy();
+                }
+            }
+        }
+        return governancePolicy;
+    }
+
+    /** 初始化所有协作组件（懒加载，只执行一次） */
+    public void initCollaboration() {
+        if (!collaborationInitialized.compareAndSet(false, true)) return;
+        getTenantBus().start();
+        logger.info("Tenant {} collaboration subsystem initialized", tenantId);
+    }
+
+    /** 获取消息总线 */
+    public TenantBus getTenantBus() {
+        if (tenantBus == null) {
+            synchronized (this) {
+                if (tenantBus == null) {
+                    tenantBus = TenantBus.getInstance();
+                }
+            }
+        }
+        return tenantBus;
+    }
+
+    /** 获取任务编排器 */
+    public TaskOrchestrator getTaskOrchestrator() {
+        if (taskOrchestrator == null) {
+            synchronized (this) {
+                if (taskOrchestrator == null) {
+                    taskOrchestrator = new TaskOrchestrator(getTenantBus());
+                }
+            }
+        }
+        return taskOrchestrator;
+    }
+
+    /** 获取协商引擎 */
+    public Negotiator getNegotiator() {
+        if (negotiator == null) {
+            synchronized (this) {
+                if (negotiator == null) {
+                    negotiator = new Negotiator(getTenantBus());
+                }
+            }
+        }
+        return negotiator;
+    }
+
+    /** 获取组织健康检查器 */
+    public OrgHealthChecker getOrgHealthChecker() {
+        if (orgHealthChecker == null) {
+            synchronized (this) {
+                if (orgHealthChecker == null) {
+                    orgHealthChecker = new OrgHealthChecker(getTenantBus());
+                }
+            }
+        }
+        return orgHealthChecker;
+    }
+
+    /** 关闭协作子系统 */
+    public void shutdownCollaboration() {
+        if (tenantBus != null) {
+            tenantBus.stop();
+        }
+        collaborationInitialized.set(false);
+        logger.info("Tenant {} collaboration subsystem shut down", tenantId);
+    }
+
+    public boolean isCollaborationInitialized() {
+        return collaborationInitialized.get();
+    }
+
     public TenantResourceMonitor getResourceMonitor() { return resourceMonitor; }
 
     public Map<String, TenantAIAgent> getActiveAgents() {

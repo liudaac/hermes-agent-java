@@ -1,5 +1,8 @@
 package com.nousresearch.hermes.agent;
 
+import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.GovernancePolicy;
+import com.nousresearch.hermes.collaboration.OrgHealthChecker;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
@@ -61,6 +64,13 @@ public class TenantAwareAIAgent {
     private com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
     private CognitiveTraceCollector cognitiveTraceCollector;
     private com.nousresearch.hermes.monitoring.AgentEvalMetrics evalMetrics;
+
+    // ======== AI原生组织：协作组件 ========
+    private final String agentId;
+    private final AgentRole agentRole;
+    private final GovernancePolicy governancePolicy;
+    private OrgHealthChecker orgHealthChecker;
+    private double lastTaskScore = 0.0;
 
     // Nudge intervals
     private int memoryNudgeInterval = 10;
@@ -167,6 +177,7 @@ public class TenantAwareAIAgent {
             : "cli_" + UUID.randomUUID().toString().substring(0, 8);
         this.tenantContext = context;
         this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
+        toolDispatcher.setNegotiator(tenantContext.getNegotiator());
 
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
@@ -181,9 +192,24 @@ public class TenantAwareAIAgent {
         this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.interrupted = new AtomicBoolean(false);
 
+        // ======== AI原生组织：绑定角色与治理策略 ========
+        this.agentId = "agent_" + UUID.randomUUID().toString().substring(0, 8);
+        AgentRole existingRole = context.getAgentRole(this.agentId);
+        if (existingRole != null) {
+            this.agentRole = existingRole;
+        } else {
+            this.agentRole = buildDefaultRole();
+            context.registerAgentRole(this.agentId, this.agentRole);
+        }
+        this.governancePolicy = context.getGovernancePolicy();
+        this.orgHealthChecker = tenantContext.getOrgHealthChecker();
+        logger.info("Agent {} bound to role '{}' in tenant {}",
+            this.agentId, this.agentRole.getRoleName(), this.tenantId);
+
         initializeLearningComponents();
         initializeTools();
         initTenantApproval();
+        tenantContext.initCollaboration();
 
         logger.info("Created TenantAwareAIAgent for existing tenant context: {}, session: {}",
             this.tenantId, this.sessionId);
@@ -205,6 +231,9 @@ public class TenantAwareAIAgent {
             // Fallback for non-tenant mode
             this.tenantContext = null;
         this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
+        if (tenantContext != null) {
+            toolDispatcher.setNegotiator(tenantContext.getNegotiator());
+        }
         }
 
         // 初始化核心组件
@@ -219,6 +248,27 @@ public class TenantAwareAIAgent {
         this.evalMetrics = new com.nousresearch.hermes.monitoring.AgentEvalMetrics();
         this.conversationHistory = new ArrayList<>();
         this.interrupted = new AtomicBoolean(false);
+
+        // ======== AI原生组织：绑定角色与治理策略 ========
+        this.agentId = "agent_" + UUID.randomUUID().toString().substring(0, 8);
+        if (this.tenantContext != null) {
+            AgentRole existingRole = this.tenantContext.getAgentRole(this.agentId);
+            if (existingRole != null) {
+                this.agentRole = existingRole;
+            } else {
+                this.agentRole = buildDefaultRole();
+                this.tenantContext.registerAgentRole(this.agentId, this.agentRole);
+            }
+            this.governancePolicy = this.tenantContext.getGovernancePolicy();
+            this.orgHealthChecker = this.tenantContext.getOrgHealthChecker();
+            logger.info("Agent {} bound to role '{}' in tenant {}",
+                this.agentId, this.agentRole.getRoleName(), this.tenantId);
+        } else {
+            this.agentRole = buildDefaultRole();
+            this.governancePolicy = new GovernancePolicy();
+            logger.info("Agent {} bound to standalone role '{}' (no tenant context)",
+                this.agentId, this.agentRole.getRoleName());
+        }
 
         // 初始化学习组件
         initializeLearningComponents();
@@ -325,6 +375,7 @@ public class TenantAwareAIAgent {
                         rr.taskScore, rr.lessons.size(), rr.antiPatterns.size());
                 if (evalMetrics != null) evalMetrics.recordReflection(rr.taskScore);
                 }
+                lastTaskScore = rr.taskScore;
             } catch (Exception e) {
                 logger.error("Reflection failed: {}", e.getMessage());
             }
@@ -341,6 +392,27 @@ public class TenantAwareAIAgent {
             } catch (Exception e) {
                 logger.warn("Curiosity engine failed: {}", e.getMessage());
             }
+        }
+
+        // ======== AI原生组织：治理状态更新 ========
+        if (completed) {
+            governancePolicy.recordSuccess();
+            if (agentRole != null) {
+                agentRole.updateMetric("sessions_completed",
+                    ((Number) agentRole.getMetrics().getOrDefault("sessions_completed", 0)).intValue() + 1);
+            }
+        }
+        agentRole.updateMetric("last_active", System.currentTimeMillis());
+        agentRole.updateMetric("tokens_used_today", governancePolicy.getTokensUsed());
+
+        // AI原生组织：组织健康检查
+        if (orgHealthChecker != null) {
+            orgHealthChecker.updateHealth(
+                agentId, lastTaskScore,
+                governancePolicy.getConsecutiveFailures(),
+                governancePolicy.getTokensUsed(),
+                governancePolicy.getDailyTokenBudget()
+            );
         }
 
         // 持久化会话
@@ -405,6 +477,13 @@ public class TenantAwareAIAgent {
             logger.debug("Failed to get session debug info: {}", e.getMessage());
         }
         return info;
+    }
+
+    /**
+     * Set the org health checker for collaborative monitoring.
+     */
+    public void setOrgHealthChecker(OrgHealthChecker checker) {
+        this.orgHealthChecker = checker;
     }
 
     /**
@@ -537,6 +616,18 @@ public class TenantAwareAIAgent {
             if (!iterationBudget.consume()) {
                 responseBuilder.append("\n[Reached maximum iterations]");
                 break;
+            }
+
+            // ======== AI原生组织：治理检查点 ========
+            if (governancePolicy.isPaused()) {
+                String pauseMsg = "⚠️ Agent paused: " + governancePolicy.getPauseReason()
+                    + "\nPlease review and restart.";
+                responseBuilder.append("\n").append(pauseMsg);
+                break;
+            }
+            if (governancePolicy.isOverBudget()) {
+                logger.warn("Tenant {} agent {} over token budget, using tier: {}",
+                    tenantId, agentId, governancePolicy.getActiveModel());
             }
 
             try {
@@ -731,6 +822,12 @@ public class TenantAwareAIAgent {
                 break;
             }
 
+            // ======== AI原生组织：治理检查点 ========
+            if (governancePolicy.isPaused()) {
+                chunkConsumer.accept("\n⚠️ Agent paused: " + governancePolicy.getPauseReason() + "\n");
+                break;
+            }
+
             try {
                 // --- Plugin hook: pre_llm_call (stream) ---
                 HookEngine hookEngineStream = getHookEngine();
@@ -907,6 +1004,14 @@ public class TenantAwareAIAgent {
         String arguments = toolCall.getFunction().getArguments();
 
         logger.debug("Executing tool: {} for tenant: {}", toolName, tenantId);
+
+        // ======== AI原生组织：角色权限检查 ========
+        if (agentRole != null && !agentRole.getAllowedTools().isEmpty()
+                && !agentRole.getAllowedTools().contains(toolName)) {
+            String msg = "Access denied: '" + toolName + "' not allowed for role '" + agentRole.getRoleName() + "'";
+            logger.warn("Tenant {} agent {} {}", tenantId, agentId, msg);
+            return ToolRegistry.toolError(msg);
+        }
 
         try {
             @SuppressWarnings("unchecked")
@@ -1315,6 +1420,25 @@ public class TenantAwareAIAgent {
     public String getTenantId() { return tenantId; }
     public String getSessionId() { return sessionId; }
     public TenantContext getTenantContext() { return tenantContext; }
+
+    // ======== AI原生组织：角色与治理 ========
+
+    public String getAgentId() { return agentId; }
+    public AgentRole getAgentRole() { return agentRole; }
+    public GovernancePolicy getGovernancePolicy() { return governancePolicy; }
+
+    /** 基于 config 构建默认角色 */
+    private AgentRole buildDefaultRole() {
+        String roleName = "General Assistant";
+        String roleDesc = "Default general-purpose agent";
+        AgentRole role = new AgentRole(roleName, roleDesc, AgentRole.Level.MID);
+        role.allowedTools("read", "write", "exec", "web_search", "web_fetch",
+            "memory", "skills", "session");
+        role.reportsTo("human_operator");
+        role.minTaskScore(0.4);
+        role.maxConsecutiveFailures(3);
+        return role;
+    }
 
     private HookEngine getHookEngine() {
         PluginManager pm = PluginManager.getInstance();

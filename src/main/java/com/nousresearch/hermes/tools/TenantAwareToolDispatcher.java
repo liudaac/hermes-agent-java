@@ -32,6 +32,7 @@ import java.util.Optional;
 import com.nousresearch.hermes.approval.ApprovalMessageHandler;
 import com.nousresearch.hermes.approval.ApprovalResult;
 import com.nousresearch.hermes.approval.ApprovalSystem;
+import com.nousresearch.hermes.collaboration.Negotiator;
 
 public class TenantAwareToolDispatcher {
     private static final Logger logger = LoggerFactory.getLogger(TenantAwareToolDispatcher.class);
@@ -44,6 +45,9 @@ public class TenantAwareToolDispatcher {
     private ApprovalSystem approvalSystem;
     private ApprovalMessageHandler approvalMessageHandler;
     
+    // AI原生组织：结构化协商引擎
+    private Negotiator negotiator;
+    
     public TenantAwareToolDispatcher(TenantContext tenantContext, ToolRegistry globalRegistry) {
         this.tenantContext = tenantContext;
         this.globalRegistry = globalRegistry;
@@ -55,6 +59,10 @@ public class TenantAwareToolDispatcher {
     
     public void setApprovalMessageHandler(ApprovalMessageHandler handler) {
         this.approvalMessageHandler = handler;
+    }
+    
+    public void setNegotiator(Negotiator negotiator) {
+        this.negotiator = negotiator;
     }
     
     public String dispatch(String toolName, Map<String, Object> args) {
@@ -83,11 +91,13 @@ public class TenantAwareToolDispatcher {
             return ToolRegistry.toolError(permission.getReason());
         }
 
+        // Compute tool entry once for both approval and negotiation
+        var optEntry = globalRegistry.getAllTools().stream()
+            .filter(t -> t.getName().equals(toolName))
+            .findFirst();
+
         // Per-tenant approval check BEFORE execution
         if (approvalSystem != null) {
-            var optEntry = globalRegistry.getAllTools().stream()
-                .filter(t -> t.getName().equals(toolName))
-                .findFirst();
             if (optEntry.isPresent() && optEntry.get().requiresApproval()) {
                 var entry = optEntry.get();
                 String operation = entry.getApprovalMessageTemplate();
@@ -117,6 +127,22 @@ public class TenantAwareToolDispatcher {
                 
                 if (!approval.isApproved()) {
                     String denied = ToolRegistry.toolError("Approval denied: " + approval.getReason());
+                    tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, denied);
+                    return denied;
+                }
+            }
+        }
+
+        // AI原生组织：高风险工具自动协商
+        if (negotiator != null && optEntry.isPresent()) {
+            var entry = optEntry.get();
+            if (entry.getRisk().ordinal() >= com.nousresearch.hermes.approval.ToolRisk.MEDIUM.ordinal()) {
+                double confidence = entry.getRisk() == com.nousresearch.hermes.approval.ToolRisk.HIGH ? 0.5 : 0.8;
+                var negResult = negotiator.autoNegotiate(
+                    tenantContext.getTenantId(), toolName, 
+                    toolName + " with args: " + safeArgs.keySet(), confidence);
+                if (negResult.needsHuman()) {
+                    String denied = ToolRegistry.toolError("Escalated for review: " + negResult.detail);
                     tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, denied);
                     return denied;
                 }

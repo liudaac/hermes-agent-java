@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.agent;
 
+import com.nousresearch.hermes.collaboration.TenantBus;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
@@ -34,6 +35,8 @@ public class SubAgent implements Callable<SubAgentResult> {
     
     private volatile boolean running;
     private SubAgentResult result;
+    private TenantBus bus;  // opt-in tenant bus for inter-agent comms
+    private String busAgentId;
     
     public SubAgent(String task, String context, HermesConfig config) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
@@ -47,6 +50,18 @@ public class SubAgent implements Callable<SubAgentResult> {
         this.running = false;
     }
     
+    /** Connect to tenant bus for inter-agent communication */
+    public SubAgent withBus(TenantBus tenantBus) {
+        this.bus = tenantBus;
+        this.busAgentId = id;
+        if (bus != null) {
+            bus.register(busAgentId, msg -> {
+                logger.debug("[SubAgent {}] received message: {}", id, msg.getAction());
+            });
+        }
+        return this;
+    }
+
     @Override
     public SubAgentResult call() throws Exception {
         running = true;
