@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Built-in QQBot platform adapter plugin.
  */
-public class QQBotPlatformPlugin implements Plugin {
-    private static final Logger logger = LoggerFactory.getLogger(QQBotPlatformPlugin.class);
+public class QqbotPlatformPlugin implements Plugin {
+    private static final Logger logger = LoggerFactory.getLogger(QqbotPlatformPlugin.class);
 
     @Override
     public void register(PluginContext ctx) {
