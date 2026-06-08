@@ -4,11 +4,11 @@ import {
   Activity, Network, Brain, Clipboard, Monitor, AlertTriangle,
   RefreshCw, Clock, TrendingUp, DollarSign, WifiOff,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { fetchJSON } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface OrgSummary {
   [key: string]: any;
@@ -50,9 +50,7 @@ export default function OrgPage() {
   const [summary, setSummary] = useState<OrgSummary>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
 
-  // Detail states
   const [nodes, setNodes] = useState<AgentNode[]>([]);
   const [handoffs, setHandoffs] = useState<HandoffItem[]>([]);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
@@ -62,8 +60,8 @@ export default function OrgPage() {
     setLoading(true)
     setError("");
     try {
-      const s = await api.get("/api/org/summary");
-      setSummary(s.data);
+      const s = await fetchJSON<any>("/api/org/summary");
+      setSummary(s);
     } catch (e: any) {
       setError(e.message || "Failed to fetch org summary");
     } finally {
@@ -71,10 +69,10 @@ export default function OrgPage() {
     }
   }, []);
 
-  const fetchNodes = async () => { try { const r = await api.get("/api/org/distributed/nodes"); setNodes(r.data?.nodes || []); } catch {} };
-  const fetchHandoffs = async () => { try { const r = await api.get("/api/org/handoff/pending"); setHandoffs(r.data?.handoffs || []); } catch {} };
-  const fetchTemplates = async () => { try { const r = await api.get("/api/org/market/templates"); setTemplates(r.data?.templates || []); } catch {} };
-  const fetchAnomalies = async () => { try { const r = await api.get("/api/org/observe/anomalies?n=10"); setAnomalies(r.data?.anomalies || []); } catch {} };
+  const fetchNodes = async () => { try { const r = await fetchJSON<any>("/api/org/distributed/nodes"); setNodes(r.nodes || []); } catch {} };
+  const fetchHandoffs = async () => { try { const r = await fetchJSON<any>("/api/org/handoff/pending"); setHandoffs(r.handoffs || []); } catch {} };
+  const fetchTemplates = async () => { try { const r = await fetchJSON<any>("/api/org/market/templates"); setTemplates(r.templates || []); } catch {} };
+  const fetchAnomalies = async () => { try { const r = await fetchJSON<any>("/api/org/observe/anomalies?n=10"); setAnomalies(r.anomalies || []); } catch {} };
 
   useEffect(() => { fetchOrg(); }, [fetchOrg]);
 
@@ -108,27 +106,37 @@ export default function OrgPage() {
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full overflow-x-auto">
-          {MODULES.map(m => (
-            <TabsTrigger key={m.id} value={m.id} className="gap-1.5">
-              <m.icon className="h-3.5 w-3.5" />
-              {m.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs defaultValue="overview">
+        {(active, setActive) => (
+          <>
+            <TabsList className="w-full overflow-x-auto">
+              {MODULES.map(m => (
+                <TabsTrigger
+                  key={m.id}
+                  active={active === m.id}
+                  value={m.id}
+                  onClick={() => setActive(m.id)}
+                  className="gap-1.5"
+                >
+                  <m.icon className="h-3.5 w-3.5" />
+                  {m.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-        {activeTab === "overview" && <OverviewTab summary={summary} />}
-        {activeTab === "identity" && <IdentityTab data={summary.identity} />}
-        {activeTab === "handoff" && <HandoffTab data={summary.handoff} handoffs={handoffs} onLoad={fetchHandoffs} />}
-        {activeTab === "auth" && <AuthTab data={summary.auth} />}
-        {activeTab === "knowledge" && <KnowledgeTab data={summary.knowledge} />}
-        {activeTab === "workflow" && <WorkflowTab data={summary.workflow} />}
-        {activeTab === "market" && <MarketTab data={summary.market} cost={summary.cost} templates={templates} onLoad={fetchTemplates} />}
-        {activeTab === "observe" && <ObserveTab data={summary.observe} anomalies={anomalies} onLoad={fetchAnomalies} />}
-        {activeTab === "distributed" && <DistributedTab data={summary.distributed} nodes={nodes} onLoad={fetchNodes} />}
-        {activeTab === "evolution" && <EvolutionTab data={summary.evolution} />}
-        {activeTab === "compliance" && <ComplianceTab data={summary.compliance} />}
+            {active === "overview" && <OverviewTab summary={summary} />}
+            {active === "identity" && <IdentityTab data={summary.identity} />}
+            {active === "handoff" && <HandoffTab data={summary.handoff} handoffs={handoffs} onLoad={fetchHandoffs} />}
+            {active === "auth" && <AuthTab data={summary.auth} />}
+            {active === "knowledge" && <KnowledgeTab data={summary.knowledge} />}
+            {active === "workflow" && <WorkflowTab data={summary.workflow} />}
+            {active === "market" && <MarketTab data={summary.market} cost={summary.cost} templates={templates} onLoad={fetchTemplates} />}
+            {active === "observe" && <ObserveTab data={summary.observe} anomalies={anomalies} onLoad={fetchAnomalies} />}
+            {active === "distributed" && <DistributedTab data={summary.distributed} nodes={nodes} onLoad={fetchNodes} />}
+            {active === "evolution" && <EvolutionTab data={summary.evolution} />}
+            {active === "compliance" && <ComplianceTab data={summary.compliance} />}
+          </>
+        )}
       </Tabs>
     </div>
   );
@@ -243,7 +251,6 @@ function MarketTab({ data, cost, templates, onLoad }: { data: any; cost: any; te
   useEffect(() => { if (!templates.length) onLoad(); }, []);
   return (
     <div className="space-y-4 mt-4">
-      {/* Cost */}
       {cost && (
         <div className="grid grid-cols-3 gap-4">
           <StatCard label="Today" value={cost.today} icon={DollarSign} />
@@ -251,7 +258,6 @@ function MarketTab({ data, cost, templates, onLoad }: { data: any; cost: any; te
           <StatCard label="Forecast" value={cost.forecast} icon={TrendingUp} />
         </div>
       )}
-      {/* Templates */}
       {templates.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Templates ({data?.total || 0})</h3>
@@ -374,7 +380,7 @@ function StatCard({ label, value, color, icon: Icon }: { label: string; value: a
           {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
-        <p className={`text-2xl font-bold ${color || ""}`}>{value ?? "—"}</p>
+        <p className={`text-2xl font-bold ${color || ""}`}>{value != null ? value : "—"}</p>
       </CardContent>
     </Card>
   );
