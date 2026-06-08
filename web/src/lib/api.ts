@@ -314,7 +314,18 @@ export const api = {
     }),
 
   // Server-side tenant comparison runs (GatewayServerV2)
-  listCompareRuns: () => fetchJSON<{ ok: boolean; runs: CompareRun[] }>("/api/compare/runs"),
+  listCompareRuns: async () => {
+    const token = window.__HERMES_SESSION_TOKEN__;
+    const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
+    const res = await fetch(`${gatewayUrl}/api/compare/runs`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<{ ok: boolean; runs: CompareRun[] }>;
+  },
   createCompareRun: async (params: { topic: string; rounds: number; tenant_ids: string[] }) => {
     const token = window.__HERMES_SESSION_TOKEN__;
     const gatewayUrl = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
