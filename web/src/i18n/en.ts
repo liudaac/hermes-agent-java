@@ -61,6 +61,7 @@ export const en: Translations = {
       skills: "Skills",
       tools: "Tools",
       tenants: "Tenants",
+      org: "Org",
       config: "Config",
       keys: "Keys",
       playground: "Playground",

@@ -63,6 +63,7 @@ export interface Translations {
       skills: string;
       tools: string;
       tenants: string;
+      org: string;
       config: string;
       keys: string;
       playground: string;
