@@ -97,7 +97,7 @@ public class HermesAgentV2 {
             this.gatewayServer = null;
             registerAdaptersV2();
         } else {
-            this.gatewayServer = new GatewayServer(gatewayPort, agentConfig);
+            this.gatewayServer = new GatewayServer(gatewayPort, agentConfig, tenantManager);
             this.gatewayServerV2 = null;
             registerAdapters();
         }

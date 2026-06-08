@@ -3,7 +3,10 @@ package com.nousresearch.hermes.gateway;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.compare.TenantComparisonOrchestrator;
+import com.nousresearch.hermes.compare.TenantComparisonRun;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantManager;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
@@ -27,15 +30,23 @@ public class GatewayServer {
     private final Map<String, PlatformAdapter> adapters;
     private final ExecutorService executor;
     private final ScheduledExecutorService sessionCleanupExecutor;
+    private final TenantComparisonOrchestrator comparisonOrchestrator;
     private Javalin app;
     private volatile boolean running = false;
     
     public GatewayServer(int port, HermesConfig config) {
+        this(port, config, null);
+    }
+
+    public GatewayServer(int port, HermesConfig config, TenantManager tenantManager) {
         this.port = port;
         this.config = config;
         this.adapters = new ConcurrentHashMap<>();
         this.executor = Executors.newCachedThreadPool();
         this.sessionCleanupExecutor = Executors.newScheduledThreadPool(1);
+        this.comparisonOrchestrator = tenantManager != null
+            ? new TenantComparisonOrchestrator(tenantManager, config)
+            : null;
     }
     
     /**
@@ -88,6 +99,15 @@ public class GatewayServer {
         // Chat API stays on the gateway because it owns the agent runtime.
         app.post("/api/chat", this::handleChat);
         app.post("/api/chat/stream", this::handleChatStream);
+
+        // Comparison API
+        if (comparisonOrchestrator != null) {
+            app.post("/api/compare/runs", this::handleCreateCompareRun);
+            app.get("/api/compare/runs", this::handleListCompareRuns);
+            app.get("/api/compare/runs/{id}", this::handleGetCompareRun);
+            app.get("/api/compare/runs/{id}/stream", this::handleStreamCompareRun);
+            app.post("/api/compare/runs/{id}/stop", this::handleStopCompareRun);
+        }
 
         // Deprecated dashboard-style API surface.
         // Kept temporarily for backwards compatibility with old clients; the canonical
@@ -647,4 +667,83 @@ public class GatewayServer {
         logger.info("GatewayServer shutdown complete");
     }
     
+    // ==================== Comparison API Methods ====================
+
+    private void handleCreateCompareRun(Context ctx) {
+        try {
+            JSONObject body = JSON.parseObject(ctx.body());
+            String topic = body.getString("topic");
+            int rounds = body.getIntValue("rounds", 3);
+            List<String> tenantIds = body.getJSONArray("tenant_ids") == null
+                ? List.of()
+                : body.getJSONArray("tenant_ids").toJavaList(String.class);
+
+            TenantComparisonRun run = comparisonOrchestrator.createRun(topic, rounds, tenantIds);
+            ctx.json(Map.of("ok", true, "run", run.toSummaryMap()));
+        } catch (IllegalArgumentException e) {
+            ctx.status(400).json(Map.of("ok", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to create comparison run", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage()));
+        }
+    }
+
+    private void handleListCompareRuns(Context ctx) {
+        ctx.json(Map.of("ok", true, "runs", comparisonOrchestrator.listRuns()));
+    }
+
+    private void handleGetCompareRun(Context ctx) {
+        String id = ctx.pathParam("id");
+        TenantComparisonRun run = comparisonOrchestrator.getRun(id);
+        if (run == null) {
+            ctx.status(404).json(Map.of("ok", false, "error", "comparison run not found"));
+            return;
+        }
+        ctx.json(Map.of("ok", true, "run", run.toDetailMap()));
+    }
+
+    private void handleStreamCompareRun(Context ctx) throws IOException {
+        var response = ctx.res();
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("text/event-stream");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("Connection", "keep-alive");
+
+        String id = ctx.pathParam("id");
+        TenantComparisonRun run = comparisonOrchestrator.getRun(id);
+        if (run == null) {
+            sendSseEvent(ctx, "error", Map.of("error", "comparison run not found"));
+            return;
+        }
+
+        int lastEventCount = -1;
+        long deadline = System.currentTimeMillis() + java.util.concurrent.TimeUnit.MINUTES.toMillis(30);
+
+        while (System.currentTimeMillis() < deadline) {
+            TenantComparisonRun current = comparisonOrchestrator.getRun(id);
+            if (current == null) { sendSseEvent(ctx, "error", Map.of("error", "comparison run not found")); return; }
+            int eventCount = current.getEvents().size();
+            String status = current.getStatus().name();
+            String lastStatus = lastEventCount == -1 ? null : "";
+            if (eventCount != lastEventCount || (lastStatus != null && !Objects.equals(status, lastStatus))) {
+                sendSseEvent(ctx, "run", current.toDetailMap());
+            }
+            TenantComparisonRun.Status s = current.getStatus(); if (s == TenantComparisonRun.Status.COMPLETED || s == TenantComparisonRun.Status.FAILED || s == TenantComparisonRun.Status.STOPPED) { sendSseEvent(ctx, "done", Map.of()); return; }
+            lastEventCount = eventCount;
+            try { Thread.sleep(1000); } catch (InterruptedException ignored) { return; }
+        }
+    }
+
+    private void handleStopCompareRun(Context ctx) {
+        String id = ctx.pathParam("id");
+        boolean stopped = comparisonOrchestrator.stopRun(id);
+        ctx.json(Map.of("ok", stopped));
+    }
+
+    private void sendSseEvent(Context ctx, String event, Object data) throws IOException {
+        var writer = ctx.res().getWriter();
+        writer.write("event: " + event + "\n");
+        writer.write("data: " + JSON.toJSONString(data) + "\n\n");
+        writer.flush();
+    }
 }
