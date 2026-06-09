@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hermes Agent Java：多租户 AI 组织运行时核心说明</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111a33;
+      --panel-2: #0f172a;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --line: rgba(148, 163, 184, .25);
+      --accent: #60a5fa;
+      --accent-2: #34d399;
+      --accent-3: #fbbf24;
+      --danger: #fb7185;
+      --code: #020617;
+      --shadow: 0 20px 80px rgba(0,0,0,.35);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.75;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(96, 165, 250, .18), transparent 32rem),
+        radial-gradient(circle at 90% 12%, rgba(52, 211, 153, .14), transparent 34rem),
+        radial-gradient(circle at 50% 100%, rgba(251, 191, 36, .08), transparent 42rem),
+        var(--bg);
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 28px;
+      width: min(1480px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 28px 0 80px;
+    }
+
+    aside {
+      position: sticky;
+      top: 24px;
+      height: calc(100vh - 48px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: rgba(15, 23, 42, .78);
+      backdrop-filter: blur(14px);
+      border-radius: 22px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    aside h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .nav {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .nav a {
+      display: block;
+      padding: 7px 10px;
+      border-radius: 10px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+
+    .nav a:hover {
+      background: rgba(96, 165, 250, .12);
+      text-decoration: none;
+      color: white;
+    }
+
+    main { min-width: 0; }
+
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(17, 24, 39, .88), rgba(30, 41, 59, .68));
+      border-radius: 30px;
+      padding: clamp(28px, 5vw, 64px);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -45% auto;
+      width: 540px;
+      height: 540px;
+      background: radial-gradient(circle, rgba(96, 165, 250, .2), transparent 70%);
+      pointer-events: none;
+    }
+
+    .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, .65);
+      color: #cbd5e1;
+      font-size: 13px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(36px, 6vw, 72px);
+      line-height: 1.05;
+      letter-spacing: -0.055em;
+    }
+
+    .subtitle {
+      margin: 24px 0 0;
+      max-width: 920px;
+      font-size: clamp(17px, 2vw, 22px);
+      color: #cbd5e1;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 34px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(2, 6, 23, .45);
+    }
+    .metric strong { display: block; font-size: 26px; color: white; }
+    .metric span { color: var(--muted); font-size: 13px; }
+
+    section {
+      margin-top: 28px;
+      border: 1px solid var(--line);
+      background: rgba(15, 23, 42, .78);
+      border-radius: 24px;
+      padding: clamp(22px, 3vw, 36px);
+      box-shadow: 0 12px 50px rgba(0,0,0,.22);
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: clamp(26px, 3vw, 40px);
+      line-height: 1.16;
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin: 28px 0 12px;
+      font-size: 22px;
+      color: #f8fafc;
+    }
+
+    h4 { margin: 18px 0 8px; font-size: 17px; color: #dbeafe; }
+    p { margin: 12px 0; color: #cbd5e1; }
+    .muted { color: var(--muted); }
+    .lead { font-size: 18px; color: #dbeafe; }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: rgba(96, 165, 250, .1);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin: 18px 0;
+      color: #dbeafe;
+    }
+    .callout.green { border-left-color: var(--accent-2); background: rgba(52, 211, 153, .1); color: #d1fae5; }
+    .callout.yellow { border-left-color: var(--accent-3); background: rgba(251, 191, 36, .1); color: #fef3c7; }
+
+    pre {
+      margin: 18px 0;
+      padding: 18px;
+      overflow: auto;
+      border-radius: 18px;
+      background: var(--code);
+      border: 1px solid rgba(148, 163, 184, .18);
+      color: #d1d5db;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      background: rgba(2, 6, 23, .72);
+      border: 1px solid rgba(148, 163, 184, .16);
+      border-radius: 7px;
+      padding: 2px 6px;
+      color: #bfdbfe;
+      font-size: .93em;
+    }
+
+    pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(2, 6, 23, .35);
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, .14);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      color: #e0f2fe;
+      background: rgba(96, 165, 250, .12);
+      font-weight: 700;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    td { color: #cbd5e1; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      background: rgba(2, 6, 23, .35);
+    }
+    .card h3 { margin-top: 0; }
+
+    .pill-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .pill {
+      border: 1px solid rgba(148, 163, 184, .24);
+      border-radius: 999px;
+      padding: 5px 9px;
+      color: #dbeafe;
+      background: rgba(96, 165, 250, .08);
+      font-size: 12px;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .flow .step {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, .18);
+      border-radius: 14px;
+      background: rgba(2, 6, 23, .28);
+    }
+    .num {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      color: white;
+      font-weight: 800;
+    }
+
+    .footer {
+      margin: 30px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { position: relative; top: 0; height: auto; }
+      .hero-grid, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .layout { width: min(100% - 22px, 1480px); }
+      .hero-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      section, .hero { border-radius: 20px; }
+      pre { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <h2>目录</h2>
+      <ol class="nav">
+        <li><a href="#overview">1. 项目定位</a></li>
+        <li><a href="#architecture">2. 总体架构</a></li>
+        <li><a href="#tenant-context">3. TenantContext 内核</a></li>
+        <li><a href="#agent-core">4. Agent 核心层</a></li>
+        <li><a href="#tools">5. 工具系统</a></li>
+        <li><a href="#org-modules">6. org 组织模块</a></li>
+        <li><a href="#collaboration">7. collaboration 协作层</a></li>
+        <li><a href="#five-knives">8. 五刀闭环</a></li>
+        <li><a href="#request-flow">9. 请求执行流</a></li>
+        <li><a href="#tenant-isolation">10. 多租户隔离</a></li>
+        <li><a href="#memory-learning">11. 记忆/学习/进化</a></li>
+        <li><a href="#dashboard-gateway">12. Dashboard / Gateway</a></li>
+        <li><a href="#release-e2e">13. Release E2E 演练</a></li>
+        <li><a href="#strengths-gaps">14. 强项与薄点</a></li>
+        <li><a href="#roadmap">15. 推荐路线</a></li>
+      </ol>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <div class="badge-row">
+          <span class="badge">Hermes Agent Java</span>
+          <span class="badge">多租户</span>
+          <span class="badge">AI 组织原生化</span>
+          <span class="badge">314 tests / 0 failures</span>
+        </div>
+        <h1>多租户 AI 组织运行时核心说明</h1>
+        <p class="subtitle">
+          本文档梳理 Hermes Agent Java 当前整体架构、核心模块关系、AI 组织原生化“五刀”闭环、端到端 Release 演练，以及后续演进路线。
+        </p>
+        <div class="hero-grid">
+          <div class="metric"><strong>7 层</strong><span>总体架构分层</span></div>
+          <div class="metric"><strong>11</strong><span>Org-native tools</span></div>
+          <div class="metric"><strong>5</strong><span>组织原生化闭环</span></div>
+          <div class="metric"><strong>314</strong><span>全量测试通过</span></div>
+        </div>
+      </header>
+
+      <section id="overview">
+        <h2>1. 项目定位</h2>
+        <p class="lead">
+          当前 Hermes Agent Java 已经不再是单纯的 Agent Runtime，而是在往 <strong>多租户 AI 组织操作系统</strong> 演进。
+        </p>
+        <div class="callout green">
+          <strong>一句话定位：</strong>AI-native multi-tenant agent organization runtime —— 多租户 AI 组织运行时。
+        </div>
+        <p>过去的主链路更像：</p>
+        <pre><code>用户输入 → Agent 调模型 → 调工具 → 返回答案</code></pre>
+        <p>现在的主链路已经变成：</p>
+        <pre><code>用户/平台请求
+  → 多租户运行时
+  → Agent 组织成员
+  → 团队协作
+  → 工具执行
+  → 记忆/进化/可观测
+  → Dashboard/Gateway 暴露能力</code></pre>
+        <p>
+          核心变化是：Agent 不再只是一个孤立工具使用者，而是有身份、有角色、有团队、有知识库、有失败教训、有组织追踪的“组织成员”。
+        </p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构</h2>
+        <p>当前项目可以理解为 7 层：</p>
+        <pre><code>┌──────────────────────────────────────────────┐
+│  入口层：Gateway / Dashboard / ACP / Web UI   │
+├──────────────────────────────────────────────┤
+│  会话层：SessionManager / TenantManager       │
+├──────────────────────────────────────────────┤
+│  多租户层：TenantContext / Sandbox / Quota    │
+├──────────────────────────────────────────────┤
+│  Agent 核心层：TenantAwareAIAgent / AIAgent   │
+├──────────────────────────────────────────────┤
+│  工具层：ToolRegistry / Dispatcher / Tools    │
+├──────────────────────────────────────────────┤
+│  AI组织层：Org Modules + Collaboration        │
+├──────────────────────────────────────────────┤
+│  学习与观测层：Memory / Evolution / Trace     │
+└──────────────────────────────────────────────┘</code></pre>
+
+        <h3>模块关系图</h3>
+        <pre><code>                       ┌────────────────────┐
+                       │   Web / Dashboard   │
+                       └─────────┬──────────┘
+                                 │
+                       ┌─────────▼──────────┐
+                       │ Gateway / ACP/API   │
+                       └─────────┬──────────┘
+                                 │
+                       ┌─────────▼──────────┐
+                       │  SessionManager     │
+                       └─────────┬──────────┘
+                                 │
+                       ┌─────────▼──────────┐
+                       │   TenantManager     │
+                       └─────────┬──────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │      TenantContext       │
+                    ├─────────────────────────┤
+                    │ Sandbox / Quota / Audit  │
+                    │ Memory / Skills / State  │
+                    │ Org Knowledge / Handoff  │
+                    │ Team / Bus / Intent      │
+                    │ Evolution / Observability│
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │   TenantAwareAIAgent     │
+                    ├─────────────────────────┤
+                    │ system prompt            │
+                    │ model call               │
+                    │ tool calls               │
+                    │ trace + evolution        │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │ TenantAwareToolDispatcher│
+                    ├─────────────────────────┤
+                    │ file/memory/code tools   │
+                    │ org-native tools         │
+                    │ sandbox enforcement      │
+                    └────────────┬────────────┘
+                                 │
+       ┌─────────────────────────┼─────────────────────────┐
+       │                         │                         │
+┌──────▼──────┐          ┌───────▼───────┐         ┌──────▼──────┐
+│ Org Modules │          │ Collaboration │         │ Observability│
+│ identity    │          │ Team          │         │ AgentTrace   │
+│ auth        │          │ TenantBus     │         │ anomalies    │
+│ knowledge   │          │ IntentOrch    │         │ dashboard    │
+│ handoff     │          │ Negotiator    │         └─────────────┘
+│ workflow    │          │ Governance    │
+│ evolution   │          └───────────────┘
+└─────────────┘</code></pre>
+      </section>
+
+      <section id="tenant-context">
+        <h2>3. TenantContext：租户级组织内核</h2>
+        <p>
+          <code>TenantContext</code> 是当前项目最重要的聚合点。它已经不只是租户配置对象，而是一个租户级组织运行时容器。
+        </p>
+        <pre><code>TenantContext
+├── 租户身份与配置
+│   ├── tenantId
+│   ├── TenantConfig
+│   └── lifecycle state
+│
+├── 隔离能力
+│   ├── TenantFileSandbox
+│   ├── TenantSecurityPolicy
+│   ├── TenantQuotaManager
+│   ├── TenantSessionManager
+│   ├── TenantMemoryManager
+│   └── TenantSkillManager
+│
+├── 协作能力
+│   ├── AgentRole registry
+│   ├── GovernancePolicy
+│   ├── TenantBus
+│   ├── TaskOrchestrator
+│   ├── Negotiator
+│   ├── OrgHealthChecker
+│   ├── TeamManager
+│   └── IntentOrchestrator
+│
+├── 组织能力
+│   ├── OrganizationalKnowledgeBase
+│   ├── HandoffProtocol
+│   └── AgentObservability
+│
+└── 共享上下文
+    └── SharedBlackboard</code></pre>
+        <div class="callout">
+          <strong>理解方式：</strong>TenantContext = 租户 + 沙箱 + 记忆 + 工具 + 组织 + 协作 + 可观测。
+        </div>
+      </section>
+
+      <section id="agent-core">
+        <h2>4. Agent 核心层</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>AIAgent</h3>
+            <p>原始单体 Agent 核心，主要负责模型调用、对话历史、system prompt、工具调用、memory、skills、approval、trajectory、reflection 等。</p>
+          </div>
+          <div class="card">
+            <h3>TenantAwareAIAgent</h3>
+            <p>当前真正的主角。在 AIAgent 基础上加入多租户、角色、团队、总线、自进化、可观测等组织原生能力。</p>
+          </div>
+        </div>
+        <h3>TenantAwareAIAgent 的职责</h3>
+        <pre><code>TenantAwareAIAgent
+├── 绑定 tenantId / TenantContext
+├── 使用租户级 MemoryManager
+├── 使用租户级 ToolDispatcher
+├── 自动注册 AgentRole
+├── 自动加入 Team
+├── 自动注册 TenantBus
+├── 构造组织感知 system prompt
+├── 注入 team context
+├── 注入 evolution context
+├── 处理工具调用
+├── 记录 tool success/failure
+├── 记录 AgentTrace
+└── 处理 bus message</code></pre>
+        <p>
+          因此，TenantAwareAIAgent 现在可以看成一个属于某个租户、拥有角色、能加入团队、能收发消息、能学习、能被追踪的组织成员。
+        </p>
+      </section>
+
+      <section id="tools">
+        <h2>5. 工具系统</h2>
+        <p>工具层由三个核心组成：</p>
+        <div class="grid-3">
+          <div class="card">
+            <h3>ToolRegistry</h3>
+            <p>全局工具注册表，保存工具名、toolset、schema、handler、risk、approval config。</p>
+          </div>
+          <div class="card">
+            <h3>ToolInitializerV2</h3>
+            <p>启动时注册全部工具，包括新增的 <code>OrgNativeTools</code>。</p>
+          </div>
+          <div class="card">
+            <h3>TenantAwareToolDispatcher</h3>
+            <p>工具执行的租户边界。把文件、代码、memory、org 工具路由到对应租户组件。</p>
+          </div>
+        </div>
+        <h3>工具执行路由</h3>
+        <pre><code>tool call
+  ↓
+TenantAwareToolDispatcher
+  ↓
+按类型路由：
+  ├── 文件工具 → TenantFileSandbox
+  ├── 代码/终端 → Tenant sandbox
+  ├── memory 工具 → TenantMemoryManager
+  ├── org 工具 → TenantContext 里的组织组件
+  └── generic tool → ToolRegistry</code></pre>
+        <h3>当前 11 个 org-native tools</h3>
+        <table>
+          <thead><tr><th>工具</th><th>作用</th><th>所属闭环</th></tr></thead>
+          <tbody>
+            <tr><td><code>find_teammate</code></td><td>按 skill / role / level 搜索队友</td><td>组织感知</td></tr>
+            <tr><td><code>delegate_task</code></td><td>通过 TenantBus 委派任务</td><td>组织协作</td></tr>
+            <tr><td><code>query_org_knowledge</code></td><td>查询 SOP / FAQ / Policy 等组织知识</td><td>组织知识</td></tr>
+            <tr><td><code>escalate_to_human</code></td><td>触发 HandoffProtocol，人类审批/协助</td><td>人机交接</td></tr>
+            <tr><td><code>team_post</code></td><td>写入团队共享状态</td><td>团队上下文</td></tr>
+            <tr><td><code>team_read</code></td><td>读取团队共享状态</td><td>团队上下文</td></tr>
+            <tr><td><code>team_status</code></td><td>查看团队成员、mission、activity</td><td>团队上下文</td></tr>
+            <tr><td><code>orchestrate_intent</code></td><td>分解 intent、匹配队友、执行/计划任务</td><td>自我组织</td></tr>
+            <tr><td><code>intent_status</code></td><td>查询 intent run 状态</td><td>自我组织</td></tr>
+            <tr><td><code>org_traces</code></td><td>查询组织/Agent 执行追踪</td><td>可观测</td></tr>
+            <tr><td><code>org_anomalies</code></td><td>查询组织异常事件</td><td>可观测</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="org-modules">
+        <h2>6. org/*：组织制度与基础设施</h2>
+        <p><code>org/</code> 下面偏“组织制度和能力”。它提供身份、权限、知识、工作流、评估、进化、可观测等基础设施。</p>
+        <table>
+          <thead><tr><th>模块</th><th>核心类</th><th>职责</th></tr></thead>
+          <tbody>
+            <tr><td><code>org/identity</code></td><td>AgentIdentity, AgentCredential, AgentIdentityManager</td><td>Agent 正式身份与凭证生命周期</td></tr>
+            <tr><td><code>org/auth</code></td><td>RBAC, ABAC, PermissionPolicy</td><td>角色 + 属性权限控制</td></tr>
+            <tr><td><code>org/handoff</code></td><td>HandoffContext, HandoffProtocol</td><td>人机交接、审批、SLA、升级链路</td></tr>
+            <tr><td><code>org/knowledge</code></td><td>KnowledgeEntry, OrganizationalKnowledgeBase</td><td>组织知识库，RAG-ready</td></tr>
+            <tr><td><code>org/workflow</code></td><td>Workflow, WorkflowStep, WorkflowEngine</td><td>显式持久化工作流</td></tr>
+            <tr><td><code>org/eval</code></td><td>AgentEvaluation</td><td>Agent 评估、A/B 对比、漂移检测</td></tr>
+            <tr><td><code>org/evolution</code></td><td>SelfEvolutionEngine, FailureCase</td><td>失败学习、成功模式、技能建议</td></tr>
+            <tr><td><code>org/observe</code></td><td>AgentObservability, AgentTrace</td><td>全链路 trace、异常检测、forensics</td></tr>
+            <tr><td><code>org/distributed</code></td><td>Registry / routing / circuit breaker 相关</td><td>分布式 Agent 网格基础</td></tr>
+            <tr><td><code>org/market</code></td><td>模板/市场相关</td><td>Agent 能力模板与 marketplace</td></tr>
+            <tr><td><code>org/compliance</code></td><td>合规相关</td><td>SOC2 / ISO / GDPR 等合规基础</td></tr>
+            <tr><td><code>org/multimodal</code></td><td>多模态协调相关</td><td>多模态 session 协作</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="collaboration">
+        <h2>7. collaboration/*：组织运转机制</h2>
+        <p><code>collaboration/</code> 是更“活”的组织协作层，它让 Agent 之间形成队伍、通信、分工、协商和治理。</p>
+        <div class="grid-2">
+          <div class="card">
+            <h3>AgentRole</h3>
+            <p>定义 Agent 在组织中的角色、级别、技能、可用工具和协作者。</p>
+            <pre><code>new AgentRole("release-manager", "Deploys releases", AgentRole.Level.LEAD)
+  .skills("release", "deploy", "production", "ci-cd");</code></pre>
+          </div>
+          <div class="card">
+            <h3>TenantBus</h3>
+            <p>Agent 间消息总线，支持 REQUEST、RESPONSE、NOTIFY、PROPOSE、ESCALATE、BROADCAST。</p>
+          </div>
+          <div class="card">
+            <h3>Team / TeamManager</h3>
+            <p>团队抽象。包含 mission、members、lead、sharedState、recentActivity。</p>
+          </div>
+          <div class="card">
+            <h3>IntentOrchestrator</h3>
+            <p>从自然语言 intent 出发，自动分解任务、匹配队友、执行并在失败时重派。</p>
+          </div>
+          <div class="card">
+            <h3>TaskOrchestrator</h3>
+            <p>显式任务/流程编排，更接近 DAG 或 pipeline。</p>
+          </div>
+          <div class="card">
+            <h3>Negotiator / GovernancePolicy / OrgHealthChecker</h3>
+            <p>协商、治理策略和组织健康检查。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="five-knives">
+        <h2>8. AI 组织原生化“五刀”闭环</h2>
+        <p>五刀解决了之前“有模块但不像活组织”的问题。</p>
+        <table>
+          <thead><tr><th>刀</th><th>主题</th><th>关键能力</th><th>代表工具/类</th></tr></thead>
+          <tbody>
+            <tr><td>第一刀</td><td>Org-Native Tools</td><td>让 Agent 感知组织：找队友、委派、查知识、升级人类</td><td>OrgNativeTools</td></tr>
+            <tr><td>第二刀</td><td>SelfEvolution 回路</td><td>失败 → 根因 → 经验 → 下次 prompt 注入</td><td>SelfEvolutionEngine</td></tr>
+            <tr><td>第三刀</td><td>Team 共享上下文</td><td>团队、成员、共享决策、团队 activity</td><td>Team, TeamManager</td></tr>
+            <tr><td>第四刀</td><td>Intent 自我组织</td><td>任务分解、技能匹配、自动委派、失败重派</td><td>IntentOrchestrator</td></tr>
+            <tr><td>第五刀</td><td>Org-wide 可观测</td><td>tool trace、异常检测、行为回放</td><td>AgentObservability, AgentTrace</td></tr>
+          </tbody>
+        </table>
+        <h3>组织闭环</h3>
+        <pre><code>用户任务
+  ↓
+TenantAwareAIAgent
+  ↓
+查组织知识：query_org_knowledge
+  ↓
+找队友：find_teammate
+  ↓
+团队共享：team_post / team_read
+  ↓
+自我组织：orchestrate_intent
+  ↓
+Agent 间通信：TenantBus
+  ↓
+失败学习：SelfEvolutionEngine
+  ↓
+可观测回放：AgentObservability / org_traces
+  ↓
+Dashboard / Gateway 对外展示</code></pre>
+      </section>
+
+      <section id="request-flow">
+        <h2>9. 一次请求的完整执行流</h2>
+        <div class="flow">
+          <div class="step"><div class="num">1</div><div><strong>用户/平台消息进入</strong><br><span class="muted">来自 Gateway、Dashboard、ACP 或 Web UI。</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>定位 session 与 tenant</strong><br><span class="muted">SessionManager / TenantManager 找到对应租户上下文。</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>TenantAwareAIAgent.processMessage()</strong><br><span class="muted">检查 tenant 状态、quota、activity，并开启 AgentTrace。</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>buildSystemPrompt()</strong><br><span class="muted">注入默认身份、memory、tools、skills、evolution context、team context。</span></div></div>
+          <div class="step"><div class="num">5</div><div><strong>ModelClient 调模型</strong><br><span class="muted">模型返回自然语言或 tool calls。</span></div></div>
+          <div class="step"><div class="num">6</div><div><strong>executeToolCall()</strong><br><span class="muted">角色权限检查、记录 TOOL_CALL、通过 TenantAwareToolDispatcher 执行、记录 TOOL_RESULT/ERROR。</span></div></div>
+          <div class="step"><div class="num">7</div><div><strong>进化与观测</strong><br><span class="muted">成功 recordSuccess，失败 recordFailure，最终 completeTrace。</span></div></div>
+          <div class="step"><div class="num">8</div><div><strong>返回结果</strong><br><span class="muted">结果回到 Gateway / Dashboard / 用户。</span></div></div>
+        </div>
+      </section>
+
+      <section id="tenant-isolation">
+        <h2>10. 多租户隔离关系</h2>
+        <p>每个 tenant 有独立的配置、工作区、记忆、会话、技能、状态和轨迹目录。</p>
+        <pre><code>/root/.hermes/tenants/{tenantId}/
+├── config/
+├── workspace/
+├── memory/
+├── sessions/
+├── skills/
+├── state/
+└── trajectory/</code></pre>
+        <table>
+          <thead><tr><th>组件</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>TenantConfig</td><td>租户配置</td></tr>
+            <tr><td>TenantQuotaManager</td><td>请求数、token、成本等 quota</td></tr>
+            <tr><td>TenantSecurityPolicy</td><td>安全策略、工具 allow/deny</td></tr>
+            <tr><td>TenantFileSandbox</td><td>文件系统隔离</td></tr>
+            <tr><td>TenantMemoryManager</td><td>租户记忆</td></tr>
+            <tr><td>TenantSkillManager</td><td>租户技能</td></tr>
+            <tr><td>TenantSessionManager</td><td>租户会话</td></tr>
+            <tr><td>TenantAuditLogger</td><td>审计日志</td></tr>
+            <tr><td>TenantMetrics</td><td>租户指标</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="memory-learning">
+        <h2>11. 记忆、学习、进化的区别</h2>
+        <table>
+          <thead><tr><th>类型</th><th>代表模块</th><th>记什么</th><th>用在哪里</th></tr></thead>
+          <tbody>
+            <tr><td>Memory</td><td>MemoryManager, MemoryCardIntegrator</td><td>用户事实、长期记忆、上下文</td><td>下次对话与 prompt snapshot</td></tr>
+            <tr><td>Learning</td><td>KnowledgeExtractor, CuriosityEngine, ReflectionEngine, ToolPerformanceTracker</td><td>知识抽取、工具表现、反思、confidence</td><td>工具选择、反思、知识沉淀</td></tr>
+            <tr><td>Evolution</td><td>SelfEvolutionEngine, FailureCase</td><td>失败教训、成功模式、技能建议</td><td>system prompt 进化、skill suggestion</td></tr>
+          </tbody>
+        </table>
+        <div class="callout yellow">
+          <strong>核心区别：</strong>Memory 记事实，Learning 学模式，Evolution 记失败并改变未来行为。
+        </div>
+      </section>
+
+      <section id="dashboard-gateway">
+        <h2>12. Dashboard / Gateway / ACP</h2>
+        <h3>Dashboard</h3>
+        <p>Dashboard 是可视化与管理入口，后端主要由 <code>DashboardServer</code>、<code>dashboard/handlers/*</code>、<code>TenantDashboardIntegration</code> 组成。</p>
+        <pre><code>React Web UI
+  ↓ HTTP
+DashboardServer / GatewayServer
+  ↓
+TenantManager / Dashboard handlers
+  ↓
+TenantContext / Org modules / Compare modules</code></pre>
+
+        <h3>Gateway</h3>
+        <p>Gateway 负责把外部平台消息接入系统。</p>
+        <pre><code>平台消息
+  ↓
+PlatformAdapter
+  ↓
+GatewayServer
+  ↓
+SessionManager
+  ↓
+TenantAwareAIAgent</code></pre>
+
+        <h3>ACP</h3>
+        <p><code>acp/</code> 是 Agent Client Protocol 相关能力，偏外部 agent/client 的结构化接入。</p>
+
+        <h3>Compare</h3>
+        <p><code>compare/</code> 用于多租户、多 Agent、多模型、多 prompt 对比，可辅助评估组织策略。</p>
+      </section>
+
+      <section id="release-e2e">
+        <h2>13. 端到端 Release 演练</h2>
+        <p>新增的 <code>AIOrganizationReleaseWorkflowE2ETest</code> 证明五刀不是散装模块，而是可以组成完整业务链路。</p>
+        <pre><code>Release Intent
+  ↓
+query_org_knowledge 查 Production Release SOP
+  ↓
+team_post / team_read 写入并读取团队决策
+  ↓
+orchestrate_intent 规划并执行 release 分工
+  ↓
+TenantBus 委派给 reviewer / QA / release-manager
+  ↓
+SelfEvolutionEngine 记录 release 教训
+  ↓
+AgentObservability 生成 trace
+  ↓
+org_traces / org_anomalies 回放组织行为</code></pre>
+        <div class="callout green">
+          <strong>验证结果：</strong><code>mvn test</code> 全量通过：314 tests, 0 failures, 0 errors, 4 skipped。
+        </div>
+      </section>
+
+      <section id="strengths-gaps">
+        <h2>14. 当前强项与薄点</h2>
+        <h3>强项</h3>
+        <div class="grid-2">
+          <div class="card"><h3>多租户底座完整</h3><p>Sandbox、quota、security、memory、skill、session、audit 都已具备。</p></div>
+          <div class="card"><h3>Agent 不再孤立</h3><p>role、team、bus、intent、trace 让 Agent 开始像组织成员。</p></div>
+          <div class="card"><h3>组织闭环成型</h3><p>知识 → 分工 → 执行 → 失败 → 学习 → 追踪 → 回放。</p></div>
+          <div class="card"><h3>测试覆盖扎实</h3><p>五刀新增 80 个测试，并有 Release E2E 演练。</p></div>
+        </div>
+        <h3>仍需打磨的地方</h3>
+        <table>
+          <thead><tr><th>薄点</th><th>原因</th><th>建议</th></tr></thead>
+          <tbody>
+            <tr><td>IntentOrchestrator 仍偏启发式</td><td>目前靠 token / skill / role / level 打分</td><td>升级为 LLM + embedding + trace-informed planner</td></tr>
+            <tr><td>team tools 缺精确 agentId 上下文</td><td>Dispatcher 当前主要持有 tenantContext</td><td>让 TenantAwareToolDispatcher 感知当前 agentId</td></tr>
+            <tr><td>Dashboard 尚未完全吃下五刀数据</td><td>后端能力已强，UI 可视化还可增强</td><td>补 Team、Intent Run、Trace Timeline、Evolution Lessons 页面</td></tr>
+            <tr><td>Workflow 与 Intent 尚未融合</td><td>一个显式 DAG，一个自组织计划</td><td>让 IntentOrchestrator 生成 Workflow，由 WorkflowEngine 持久化执行</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="roadmap">
+        <h2>15. 推荐演进路线</h2>
+        <div class="flow">
+          <div class="step"><div class="num">1</div><div><strong>UI 可视化五刀</strong><br><span class="muted">Team、Intent Runs、Traces、Evolution Lessons、Anomalies、Tool Usage Heatmap。</span></div></div>
+          <div class="step"><div class="num">2</div><div><strong>IntentOrchestrator 智能化</strong><br><span class="muted">从 heuristic 升级为 LLM / embedding / trace-informed planner。</span></div></div>
+          <div class="step"><div class="num">3</div><div><strong>融合 WorkflowEngine</strong><br><span class="muted">intent → plan → workflow → execute → trace → evolve。</span></div></div>
+          <div class="step"><div class="num">4</div><div><strong>组织调度脑</strong><br><span class="muted">引入 load、availability、failure rate、success pattern、cost 参与调度。</span></div></div>
+        </div>
+        <div class="callout">
+          <strong>最终方向：</strong>从“多 Agent 框架”演进为真正的 AI 组织操作系统。
+        </div>
+      </section>
+
+      <p class="footer">
+        Generated for Hermes Agent Java · 核心说明文档 · doc.html
+      </p>
+    </main>
+  </div>
+</body>
+</html>
