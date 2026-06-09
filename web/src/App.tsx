@@ -21,6 +21,7 @@ import {
   Star,
   Code,
   Eye,
+  Monitor,
   Users,
   Bot,
   Layout,
@@ -40,6 +41,7 @@ import SkillsPage from "@/pages/SkillsPage";
 import ToolsPage from "@/pages/ToolsPage";
 import TenantsPage from "@/pages/TenantsPage";
 import OrgPage from "@/pages/OrgPage";
+import OrgControlCenterPage from "@/pages/OrgControlCenterPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import PlaygroundPage from "@/pages/PlaygroundPage";
@@ -80,6 +82,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
   { path: "/org", labelKey: "org", label: "Org", icon: Layout },
+  { path: "/org-control", label: "Org Control", icon: Monitor },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
 ];
@@ -268,6 +271,7 @@ export default function App() {
           <Route path="/env" element={<EnvPage />} />
 
           <Route path="/org" element={<OrgPage />} />
+          <Route path="/org-control" element={<OrgControlCenterPage />} />
           {plugins.map(({ manifest, component: PluginComponent }) => (
             <Route
               key={manifest.name}

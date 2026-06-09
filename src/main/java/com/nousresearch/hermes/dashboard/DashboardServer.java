@@ -81,6 +81,7 @@ public class DashboardServer {
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
+    private final OrgControlCenterHandler orgControlCenterHandler;
     private final OrgApiHandler orgApiHandler = new OrgApiHandler()
             .with("identity", new AgentIdentityManager())
             .with("handoff", new HandoffProtocol())
@@ -122,8 +123,9 @@ public class DashboardServer {
         // Initialize handlers
         this.configHandler = new ConfigHandler(config);
         this.sessionHandler = new SessionHandler();
-        // Wire AI-native org overview to real tenant data
+        // Wire AI-native org overview/control center to real tenant data
         this.orgOverviewHandler.setTenantManager(tenantManager);
+        this.orgControlCenterHandler = new OrgControlCenterHandler(tenantManager);
         this.envHandler = new EnvHandler();
         this.logsHandler = new LogsHandler();
         this.skillsHandler = new SkillsHandler();
@@ -401,6 +403,14 @@ public class DashboardServer {
         app.get("/api/org/evolution/failures", orgApiHandler::evolutionFailures);
         app.get("/api/org/evolution/patterns", orgApiHandler::evolutionPatterns);
         app.get("/api/org/compliance", orgApiHandler::complianceSummary);
+
+        // --- Org Control Center API (五刀可视化聚合) ---
+        app.get("/api/org/control/overview", orgControlCenterHandler::overview);
+        app.get("/api/org/control/teams", orgControlCenterHandler::teams);
+        app.get("/api/org/control/intents", orgControlCenterHandler::intents);
+        app.get("/api/org/control/traces", orgControlCenterHandler::traces);
+        app.get("/api/org/control/evolution", orgControlCenterHandler::evolution);
+        app.get("/api/org/control/anomalies", orgControlCenterHandler::anomalies);
 
         // Dashboard themes API
         app.get("/api/dashboard/themes", ctx -> {

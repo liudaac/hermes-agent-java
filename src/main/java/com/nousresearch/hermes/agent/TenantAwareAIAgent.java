@@ -264,6 +264,7 @@ public class TenantAwareAIAgent {
             }
             this.governancePolicy = this.tenantContext.getGovernancePolicy();
             this.orgHealthChecker = this.tenantContext.getOrgHealthChecker();
+            this.evolutionEngine = this.tenantContext.getEvolutionEngine();
             // ======== AI原生组织：第三刀——团队与总线注册 ========
             // 1) 加入默认团队（singleton team，确保每个 agent 至少有归属）
             // 2) 自动注册到 TenantBus，让队友能 discover 并 message 它

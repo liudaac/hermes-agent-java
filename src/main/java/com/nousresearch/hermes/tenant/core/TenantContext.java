@@ -104,6 +104,8 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.collaboration.IntentOrchestrator intentOrchestrator;
     // 组织可观测性（第五刀：全链路追踪）
     private volatile com.nousresearch.hermes.org.observe.AgentObservability observability;
+    // 自进化引擎（租户级共享，供 Dashboard 与 Agent 共用）
+    private volatile com.nousresearch.hermes.org.evolution.SelfEvolutionEngine evolutionEngine;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -909,6 +911,18 @@ public class TenantContext {
             }
         }
         return observability;
+    }
+
+    /** 获取租户级自进化引擎（失败学习、成功模式、技能建议） */
+    public com.nousresearch.hermes.org.evolution.SelfEvolutionEngine getEvolutionEngine() {
+        if (evolutionEngine == null) {
+            synchronized (this) {
+                if (evolutionEngine == null) {
+                    evolutionEngine = new com.nousresearch.hermes.org.evolution.SelfEvolutionEngine();
+                }
+            }
+        }
+        return evolutionEngine;
     }
 
     /** 关闭协作子系统 */
