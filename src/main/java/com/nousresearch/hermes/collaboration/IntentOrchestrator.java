@@ -54,7 +54,7 @@ public class IntentOrchestrator {
         // For each subtask, find the best agent
         List<SubtaskAssignment> assignments = new ArrayList<>();
         for (String subtask : subtasks) {
-            SubtaskAssignment best = findBestMatch(subtask, roles);
+            SubtaskAssignment best = findBestMatch(subtask, roles, tenantContext);
             assignments.add(best);
         }
 
@@ -164,79 +164,31 @@ public class IntentOrchestrator {
     // ======== Agent Matching ========
 
     /**
-     * Find the best teammate for a subtask by scoring skill overlap.
+     * Find the best teammate for a subtask by scoring skill/role overlap.
+     * Legacy static API used by tests and callers that do not need tenant-aware
+     * availability/reliability/evolution signals.
      */
     static SubtaskAssignment findBestMatch(String subtask, Map<String, AgentRole> roles) {
-        String lower = subtask.toLowerCase();
-        String[] tokens = lower.split("\\W+");
+        return findBestMatch(subtask, roles, null);
+    }
 
-        AgentRole best = null;
-        String bestAgentId = null;
-        double bestScore = 0.0;
-        List<String> bestSkills = List.of();
+    /**
+     * Find the best teammate for a subtask using organization-aware capability scoring.
+     */
+    static SubtaskAssignment findBestMatch(String subtask, Map<String, AgentRole> roles, TenantContext ctx) {
+        CapabilityScorer.CapabilityScore best = null;
 
         for (var entry : roles.entrySet()) {
-            String agentId = entry.getKey();
-            AgentRole role = entry.getValue();
-
-            // Score: count of skill matches in the subtask
-            int matches = 0;
-            List<String> matched = new ArrayList<>();
-            for (String skill : role.getSkills()) {
-                for (String token : tokens) {
-                    if (skill.toLowerCase().contains(token) || token.contains(skill.toLowerCase())) {
-                        if (token.length() >= 3) {
-                            matches++;
-                            if (!matched.contains(skill)) matched.add(skill);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Role name match: full substring OR token overlap with role name parts
-            String roleLower = role.getRoleName().toLowerCase();
-            if (lower.contains(roleLower)) {
-                matches += 2;
-            } else {
-                // Token-level role name match (e.g. role "data-analyst" matches token "data")
-                for (String roleToken : roleLower.split("\\W+")) {
-                    if (roleToken.length() < 3) continue;
-                    for (String taskToken : tokens) {
-                        if (taskToken.length() < 3) continue;
-                        if (roleToken.contains(taskToken) || taskToken.contains(roleToken)) {
-                            matches++;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Level bonus — only meaningful when there are skill/role matches.
-            // Otherwise an unrelated LEAD would outscore a relevant JUNIOR.
-            double levelBonus = 0.0;
-            if (matches > 0) {
-                levelBonus = switch (role.getLevel()) {
-                    case LEAD -> 0.5;
-                    case SENIOR -> 0.3;
-                    case MID -> 0.1;
-                    case JUNIOR -> 0.0;
-                };
-            }
-
-            double score = matches + levelBonus;
-            if (score > bestScore) {
-                bestScore = score;
-                best = role;
-                bestAgentId = agentId;
-                bestSkills = matched;
+            var score = CapabilityScorer.score(subtask, entry.getKey(), entry.getValue(), ctx);
+            if (best == null || score.total() > best.total()) {
+                best = score;
             }
         }
 
-        if (best == null || bestScore < 0.1) {
+        if (best == null || best.total() < 0.1) {
             return new SubtaskAssignment(subtask, null, null, 0.0, List.of());
         }
-        return new SubtaskAssignment(subtask, bestAgentId, best.getRoleName(), bestScore, bestSkills);
+        return new SubtaskAssignment(subtask, best.agentId(), best.roleName(), best.total(), best.matchedSkills());
     }
 
     /**
@@ -247,7 +199,7 @@ public class IntentOrchestrator {
         Map<String, AgentRole> filtered = new java.util.HashMap<>(roles);
         filtered.remove(excludeAgentId);
         if (filtered.isEmpty()) return null;
-        return findBestMatch(original.subtask(), filtered);
+        return findBestMatch(original.subtask(), filtered, tenantContext);
     }
 
     // ======== Data Classes ========
