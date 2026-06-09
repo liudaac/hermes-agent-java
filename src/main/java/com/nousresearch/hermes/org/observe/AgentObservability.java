@@ -85,6 +85,11 @@ public class AgentObservability {
             .limit(limit).toList();
     }
 
+    /** Get recent traces across all agents. */
+    public List<AgentTrace> getAllRecentTraces(int limit) {
+        return history.stream().limit(limit).toList();
+    }
+
     // ---- anomaly detection ----
 
     private void checkAnomalies(AgentTrace trace, AgentStatus status) {

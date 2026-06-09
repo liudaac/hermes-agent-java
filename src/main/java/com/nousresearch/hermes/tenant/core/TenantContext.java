@@ -2,6 +2,8 @@ package com.nousresearch.hermes.tenant.core;
 
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.collaboration.*;
+import com.nousresearch.hermes.org.handoff.HandoffProtocol;
+import com.nousresearch.hermes.org.knowledge.OrganizationalKnowledgeBase;
 import com.nousresearch.hermes.tenant.core.TenantConfig;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
@@ -92,6 +94,16 @@ public class TenantContext {
     private volatile Negotiator negotiator;
     // 组织健康检查器
     private volatile OrgHealthChecker orgHealthChecker;
+    // 组织知识库（RAG-ready）
+    private volatile OrganizationalKnowledgeBase orgKnowledgeBase;
+    // 人机交接协议
+    private volatile HandoffProtocol handoffProtocol;
+    // 团队管理器（同一租户内的 Agent 编组）
+    private volatile com.nousresearch.hermes.collaboration.TeamManager teamManager;
+    // 意图驱动的任务编排器（自我组织）
+    private volatile com.nousresearch.hermes.collaboration.IntentOrchestrator intentOrchestrator;
+    // 组织可观测性（第五刀：全链路追踪）
+    private volatile com.nousresearch.hermes.org.observe.AgentObservability observability;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -837,6 +849,66 @@ public class TenantContext {
             }
         }
         return orgHealthChecker;
+    }
+
+    /** 获取组织知识库（RAG-ready，支持语义搜索） */
+    public OrganizationalKnowledgeBase getOrgKnowledgeBase() {
+        if (orgKnowledgeBase == null) {
+            synchronized (this) {
+                if (orgKnowledgeBase == null) {
+                    orgKnowledgeBase = new OrganizationalKnowledgeBase();
+                }
+            }
+        }
+        return orgKnowledgeBase;
+    }
+
+    /** 获取人机交接协议（支持审批、升级链路） */
+    public HandoffProtocol getHandoffProtocol() {
+        if (handoffProtocol == null) {
+            synchronized (this) {
+                if (handoffProtocol == null) {
+                    handoffProtocol = new HandoffProtocol();
+                }
+            }
+        }
+        return handoffProtocol;
+    }
+
+    /** 获取团队管理器（同一租户内的 Agent 编组） */
+    public com.nousresearch.hermes.collaboration.TeamManager getTeamManager() {
+        if (teamManager == null) {
+            synchronized (this) {
+                if (teamManager == null) {
+                    teamManager = new com.nousresearch.hermes.collaboration.TeamManager(tenantId);
+                }
+            }
+        }
+        return teamManager;
+    }
+
+    /** 获取意图编排器（第四刀：Agent 自我组织） */
+    public com.nousresearch.hermes.collaboration.IntentOrchestrator getIntentOrchestrator() {
+        if (intentOrchestrator == null) {
+            synchronized (this) {
+                if (intentOrchestrator == null) {
+                    intentOrchestrator = new com.nousresearch.hermes.collaboration.IntentOrchestrator(this);
+                }
+            }
+        }
+        return intentOrchestrator;
+    }
+
+    /** 获取组织可观测性（第五刀：全链路追踪、异常检测） */
+    public com.nousresearch.hermes.org.observe.AgentObservability getObservability() {
+        if (observability == null) {
+            synchronized (this) {
+                if (observability == null) {
+                    observability = new com.nousresearch.hermes.org.observe.AgentObservability();
+                }
+            }
+        }
+        return observability;
     }
 
     /** 关闭协作子系统 */

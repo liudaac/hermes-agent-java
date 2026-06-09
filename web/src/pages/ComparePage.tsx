@@ -771,7 +771,7 @@ export default function ComparePage() {
                 <Button
                   size="sm"
                   onClick={runAutoChat}
-                  disabled={!autoTopic.trim() || participants.length < 2}
+                  disabled={!autoTopic.trim() || participants.length < 2 || new Set(participants.map((p) => p.tenantId)).size < 2}
                   className="h-7 text-xs px-3"
                 >
                   <Play className="h-3 w-3 mr-1" />

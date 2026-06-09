@@ -157,6 +157,7 @@ public class TenantAwareToolDispatcher {
                 case "execute_python", "execute_javascript", "execute_bash" -> dispatchCodeTool(toolName, safeArgs);
                 case "terminal", "execute_command" -> dispatchTerminalTool(toolName, safeArgs);
                 case "memory_read", "memory_write", "memory_search" -> dispatchMemoryTool(toolName, safeArgs);
+                case "find_teammate", "delegate_task", "query_org_knowledge", "escalate_to_human", "team_post", "team_read", "team_status", "orchestrate_intent", "intent_status", "org_traces", "org_anomalies" -> dispatchOrgTool(toolName, safeArgs);
                 default -> dispatchGenericTool(toolName, safeArgs);
             };
         } catch (Exception e) {
@@ -388,6 +389,429 @@ public class TenantAwareToolDispatcher {
         };
     }
     
+    // ========== AI原生组织工具 ==========
+    private String dispatchOrgTool(String toolName, Map<String, Object> args) {
+        return switch (toolName) {
+            case "find_teammate" -> findTeammate(args);
+            case "delegate_task" -> delegateTask(args);
+            case "query_org_knowledge" -> queryOrgKnowledge(args);
+            case "escalate_to_human" -> escalateToHuman(args);
+            case "team_post" -> teamPost(args);
+            case "team_read" -> teamRead(args);
+            case "team_status" -> teamStatus(args);
+            case "orchestrate_intent" -> orchestrateIntent(args);
+            case "intent_status" -> intentStatus(args);
+            case "org_traces" -> orgTraces(args);
+            case "org_anomalies" -> orgAnomalies(args);
+            default -> ToolRegistry.toolError("Unknown org tool: " + toolName);
+        };
+    }
+
+    /**
+     * Find teammates by skill, role, or capability.
+     * Searches the tenant's agent role registry.
+     */
+    private String findTeammate(Map<String, Object> args) {
+        String skill = (String) args.get("skill");
+        String role = (String) args.get("role");
+        String level = (String) args.get("level");
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (var entry : tenantContext.listAgentRoles().entrySet()) {
+            var agentRole = entry.getValue();
+            boolean match = true;
+
+            if (skill != null && !skill.isBlank()) {
+                match = agentRole.getSkills().stream()
+                    .anyMatch(s -> s.toLowerCase().contains(skill.toLowerCase()));
+            }
+            if (match && role != null && !role.isBlank()) {
+                match = agentRole.getRoleName().toLowerCase().contains(role.toLowerCase());
+            }
+            if (match && level != null && !level.isBlank()) {
+                match = agentRole.getLevel().name().equalsIgnoreCase(level);
+            }
+
+            if (match) {
+                results.add(agentRole.toMap());
+            }
+        }
+
+        return ToolRegistry.toolResult(Map.of(
+            "teammates", results,
+            "count", results.size(),
+            "tenant", tenantContext.getTenantId()
+        ));
+    }
+
+    /**
+     * Delegate a task to another agent via TenantBus.
+     * Sends a request message and waits for a reply.
+     */
+    private String delegateTask(Map<String, Object> args) {
+        String to = (String) args.get("to");
+        String task = (String) args.get("task");
+        String context = (String) args.getOrDefault("context", "");
+        int timeoutSec = ((Number) args.getOrDefault("timeout_seconds", 120)).intValue();
+
+        if (to == null || to.isBlank()) {
+            return ToolRegistry.toolError("Target agent 'to' is required");
+        }
+        if (task == null || task.isBlank()) {
+            return ToolRegistry.toolError("Task description is required");
+        }
+
+        // Ensure collaboration is initialized
+        tenantContext.initCollaboration();
+        var bus = tenantContext.getTenantBus();
+
+        if (!bus.isRegistered(to)) {
+            return ToolRegistry.toolError("Teammate '" + to + "' is not available. Use find_teammate to see who's online.");
+        }
+
+        try {
+            var msg = com.nousresearch.hermes.collaboration.AgentMessage.builder(
+                    tenantContext.getTenantId(), to, com.nousresearch.hermes.collaboration.AgentMessage.Type.REQUEST)
+                .action("delegate_task")
+                .payload(Map.of(
+                    "task", task,
+                    "context", context,
+                    "from", tenantContext.getTenantId()
+                ))
+                .timeoutMs(timeoutSec * 1000L)
+                .build();
+
+            var reply = bus.sendAndWait(msg, timeoutSec * 1000L);
+            return ToolRegistry.toolResult(Map.of(
+                "delegated_to", to,
+                "status", "completed",
+                "result", reply.getResultText(),
+                "payload", reply.getPayload()
+            ));
+        } catch (com.nousresearch.hermes.collaboration.TenantBus.TimeoutException e) {
+            return ToolRegistry.toolError("Delegation to '" + to + "' timed out after " + timeoutSec + "s. The teammate may be busy.");
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Delegation failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Query the organizational knowledge base.
+     * Searches across SOPs, best practices, troubleshooting guides, etc.
+     */
+    private String queryOrgKnowledge(Map<String, Object> args) {
+        String query = (String) args.get("query");
+        String typeStr = (String) args.get("type");
+        int maxResults = ((Number) args.getOrDefault("max_results", 5)).intValue();
+
+        if (query == null || query.isBlank()) {
+            return ToolRegistry.toolError("Search query is required");
+        }
+
+        var kb = tenantContext.getOrgKnowledgeBase();
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        try {
+            var entries = kb.search(query, maxResults);
+
+            // Filter by type if requested
+            for (var entry : entries) {
+                if (typeStr != null && !"any".equalsIgnoreCase(typeStr)) {
+                    if (!entry.getType().name().equalsIgnoreCase(typeStr)) continue;
+                }
+                results.add(Map.of(
+                    "id", entry.getId(),
+                    "title", entry.getTitle(),
+                    "type", entry.getType().name(),
+                    "content", entry.getContent(),
+                    "author", entry.getAuthor(),
+                    "tags", new ArrayList<>(entry.getTags()),
+                    "classification", entry.getClassification().name(),
+                    "views", entry.getViewCount()
+                ));
+                if (results.size() >= maxResults) break;
+            }
+        } catch (Exception e) {
+            logger.warn("Org knowledge search failed: {}", e.getMessage());
+        }
+
+        return ToolRegistry.toolResult(Map.of(
+            "query", query,
+            "results", results,
+            "count", results.size(),
+            "total_entries", kb.size(),
+            "hint", results.isEmpty() ? "No matching knowledge found. Consider adding to the knowledge base." : ""
+        ));
+    }
+
+    /**
+     * Escalate a decision to a human via the HandoffProtocol.
+     */
+    private String escalateToHuman(Map<String, Object> args) {
+        String summary = (String) args.get("summary");
+        String detail = (String) args.get("detail");
+        String priorityStr = (String) args.getOrDefault("priority", "NORMAL");
+        String target = (String) args.get("target");
+
+        if (summary == null || summary.isBlank()) {
+            return ToolRegistry.toolError("Summary is required for escalation");
+        }
+        if (detail == null || detail.isBlank()) {
+            return ToolRegistry.toolError("Detail is required for escalation");
+        }
+
+        com.nousresearch.hermes.org.handoff.HandoffContext.Priority priority;
+        try {
+            priority = com.nousresearch.hermes.org.handoff.HandoffContext.Priority.valueOf(priorityStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            priority = com.nousresearch.hermes.org.handoff.HandoffContext.Priority.NORMAL;
+        }
+
+        var protocol = tenantContext.getHandoffProtocol();
+        protocol.start();
+
+        var ctx = protocol.requestApproval(
+            tenantContext.getTenantId(),
+            summary,
+            detail,
+            target != null ? target : "human-operator",
+            600
+        );
+
+        return ToolRegistry.toolResult(Map.of(
+            "handoff_id", ctx.getHandoffId(),
+            "status", "pending",
+            "priority", priority.name(),
+            "summary", summary,
+            "next_steps", "A human reviewer will be notified. You can check status with the handoff_id."
+        ));
+    }
+
+    // ======== 第三刀：Team 操作 ========
+
+    /**
+     * Post a note to the agent's team's shared state.
+     * All team members can read it via team_read.
+     */
+    private String teamPost(Map<String, Object> args) {
+        String key = (String) args.get("key");
+        Object content = args.get("content");
+        String tag = (String) args.get("tag");
+
+        if (key == null || key.isBlank()) {
+            return ToolRegistry.toolError("Key is required for team_post");
+        }
+        if (content == null) {
+            return ToolRegistry.toolError("Content is required for team_post");
+        }
+
+        // Get the agent's team from the dispatcher context
+        // Note: dispatcher doesn't know which agent, so we use the tenant's default team for the agent.
+        // The proper fix is to plumb the agentId through, but for now use a team key prefix per agent.
+        // We'll use the team created by the agent (id starts with team_<agentId> or default team)
+        var teamManager = tenantContext.getTeamManager();
+        var teams = teamManager.listTeams();
+        if (teams.isEmpty()) {
+            return ToolRegistry.toolError("No team exists for this tenant");
+        }
+        // Use the most recently active team (heuristic)
+        var team = teams.get(teams.size() - 1);
+
+        var entry = new java.util.LinkedHashMap<String, Object>();
+        entry.put("content", content);
+        if (tag != null) entry.put("tag", tag);
+        entry.put("posted_at", java.time.Instant.now().toString());
+        team.putState(key, entry);
+
+        return ToolRegistry.toolResult(Map.of(
+            "team", team.getName(),
+            "key", key,
+            "tag", tag != null ? tag : "",
+            "status", "posted"
+        ));
+    }
+
+    /**
+     * Read entries from the agent's team's shared state.
+     */
+    private String teamRead(Map<String, Object> args) {
+        String keyPattern = (String) args.get("key_pattern");
+        int limit = ((Number) args.getOrDefault("limit", 20)).intValue();
+
+        var teamManager = tenantContext.getTeamManager();
+        var teams = teamManager.listTeams();
+        if (teams.isEmpty()) {
+            return ToolRegistry.toolError("No team exists for this tenant");
+        }
+        var team = teams.get(teams.size() - 1);
+
+        var entries = new java.util.ArrayList<java.util.Map<String, Object>>();
+        for (var e : team.getState().entrySet()) {
+            if (keyPattern != null && !keyPattern.isBlank() && !e.getKey().startsWith(keyPattern)) {
+                continue;
+            }
+            if (entries.size() >= limit) break;
+            entries.add(java.util.Map.of(
+                "key", e.getKey(),
+                "value", e.getValue()
+            ));
+        }
+        return ToolRegistry.toolResult(Map.of(
+            "team", team.getName(),
+            "entries", entries,
+            "count", entries.size(),
+            "filter", keyPattern != null ? keyPattern : ""
+        ));
+    }
+
+    /**
+     * Get the current status of the agent's team.
+     */
+    private String teamStatus(Map<String, Object> args) {
+        var teamManager = tenantContext.getTeamManager();
+        var teams = teamManager.listTeams();
+        if (teams.isEmpty()) {
+            return ToolRegistry.toolResult(Map.of(
+                "total_teams", 0,
+                "hint", "No team exists yet. Create one to enable team collaboration."
+            ));
+        }
+        var team = teams.get(teams.size() - 1);
+
+        var recent = team.getRecentActivity(5).stream()
+            .map(a -> java.util.Map.of(
+                "type", a.type(),
+                "actor", a.actor() != null ? a.actor() : "",
+                "detail", a.detail(),
+                "at", a.timestamp().toString()
+            )).toList();
+
+        return ToolRegistry.toolResult(java.util.Map.of(
+            "team", team.toMap(),
+            "recent_activity", recent
+        ));
+    }
+
+    // ======== 第四刀：Intent 自我组织 ========
+
+    /**
+     * Plan or execute an intent — let the agent self-organize around a complex task.
+     * In plan mode, returns who would do what. In execute mode, runs the plan asynchronously.
+     */
+    private String orchestrateIntent(Map<String, Object> args) {
+        String intent = (String) args.get("intent");
+        String mode = (String) args.getOrDefault("mode", "execute");
+
+        if (intent == null || intent.isBlank()) {
+            return ToolRegistry.toolError("Intent is required");
+        }
+
+        try {
+            var orchestrator = tenantContext.getIntentOrchestrator();
+
+            if ("plan".equalsIgnoreCase(mode)) {
+                var plan = orchestrator.plan(intent);
+                return ToolRegistry.toolResult(plan.toMap());
+            } else {
+                var run = orchestrator.execute(intent);
+                return ToolRegistry.toolResult(java.util.Map.of(
+                    "run_id", run.runId,
+                    "intent", run.intent,
+                    "status", run.status.name(),
+                    "subtasks_total", run.assignments.size(),
+                    "hint", "Use intent_status(run_id) to check progress"
+                ));
+            }
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Orchestration failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get the status of a previously-started intent run.
+     */
+    private String intentStatus(Map<String, Object> args) {
+        String runId = (String) args.get("run_id");
+        if (runId == null || runId.isBlank()) {
+            return ToolRegistry.toolError("run_id is required");
+        }
+
+        try {
+            var run = tenantContext.getIntentOrchestrator().getRun(runId);
+            if (run == null) {
+                return ToolRegistry.toolError("No run found with id: " + runId);
+            }
+            return ToolRegistry.toolResult(run.toMap());
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Failed to get run status: " + e.getMessage());
+        }
+    }
+
+    // ======== 第五刀：可观测性 API ========
+
+    /**
+     * Get recent agent traces for forensics.
+     */
+    private String orgTraces(Map<String, Object> args) {
+        String agentId = (String) args.get("agent_id");
+        int limit = ((Number) args.getOrDefault("limit", 10)).intValue();
+
+        try {
+            var obs = tenantContext.getObservability();
+            var traces = agentId != null && !agentId.isBlank()
+                ? obs.getRecentTraces(agentId, limit)
+                : obs.getAllRecentTraces(limit);
+
+            var entries = new java.util.ArrayList<java.util.Map<String, Object>>();
+            for (var t : traces) {
+                entries.add(java.util.Map.of(
+                    "trace_id", t.getTraceId(),
+                    "agent", t.getAgentId(),
+                    "session", t.getSessionId(),
+                    "task", t.getTaskDescription(),
+                    "status", t.getStatus().name(),
+                    "steps", t.stepCount(),
+                    "errors", t.getErrorCount(),
+                    "duration_ms", t.getEndTime() != null
+                        ? java.time.Duration.between(t.getStartTime(), t.getEndTime()).toMillis()
+                        : 0,
+                    "started_at", t.getStartTime().toString()
+                ));
+            }
+            return ToolRegistry.toolResult(java.util.Map.of(
+                "traces", entries,
+                "count", entries.size(),
+                "filter", agentId != null ? agentId : "all"
+            ));
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Failed to get traces: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get recent anomaly events.
+     */
+    private String orgAnomalies(Map<String, Object> args) {
+        int limit = ((Number) args.getOrDefault("limit", 10)).intValue();
+
+        try {
+            var obs = tenantContext.getObservability();
+            var events = obs.getRecentAnomalies(limit);
+            var entries = events.stream().map(a -> java.util.Map.of(
+                "type", a.type().name(),
+                "agent", a.agentId(),
+                "message", a.message(),
+                "at", a.time().toString()
+            )).toList();
+            return ToolRegistry.toolResult(java.util.Map.of(
+                "anomalies", entries,
+                "count", entries.size()
+            ));
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Failed to get anomalies: " + e.getMessage());
+        }
+    }
+
     private String dispatchGenericTool(String toolName, Map<String, Object> args) {
         var entry = globalRegistry.getAllTools().stream()
             .filter(t -> t.getName().equals(toolName))

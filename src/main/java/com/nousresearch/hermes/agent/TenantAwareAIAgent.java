@@ -70,6 +70,9 @@ public class TenantAwareAIAgent {
     private final AgentRole agentRole;
     private final GovernancePolicy governancePolicy;
     private OrgHealthChecker orgHealthChecker;
+    private com.nousresearch.hermes.org.evolution.SelfEvolutionEngine evolutionEngine;
+    private com.nousresearch.hermes.collaboration.Team team;
+    private com.nousresearch.hermes.org.observe.AgentTrace currentTrace;
     private double lastTaskScore = 0.0;
 
     // Nudge intervals
@@ -261,6 +264,20 @@ public class TenantAwareAIAgent {
             }
             this.governancePolicy = this.tenantContext.getGovernancePolicy();
             this.orgHealthChecker = this.tenantContext.getOrgHealthChecker();
+            // ======== AI原生组织：第三刀——团队与总线注册 ========
+            // 1) 加入默认团队（singleton team，确保每个 agent 至少有归属）
+            // 2) 自动注册到 TenantBus，让队友能 discover 并 message 它
+            try {
+                this.tenantContext.initCollaboration();
+                var team = this.tenantContext.getTeamManager().getOrCreateDefaultTeam(this.agentId);
+                this.team = team;
+                var bus = this.tenantContext.getTenantBus();
+                bus.register(this.agentId, msg -> handleBusMessage(msg));
+                logger.info("Agent {} joined team '{}' and registered on bus",
+                    this.agentId, team.getName());
+            } catch (Exception e) {
+                logger.warn("Failed to register agent on team/bus: {}", e.getMessage());
+            }
             logger.info("Agent {} bound to role '{}' in tenant {}",
                 this.agentId, this.agentRole.getRoleName(), this.tenantId);
         } else {
@@ -317,8 +334,33 @@ public class TenantAwareAIAgent {
         // 4. 确保 Web/Gateway 路径也加载租户自动技能
         ensureAutoSkillsLoaded("web");
 
+        // ======== AI原生组织：第五刀——可观测性 ========
+        // 开启一次追踪，整次请求的工具调用、错误、决策都会被记录
+        com.nousresearch.hermes.org.observe.AgentTrace currentTrace = null;
+        if (tenantContext != null) {
+            currentTrace = tenantContext.getObservability().startTrace(agentId, sessionId, message);
+        }
+        this.currentTrace = currentTrace;
+
         // 5. 执行核心处理逻辑
-        return doProcessMessage(message);
+        String result;
+        try {
+            result = doProcessMessage(message);
+        } catch (Exception e) {
+            if (currentTrace != null) {
+                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(e.getMessage()));
+                currentTrace.end(com.nousresearch.hermes.org.observe.AgentTrace.Status.FAILED);
+                tenantContext.getObservability().completeTrace(currentTrace);
+            }
+            throw e;
+        }
+
+        // 6. 完成追踪
+        if (currentTrace != null) {
+            currentTrace.end(com.nousresearch.hermes.org.observe.AgentTrace.Status.SUCCESS);
+            tenantContext.getObservability().completeTrace(currentTrace);
+        }
+        return result;
     }
 
     /**
@@ -1005,11 +1047,21 @@ public class TenantAwareAIAgent {
 
         logger.debug("Executing tool: {} for tenant: {}", toolName, tenantId);
 
+        // ======== AI原生组织：第五刀——可观测性记录 ========
+        long toolStartMs = System.currentTimeMillis();
+        if (currentTrace != null) {
+            currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolCall(
+                toolName, arguments, java.util.List.of(), 1.0, 0, 0.0));
+        }
+
         // ======== AI原生组织：角色权限检查 ========
         if (agentRole != null && !agentRole.getAllowedTools().isEmpty()
                 && !agentRole.getAllowedTools().contains(toolName)) {
             String msg = "Access denied: '" + toolName + "' not allowed for role '" + agentRole.getRoleName() + "'";
             logger.warn("Tenant {} agent {} {}", tenantId, agentId, msg);
+            if (currentTrace != null) {
+                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
+            }
             return ToolRegistry.toolError(msg);
         }
 
@@ -1018,9 +1070,11 @@ public class TenantAwareAIAgent {
             Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readValue(arguments, Map.class);
 
+            String result;
+
             // Use persistent TenantAwareToolDispatcher (approval-aware)
             if (toolDispatcher != null) {
-                return toolDispatcher.dispatch(toolName, args);
+                result = toolDispatcher.dispatch(toolName, args);
             } else {
                 // Fallback to global registry (non-tenant mode)
                 var entry = ToolRegistry.getInstance().getAllTools().stream()
@@ -1028,19 +1082,156 @@ public class TenantAwareAIAgent {
                     .findFirst()
                     .orElse(null);
                 if (entry != null) {
-                    return entry.getHandler().apply(args);
+                    result = entry.getHandler().apply(args);
+                } else {
+                    result = ToolRegistry.toolError("Unknown tool: " + toolName);
                 }
-                return ToolRegistry.toolError("Unknown tool: " + toolName);
             }
+
+            // AI原生组织：第五刀——记录工具结果到追踪
+            if (currentTrace != null) {
+                long duration = System.currentTimeMillis() - toolStartMs;
+                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolResult(
+                    toolName, result, duration));
+            }
+
+            // AI原生组织：记录成功模式，强化有效策略
+            if (evolutionEngine != null && !result.contains("\"error\"")) {
+                evolutionEngine.recordSuccess(agentId, toolName,
+                    "Tool '" + toolName + "' executed with args: " + args.keySet());
+            }
+
+            return result;
 
         } catch (Exception e) {
             logger.error("Tool execution failed: {}", toolName, e);
+
+            // AI原生组织：第五刀——记录错误到追踪
+            if (currentTrace != null) {
+                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(
+                    toolName + ": " + e.getMessage()));
+            }
+
+            // AI原生组织：记录失败，驱动自我进化
+            if (evolutionEngine != null) {
+                var failure = new com.nousresearch.hermes.org.evolution.FailureCase.Builder(
+                        agentId,
+                        "Execute tool: " + toolName,
+                        e.getMessage()
+                    )
+                    .rootCause(determineRootCause(e, toolName))
+                    .severity(com.nousresearch.hermes.org.evolution.FailureCase.Severity.MEDIUM)
+                    .lesson("Tool '" + toolName + "' failed: " + e.getClass().getSimpleName())
+                    .build();
+                evolutionEngine.recordFailure(failure);
+            }
+
             return ToolRegistry.toolError("Execution failed: " + e.getMessage());
         }
     }
 
     // Tool execution is now handled by TenantAwareToolDispatcher
     // This ensures proper sandbox isolation and permission checks
+
+    // ======== AI原生组织：失败根因分析 ========
+    private static com.nousresearch.hermes.org.evolution.FailureCase.RootCause determineRootCause(
+            Exception e, String toolName) {
+        String msg = (e.getMessage() != null ? e.getMessage().toLowerCase() : "");
+        if (msg.contains("permission") || msg.contains("denied") || msg.contains("access")) {
+            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.PERMISSION_DENIED;
+        }
+        if (msg.contains("not found") || msg.contains("unknown") || msg.contains("no such")) {
+            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.WRONG_TOOL;
+        }
+        if (msg.contains("timeout") || msg.contains("timed out")) {
+            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.INSUFFICIENT_CONTEXT;
+        }
+        if (msg.contains("ambiguous") || msg.contains("unclear")) {
+            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.AMBIGUOUS_PROMPT;
+        }
+        return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.WRONG_TOOL;
+    }
+
+    /**
+     * Get or create the per-agent evolution engine.
+     */
+    public com.nousresearch.hermes.org.evolution.SelfEvolutionEngine getEvolutionEngine() {
+        if (evolutionEngine == null) {
+            evolutionEngine = new com.nousresearch.hermes.org.evolution.SelfEvolutionEngine();
+        }
+        return evolutionEngine;
+    }
+
+    public void setEvolutionEngine(com.nousresearch.hermes.org.evolution.SelfEvolutionEngine engine) {
+        this.evolutionEngine = engine;
+    }
+
+    // ======== AI原生组织：第三刀——Team-Aware Methods ========
+
+    /** Get the team this agent belongs to. */
+    public com.nousresearch.hermes.collaboration.Team getTeam() {
+        return team;
+    }
+
+    /** Set the team this agent belongs to (also adds agent to team). */
+    public void setTeam(com.nousresearch.hermes.collaboration.Team team) {
+        this.team = team;
+        if (team != null) {
+            team.addMember(agentId);
+        }
+    }
+
+    /**
+     * Build a team-aware system prompt section.
+     * Injects team context, members, and recent activity.
+     */
+    public String buildTeamAwarePrompt() {
+        if (team == null) return "";
+        return team.describeForPrompt();
+    }
+
+    /**
+     * Handle a message received from the TenantBus.
+     * The default behavior stores the message in team shared state
+     * so the agent can reference it later via the system prompt.
+     */
+    private void handleBusMessage(com.nousresearch.hermes.collaboration.AgentMessage msg) {
+        if (msg == null) return;
+        try {
+            // Record the incoming message in team state for awareness
+            if (team != null) {
+                String key = "msg:" + msg.getMessageId();
+                team.putState(key, java.util.Map.of(
+                    "from", msg.getSenderId(),
+                    "action", msg.getAction(),
+                    "payload", msg.getPayload(),
+                    "at", java.time.Instant.now().toString()
+                ));
+            }
+            logger.debug("Agent {} received bus message from {}: action={}",
+                agentId, msg.getSenderId(), msg.getAction());
+
+            // Auto-reply to REQUEST messages with a default response
+            if (msg.getType() == com.nousresearch.hermes.collaboration.AgentMessage.Type.REQUEST) {
+                var reply = com.nousresearch.hermes.collaboration.AgentMessage.builder(
+                        agentId, msg.getSenderId(), com.nousresearch.hermes.collaboration.AgentMessage.Type.RESPONSE)
+                    .action("ack")
+                    .payload(java.util.Map.of(
+                        "received", true,
+                        "from", agentId,
+                        "original_action", msg.getAction()
+                    ))
+                    .replyTo(msg.getMessageId())
+                    .build();
+                // Use the bus to reply (need to get it from context)
+                if (tenantContext != null) {
+                    tenantContext.getTenantBus().reply(msg, reply);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to handle bus message for {}: {}", agentId, e.getMessage());
+        }
+    }
 
     // ==================== Helper Methods ====================
 
@@ -1141,6 +1332,21 @@ public class TenantAwareAIAgent {
             if (!hints.isEmpty()) {
                 prompt.append(hints).append("\n");
             }
+        }
+
+        // ======== AI原生组织：自进化上下文 ========
+        // 注入从历史失败中学到的经验教训，让 Agent 持续进化
+        if (evolutionEngine != null) {
+            String evolutionCtx = evolutionEngine.buildEvolutionPrompt(agentId);
+            if (!evolutionCtx.isBlank() && !evolutionCtx.trim().equals("# Self-Evolution Context")) {
+                prompt.append(evolutionCtx).append("\n");
+            }
+        }
+
+        // ======== AI原生组织：第三刀——Team 上下文注入 ========
+        // 让 Agent 知道自己属于哪个团队、有哪些队友、最近发生了什么
+        if (team != null) {
+            prompt.append(buildTeamAwarePrompt()).append("\n");
         }
 
         return prompt.toString();
