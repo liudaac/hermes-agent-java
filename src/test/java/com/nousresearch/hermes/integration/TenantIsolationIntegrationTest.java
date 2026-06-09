@@ -15,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TenantIsolationIntegrationTest {
 
+    private static final String RUN_ID = Long.toHexString(System.nanoTime());
+
     private TenantManager tenantManager;
     private HermesConfig hermesConfig;
 
@@ -49,19 +51,20 @@ public class TenantIsolationIntegrationTest {
     void testMultipleTenants() {
         // Create multiple tenants
         for (int i = 0; i < 5; i++) {
+            String tenantId = unique("tenant-" + i);
             TenantProvisioningRequest request = new TenantProvisioningRequest()
-                .setTenantId("tenant-" + i)
+                .setTenantId(tenantId)
                 .withDefaultQuota()
                 .withDefaultSecurityPolicy();
 
             TenantContext tenant = tenantManager.createTenant(request);
             assertNotNull(tenant);
-            assertEquals("tenant-" + i, tenant.getTenantId());
+            assertEquals(tenantId, tenant.getTenantId());
         }
 
         // Verify all tenants exist
-        assertTrue(tenantManager.exists("tenant-0"));
-        assertTrue(tenantManager.exists("tenant-4"));
+        assertTrue(tenantManager.exists(unique("tenant-0")));
+        assertTrue(tenantManager.exists(unique("tenant-4")));
     }
 
     @Test
@@ -69,8 +72,8 @@ public class TenantIsolationIntegrationTest {
     @DisplayName("Tenants should have isolated file systems")
     void testFileSystemIsolation() {
         // Create two tenants
-        TenantContext tenant1 = createTestTenant("fs-tenant-1");
-        TenantContext tenant2 = createTestTenant("fs-tenant-2");
+        TenantContext tenant1 = createTestTenant(unique("fs-tenant-1"));
+        TenantContext tenant2 = createTestTenant(unique("fs-tenant-2"));
 
         // Write to same filename in both tenants
         tenant1.getFileSandbox().writeFile("shared.txt", "Tenant1 Data");
@@ -89,7 +92,7 @@ public class TenantIsolationIntegrationTest {
     @Order(3)
     @DisplayName("Tenant quota should be enforced")
     void testQuotaEnforcement() {
-        TenantContext tenant = createTestTenant("quota-tenant");
+        TenantContext tenant = createTestTenant(unique("quota-tenant"));
 
         // Set very low quota
         var quota = tenant.getQuotaManager().getQuota();
@@ -116,16 +119,16 @@ public class TenantIsolationIntegrationTest {
     @Order(4)
     @DisplayName("Tenant agents should be isolated")
     void testAgentIsolation() {
-        TenantContext tenant1 = createTestTenant("agent-tenant-1");
-        TenantContext tenant2 = createTestTenant("agent-tenant-2");
+        TenantContext tenant1 = createTestTenant(unique("agent-tenant-1"));
+        TenantContext tenant2 = createTestTenant(unique("agent-tenant-2"));
 
         // Create agents for each tenant
-        TenantAwareAIAgent agent1 = TenantAwareAIAgent.forTenant("agent-tenant-1", hermesConfig);
-        TenantAwareAIAgent agent2 = TenantAwareAIAgent.forTenant("agent-tenant-2", hermesConfig);
+        TenantAwareAIAgent agent1 = TenantAwareAIAgent.forTenant(unique("agent-tenant-1"), hermesConfig);
+        TenantAwareAIAgent agent2 = TenantAwareAIAgent.forTenant(unique("agent-tenant-2"), hermesConfig);
 
         // Verify tenant isolation
-        assertEquals("agent-tenant-1", agent1.getTenantId());
-        assertEquals("agent-tenant-2", agent2.getTenantId());
+        assertEquals(unique("agent-tenant-1"), agent1.getTenantId());
+        assertEquals(unique("agent-tenant-2"), agent2.getTenantId());
 
         // Agents should have different tenant contexts
         assertNotEquals(agent1.getTenantContext(), agent2.getTenantContext());
@@ -135,14 +138,14 @@ public class TenantIsolationIntegrationTest {
     @Order(5)
     @DisplayName("Suspended tenant should reject requests")
     void testSuspendedTenant() {
-        TenantContext tenant = createTestTenant("suspend-tenant");
+        TenantContext tenant = createTestTenant(unique("suspend-tenant"));
         assertTrue(tenant.isActive());
 
         // Suspend tenant
-        tenantManager.suspendTenant("suspend-tenant", "Test suspension");
+        tenantManager.suspendTenant(unique("suspend-tenant"), "Test suspension");
 
         // Verify tenant is suspended
-        TenantContext suspended = tenantManager.getTenant("suspend-tenant");
+        TenantContext suspended = tenantManager.getTenant(unique("suspend-tenant"));
         assertFalse(suspended.isActive());
     }
 
@@ -150,7 +153,7 @@ public class TenantIsolationIntegrationTest {
     @Order(6)
     @DisplayName("Tenant sessions should be persisted and recovered")
     void testSessionPersistence() {
-        TenantContext tenant = createTestTenant("session-tenant");
+        TenantContext tenant = createTestTenant(unique("session-tenant"));
 
         // Create a session
         var session = tenant.getSessionManager().createSession("persist-session");
@@ -165,6 +168,10 @@ public class TenantIsolationIntegrationTest {
 
         // Verify session exists
         assertEquals(1, tenant.getActiveSessionCount());
+    }
+
+    private static String unique(String base) {
+        return base + "-" + RUN_ID;
     }
 
     private TenantContext createTestTenant(String tenantId) {
