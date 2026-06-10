@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
 import com.nousresearch.hermes.org.observe.AgentTrace;
+import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
@@ -89,6 +90,7 @@ public class OrgControlCenterHandler {
                 )).toList());
                 row.put("state_keys", new ArrayList<>(team.getState().keySet()));
                 row.put("agent_roles", t.listAgentRoles().entrySet().stream().map(e -> {
+                    CapabilityScorer.clearExpiredManualOverride(e.getValue());
                     Map<String, Object> role = new LinkedHashMap<>(e.getValue().toMap());
                     role.put("agent", e.getKey());
                     return role;
@@ -184,14 +186,17 @@ public class OrgControlCenterHandler {
         if (mode == null || mode.isBlank() || "normal".equalsIgnoreCase(mode)) {
             role.removeMetric("manual_disabled");
             role.removeMetric("manual_penalty");
+            role.removeMetric("manual_expires_at");
             mode = "normal";
         } else if ("disabled".equalsIgnoreCase(mode)) {
             role.updateMetric("manual_disabled", true);
             role.removeMetric("manual_penalty");
+            applyOverrideTtl(role, body);
             mode = "disabled";
         } else if ("deprioritized".equalsIgnoreCase(mode) || "deprioritize".equalsIgnoreCase(mode)) {
             role.updateMetric("manual_disabled", false);
             role.updateMetric("manual_penalty", parseDouble(body.get("penalty"), 1.5));
+            applyOverrideTtl(role, body);
             mode = "deprioritized";
         } else {
             throw new IllegalArgumentException("Unsupported override mode: " + mode);
@@ -204,6 +209,7 @@ public class OrgControlCenterHandler {
             "mode", mode,
             "manualDisabled", role.getMetrics().getOrDefault("manual_disabled", false),
             "manualPenalty", role.getMetrics().getOrDefault("manual_penalty", 0),
+            "manualExpiresAt", role.getMetrics().getOrDefault("manual_expires_at", 0),
             "timestamp", System.currentTimeMillis()
         ));
         tenant.save();
@@ -303,6 +309,28 @@ public class OrgControlCenterHandler {
         if (header != null && !header.isBlank()) return header;
         String query = ctx.queryParam("actor");
         return query != null && !query.isBlank() ? query : "dashboard";
+    }
+
+    private static void applyOverrideTtl(com.nousresearch.hermes.collaboration.AgentRole role, Map<String, Object> body) {
+        long ttlMs = parseLong(body.get("ttl_ms"), 0L);
+        Object expiresAt = body.get("expires_at");
+        if (expiresAt != null) {
+            long deadline = parseLong(expiresAt, 0L);
+            if (deadline > 0) role.updateMetric("manual_expires_at", deadline);
+            else role.removeMetric("manual_expires_at");
+            return;
+        }
+        if (ttlMs > 0) role.updateMetric("manual_expires_at", System.currentTimeMillis() + ttlMs);
+        else role.removeMetric("manual_expires_at");
+    }
+
+    private static long parseLong(Object value, long fallback) {
+        if (value == null) return fallback;
+        try {
+            return value instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(value));
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 
     private static double parseDouble(Object value, double fallback) {

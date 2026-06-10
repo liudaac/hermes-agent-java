@@ -114,8 +114,24 @@ public class CapabilityScorer {
         }
     }
 
+    public static boolean clearExpiredManualOverride(AgentRole role) {
+        try {
+            Object expiresAt = role.getMetrics().get("manual_expires_at");
+            if (expiresAt == null) return false;
+            long deadline = expiresAt instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(expiresAt));
+            if (deadline <= 0 || System.currentTimeMillis() < deadline) return false;
+            role.removeMetric("manual_disabled");
+            role.removeMetric("manual_penalty");
+            role.removeMetric("manual_expires_at");
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     private static double manualOverrideScore(AgentRole role) {
         try {
+            clearExpiredManualOverride(role);
             Object disabled = role.getMetrics().get("manual_disabled");
             if (Boolean.TRUE.equals(disabled) || "true".equalsIgnoreCase(String.valueOf(disabled))) {
                 return -10.0;

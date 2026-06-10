@@ -118,4 +118,32 @@ class CapabilityScorerTest {
         assertEquals(-1.5, deprioritizedScore.components().get("manual_override"), 0.001);
     }
 
+    @Test
+    void expiredManualOverrideAutoRestoresBeforeScoring() {
+        var role = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID)
+            .skills("tests", "qa")
+            .disabled(true);
+        role.updateMetric("manual_expires_at", System.currentTimeMillis() - 1_000);
+
+        var score = CapabilityScorer.score("run tests", "agent-expired", role, tenant);
+
+        assertEquals(0.0, score.components().get("manual_override"), 0.001);
+        assertFalse(role.getMetrics().containsKey("manual_disabled"));
+        assertFalse(role.getMetrics().containsKey("manual_penalty"));
+        assertFalse(role.getMetrics().containsKey("manual_expires_at"));
+    }
+
+    @Test
+    void activeTtlManualOverrideStillApplies() {
+        var role = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID)
+            .skills("tests", "qa")
+            .deprioritize(1.5);
+        role.updateMetric("manual_expires_at", System.currentTimeMillis() + 60_000);
+
+        var score = CapabilityScorer.score("run tests", "agent-ttl", role, tenant);
+
+        assertEquals(-1.5, score.components().get("manual_override"), 0.001);
+        assertTrue(role.getMetrics().containsKey("manual_expires_at"));
+    }
+
 }

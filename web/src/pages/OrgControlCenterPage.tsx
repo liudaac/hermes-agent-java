@@ -129,7 +129,7 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/agents/${encodeURIComponent(tenantId)}/${encodeURIComponent(agentId)}/override`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, actor: "dashboard", reason: `Operator set agent routing mode to ${mode}` }),
+      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, ttl_ms: mode === "normal" ? undefined : 60 * 60 * 1000, actor: "dashboard", reason: `Operator set agent routing mode to ${mode}` }),
     }));
   }, [runControl]);
 
@@ -372,6 +372,8 @@ function TeamCard({
             const disabled = metrics.manual_disabled === true || metrics.manual_disabled === "true";
             const penalty = Number(metrics.manual_penalty || 0);
             const mode = disabled ? "disabled" : penalty > 0 ? "deprioritized" : "normal";
+            const expiresAt = Number(metrics.manual_expires_at || 0);
+            const expiresLabel = expiresAt > 0 ? ` · expires ${new Date(expiresAt).toLocaleTimeString()}` : "";
             const baseKey = `${team.tenant_id}:${agent}:override`;
             return (
               <div key={agent} className="rounded border border-current/10 p-2">
@@ -379,7 +381,7 @@ function TeamCard({
                   <div className="min-w-0">
                     <div className="truncate text-xs font-medium">{agent}</div>
                     <div className="text-xs text-muted-foreground">
-                      {role.name} · {role.level} · {mode}{penalty > 0 && !disabled ? ` (-${penalty})` : ""}
+                      {role.name} · {role.level} · {mode}{penalty > 0 && !disabled ? ` (-${penalty})` : ""}{expiresLabel}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
