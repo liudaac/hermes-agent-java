@@ -570,7 +570,15 @@ public class TenantContext {
             }
             activeAgents.clear();
 
-            // 2. 停止资源监控
+            // 2. Stop tenant-scoped collaboration bus so handlers, queues,
+            // pending replies and history cannot leak across tenant lifecycles.
+            if (tenantBus != null) {
+                TenantBus.removeTenant(tenantId);
+                tenantBus = null;
+                collaborationInitialized.set(false);
+            }
+
+            // 3. 停止资源监控
             if (resourceMonitor != null) {
                 resourceMonitor.shutdown();
             }

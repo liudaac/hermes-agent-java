@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nousresearch.hermes.config.Constants;
+import com.nousresearch.hermes.collaboration.TenantBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -399,12 +400,17 @@ public class TenantManager {
             Thread.currentThread().interrupt();
         }
         
-        // 持久化所有租户状态
+        // Persist loaded tenant state and release tenant-scoped runtime resources.
         for (TenantContext context : tenants.values()) {
             try {
-                context.getSessionManager().persistAll();
+                context.save();
             } catch (Exception e) {
                 logger.error("Failed to persist tenant: {}", context.getTenantId(), e);
+            }
+            try {
+                TenantBus.removeTenant(context.getTenantId());
+            } catch (Exception e) {
+                logger.warn("Failed to release tenant bus for {}: {}", context.getTenantId(), e.getMessage());
             }
         }
         
