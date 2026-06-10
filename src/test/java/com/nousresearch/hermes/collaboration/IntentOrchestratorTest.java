@@ -275,6 +275,25 @@ class IntentOrchestratorTest {
         assertEquals("agent-4", reroute.assignments().get(0).agentId());
     }
 
+
+    @Test
+    void intentRunsPersistAndReload() throws Exception {
+        var run = orchestrator.execute("review the code");
+        waitForTerminal(run);
+        orchestrator.saveRuns();
+
+        var reloaded = new IntentOrchestrator(tenantContext);
+        var restored = reloaded.getRun(run.runId);
+
+        assertNotNull(restored);
+        assertEquals(run.runId, restored.runId);
+        assertEquals(run.intent, restored.intent);
+        assertEquals(run.status, restored.status);
+        assertEquals(run.failures().size(), restored.failures().size());
+        assertEquals(run.attempts().size(), restored.attempts().size());
+        assertEquals(run.assignments().size(), restored.assignments().size());
+    }
+
     private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {

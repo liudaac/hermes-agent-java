@@ -5,8 +5,12 @@ import com.nousresearch.hermes.org.evolution.FailureCase;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -28,6 +32,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class IntentOrchestrator {
     private static final Logger logger = LoggerFactory.getLogger(IntentOrchestrator.class);
     private static final AtomicLong TASK_ID_GEN = new AtomicLong();
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final String RUNS_FILE = "intent-runs.json";
 
     private final TenantContext tenantContext;
     private final TaskOrchestrator taskOrchestrator;
@@ -36,6 +42,7 @@ public class IntentOrchestrator {
     public IntentOrchestrator(TenantContext tenantContext) {
         this.tenantContext = tenantContext;
         this.taskOrchestrator = tenantContext.getTaskOrchestrator();
+        loadRuns();
     }
 
     /**
@@ -126,6 +133,7 @@ public class IntentOrchestrator {
         String runId = "run_" + TASK_ID_GEN.incrementAndGet();
         IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction);
         runs.put(runId, run);
+        saveRuns();
 
         // Execute each assignment in sequence (simplicity over parallelism for now)
         Thread t = new Thread(() -> {
@@ -160,6 +168,7 @@ public class IntentOrchestrator {
                 }
             }
             run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
+            saveRuns();
         }, "intent-orchestrator-" + runId);
         t.setDaemon(true);
         t.start();
@@ -277,7 +286,49 @@ public class IntentOrchestrator {
     }
 
     public List<IntentRun> listRuns() {
-        return new ArrayList<>(runs.values());
+        return runs.values().stream()
+            .sorted(Comparator.comparingLong((IntentRun r) -> r.startedAt).reversed())
+            .toList();
+    }
+
+    public synchronized void saveRuns() {
+        try {
+            Path path = runsPath();
+            Files.createDirectories(path.getParent());
+            List<Map<String, Object>> rows = listRuns().stream().map(IntentRun::toMap).toList();
+            JSON_MAPPER.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), rows);
+        } catch (Exception e) {
+            logger.warn("Failed to save intent runs for tenant {}: {}", tenantContext.getTenantId(), e.getMessage());
+        }
+    }
+
+    private void loadRuns() {
+        Path path = runsPath();
+        if (!Files.exists(path)) return;
+        try {
+            List<Map<String, Object>> rows = JSON_MAPPER.readValue(path.toFile(), new TypeReference<List<Map<String, Object>>>() {});
+            long maxId = 0;
+            for (Map<String, Object> row : rows) {
+                IntentRun run = IntentRun.fromMap(row);
+                runs.put(run.runId, run);
+                maxId = Math.max(maxId, parseRunNumber(run.runId));
+            }
+            final long loadedMaxId = maxId;
+            TASK_ID_GEN.updateAndGet(v -> Math.max(v, loadedMaxId));
+            logger.info("Tenant {}: loaded {} persisted intent runs", tenantContext.getTenantId(), runs.size());
+        } catch (Exception e) {
+            logger.warn("Failed to load intent runs for tenant {}: {}", tenantContext.getTenantId(), e.getMessage());
+        }
+    }
+
+    private Path runsPath() {
+        return tenantContext.getTenantDir().resolve("state").resolve(RUNS_FILE);
+    }
+
+    private static long parseRunNumber(String runId) {
+        if (runId == null) return 0;
+        try { return Long.parseLong(runId.replaceFirst("^run_", "")); }
+        catch (Exception ignored) { return 0; }
     }
 
     // ======== Decomposition ========
@@ -361,6 +412,27 @@ public class IntentOrchestrator {
             this(subtask, agentId, roleName, score, matchedSkills, Map.of());
         }
 
+        @SuppressWarnings("unchecked")
+        public static SubtaskAssignment fromMap(Map<String, Object> m) {
+            Map<String, Double> components = new LinkedHashMap<>();
+            Object rawComponents = m.get("score_components");
+            if (rawComponents instanceof Map<?, ?> cm) {
+                cm.forEach((k, v) -> components.put(String.valueOf(k), v instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(v))));
+            }
+            List<String> skills = ((List<Object>) m.getOrDefault("matched_skills", List.of())).stream().map(String::valueOf).toList();
+            Object agent = m.get("agent");
+            String agentId = agent == null || "(unassigned)".equals(String.valueOf(agent)) ? null : String.valueOf(agent);
+            return new SubtaskAssignment(
+                String.valueOf(m.getOrDefault("subtask", "")),
+                agentId,
+                String.valueOf(m.getOrDefault("role", "")),
+                m.get("score") instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(m.getOrDefault("score", "0"))),
+                skills,
+                components
+            );
+        }
+
+
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("subtask", subtask);
@@ -408,6 +480,38 @@ public class IntentOrchestrator {
         static IntentAttempt failure(SubtaskAssignment a, boolean reassigned, String reassignedFrom, String traceId, long latencyMs, String error) {
             return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, false, error, latencyMs, System.currentTimeMillis());
         }
+        public static IntentAttempt fromMap(Map<String, Object> m) {
+            return new IntentAttempt(
+                String.valueOf(m.getOrDefault("subtask", "")),
+                stringOrNull(m.get("agent")),
+                stringOrNull(m.get("role")),
+                doubleValue(m.get("score")),
+                Boolean.parseBoolean(String.valueOf(m.getOrDefault("reassigned", "false"))),
+                stringOrNull(m.get("reassigned_from")),
+                stringOrNull(m.get("trace_id")),
+                Boolean.parseBoolean(String.valueOf(m.getOrDefault("success", "false"))),
+                stringOrNull(m.get("error")),
+                longValue(m.get("latency_ms")),
+                longValue(m.get("timestamp"))
+            );
+        }
+
+        private static String stringOrNull(Object value) {
+            if (value == null) return null;
+            String s = String.valueOf(value);
+            return "null".equals(s) ? null : s;
+        }
+
+        private static long longValue(Object value) {
+            if (value == null) return 0L;
+            return value instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(value));
+        }
+
+        private static double doubleValue(Object value) {
+            if (value == null) return 0.0;
+            return value instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(value));
+        }
+
 
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -437,7 +541,7 @@ public class IntentOrchestrator {
         public final List<IntentAttempt> attempts = Collections.synchronizedList(new ArrayList<>());
         public volatile RunStatus status = RunStatus.PENDING;
         public volatile String currentSubtask = null;
-        public final long startedAt = System.currentTimeMillis();
+        public final long startedAt;
         public volatile long completedAt = 0;
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments) {
@@ -445,11 +549,19 @@ public class IntentOrchestrator {
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
+            this(runId, intent, assignments, parentRunId, controlAction, System.currentTimeMillis(), 0L, RunStatus.PENDING, null);
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask) {
             this.runId = runId;
             this.intent = intent;
             this.assignments = List.copyOf(assignments);
             this.parentRunId = parentRunId;
             this.controlAction = controlAction != null ? controlAction : "execute";
+            this.startedAt = startedAt > 0 ? startedAt : System.currentTimeMillis();
+            this.completedAt = completedAt;
+            this.status = status != null ? status : RunStatus.PENDING;
+            this.currentSubtask = currentSubtask;
         }
 
         public synchronized void recordSuccess(String subtask, String result) {
@@ -478,6 +590,45 @@ public class IntentOrchestrator {
         public Map<String, String> failures() { return Map.copyOf(failures); }
         public List<IntentAttempt> attempts() {
             synchronized (attempts) { return List.copyOf(attempts); }
+        }
+
+        @SuppressWarnings("unchecked")
+        public static IntentRun fromMap(Map<String, Object> m) {
+            List<SubtaskAssignment> assignments = ((List<Object>) m.getOrDefault("assignments", List.of())).stream()
+                .map(x -> SubtaskAssignment.fromMap((Map<String, Object>) x))
+                .toList();
+            RunStatus status = RunStatus.PENDING;
+            try { status = RunStatus.valueOf(String.valueOf(m.getOrDefault("status", "PENDING"))); } catch (Exception ignored) {}
+            IntentRun run = new IntentRun(
+                String.valueOf(m.get("run_id")),
+                String.valueOf(m.getOrDefault("intent", "")),
+                assignments,
+                stringOrNull(m.get("parent_run_id")),
+                String.valueOf(m.getOrDefault("control_action", "execute")),
+                longValue(m.get("started_at")),
+                longValue(m.get("completed_at")),
+                status,
+                stringOrNull(m.get("current_subtask"))
+            );
+            Object successes = m.get("successes");
+            if (successes instanceof Map<?, ?> sm) sm.forEach((k, v) -> run.successes.put(String.valueOf(k), String.valueOf(v)));
+            Object failures = m.get("failures");
+            if (failures instanceof Map<?, ?> fm) fm.forEach((k, v) -> run.failures.put(String.valueOf(k), String.valueOf(v)));
+            for (Object x : (List<Object>) m.getOrDefault("attempts", List.of())) {
+                run.attempts.add(IntentAttempt.fromMap((Map<String, Object>) x));
+            }
+            return run;
+        }
+
+        private static String stringOrNull(Object value) {
+            if (value == null) return null;
+            String s = String.valueOf(value);
+            return "null".equals(s) ? null : s;
+        }
+
+        private static long longValue(Object value) {
+            if (value == null) return 0L;
+            return value instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(value));
         }
 
         public Map<String, Object> toMap() {
