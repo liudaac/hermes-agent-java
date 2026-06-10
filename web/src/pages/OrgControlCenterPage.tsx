@@ -45,7 +45,7 @@ export default function OrgControlCenterPage() {
       const [o, t, i, tr, e, a, au] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
-        fetchJSON<any>("/api/org/control/intents"),
+        fetchJSON<any>("/api/org/control/intents?limit=50&offset=0"),
         fetchJSON<any>("/api/org/control/traces?n=30"),
         fetchJSON<any>("/api/org/control/evolution"),
         fetchJSON<any>("/api/org/control/anomalies?n=30"),

@@ -34,6 +34,7 @@ public class IntentOrchestrator {
     private static final AtomicLong TASK_ID_GEN = new AtomicLong();
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private static final String RUNS_FILE = "intent-runs.json";
+    private static final int DEFAULT_MAX_PERSISTED_RUNS = 1000;
 
     private final TenantContext tenantContext;
     private final TaskOrchestrator taskOrchestrator;
@@ -291,10 +292,19 @@ public class IntentOrchestrator {
             .toList();
     }
 
+    public List<IntentRun> listRuns(int limit, int offset) {
+        List<IntentRun> all = listRuns();
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = limit <= 0 ? all.size() : limit;
+        if (safeOffset >= all.size()) return List.of();
+        return all.subList(safeOffset, Math.min(all.size(), safeOffset + safeLimit));
+    }
+
     public synchronized void saveRuns() {
         try {
             Path path = runsPath();
             Files.createDirectories(path.getParent());
+            pruneRuns();
             List<Map<String, Object>> rows = listRuns().stream().map(IntentRun::toMap).toList();
             JSON_MAPPER.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), rows);
         } catch (Exception e) {
@@ -313,12 +323,28 @@ public class IntentOrchestrator {
                 runs.put(run.runId, run);
                 maxId = Math.max(maxId, parseRunNumber(run.runId));
             }
+            pruneRuns();
             final long loadedMaxId = maxId;
             TASK_ID_GEN.updateAndGet(v -> Math.max(v, loadedMaxId));
             logger.info("Tenant {}: loaded {} persisted intent runs", tenantContext.getTenantId(), runs.size());
         } catch (Exception e) {
             logger.warn("Failed to load intent runs for tenant {}: {}", tenantContext.getTenantId(), e.getMessage());
         }
+    }
+
+
+    private void pruneRuns() {
+        int maxRuns = maxPersistedRuns();
+        if (maxRuns <= 0 || runs.size() <= maxRuns) return;
+        Set<String> keep = listRuns().stream()
+            .limit(maxRuns)
+            .map(r -> r.runId)
+            .collect(java.util.stream.Collectors.toSet());
+        runs.keySet().removeIf(id -> !keep.contains(id));
+    }
+
+    private static int maxPersistedRuns() {
+        return Integer.getInteger("hermes.intent.runs.max", DEFAULT_MAX_PERSISTED_RUNS);
     }
 
     private Path runsPath() {

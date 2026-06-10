@@ -105,16 +105,31 @@ public class OrgControlCenterHandler {
 
     /** GET /api/org/control/intents */
     public void intents(Context ctx) {
-        List<Map<String, Object>> rows = new ArrayList<>();
+        int limit = parseInt(ctx.queryParam("limit"), 50);
+        int offset = parseInt(ctx.queryParam("offset"), 0);
+        String tenantFilter = ctx.queryParam("tenantId");
+        List<Map<String, Object>> allRows = new ArrayList<>();
         for (TenantContext t : tenants()) {
+            if (tenantFilter != null && !tenantFilter.isBlank() && !tenantFilter.equals(t.getTenantId())) continue;
             for (var run : t.getIntentOrchestrator().listRuns()) {
                 Map<String, Object> row = new LinkedHashMap<>(run.toMap());
                 row.put("tenant_id", t.getTenantId());
-                rows.add(row);
+                allRows.add(row);
             }
         }
-        rows.sort((a, b) -> Long.compare((long)b.getOrDefault("started_at", 0L), (long)a.getOrDefault("started_at", 0L)));
-        ctx.json(Map.of("runs", rows, "count", rows.size()));
+        allRows.sort((a, b) -> Long.compare((long)b.getOrDefault("started_at", 0L), (long)a.getOrDefault("started_at", 0L)));
+        int safeOffset = Math.max(0, offset);
+        int safeLimit = limit <= 0 ? allRows.size() : limit;
+        List<Map<String, Object>> page = safeOffset >= allRows.size()
+            ? List.of()
+            : allRows.subList(safeOffset, Math.min(allRows.size(), safeOffset + safeLimit));
+        ctx.json(Map.of(
+            "runs", page,
+            "count", page.size(),
+            "total", allRows.size(),
+            "limit", safeLimit,
+            "offset", safeOffset
+        ));
     }
 
 

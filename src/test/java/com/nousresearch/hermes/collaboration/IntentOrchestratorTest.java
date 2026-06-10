@@ -345,6 +345,32 @@ class IntentOrchestratorTest {
         assertEquals(IntentOrchestrator.RunStatus.COMPLETED, replay.status);
     }
 
+
+    @Test
+    void intentRunRetentionKeepsMostRecentRuns() throws Exception {
+        String previous = System.getProperty("hermes.intent.runs.max");
+        System.setProperty("hermes.intent.runs.max", "3");
+        try {
+            for (int i = 0; i < 5; i++) {
+                var run = orchestrator.execute("review the code " + i);
+                waitForTerminal(run);
+            }
+            orchestrator.saveRuns();
+
+            var reloaded = new IntentOrchestrator(tenantContext);
+            var runs = reloaded.listRuns();
+
+            assertEquals(3, runs.size());
+            assertTrue(runs.get(0).startedAt >= runs.get(1).startedAt);
+            assertTrue(runs.get(1).startedAt >= runs.get(2).startedAt);
+            assertEquals(2, reloaded.listRuns(2, 0).size());
+            assertEquals(1, reloaded.listRuns(2, 2).size());
+        } finally {
+            if (previous == null) System.clearProperty("hermes.intent.runs.max");
+            else System.setProperty("hermes.intent.runs.max", previous);
+        }
+    }
+
     private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
