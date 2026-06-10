@@ -2,6 +2,8 @@ package com.nousresearch.hermes.dashboard.handlers;
 
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
+import com.nousresearch.hermes.governance.ControlActionPolicy;
+import io.javalin.http.ForbiddenResponse;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
@@ -122,6 +124,7 @@ public class OrgControlCenterHandler {
         Map<String, Object> body = parseJsonBody(ctx);
         String actor = operatorActor(ctx, body);
         String reason = stringOrDefault(body.get("reason"), "");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.REPLAY_INTENT, reason, Map.of("runId", ctx.pathParam("runId")));
         String parentRunId = ctx.pathParam("runId");
         var run = tenant.getIntentOrchestrator().replayFailures(parentRunId);
         tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REPLAYED, Map.of(
@@ -149,6 +152,11 @@ public class OrgControlCenterHandler {
         String targetAgent = stringValue(body.get("target_agent"));
         String actor = operatorActor(ctx, body);
         String reason = stringOrDefault(body.get("reason"), "");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.REROUTE_INTENT, reason, Map.of(
+            "runId", ctx.pathParam("runId"),
+            "subtask", subtask != null ? subtask : "",
+            "targetAgent", targetAgent != null ? targetAgent : ""
+        ));
         String parentRunId = ctx.pathParam("runId");
         var run = tenant.getIntentOrchestrator().reroute(parentRunId, subtask, targetAgent);
         tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REROUTED, Map.of(
@@ -182,6 +190,7 @@ public class OrgControlCenterHandler {
         Map<String, Object> body = parseJsonBody(ctx);
         String actor = operatorActor(ctx, body);
         String reason = stringOrDefault(body.get("reason"), "");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.OVERRIDE_AGENT, reason, Map.of("agent", agentId));
         String mode = stringValue(body.get("mode"));
         if (mode == null || mode.isBlank() || "normal".equalsIgnoreCase(mode)) {
             role.removeMetric("manual_disabled");
@@ -270,6 +279,21 @@ public class OrgControlCenterHandler {
 
     private List<TenantContext> tenants() {
         return new ArrayList<>(tenantManager.getAllTenants().values());
+    }
+
+
+    private void assertAllowed(TenantContext tenant, String actor, ControlActionPolicy.Action action, String reason, Map<String, Object> context) {
+        if (ControlActionPolicy.isAllowed(actor, action)) return;
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("tenantId", tenant.getTenantId());
+        details.put("actor", actor);
+        details.put("action", action.name());
+        details.put("reason", reason != null ? reason : "");
+        details.put("denyReason", ControlActionPolicy.denyReason(actor, action));
+        details.put("timestamp", System.currentTimeMillis());
+        details.putAll(context);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_ACTION_DENIED, details);
+        throw new ForbiddenResponse(details.get("denyReason").toString());
     }
 
     private TenantContext requireTenant(String tenantId) {
