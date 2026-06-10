@@ -277,6 +277,30 @@ public class OrgControlCenterHandler {
         ctx.json(Map.of("anomalies", rows, "count", rows.size()));
     }
 
+
+    /** GET /api/org/control/audit?n=50 */
+    public void audit(Context ctx) {
+        int n = parseInt(ctx.queryParam("n"), 50);
+        String tenantFilter = ctx.queryParam("tenantId");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext t : tenants()) {
+            if (tenantFilter != null && !tenantFilter.isBlank() && !tenantFilter.equals(t.getTenantId())) continue;
+            for (var entry : t.getAuditLogger().getRecentEvents(n)) {
+                String event = entry.event().name();
+                if (!event.startsWith("CONTROL_")) continue;
+                rows.add(Map.of(
+                    "tenant_id", t.getTenantId(),
+                    "event", event,
+                    "time", entry.timestamp().toString(),
+                    "details", entry.details()
+                ));
+            }
+        }
+        rows.sort((a, b) -> ((String)b.get("time")).compareTo((String)a.get("time")));
+        if (rows.size() > n) rows = rows.subList(0, n);
+        ctx.json(Map.of("audit", rows, "count", rows.size()));
+    }
+
     private List<TenantContext> tenants() {
         return new ArrayList<>(tenantManager.getAllTenants().values());
     }

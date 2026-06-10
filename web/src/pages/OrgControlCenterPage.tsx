@@ -32,6 +32,7 @@ export default function OrgControlCenterPage() {
   const [traces, setTraces] = useState<any[]>([]);
   const [evolution, setEvolution] = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [audit, setAudit] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -41,13 +42,14 @@ export default function OrgControlCenterPage() {
     setLoading(true);
     setError("");
     try {
-      const [o, t, i, tr, e, a] = await Promise.all([
+      const [o, t, i, tr, e, a, au] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
         fetchJSON<any>("/api/org/control/intents"),
         fetchJSON<any>("/api/org/control/traces?n=30"),
         fetchJSON<any>("/api/org/control/evolution"),
         fetchJSON<any>("/api/org/control/anomalies?n=30"),
+        fetchJSON<any>("/api/org/control/audit?n=30"),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -55,6 +57,7 @@ export default function OrgControlCenterPage() {
       setTraces(tr.traces || []);
       setEvolution(e.evolution || []);
       setAnomalies(a.anomalies || []);
+      setAudit(au.audit || []);
     } catch (err: any) {
       setError(err?.message || "Failed to load Org Control Center");
     } finally {
@@ -100,16 +103,26 @@ export default function OrgControlCenterPage() {
     }
   }, [load]);
 
+  const askReason = useCallback((defaultReason: string) => {
+    const reason = window.prompt("Reason for this control action", defaultReason);
+    if (reason === null) return null;
+    return reason.trim() || defaultReason;
+  }, []);
+
   const replayRun = useCallback((run: any) => {
+    const reason = askReason("Operator replayed failed subtasks from Control Center");
+    if (reason === null) return;
     const key = `${run.tenant_id}:${run.run_id}:replay`;
     return runControl(key, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/replay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", reason: "Operator replayed failed subtasks from Control Center" }),
+      body: JSON.stringify({ actor: "dashboard", reason }),
     }));
-  }, [runControl]);
+  }, [askReason, runControl]);
 
   const rerouteRun = useCallback((run: any, subtask: string) => {
+    const reason = askReason("Operator rerouted failed subtask from Control Center");
+    if (reason === null) return;
     const targetKey = `${run.tenant_id}:${run.run_id}:${subtask}`;
     const target = rerouteTargets[targetKey];
     if (!target) {
@@ -120,18 +133,20 @@ export default function OrgControlCenterPage() {
     return runControl(actionKey, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/reroute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subtask, target_agent: target, actor: "dashboard", reason: "Operator rerouted failed subtask from Control Center" }),
+      body: JSON.stringify({ subtask, target_agent: target, actor: "dashboard", reason }),
     }));
-  }, [rerouteTargets, runControl]);
+  }, [askReason, rerouteTargets, runControl]);
 
   const overrideAgent = useCallback((tenantId: string, agentId: string, mode: "normal" | "disabled" | "deprioritized") => {
+    const reason = askReason(`Operator set agent routing mode to ${mode}`);
+    if (reason === null) return;
     const key = `${tenantId}:${agentId}:override:${mode}`;
     return runControl(key, () => fetchJSON(`/api/org/control/agents/${encodeURIComponent(tenantId)}/${encodeURIComponent(agentId)}/override`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, ttl_ms: mode === "normal" ? undefined : 60 * 60 * 1000, actor: "dashboard", reason: `Operator set agent routing mode to ${mode}` }),
+      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, ttl_ms: mode === "normal" ? undefined : 60 * 60 * 1000, actor: "dashboard", reason }),
     }));
-  }, [runControl]);
+  }, [askReason, runControl]);
 
   if (loading) {
     return (
@@ -288,6 +303,25 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
+              <GitBranch className="h-4 w-4" /> Control Action Timeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {audit.length === 0 ? (
+              <Empty label="No control actions audited yet" />
+            ) : (
+              <div className="space-y-2">
+                {audit.slice(0, 8).map((entry, idx) => (
+                  <AuditEntryCard key={`${entry.tenant_id}:${entry.time}:${idx}`} entry={entry} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
               <Brain className="h-4 w-4" /> Evolution
             </CardTitle>
           </CardHeader>
@@ -337,6 +371,30 @@ export default function OrgControlCenterPage() {
 }
 
 
+
+
+function AuditEntryCard({ entry }: { entry: any }) {
+  const raw = entry.details?.raw || "";
+  const actor = extractRawValue(raw, "actor") || "unknown";
+  const reason = extractRawValue(raw, "reason") || raw;
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{entry.event}</div>
+          <div className="text-xs text-muted-foreground">{entry.tenant_id} · {actor}</div>
+        </div>
+        <Badge variant="outline">{new Date(entry.time).toLocaleTimeString()}</Badge>
+      </div>
+      <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{reason}</div>
+    </div>
+  );
+}
+
+function extractRawValue(raw: string, key: string) {
+  const match = raw.match(new RegExp(`${key}=([^,}]+)`));
+  return match ? match[1].trim() : "";
+}
 
 function TeamCard({
   team,
