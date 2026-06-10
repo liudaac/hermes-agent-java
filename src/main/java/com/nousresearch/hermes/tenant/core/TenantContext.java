@@ -810,7 +810,7 @@ public class TenantContext {
         if (tenantBus == null) {
             synchronized (this) {
                 if (tenantBus == null) {
-                    tenantBus = TenantBus.getInstance();
+                    tenantBus = TenantBus.forTenant(tenantId);
                 }
             }
         }

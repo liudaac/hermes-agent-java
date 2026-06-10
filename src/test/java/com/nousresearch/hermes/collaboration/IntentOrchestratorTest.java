@@ -22,15 +22,9 @@ class IntentOrchestratorTest {
 
     @BeforeEach
     void setUp() {
-        var request = TenantProvisioningRequest.builder("intent-tenant", "test-user").build();
-        tenantContext = TenantContext.create("intent-tenant", request);
-        // TenantBus is process-wide; keep this test class isolated from handlers
-        // registered by earlier async orchestration tests.
-        tenantContext.getTenantBus().unregister("agent-1");
-        tenantContext.getTenantBus().unregister("agent-2");
-        tenantContext.getTenantBus().unregister("agent-3");
-        tenantContext.getTenantBus().unregister("agent-4");
-
+        String tenantId = "intent-tenant-" + System.nanoTime();
+        var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
+        tenantContext = TenantContext.create(tenantId, request);
         // Seed multiple agent roles for matching
         tenantContext.registerAgentRole("agent-1",
             new AgentRole("code-reviewer", "Reviews code", AgentRole.Level.SENIOR)

@@ -165,7 +165,8 @@ public class SubAgentTool {
         String context = (String) args.getOrDefault("context", "");
         if (stepDefs == null || stepDefs.isEmpty()) return ToolRegistry.toolError("Steps list is required");
         try {
-            TaskOrchestrator orchestrator = new TaskOrchestrator(TenantBus.getInstance());
+            String tenantId = (String) args.getOrDefault("tenant_id", "global");
+            TaskOrchestrator orchestrator = new TaskOrchestrator(TenantBus.forTenant(tenantId));
             List<TaskOrchestrator.Step> steps = new ArrayList<>();
             for (Map<String, Object> def : stepDefs) {
                 String name = (String) def.get("name");

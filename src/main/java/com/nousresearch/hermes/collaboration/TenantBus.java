@@ -25,8 +25,11 @@ public class TenantBus {
     private static final Logger logger = LoggerFactory.getLogger(TenantBus.class);
     
     private static volatile TenantBus instance;
+    private static final ConcurrentHashMap<String, TenantBus> tenantBuses = new ConcurrentHashMap<>();
+
+    private final String tenantId;
     
-    // Message handlers keyed by tenant/agent ID
+    // Message handlers keyed by agent ID within this bus/tenant
     private final ConcurrentHashMap<String, Consumer<AgentMessage>> handlers = new ConcurrentHashMap<>();
     
     // Pending reply futures keyed by message ID
@@ -42,13 +45,35 @@ public class TenantBus {
     
     private volatile boolean running = false;
     
-    private TenantBus() {}
+    private TenantBus() { this("global"); }
+
+    private TenantBus(String tenantId) {
+        this.tenantId = tenantId == null || tenantId.isBlank() ? "global" : tenantId;
+    }
     
+    /**
+     * Legacy global bus retained for callers that are not yet tenant-aware.
+     * Tenant runtime code should prefer {@link #forTenant(String)}.
+     */
     public static synchronized TenantBus getInstance() {
         if (instance == null) {
-            instance = new TenantBus();
+            instance = new TenantBus("global");
         }
         return instance;
+    }
+
+    /** Return an isolated bus instance for a tenant. */
+    public static TenantBus forTenant(String tenantId) {
+        String key = tenantId == null || tenantId.isBlank() ? "global" : tenantId;
+        if ("global".equals(key)) return getInstance();
+        return tenantBuses.computeIfAbsent(key, TenantBus::new);
+    }
+
+    /** Remove a tenant-scoped bus, stopping it first. Primarily for tests/cleanup. */
+    public static void removeTenant(String tenantId) {
+        if (tenantId == null || tenantId.isBlank() || "global".equals(tenantId)) return;
+        TenantBus bus = tenantBuses.remove(tenantId);
+        if (bus != null) bus.stop();
     }
     
     /**
@@ -70,11 +95,11 @@ public class TenantBus {
                     break;
                 }
             }
-        }, "tenant-bus-delivery");
+        }, "tenant-bus-delivery-" + tenantId);
         deliveryThread.setDaemon(true);
         deliveryThread.start();
         
-        logger.info("TenantBus started");
+        logger.info("TenantBus started for tenant {}", tenantId);
     }
     
     /**
@@ -87,7 +112,7 @@ public class TenantBus {
             future.completeExceptionally(new RuntimeException("Bus stopped"));
         }
         pendingReplies.clear();
-        logger.info("TenantBus stopped");
+        logger.info("TenantBus stopped for tenant {}", tenantId);
     }
     
     /**
@@ -95,7 +120,7 @@ public class TenantBus {
      */
     public void register(String agentId, Consumer<AgentMessage> handler) {
         handlers.put(agentId, handler);
-        logger.info("Agent '{}' registered on bus", agentId);
+        logger.info("Agent '{}' registered on bus for tenant {}", agentId, tenantId);
     }
     
     /**
@@ -105,7 +130,7 @@ public class TenantBus {
         handlers.remove(agentId);
         // Clean up pending replies for this agent
         pendingReplies.values().removeIf(f -> f.isDone());
-        logger.info("Agent '{}' unregistered from bus", agentId);
+        logger.info("Agent '{}' unregistered from bus for tenant {}", agentId, tenantId);
     }
     
     /**
@@ -135,7 +160,7 @@ public class TenantBus {
             deliveryQueue.offer(message);
         }
         
-        logger.debug("Queued: {}", message);
+        logger.debug("Queued on tenant {}: {}", tenantId, message);
     }
     
     /**
@@ -216,8 +241,8 @@ public class TenantBus {
     private void deliver(AgentMessage msg) {
         Consumer<AgentMessage> handler = handlers.get(msg.getReceiverId());
         if (handler == null) {
-            logger.warn("No handler for receiver '{}', message: {}", 
-                msg.getReceiverId(), msg.getMessageId());
+            logger.warn("No handler for receiver '{}' on tenant {}, message: {}",
+                msg.getReceiverId(), tenantId, msg.getMessageId());
             msg.setStatus(AgentMessage.Status.FAILED);
             msg.setResultText("Receiver not found: " + msg.getReceiverId());
             return;
@@ -227,7 +252,7 @@ public class TenantBus {
             handler.accept(msg);
             msg.setStatus(AgentMessage.Status.PROCESSED);
         } catch (Exception e) {
-            logger.error("Handler for '{}' failed: {}", msg.getReceiverId(), e.getMessage());
+            logger.error("Handler for '{}' failed on tenant {}: {}", msg.getReceiverId(), tenantId, e.getMessage());
             msg.setStatus(AgentMessage.Status.FAILED);
             msg.setResultText("Handler error: " + e.getMessage());
         }
@@ -239,6 +264,8 @@ public class TenantBus {
             messageHistory.pollFirst();
         }
     }
+
+    public String getTenantId() { return tenantId; }
     
     /**
      * Custom timeout exception for agent communication.
