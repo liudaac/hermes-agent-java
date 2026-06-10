@@ -34,6 +34,8 @@ export default function OrgControlCenterPage() {
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const [rerouteTargets, setRerouteTargets] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,59 @@ export default function OrgControlCenterPage() {
 
   const recentTraces = useMemo(() => traces.slice(0, 8), [traces]);
   const recentRuns = useMemo(() => runs.slice(0, 8), [runs]);
+  const agentsByTenant = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const team of teams) {
+      const tenantId = team.tenant_id;
+      if (!tenantId) continue;
+      const set = new Set(map[tenantId] || []);
+      for (const member of team.members || []) set.add(String(member));
+      map[tenantId] = Array.from(set).sort();
+    }
+    for (const run of runs) {
+      const tenantId = run.tenant_id;
+      if (!tenantId) continue;
+      const set = new Set(map[tenantId] || []);
+      for (const attempt of run.attempts || []) if (attempt.agent) set.add(String(attempt.agent));
+      map[tenantId] = Array.from(set).sort();
+    }
+    return map;
+  }, [runs, teams]);
+
+  const runControl = useCallback(async (key: string, action: () => Promise<unknown>) => {
+    setBusyAction(key);
+    setError("");
+    try {
+      await action();
+      await load();
+    } catch (err: any) {
+      setError(err?.message || "Control action failed");
+    } finally {
+      setBusyAction("");
+    }
+  }, [load]);
+
+  const replayRun = useCallback((run: any) => {
+    const key = `${run.tenant_id}:${run.run_id}:replay`;
+    return runControl(key, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/replay`, {
+      method: "POST",
+    }));
+  }, [runControl]);
+
+  const rerouteRun = useCallback((run: any, subtask: string) => {
+    const targetKey = `${run.tenant_id}:${run.run_id}:${subtask}`;
+    const target = rerouteTargets[targetKey];
+    if (!target) {
+      setError("Choose a target agent before rerouting");
+      return;
+    }
+    const actionKey = `${targetKey}:reroute`;
+    return runControl(actionKey, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/reroute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subtask, target_agent: target }),
+    }));
+  }, [rerouteTargets, runControl]);
 
   if (loading) {
     return (
@@ -155,18 +210,16 @@ export default function OrgControlCenterPage() {
             ) : (
               <div className="space-y-3">
                 {recentRuns.map((run) => (
-                  <div key={`${run.tenant_id}:${run.run_id}`} className="rounded-lg border border-current/15 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{run.intent}</div>
-                        <div className="text-xs text-muted-foreground">{run.run_id} · {run.tenant_id}</div>
-                      </div>
-                      <StatusBadge status={run.status} />
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {run.succeeded ?? 0} succeeded / {run.failed ?? 0} failed / {run.subtasks_total ?? 0} subtasks
-                    </div>
-                  </div>
+                  <IntentRunCard
+                    key={`${run.tenant_id}:${run.run_id}`}
+                    run={run}
+                    agents={agentsByTenant[run.tenant_id] || []}
+                    busyAction={busyAction}
+                    rerouteTargets={rerouteTargets}
+                    onReplay={replayRun}
+                    onReroute={rerouteRun}
+                    onTargetChange={(targetKey, value) => setRerouteTargets((prev) => ({ ...prev, [targetKey]: value }))}
+                  />
                 ))}
               </div>
             )}
@@ -276,6 +329,97 @@ export default function OrgControlCenterPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+
+function IntentRunCard({
+  run,
+  agents,
+  busyAction,
+  rerouteTargets,
+  onReplay,
+  onReroute,
+  onTargetChange,
+}: {
+  run: any;
+  agents: string[];
+  busyAction: string;
+  rerouteTargets: Record<string, string>;
+  onReplay: (run: any) => void;
+  onReroute: (run: any, subtask: string) => void;
+  onTargetChange: (targetKey: string, value: string) => void;
+}) {
+  const failedEntries = Object.entries(run.failures || {});
+  const replayKey = `${run.tenant_id}:${run.run_id}:replay`;
+  const isControlRun = Boolean(run.parent_run_id);
+
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{run.intent}</div>
+          <div className="text-xs text-muted-foreground">{run.run_id} · {run.tenant_id}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <Badge variant="outline">{run.control_action || "execute"}</Badge>
+            {isControlRun && <Badge variant="secondary">parent {run.parent_run_id}</Badge>}
+          </div>
+        </div>
+        <StatusBadge status={run.status} />
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        {run.succeeded ?? 0} succeeded / {run.failed ?? 0} failed / {run.subtasks_total ?? 0} subtasks
+      </div>
+
+      {failedEntries.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-md border border-red-500/20 bg-red-500/5 p-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-red-300">Failed subtasks</div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busyAction === replayKey}
+              onClick={() => onReplay(run)}
+            >
+              {busyAction === replayKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+              Replay failed
+            </Button>
+          </div>
+
+          {failedEntries.slice(0, 4).map(([subtask, err]) => {
+            const targetKey = `${run.tenant_id}:${run.run_id}:${subtask}`;
+            const actionKey = `${targetKey}:reroute`;
+            return (
+              <div key={subtask} className="rounded border border-current/10 p-2">
+                <div className="text-xs font-medium">{subtask}</div>
+                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{String(err)}</div>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <select
+                    className="h-8 rounded-md border border-current/20 bg-background px-2 text-xs"
+                    value={rerouteTargets[targetKey] || ""}
+                    onChange={(e) => onTargetChange(targetKey, e.target.value)}
+                  >
+                    <option value="">Choose target agent</option>
+                    {agents.map((agent) => (
+                      <option key={agent} value={agent}>{agent}</option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={!rerouteTargets[targetKey] || busyAction === actionKey}
+                    onClick={() => onReroute(run, subtask)}
+                  >
+                    {busyAction === actionKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+                    Reroute
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
