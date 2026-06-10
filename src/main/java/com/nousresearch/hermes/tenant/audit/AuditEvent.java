@@ -13,6 +13,11 @@ public enum AuditEvent {
     // Agent 生命周期
     AGENT_CREATED,
     AGENT_DESTROYED,
+
+    // Control Center governance actions
+    CONTROL_INTENT_REPLAYED,
+    CONTROL_INTENT_REROUTED,
+    CONTROL_AGENT_OVERRIDE_CHANGED,
     
     // 文件操作
     FILE_READ,

@@ -104,6 +104,8 @@ export default function OrgControlCenterPage() {
     const key = `${run.tenant_id}:${run.run_id}:replay`;
     return runControl(key, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/replay`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason: "Operator replayed failed subtasks from Control Center" }),
     }));
   }, [runControl]);
 
@@ -118,7 +120,7 @@ export default function OrgControlCenterPage() {
     return runControl(actionKey, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/reroute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subtask, target_agent: target }),
+      body: JSON.stringify({ subtask, target_agent: target, actor: "dashboard", reason: "Operator rerouted failed subtask from Control Center" }),
     }));
   }, [rerouteTargets, runControl]);
 
@@ -127,7 +129,7 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/agents/${encodeURIComponent(tenantId)}/${encodeURIComponent(agentId)}/override`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined }),
+      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, actor: "dashboard", reason: `Operator set agent routing mode to ${mode}` }),
     }));
   }, [runControl]);
 

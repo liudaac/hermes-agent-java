@@ -3,6 +3,7 @@ package com.nousresearch.hermes.dashboard.handlers;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
+import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import io.javalin.http.Context;
 
 import java.time.Duration;
@@ -116,7 +117,19 @@ public class OrgControlCenterHandler {
     /** POST /api/org/control/intents/{tenantId}/{runId}/replay */
     public void replayIntent(Context ctx) {
         TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
-        var run = tenant.getIntentOrchestrator().replayFailures(ctx.pathParam("runId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "");
+        String parentRunId = ctx.pathParam("runId");
+        var run = tenant.getIntentOrchestrator().replayFailures(parentRunId);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REPLAYED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "reason", reason,
+            "parentRunId", parentRunId,
+            "newRunId", run.runId,
+            "timestamp", System.currentTimeMillis()
+        ));
         ctx.json(Map.of(
             "ok", true,
             "action", "replay_failed",
@@ -132,7 +145,20 @@ public class OrgControlCenterHandler {
         Map<String, Object> body = parseJsonBody(ctx);
         String subtask = stringValue(body.get("subtask"));
         String targetAgent = stringValue(body.get("target_agent"));
-        var run = tenant.getIntentOrchestrator().reroute(ctx.pathParam("runId"), subtask, targetAgent);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "");
+        String parentRunId = ctx.pathParam("runId");
+        var run = tenant.getIntentOrchestrator().reroute(parentRunId, subtask, targetAgent);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REROUTED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "reason", reason,
+            "parentRunId", parentRunId,
+            "newRunId", run.runId,
+            "subtask", subtask != null ? subtask : "",
+            "targetAgent", targetAgent != null ? targetAgent : "",
+            "timestamp", System.currentTimeMillis()
+        ));
         ctx.json(Map.of(
             "ok", true,
             "action", "reroute",
@@ -152,6 +178,8 @@ public class OrgControlCenterHandler {
             throw new IllegalArgumentException("Unknown agent role: " + agentId);
         }
         Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "");
         String mode = stringValue(body.get("mode"));
         if (mode == null || mode.isBlank() || "normal".equalsIgnoreCase(mode)) {
             role.removeMetric("manual_disabled");
@@ -168,6 +196,16 @@ public class OrgControlCenterHandler {
         } else {
             throw new IllegalArgumentException("Unsupported override mode: " + mode);
         }
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_AGENT_OVERRIDE_CHANGED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "reason", reason,
+            "agent", agentId,
+            "mode", mode,
+            "manualDisabled", role.getMetrics().getOrDefault("manual_disabled", false),
+            "manualPenalty", role.getMetrics().getOrDefault("manual_penalty", 0),
+            "timestamp", System.currentTimeMillis()
+        ));
         tenant.save();
         ctx.json(Map.of(
             "ok", true,
@@ -249,6 +287,22 @@ public class OrgControlCenterHandler {
 
     private static String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static String stringOrDefault(Object value, String fallback) {
+        String s = stringValue(value);
+        return s == null || s.isBlank() ? fallback : s;
+    }
+
+    private static String operatorActor(Context ctx, Map<String, Object> body) {
+        String fromBody = stringValue(body.get("actor"));
+        if (fromBody != null && !fromBody.isBlank()) return fromBody;
+        String header = ctx.header("X-Hermes-Operator");
+        if (header != null && !header.isBlank()) return header;
+        header = ctx.header("X-Operator");
+        if (header != null && !header.isBlank()) return header;
+        String query = ctx.queryParam("actor");
+        return query != null && !query.isBlank() ? query : "dashboard";
     }
 
     private static double parseDouble(Object value, double fallback) {
