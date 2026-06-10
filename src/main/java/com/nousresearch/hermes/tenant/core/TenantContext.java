@@ -11,11 +11,16 @@ import com.nousresearch.hermes.tenant.audit.TenantAuditLogger;
 import com.nousresearch.hermes.tenant.quota.TenantQuotaManager;
 import com.nousresearch.hermes.tenant.sandbox.*;
 import com.nousresearch.hermes.tenant.security.TenantSecurityPolicy;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.http.HttpResponse;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Collections;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -45,6 +50,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class TenantContext {
     private static final Logger logger = LoggerFactory.getLogger(TenantContext.class);
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final String AGENT_ROLES_FILE = "agent-roles.json";
 
     private final String tenantId;
     private final Path tenantDir;
@@ -445,12 +452,85 @@ public class TenantContext {
             this.memoryManager = TenantMemoryManager.load(this.tenantId, tenantDir.resolve("memories"));
             this.skillManager = TenantSkillManager.load(this.tenantId, tenantDir.resolve("skills"), this);
             this.sessionManager = TenantSessionManager.load(tenantDir.resolve("sessions"), this);
+            loadAgentRoles();
             this.toolRegistry = new TenantToolRegistry(this);
             this.resourceMonitor = new TenantResourceMonitor(this);
 
         } finally {
             lifecycleLock.writeLock().unlock();
         }
+    }
+
+
+    private Path agentRolesPath() {
+        return tenantDir.resolve("config").resolve(AGENT_ROLES_FILE);
+    }
+
+    private void saveAgentRoles() {
+        try {
+            Path path = agentRolesPath();
+            Files.createDirectories(path.getParent());
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (Map.Entry<String, AgentRole> entry : agentRoles.entrySet()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("agent", entry.getKey());
+                row.put("role", entry.getValue().toMap());
+                rows.add(row);
+            }
+            JSON_MAPPER.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), rows);
+        } catch (Exception e) {
+            logger.warn("Failed to save agent roles for tenant {}: {}", tenantId, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadAgentRoles() {
+        Path path = agentRolesPath();
+        if (!Files.exists(path)) return;
+        try {
+            List<Map<String, Object>> rows = JSON_MAPPER.readValue(path.toFile(), new TypeReference<List<Map<String, Object>>>() {});
+            agentRoles.clear();
+            for (Map<String, Object> row : rows) {
+                String agentId = String.valueOf(row.get("agent"));
+                Object rawRole = row.get("role");
+                if (agentId == null || agentId.isBlank() || rawRole == null) continue;
+                Map<String, Object> roleMap = (Map<String, Object>) rawRole;
+                AgentRole role = agentRoleFromMap(roleMap);
+                agentRoles.put(agentId, role);
+            }
+            logger.info("Tenant {}: loaded {} agent roles", tenantId, agentRoles.size());
+        } catch (Exception e) {
+            logger.warn("Failed to load agent roles for tenant {}: {}", tenantId, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static AgentRole agentRoleFromMap(Map<String, Object> m) {
+        String name = String.valueOf(m.getOrDefault("name", "agent"));
+        String description = String.valueOf(m.getOrDefault("description", ""));
+        AgentRole.Level level = AgentRole.Level.MID;
+        try {
+            Object rawLevel = m.get("level");
+            if (rawLevel != null) level = AgentRole.Level.valueOf(String.valueOf(rawLevel));
+        } catch (Exception ignored) {}
+        AgentRole role = new AgentRole(name, description, level);
+        for (Object skill : (List<Object>) m.getOrDefault("skills", Collections.emptyList())) role.addSkill(String.valueOf(skill));
+        for (Object item : (List<Object>) m.getOrDefault("responsibilities", Collections.emptyList())) role.responsibilities(String.valueOf(item));
+        Object reportsTo = m.get("reports_to");
+        if (reportsTo != null) role.reportsTo(String.valueOf(reportsTo));
+        for (Object id : (List<Object>) m.getOrDefault("collaborators", Collections.emptyList())) role.collaborators(String.valueOf(id));
+        for (Object id : (List<Object>) m.getOrDefault("manages", Collections.emptyList())) role.manages(String.valueOf(id));
+        Object minTaskScore = m.get("min_task_score");
+        if (minTaskScore instanceof Number n) role.minTaskScore(n.doubleValue());
+        Object maxFailures = m.get("max_consecutive_failures");
+        if (maxFailures instanceof Number n) role.maxConsecutiveFailures(n.intValue());
+        Object metrics = m.get("metrics");
+        if (metrics instanceof Map<?, ?> metricMap) {
+            for (Map.Entry<?, ?> e : metricMap.entrySet()) {
+                if (e.getKey() != null) role.updateMetric(String.valueOf(e.getKey()), e.getValue());
+            }
+        }
+        return role;
     }
 
     // ============ 生命周期管理 ============
@@ -477,6 +557,8 @@ public class TenantContext {
             if (config != null) {
                 config.save();
             }
+
+            saveAgentRoles();
             
             // 保存安全策略
             if (securityPolicy != null) {
@@ -606,6 +688,7 @@ public class TenantContext {
             if (config != null) {
                 config.save();
             }
+            saveAgentRoles();
 
             // 4. 记录审计
             auditLogger.log(AuditEvent.TENANT_DESTROYED, Map.of(

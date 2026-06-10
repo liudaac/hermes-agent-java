@@ -168,6 +168,7 @@ public class OrgControlCenterHandler {
         } else {
             throw new IllegalArgumentException("Unsupported override mode: " + mode);
         }
+        tenant.save();
         ctx.json(Map.of(
             "ok", true,
             "tenant_id", tenant.getTenantId(),
