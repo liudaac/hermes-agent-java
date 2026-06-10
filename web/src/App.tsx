@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import {
   Activity,
@@ -30,22 +30,22 @@ import {
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
 import { Backdrop } from "@/components/Backdrop";
-import StatusPage from "@/pages/StatusPage";
-import ConfigPage from "@/pages/ConfigPage";
-import EnvPage from "@/pages/EnvPage";
-import SessionsPage from "@/pages/SessionsPage";
-import LogsPage from "@/pages/LogsPage";
-import AnalyticsPage from "@/pages/AnalyticsPage";
-import CronPage from "@/pages/CronPage";
-import SkillsPage from "@/pages/SkillsPage";
-import ToolsPage from "@/pages/ToolsPage";
-import TenantsPage from "@/pages/TenantsPage";
-import OrgPage from "@/pages/OrgPage";
-import OrgControlCenterPage from "@/pages/OrgControlCenterPage";
+const StatusPage = lazy(() => import("@/pages/StatusPage"));
+const ConfigPage = lazy(() => import("@/pages/ConfigPage"));
+const EnvPage = lazy(() => import("@/pages/EnvPage"));
+const SessionsPage = lazy(() => import("@/pages/SessionsPage"));
+const LogsPage = lazy(() => import("@/pages/LogsPage"));
+const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
+const CronPage = lazy(() => import("@/pages/CronPage"));
+const SkillsPage = lazy(() => import("@/pages/SkillsPage"));
+const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
+const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
+const OrgPage = lazy(() => import("@/pages/OrgPage"));
+const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-import PlaygroundPage from "@/pages/PlaygroundPage";
-import ComparePage from "@/pages/ComparePage";
+const PlaygroundPage = lazy(() => import("@/pages/PlaygroundPage"));
+const ComparePage = lazy(() => import("@/pages/ComparePage"));
 import { useI18n } from "@/i18n";
 import { usePlugins } from "@/plugins";
 import type { RegisteredPlugin } from "@/plugins";
@@ -256,7 +256,8 @@ export default function App() {
       </header>
 
       <main className="relative z-2 mx-auto w-full max-w-[1600px] flex-1 px-3 sm:px-6 pt-16 sm:pt-20 pb-4 sm:pb-8">
-        <Routes>
+        <Suspense fallback={<PageLoading />}>
+          <Routes>
           <Route path="/" element={<StatusPage />} />
           <Route path="/playground" element={<PlaygroundPage />} />
           <Route path="/compare" element={<ComparePage />} />
@@ -281,7 +282,8 @@ export default function App() {
           ))}
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
 
       <footer className="relative z-2 border-t border-current/20">
@@ -304,6 +306,14 @@ export default function App() {
           </Cell>
         </Grid>
       </footer>
+    </div>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="flex h-64 items-center justify-center text-sm tracking-[0.12em] opacity-70">
+      Loading...
     </div>
   );
 }
