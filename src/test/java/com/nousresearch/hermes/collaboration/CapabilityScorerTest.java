@@ -102,4 +102,20 @@ class CapabilityScorerTest {
         assertTrue(((java.util.Map<?, ?>) assignment.toMap().get("score_components")).containsKey("availability"));
     }
 
+    @Test
+    void manualOverrideCanDisableOrDeprioritizeAgent() {
+        var normal = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa");
+        var disabled = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa").disabled(true);
+        var deprioritized = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa").deprioritize(1.5);
+
+        var normalScore = CapabilityScorer.score("run tests", "agent-normal", normal, tenant);
+        var disabledScore = CapabilityScorer.score("run tests", "agent-disabled", disabled, tenant);
+        var deprioritizedScore = CapabilityScorer.score("run tests", "agent-low", deprioritized, tenant);
+
+        assertTrue(disabledScore.total() < deprioritizedScore.total());
+        assertTrue(deprioritizedScore.total() < normalScore.total());
+        assertTrue(disabledScore.components().get("manual_override") <= -10.0);
+        assertEquals(-1.5, deprioritizedScore.components().get("manual_override"), 0.001);
+    }
+
 }

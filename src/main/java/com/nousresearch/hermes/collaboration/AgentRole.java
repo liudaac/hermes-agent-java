@@ -59,7 +59,11 @@ public class AgentRole {
     
     // Dynamic metric updates
     public void updateMetric(String key, Object value) { metrics.put(key, value); }
+    public void removeMetric(String key) { metrics.remove(key); }
     public void addSkill(String skill) { skills.add(skill); }
+
+    public AgentRole disabled(boolean disabled) { updateMetric("manual_disabled", disabled); return this; }
+    public AgentRole deprioritize(double penalty) { updateMetric("manual_penalty", penalty); return this; }
     
     // Getters
     public String getRoleName() { return roleName; }

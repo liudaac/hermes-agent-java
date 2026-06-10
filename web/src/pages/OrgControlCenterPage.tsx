@@ -122,6 +122,15 @@ export default function OrgControlCenterPage() {
     }));
   }, [rerouteTargets, runControl]);
 
+  const overrideAgent = useCallback((tenantId: string, agentId: string, mode: "normal" | "disabled" | "deprioritized") => {
+    const key = `${tenantId}:${agentId}:override:${mode}`;
+    return runControl(key, () => fetchJSON(`/api/org/control/agents/${encodeURIComponent(tenantId)}/${encodeURIComponent(agentId)}/override`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined }),
+    }));
+  }, [runControl]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -178,20 +187,12 @@ export default function OrgControlCenterPage() {
             ) : (
               <div className="space-y-3">
                 {teams.slice(0, 8).map((team) => (
-                  <div key={`${team.tenant_id}:${team.team_id}`} className="rounded-lg border border-current/15 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium">{team.name}</div>
-                        <div className="text-xs text-muted-foreground">{team.mission || "No mission"}</div>
-                      </div>
-                      <Badge variant="outline">{team.size ?? 0} members</Badge>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {(team.members || []).slice(0, 6).map((m: string) => (
-                        <Badge key={m} variant="secondary">{m}</Badge>
-                      ))}
-                    </div>
-                  </div>
+                  <TeamCard
+                    key={`${team.tenant_id}:${team.team_id}`}
+                    team={team}
+                    busyAction={busyAction}
+                    onOverride={overrideAgent}
+                  />
                 ))}
               </div>
             )}
@@ -333,6 +334,90 @@ export default function OrgControlCenterPage() {
   );
 }
 
+
+
+function TeamCard({
+  team,
+  busyAction,
+  onOverride,
+}: {
+  team: any;
+  busyAction: string;
+  onOverride: (tenantId: string, agentId: string, mode: "normal" | "disabled" | "deprioritized") => void;
+}) {
+  const roles = team.agent_roles || [];
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-medium">{team.name}</div>
+          <div className="text-xs text-muted-foreground">{team.mission || "No mission"}</div>
+        </div>
+        <Badge variant="outline">{team.size ?? 0} members</Badge>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {(team.members || []).slice(0, 6).map((m: string) => (
+          <Badge key={m} variant="secondary">{m}</Badge>
+        ))}
+      </div>
+
+      {roles.length > 0 && (
+        <div className="mt-3 space-y-2 rounded-md border border-current/10 p-2">
+          <div className="text-xs font-medium">Agent routing controls</div>
+          {roles.slice(0, 6).map((role: any) => {
+            const agent = role.agent;
+            const metrics = role.metrics || {};
+            const disabled = metrics.manual_disabled === true || metrics.manual_disabled === "true";
+            const penalty = Number(metrics.manual_penalty || 0);
+            const mode = disabled ? "disabled" : penalty > 0 ? "deprioritized" : "normal";
+            const baseKey = `${team.tenant_id}:${agent}:override`;
+            return (
+              <div key={agent} className="rounded border border-current/10 p-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium">{agent}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {role.name} · {role.level} · {mode}{penalty > 0 && !disabled ? ` (-${penalty})` : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Button
+                      variant={mode === "disabled" ? "destructive" : "outline"}
+                      size="sm"
+                      disabled={busyAction === `${baseKey}:disabled`}
+                      onClick={() => onOverride(team.tenant_id, agent, "disabled")}
+                    >
+                      {busyAction === `${baseKey}:disabled` ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+                      Disable
+                    </Button>
+                    <Button
+                      variant={mode === "deprioritized" ? "secondary" : "outline"}
+                      size="sm"
+                      disabled={busyAction === `${baseKey}:deprioritized`}
+                      onClick={() => onOverride(team.tenant_id, agent, "deprioritized")}
+                    >
+                      {busyAction === `${baseKey}:deprioritized` ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+                      Deprioritize
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={mode === "normal" || busyAction === `${baseKey}:normal`}
+                      onClick={() => onOverride(team.tenant_id, agent, "normal")}
+                    >
+                      {busyAction === `${baseKey}:normal` ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+                      Restore
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function IntentRunCard({
   run,

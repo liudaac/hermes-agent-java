@@ -35,6 +35,7 @@ public class CapabilityScorer {
         double availabilityScore = availabilityBonus(agentId, ctx);
         double reliabilityScore = reliabilityBonus(agentId, ctx);
         double evolutionScore = evolutionBonus(agentId, lower, role, ctx);
+        double manualOverrideScore = manualOverrideScore(role);
 
         components.put("skill_match", skillScore);
         components.put("role_match", roleScore);
@@ -42,8 +43,9 @@ public class CapabilityScorer {
         components.put("availability", availabilityScore);
         components.put("reliability", reliabilityScore);
         components.put("evolution", evolutionScore);
+        components.put("manual_override", manualOverrideScore);
 
-        double total = skillScore + roleScore + levelScore + availabilityScore + reliabilityScore + evolutionScore;
+        double total = skillScore + roleScore + levelScore + availabilityScore + reliabilityScore + evolutionScore + manualOverrideScore;
         return new CapabilityScore(agentId, role.getRoleName(), total, matchedSkills, components);
     }
 
@@ -107,6 +109,21 @@ public class CapabilityScorer {
             double errorPenalty = Math.min(1.0, status.getErrorRate());
             double latencyPenalty = Math.min(0.35, status.getAverageLatencyMs() / 120_000.0);
             return 0.3 - errorPenalty - latencyPenalty;
+        } catch (Exception ignored) {
+            return 0.0;
+        }
+    }
+
+    private static double manualOverrideScore(AgentRole role) {
+        try {
+            Object disabled = role.getMetrics().get("manual_disabled");
+            if (Boolean.TRUE.equals(disabled) || "true".equalsIgnoreCase(String.valueOf(disabled))) {
+                return -10.0;
+            }
+            Object penalty = role.getMetrics().get("manual_penalty");
+            if (penalty == null) return 0.0;
+            double value = penalty instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(penalty));
+            return -Math.max(0.0, Math.min(5.0, value));
         } catch (Exception ignored) {
             return 0.0;
         }

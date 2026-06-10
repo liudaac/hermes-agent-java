@@ -410,6 +410,7 @@ public class DashboardServer {
         app.get("/api/org/control/intents", orgControlCenterHandler::intents);
         app.post("/api/org/control/intents/{tenantId}/{runId}/replay", orgControlCenterHandler::replayIntent);
         app.post("/api/org/control/intents/{tenantId}/{runId}/reroute", orgControlCenterHandler::rerouteIntent);
+        app.post("/api/org/control/agents/{tenantId}/{agentId}/override", orgControlCenterHandler::agentOverride);
         app.get("/api/org/control/traces", orgControlCenterHandler::traces);
         app.get("/api/org/control/evolution", orgControlCenterHandler::evolution);
         app.get("/api/org/control/anomalies", orgControlCenterHandler::anomalies);

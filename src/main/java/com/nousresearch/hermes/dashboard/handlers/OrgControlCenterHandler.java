@@ -87,6 +87,11 @@ public class OrgControlCenterHandler {
                     "time", a.timestamp().toString()
                 )).toList());
                 row.put("state_keys", new ArrayList<>(team.getState().keySet()));
+                row.put("agent_roles", t.listAgentRoles().entrySet().stream().map(e -> {
+                    Map<String, Object> role = new LinkedHashMap<>(e.getValue().toMap());
+                    role.put("agent", e.getKey());
+                    return role;
+                }).toList());
                 rows.add(row);
             }
         }
@@ -134,6 +139,41 @@ public class OrgControlCenterHandler {
             "tenant_id", tenant.getTenantId(),
             "parent_run_id", ctx.pathParam("runId"),
             "run", run.toMap()
+        ));
+    }
+
+
+    /** POST /api/org/control/agents/{tenantId}/{agentId}/override */
+    public void agentOverride(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String agentId = ctx.pathParam("agentId");
+        var role = tenant.getAgentRole(agentId);
+        if (role == null) {
+            throw new IllegalArgumentException("Unknown agent role: " + agentId);
+        }
+        Map<String, Object> body = parseJsonBody(ctx);
+        String mode = stringValue(body.get("mode"));
+        if (mode == null || mode.isBlank() || "normal".equalsIgnoreCase(mode)) {
+            role.removeMetric("manual_disabled");
+            role.removeMetric("manual_penalty");
+            mode = "normal";
+        } else if ("disabled".equalsIgnoreCase(mode)) {
+            role.updateMetric("manual_disabled", true);
+            role.removeMetric("manual_penalty");
+            mode = "disabled";
+        } else if ("deprioritized".equalsIgnoreCase(mode) || "deprioritize".equalsIgnoreCase(mode)) {
+            role.updateMetric("manual_disabled", false);
+            role.updateMetric("manual_penalty", parseDouble(body.get("penalty"), 1.5));
+            mode = "deprioritized";
+        } else {
+            throw new IllegalArgumentException("Unsupported override mode: " + mode);
+        }
+        ctx.json(Map.of(
+            "ok", true,
+            "tenant_id", tenant.getTenantId(),
+            "agent", agentId,
+            "mode", mode,
+            "role", role.toMap()
         ));
     }
 
@@ -208,6 +248,15 @@ public class OrgControlCenterHandler {
 
     private static String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private static double parseDouble(Object value, double fallback) {
+        if (value == null) return fallback;
+        try {
+            return value instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(value));
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 
     private static Map<String, Object> traceRow(String tenantId, AgentTrace t) {
