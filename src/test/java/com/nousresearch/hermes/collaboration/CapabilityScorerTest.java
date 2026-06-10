@@ -87,4 +87,19 @@ class CapabilityScorerTest {
             "run tests", tenant.listAgentRoles(), tenant);
         assertEquals("agent-online", assignment.agentId());
     }
+    @Test
+    void assignmentExposesScoreComponentsForExplanation() {
+        tenant.registerAgentRole("agent-online",
+            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+        tenant.getTenantBus().register("agent-online", msg -> {});
+
+        var assignment = IntentOrchestrator.findBestMatch(
+            "run tests", tenant.listAgentRoles(), tenant);
+
+        assertEquals("agent-online", assignment.agentId());
+        assertFalse(assignment.scoreComponents().isEmpty());
+        assertTrue(assignment.toMap().containsKey("score_components"));
+        assertTrue(((java.util.Map<?, ?>) assignment.toMap().get("score_components")).containsKey("availability"));
+    }
+
 }

@@ -372,6 +372,15 @@ function IntentRunCard({
         {run.succeeded ?? 0} succeeded / {run.failed ?? 0} failed / {run.subtasks_total ?? 0} subtasks
       </div>
 
+      {(run.assignments || []).length > 0 && (
+        <div className="mt-3 space-y-2 rounded-md border border-current/10 p-2">
+          <div className="text-xs font-medium">Scoring explanation</div>
+          {(run.assignments || []).slice(0, 4).map((assignment: any, idx: number) => (
+            <ScoreBreakdown key={`${assignment.subtask}:${idx}`} assignment={assignment} />
+          ))}
+        </div>
+      )}
+
       {failedEntries.length > 0 && (
         <div className="mt-3 space-y-2 rounded-md border border-red-500/20 bg-red-500/5 p-2">
           <div className="flex items-center justify-between gap-2">
@@ -422,6 +431,49 @@ function IntentRunCard({
       )}
     </div>
   );
+}
+
+
+function ScoreBreakdown({ assignment }: { assignment: any }) {
+  const components = assignment.score_components || {};
+  const entries = Object.entries(components);
+  return (
+    <div className="rounded border border-current/10 p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium">{assignment.subtask}</div>
+          <div className="text-xs text-muted-foreground">
+            {assignment.agent} · {assignment.role || "no role"} · score {Number(assignment.score || 0).toFixed(2)}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {(assignment.matched_skills || []).slice(0, 4).map((skill: string) => (
+            <Badge key={skill} variant="secondary">{skill}</Badge>
+          ))}
+        </div>
+      </div>
+      {entries.length > 0 && (
+        <div className="mt-2 grid gap-1 sm:grid-cols-2">
+          {entries.map(([name, raw]) => {
+            const value = Number(raw || 0);
+            const positive = value >= 0;
+            return (
+              <div key={name} className="flex items-center justify-between rounded bg-current/5 px-2 py-1 text-xs">
+                <span className="text-muted-foreground">{formatComponentName(name)}</span>
+                <span className={positive ? "text-emerald-300" : "text-red-300"}>
+                  {positive ? "+" : ""}{value.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatComponentName(name: string) {
+  return name.replace(/_/g, " ");
 }
 
 function Metric({ icon: Icon, label, value }: { icon: any; label: string; value: number }) {

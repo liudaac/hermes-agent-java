@@ -112,7 +112,7 @@ public class IntentOrchestrator {
                 throw new IllegalArgumentException("Unknown target agent role: " + targetAgentId);
             }
             var score = CapabilityScorer.score(targetSubtask, targetAgentId, role, tenantContext);
-            target = new SubtaskAssignment(targetSubtask, targetAgentId, role.getRoleName(), score.total(), score.matchedSkills());
+            target = new SubtaskAssignment(targetSubtask, targetAgentId, role.getRoleName(), score.total(), score.matchedSkills(), score.components());
         } else {
             target = findAlternative(base, base.agentId());
             if (target == null || target.agentId() == null) {
@@ -331,7 +331,7 @@ public class IntentOrchestrator {
         if (best == null || best.total() < 0.1) {
             return new SubtaskAssignment(subtask, null, null, 0.0, List.of());
         }
-        return new SubtaskAssignment(subtask, best.agentId(), best.roleName(), best.total(), best.matchedSkills());
+        return new SubtaskAssignment(subtask, best.agentId(), best.roleName(), best.total(), best.matchedSkills(), best.components());
     }
 
     /**
@@ -354,8 +354,24 @@ public class IntentOrchestrator {
         String agentId,
         String roleName,
         double score,
-        List<String> matchedSkills
-    ) {}
+        List<String> matchedSkills,
+        Map<String, Double> scoreComponents
+    ) {
+        public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills) {
+            this(subtask, agentId, roleName, score, matchedSkills, Map.of());
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("subtask", subtask);
+            m.put("agent", agentId != null ? agentId : "(unassigned)");
+            m.put("role", roleName != null ? roleName : "");
+            m.put("score", score);
+            m.put("matched_skills", matchedSkills != null ? matchedSkills : List.of());
+            m.put("score_components", scoreComponents != null ? scoreComponents : Map.of());
+            return m;
+        }
+    }
 
     public record IntentPlan(
         String intent,
@@ -366,13 +382,7 @@ public class IntentOrchestrator {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("intent", intent);
             m.put("status", status);
-            m.put("subtasks", assignments.stream().map(a -> Map.of(
-                "subtask", a.subtask(),
-                "agent", a.agentId() != null ? a.agentId() : "(unassigned)",
-                "role", a.roleName() != null ? a.roleName() : "",
-                "score", a.score(),
-                "matched_skills", a.matchedSkills()
-            )).toList());
+            m.put("subtasks", assignments.stream().map(SubtaskAssignment::toMap).toList());
             return m;
         }
     }
@@ -479,6 +489,7 @@ public class IntentOrchestrator {
             m.put("status", status.name());
             m.put("current_subtask", currentSubtask);
             m.put("subtasks_total", assignments.size());
+            m.put("assignments", assignments.stream().map(SubtaskAssignment::toMap).toList());
             m.put("succeeded", successes.size());
             m.put("failed", failures.size());
             m.put("successes", successes);
