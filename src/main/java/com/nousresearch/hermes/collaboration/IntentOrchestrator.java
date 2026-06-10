@@ -69,13 +69,67 @@ public class IntentOrchestrator {
      */
     public IntentRun execute(String intent) {
         IntentPlan plan = plan(intent);
+        return startRun(intent, plan.assignments(), null, "execute");
+    }
+
+    /** Replay only the failed subtasks from a previous run. */
+    public IntentRun replayFailures(String runId) {
+        IntentRun original = getRun(runId);
+        if (original == null) {
+            throw new IllegalArgumentException("Unknown intent run: " + runId);
+        }
+        List<SubtaskAssignment> failedAssignments = original.assignments().stream()
+            .filter(a -> original.failures().containsKey(a.subtask()))
+            .toList();
+        if (failedAssignments.isEmpty()) {
+            throw new IllegalStateException("Intent run has no failed subtasks to replay: " + runId);
+        }
+        return startRun(original.intent, failedAssignments, runId, "replay_failed");
+    }
+
+    /** Reroute a subtask from a previous run to a specific target agent. */
+    public IntentRun reroute(String runId, String subtask, String targetAgentId) {
+        IntentRun original = getRun(runId);
+        if (original == null) {
+            throw new IllegalArgumentException("Unknown intent run: " + runId);
+        }
+        String targetSubtask = subtask != null && !subtask.isBlank()
+            ? subtask
+            : original.failures().keySet().stream().findFirst().orElse(original.currentSubtask);
+        if (targetSubtask == null || targetSubtask.isBlank()) {
+            throw new IllegalArgumentException("Subtask is required for reroute");
+        }
+
+        SubtaskAssignment base = original.assignments().stream()
+            .filter(a -> a.subtask().equals(targetSubtask))
+            .findFirst()
+            .orElse(new SubtaskAssignment(targetSubtask, null, null, 0.0, List.of()));
+
+        SubtaskAssignment target;
+        if (targetAgentId != null && !targetAgentId.isBlank()) {
+            AgentRole role = tenantContext.getAgentRole(targetAgentId);
+            if (role == null) {
+                throw new IllegalArgumentException("Unknown target agent role: " + targetAgentId);
+            }
+            var score = CapabilityScorer.score(targetSubtask, targetAgentId, role, tenantContext);
+            target = new SubtaskAssignment(targetSubtask, targetAgentId, role.getRoleName(), score.total(), score.matchedSkills());
+        } else {
+            target = findAlternative(base, base.agentId());
+            if (target == null || target.agentId() == null) {
+                throw new IllegalStateException("No alternative teammate available for subtask: " + targetSubtask);
+            }
+        }
+        return startRun(original.intent, List.of(target), runId, "reroute");
+    }
+
+    private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
         String runId = "run_" + TASK_ID_GEN.incrementAndGet();
-        IntentRun run = new IntentRun(runId, intent, plan.assignments());
+        IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction);
         runs.put(runId, run);
 
         // Execute each assignment in sequence (simplicity over parallelism for now)
         Thread t = new Thread(() -> {
-            for (SubtaskAssignment a : plan.assignments()) {
+            for (SubtaskAssignment a : assignments) {
                 run.setStatus(RunStatus.RUNNING);
                 run.setCurrentSubtask(a.subtask());
                 if (a.agentId() == null) {
@@ -366,6 +420,8 @@ public class IntentOrchestrator {
         public final String runId;
         public final String intent;
         public final List<SubtaskAssignment> assignments;
+        public final String parentRunId;
+        public final String controlAction;
         public final Map<String, String> successes = new ConcurrentHashMap<>();
         public final Map<String, String> failures = new ConcurrentHashMap<>();
         public final List<IntentAttempt> attempts = Collections.synchronizedList(new ArrayList<>());
@@ -375,9 +431,15 @@ public class IntentOrchestrator {
         public volatile long completedAt = 0;
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments) {
+            this(runId, intent, assignments, null, "execute");
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
             this.runId = runId;
             this.intent = intent;
             this.assignments = List.copyOf(assignments);
+            this.parentRunId = parentRunId;
+            this.controlAction = controlAction != null ? controlAction : "execute";
         }
 
         public synchronized void recordSuccess(String subtask, String result) {
@@ -401,6 +463,7 @@ public class IntentOrchestrator {
 
         public void setCurrentSubtask(String s) { this.currentSubtask = s; }
 
+        public List<SubtaskAssignment> assignments() { return assignments; }
         public Map<String, String> successes() { return Map.copyOf(successes); }
         public Map<String, String> failures() { return Map.copyOf(failures); }
         public List<IntentAttempt> attempts() {
@@ -411,6 +474,8 @@ public class IntentOrchestrator {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("run_id", runId);
             m.put("intent", intent);
+            m.put("parent_run_id", parentRunId);
+            m.put("control_action", controlAction);
             m.put("status", status.name());
             m.put("current_subtask", currentSubtask);
             m.put("subtasks_total", assignments.size());

@@ -221,6 +221,60 @@ class IntentOrchestratorTest {
         assertTrue(tenantContext.getEvolutionEngine().getAgentFailures("agent-2", 5).size() >= 1);
     }
 
+
+    @Test
+    void replayFailuresCreatesControlRunForFailedSubtasks() throws Exception {
+        var failed = orchestrator.execute("review the code");
+        waitForTerminal(failed);
+        assertEquals(IntentOrchestrator.RunStatus.PARTIAL, failed.status);
+        assertFalse(failed.failures().isEmpty());
+
+        tenantContext.getTenantBus().register("agent-1", msg -> {
+            var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
+                .action("done")
+                .replyTo(msg.getMessageId())
+                .payload(Map.of("ok", true))
+                .build();
+            reply.setResultText("replayed ok");
+            tenantContext.getTenantBus().reply(msg, reply);
+        });
+
+        var replay = orchestrator.replayFailures(failed.runId);
+        waitForTerminal(replay);
+
+        assertEquals(failed.runId, replay.parentRunId);
+        assertEquals("replay_failed", replay.controlAction);
+        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, replay.status);
+        assertEquals(failed.failures().size(), replay.assignments().size());
+    }
+
+    @Test
+    void rerouteCreatesControlRunForTargetAgent() throws Exception {
+        tenantContext.registerAgentRole("agent-4",
+            new AgentRole("backup-reviewer", "Backup reviewer", AgentRole.Level.SENIOR)
+                .skills("review", "code"));
+        tenantContext.getTenantBus().register("agent-4", msg -> {
+            var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
+                .action("done")
+                .replyTo(msg.getMessageId())
+                .payload(Map.of("ok", true))
+                .build();
+            reply.setResultText("rerouted ok");
+            tenantContext.getTenantBus().reply(msg, reply);
+        });
+
+        var original = orchestrator.execute("review the code");
+        waitForTerminal(original);
+
+        var reroute = orchestrator.reroute(original.runId, "review the code", "agent-4");
+        waitForTerminal(reroute);
+
+        assertEquals(original.runId, reroute.parentRunId);
+        assertEquals("reroute", reroute.controlAction);
+        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, reroute.status);
+        assertEquals("agent-4", reroute.assignments().get(0).agentId());
+    }
+
     private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {

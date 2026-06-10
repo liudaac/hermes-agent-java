@@ -107,6 +107,36 @@ public class OrgControlCenterHandler {
         ctx.json(Map.of("runs", rows, "count", rows.size()));
     }
 
+
+    /** POST /api/org/control/intents/{tenantId}/{runId}/replay */
+    public void replayIntent(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        var run = tenant.getIntentOrchestrator().replayFailures(ctx.pathParam("runId"));
+        ctx.json(Map.of(
+            "ok", true,
+            "action", "replay_failed",
+            "tenant_id", tenant.getTenantId(),
+            "parent_run_id", ctx.pathParam("runId"),
+            "run", run.toMap()
+        ));
+    }
+
+    /** POST /api/org/control/intents/{tenantId}/{runId}/reroute */
+    public void rerouteIntent(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String subtask = stringValue(body.get("subtask"));
+        String targetAgent = stringValue(body.get("target_agent"));
+        var run = tenant.getIntentOrchestrator().reroute(ctx.pathParam("runId"), subtask, targetAgent);
+        ctx.json(Map.of(
+            "ok", true,
+            "action", "reroute",
+            "tenant_id", tenant.getTenantId(),
+            "parent_run_id", ctx.pathParam("runId"),
+            "run", run.toMap()
+        ));
+    }
+
     /** GET /api/org/control/traces?n=50 */
     public void traces(Context ctx) {
         int n = parseInt(ctx.queryParam("n"), 50);
@@ -155,6 +185,29 @@ public class OrgControlCenterHandler {
 
     private List<TenantContext> tenants() {
         return new ArrayList<>(tenantManager.getAllTenants().values());
+    }
+
+    private TenantContext requireTenant(String tenantId) {
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        if (tenant == null) {
+            throw new IllegalArgumentException("Unknown tenant: " + tenantId);
+        }
+        return tenant;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> parseJsonBody(Context ctx) {
+        String body = ctx.body();
+        if (body == null || body.isBlank()) return Map.of();
+        try {
+            return ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid JSON body: " + e.getMessage(), e);
+        }
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private static Map<String, Object> traceRow(String tenantId, AgentTrace t) {
