@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.collaboration;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.org.evolution.FailureCase;
+import com.nousresearch.hermes.org.observe.AgentTrace;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,18 +83,21 @@ public class IntentOrchestrator {
                     continue;
                 }
                 try {
-                    String result = delegateOne(a);
+                    String result = delegateOne(run, a, false, null);
                     run.recordSuccess(a.subtask(), result);
                 } catch (Exception e) {
+                    recordExecutionFailure(run, a, e, false, null);
+
                     // Failure: try to reassign once
                     logger.warn("Subtask '{}' failed for {}: {} — attempting reassignment",
                         a.subtask(), a.agentId(), e.getMessage());
                     var retry = findAlternative(a, a.agentId());
-                    if (retry != null) {
+                    if (retry != null && retry.agentId() != null) {
                         try {
-                            String result = delegateOne(retry);
+                            String result = delegateOne(run, retry, true, a.agentId());
                             run.recordSuccess(retry.subtask(), result + " (reassigned from " + a.agentId() + ")");
                         } catch (Exception e2) {
+                            recordExecutionFailure(run, retry, e2, true, a.agentId());
                             run.recordFailure(retry.subtask(), "Reassignment failed: " + e2.getMessage());
                         }
                     } else {
@@ -108,25 +113,109 @@ public class IntentOrchestrator {
         return run;
     }
 
-    private String delegateOne(SubtaskAssignment a) throws Exception {
+    private String delegateOne(IntentRun run, SubtaskAssignment a, boolean reassigned, String reassignedFrom) throws Exception {
         if (a.agentId() == null) {
             throw new RuntimeException("No agent assigned");
         }
+
+        long started = System.currentTimeMillis();
+        AgentTrace trace = tenantContext.getObservability().startTrace(a.agentId(), run.runId, a.subtask())
+            .meta("intent", run.intent)
+            .meta("score", a.score())
+            .meta("matched_skills", a.matchedSkills())
+            .meta("reassigned", reassigned);
+        if (reassignedFrom != null) trace.meta("reassigned_from", reassignedFrom);
+
         var bus = tenantContext.getTenantBus();
         if (!bus.isRegistered(a.agentId())) {
-            throw new RuntimeException("Agent " + a.agentId() + " not on bus");
+            RuntimeException e = new RuntimeException("Agent " + a.agentId() + " not on bus");
+            trace.step(AgentTrace.Step.error(e.getMessage()));
+            trace.end(AgentTrace.Status.FAILED);
+            tenantContext.getObservability().completeTrace(trace);
+            run.recordAttempt(IntentAttempt.failure(a, reassigned, reassignedFrom, trace.getTraceId(), System.currentTimeMillis() - started, e.getMessage()));
+            throw e;
         }
+
         var msg = AgentMessage.builder(tenantContext.getTenantId(), a.agentId(), AgentMessage.Type.REQUEST)
             .action("intent_subtask")
             .payload(Map.of(
+                "run_id", run.runId,
                 "subtask", a.subtask(),
                 "score", a.score(),
-                "matched_skills", a.matchedSkills()
+                "matched_skills", a.matchedSkills(),
+                "reassigned", reassigned,
+                "reassigned_from", reassignedFrom != null ? reassignedFrom : ""
             ))
             .timeoutMs(60_000L)
             .build();
-        var reply = bus.sendAndWait(msg, 60_000L);
-        return reply.getResultText();
+
+        trace.step(AgentTrace.Step.decision(
+            "Assigned subtask to " + a.agentId() + " (score=" + String.format("%.2f", a.score()) + ")",
+            Math.min(0.99, Math.max(0.05, a.score() / 5.0)),
+            reassignedFrom != null ? List.of("original=" + reassignedFrom) : List.of()
+        ));
+
+        try {
+            var reply = bus.sendAndWait(msg, 60_000L);
+            String result = reply.getResultText() != null ? reply.getResultText() : "";
+            trace.step(AgentTrace.Step.toolResult("tenant_bus", result, System.currentTimeMillis() - started));
+            trace.end(AgentTrace.Status.SUCCESS);
+            tenantContext.getObservability().completeTrace(trace);
+            tenantContext.getEvolutionEngine().recordSuccess(a.agentId(), successPattern(a.subtask()),
+                "Intent subtask succeeded in run " + run.runId);
+            run.recordAttempt(IntentAttempt.success(a, reassigned, reassignedFrom, trace.getTraceId(), System.currentTimeMillis() - started));
+            return result;
+        } catch (Exception e) {
+            trace.step(AgentTrace.Step.error(e.getMessage()));
+            trace.end(classifyTraceStatus(e));
+            tenantContext.getObservability().completeTrace(trace);
+            run.recordAttempt(IntentAttempt.failure(a, reassigned, reassignedFrom, trace.getTraceId(), System.currentTimeMillis() - started, e.getMessage()));
+            throw e;
+        }
+    }
+
+    private void recordExecutionFailure(IntentRun run, SubtaskAssignment a, Exception e, boolean reassigned, String reassignedFrom) {
+        if (a.agentId() == null) return;
+        try {
+            var failure = new FailureCase.Builder(a.agentId(), a.subtask(), e.getMessage() != null ? e.getMessage() : e.toString())
+                .expectedOutcome("Complete intent subtask for run " + run.runId)
+                .rootCause(classifyRootCause(e))
+                .severity(reassigned ? FailureCase.Severity.HIGH : FailureCase.Severity.MEDIUM)
+                .lesson("Intent subtask failed; prefer healthier or more specialized agents for similar work")
+                .contextHint("intent", run.intent)
+                .contextHint("role", a.roleName() != null ? a.roleName() : "")
+                .contextHint("reassigned", String.valueOf(reassigned));
+            if (reassignedFrom != null) failure.contextHint("reassigned_from", reassignedFrom);
+            tenantContext.getEvolutionEngine().recordFailure(failure.build());
+        } catch (Exception ignored) {
+            // Learning feedback must never break orchestration.
+        }
+    }
+
+    private static FailureCase.RootCause classifyRootCause(Exception e) {
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        if (e instanceof TenantBus.TimeoutException || msg.contains("timeout") || msg.contains("within")) {
+            return FailureCase.RootCause.TIMEOUT;
+        }
+        if (msg.contains("not on bus") || msg.contains("receiver not found") || msg.contains("no handler")) {
+            return FailureCase.RootCause.EXTERNAL_FAILURE;
+        }
+        if (msg.contains("permission") || msg.contains("denied")) {
+            return FailureCase.RootCause.PERMISSION_DENIED;
+        }
+        return FailureCase.RootCause.UNKNOWN;
+    }
+
+    private static AgentTrace.Status classifyTraceStatus(Exception e) {
+        return classifyRootCause(e) == FailureCase.RootCause.TIMEOUT
+            ? AgentTrace.Status.TIMED_OUT
+            : AgentTrace.Status.FAILED;
+    }
+
+    private static String successPattern(String subtask) {
+        if (subtask == null || subtask.isBlank()) return "intent-subtask";
+        String normalized = subtask.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+        return normalized.length() > 48 ? normalized.substring(0, 48) : normalized;
     }
 
     public IntentRun getRun(String runId) {
@@ -234,12 +323,52 @@ public class IntentOrchestrator {
         }
     }
 
+
+    public record IntentAttempt(
+        String subtask,
+        String agentId,
+        String roleName,
+        double score,
+        boolean reassigned,
+        String reassignedFrom,
+        String traceId,
+        boolean success,
+        String error,
+        long latencyMs,
+        long timestamp
+    ) {
+        static IntentAttempt success(SubtaskAssignment a, boolean reassigned, String reassignedFrom, String traceId, long latencyMs) {
+            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, true, null, latencyMs, System.currentTimeMillis());
+        }
+
+        static IntentAttempt failure(SubtaskAssignment a, boolean reassigned, String reassignedFrom, String traceId, long latencyMs, String error) {
+            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, false, error, latencyMs, System.currentTimeMillis());
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("subtask", subtask);
+            m.put("agent", agentId);
+            m.put("role", roleName);
+            m.put("score", score);
+            m.put("reassigned", reassigned);
+            m.put("reassigned_from", reassignedFrom);
+            m.put("trace_id", traceId);
+            m.put("success", success);
+            m.put("error", error);
+            m.put("latency_ms", latencyMs);
+            m.put("timestamp", timestamp);
+            return m;
+        }
+    }
+
     public static class IntentRun {
         public final String runId;
         public final String intent;
         public final List<SubtaskAssignment> assignments;
         public final Map<String, String> successes = new ConcurrentHashMap<>();
         public final Map<String, String> failures = new ConcurrentHashMap<>();
+        public final List<IntentAttempt> attempts = Collections.synchronizedList(new ArrayList<>());
         public volatile RunStatus status = RunStatus.PENDING;
         public volatile String currentSubtask = null;
         public final long startedAt = System.currentTimeMillis();
@@ -259,6 +388,10 @@ public class IntentOrchestrator {
             failures.put(subtask, error);
         }
 
+        public void recordAttempt(IntentAttempt attempt) {
+            attempts.add(attempt);
+        }
+
         public void setStatus(RunStatus s) {
             this.status = s;
             if (s == RunStatus.COMPLETED || s == RunStatus.PARTIAL || s == RunStatus.FAILED) {
@@ -270,6 +403,9 @@ public class IntentOrchestrator {
 
         public Map<String, String> successes() { return Map.copyOf(successes); }
         public Map<String, String> failures() { return Map.copyOf(failures); }
+        public List<IntentAttempt> attempts() {
+            synchronized (attempts) { return List.copyOf(attempts); }
+        }
 
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -282,6 +418,7 @@ public class IntentOrchestrator {
             m.put("failed", failures.size());
             m.put("successes", successes);
             m.put("failures", failures);
+            m.put("attempts", attempts().stream().map(IntentAttempt::toMap).toList());
             m.put("started_at", startedAt);
             m.put("completed_at", completedAt);
             return m;

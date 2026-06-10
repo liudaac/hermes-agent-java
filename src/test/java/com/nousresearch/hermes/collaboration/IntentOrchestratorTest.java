@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,6 +24,12 @@ class IntentOrchestratorTest {
     void setUp() {
         var request = TenantProvisioningRequest.builder("intent-tenant", "test-user").build();
         tenantContext = TenantContext.create("intent-tenant", request);
+        // TenantBus is process-wide; keep this test class isolated from handlers
+        // registered by earlier async orchestration tests.
+        tenantContext.getTenantBus().unregister("agent-1");
+        tenantContext.getTenantBus().unregister("agent-2");
+        tenantContext.getTenantBus().unregister("agent-3");
+        tenantContext.getTenantBus().unregister("agent-4");
 
         // Seed multiple agent roles for matching
         tenantContext.registerAgentRole("agent-1",
@@ -182,4 +190,54 @@ class IntentOrchestratorTest {
         var runs = orchestrator.listRuns();
         assertTrue(runs.size() >= 2);
     }
+
+    @Test
+    void successfulExecutionFeedsObservabilityAndEvolution() throws Exception {
+        tenantContext.getTenantBus().register("agent-1", msg -> {
+            var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
+                .action("done")
+                .replyTo(msg.getMessageId())
+                .payload(Map.of("ok", true))
+                .build();
+            reply.setResultText("review completed");
+            tenantContext.getTenantBus().reply(msg, reply);
+        });
+
+        var run = orchestrator.execute("review the code");
+        waitForTerminal(run);
+
+        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, run.status);
+        assertEquals(1, run.successes().size());
+        assertFalse(run.attempts().isEmpty());
+        assertTrue(run.attempts().stream().allMatch(IntentOrchestrator.IntentAttempt::success));
+        assertTrue(tenantContext.getObservability().getRecentTraces("agent-1", 5).size() >= 1);
+        assertFalse(tenantContext.getEvolutionEngine().getSuccessPatterns("agent-1").isEmpty());
+    }
+
+    @Test
+    void failedExecutionFeedsObservabilityAndEvolution() throws Exception {
+        var run = orchestrator.execute("deploy to production");
+        waitForTerminal(run);
+
+        assertEquals(IntentOrchestrator.RunStatus.PARTIAL, run.status);
+        assertFalse(run.failures().isEmpty());
+        assertFalse(run.attempts().isEmpty());
+        assertTrue(run.attempts().stream().anyMatch(a -> !a.success()));
+        assertTrue(tenantContext.getObservability().getRecentTraces("agent-2", 5).size() >= 1);
+        assertTrue(tenantContext.getEvolutionEngine().getAgentFailures("agent-2", 5).size() >= 1);
+    }
+
+    private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline) {
+            if (run.status == IntentOrchestrator.RunStatus.COMPLETED
+                || run.status == IntentOrchestrator.RunStatus.PARTIAL
+                || run.status == IntentOrchestrator.RunStatus.FAILED) {
+                return;
+            }
+            Thread.sleep(20);
+        }
+        fail("run did not finish, status=" + run.status);
+    }
+
 }
