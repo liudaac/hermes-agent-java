@@ -283,7 +283,8 @@ public class OrgControlCenterHandler {
                     "type", a.type().name(),
                     "agent", a.agentId(),
                     "message", a.message(),
-                    "time", a.time().toString()
+                    "time", a.time().toString(),
+                    "suggestion", anomalySuggestion(a.type().name(), a.agentId(), a.message())
                 ));
             }
         }
@@ -314,6 +315,31 @@ public class OrgControlCenterHandler {
         rows.sort((a, b) -> ((String)b.get("time")).compareTo((String)a.get("time")));
         if (rows.size() > n) rows = rows.subList(0, n);
         ctx.json(Map.of("audit", rows, "count", rows.size()));
+    }
+
+
+    static Map<String, Object> anomalySuggestion(String type, String agentId, String message) {
+        String reason = "Anomaly detected: " + type + " - " + message;
+        return switch (type) {
+            case "ERROR_STORM", "HIGH_LATENCY", "MODEL_DEGRADATION", "BEHAVIOR_CHANGE" -> Map.of(
+                "kind", "agent_override",
+                "mode", "deprioritized",
+                "target_agent", agentId,
+                "ttl_ms", 60 * 60 * 1000,
+                "label", "Deprioritize 1h",
+                "reason", reason
+            );
+            case "COST_SPIKE" -> Map.of(
+                "kind", "monitor",
+                "label", "Monitor cost spike",
+                "reason", reason
+            );
+            default -> Map.of(
+                "kind", "monitor",
+                "label", "Review anomaly",
+                "reason", reason
+            );
+        };
     }
 
     private List<TenantContext> tenants() {

@@ -291,6 +291,25 @@ export default function OrgControlCenterPage() {
                       <span className="text-xs text-muted-foreground">{a.agent}</span>
                     </div>
                     <div className="mt-2 text-sm">{a.message}</div>
+                    {a.suggestion && (
+                      <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-current/10 p-2">
+                        <div className="text-xs text-muted-foreground">
+                          Suggested: <span className="font-medium text-foreground">{a.suggestion.label}</span>
+                        </div>
+                        {a.suggestion.kind === "agent_override" ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={busyAction === `${a.tenant_id}:${a.suggestion.target_agent}:override:${a.suggestion.mode}`}
+                            onClick={() => overrideAgent(a.tenant_id, a.suggestion.target_agent, a.suggestion.mode)}
+                          >
+                            Apply
+                          </Button>
+                        ) : (
+                          <Badge variant="outline">Monitor</Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
