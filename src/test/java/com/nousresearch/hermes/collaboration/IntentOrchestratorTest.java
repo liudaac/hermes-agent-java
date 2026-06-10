@@ -187,6 +187,7 @@ class IntentOrchestratorTest {
 
     @Test
     void successfulExecutionFeedsObservabilityAndEvolution() throws Exception {
+        tenantContext.initCollaboration();
         tenantContext.getTenantBus().register("agent-1", msg -> {
             var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
                 .action("done")
@@ -294,12 +295,63 @@ class IntentOrchestratorTest {
         assertEquals(run.assignments().size(), restored.assignments().size());
     }
 
+
+    @Test
+    void persistedActiveRunsReloadAsInterruptedAndReplayable() throws Exception {
+        var assignment = new IntentOrchestrator.SubtaskAssignment(
+            "review the code",
+            "agent-1",
+            "code-reviewer",
+            1.0,
+            java.util.List.of("review"),
+            java.util.Map.of("skill_match", 1.0)
+        );
+        var active = new IntentOrchestrator.IntentRun(
+            "run_9999",
+            "review the code",
+            java.util.List.of(assignment),
+            null,
+            "execute",
+            System.currentTimeMillis() - 10_000,
+            0L,
+            IntentOrchestrator.RunStatus.RUNNING,
+            "review the code"
+        );
+        var path = tenantContext.getTenantDir().resolve("state").resolve("intent-runs.json");
+        java.nio.file.Files.createDirectories(path.getParent());
+        new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter()
+            .writeValue(path.toFile(), java.util.List.of(active.toMap()));
+
+        var reloaded = new IntentOrchestrator(tenantContext);
+        var interrupted = reloaded.getRun("run_9999");
+
+        assertNotNull(interrupted);
+        assertEquals(IntentOrchestrator.RunStatus.INTERRUPTED, interrupted.status);
+        assertTrue(interrupted.completedAt > 0);
+        assertTrue(interrupted.failures().containsKey("review the code"));
+
+        tenantContext.initCollaboration();
+        tenantContext.getTenantBus().register("agent-1", msg -> {
+            var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
+                .action("done")
+                .replyTo(msg.getMessageId())
+                .payload(Map.of("ok", true))
+                .build();
+            reply.setResultText("recovered ok");
+            tenantContext.getTenantBus().reply(msg, reply);
+        });
+        var replay = reloaded.replayFailures("run_9999");
+        waitForTerminal(replay);
+        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, replay.status);
+    }
+
     private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
             if (run.status == IntentOrchestrator.RunStatus.COMPLETED
                 || run.status == IntentOrchestrator.RunStatus.PARTIAL
-                || run.status == IntentOrchestrator.RunStatus.FAILED) {
+                || run.status == IntentOrchestrator.RunStatus.FAILED
+                || run.status == IntentOrchestrator.RunStatus.INTERRUPTED) {
                 return;
             }
             Thread.sleep(20);

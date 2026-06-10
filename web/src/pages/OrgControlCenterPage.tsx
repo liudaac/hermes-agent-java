@@ -641,7 +641,7 @@ function Metric({ icon: Icon, label, value }: { icon: any; label: string; value:
 
 function StatusBadge({ status }: { status?: string }) {
   const s = status || "UNKNOWN";
-  const variant = s === "SUCCESS" || s === "COMPLETED" ? "default" : s === "FAILED" ? "destructive" : "outline";
+  const variant = s === "SUCCESS" || s === "COMPLETED" ? "default" : s === "FAILED" || s === "INTERRUPTED" ? "destructive" : "outline";
   return <Badge variant={variant as any}>{s}</Badge>;
 }
 

@@ -398,7 +398,7 @@ public class IntentOrchestrator {
 
     // ======== Data Classes ========
 
-    public enum RunStatus { PENDING, RUNNING, COMPLETED, PARTIAL, FAILED }
+    public enum RunStatus { PENDING, RUNNING, COMPLETED, PARTIAL, FAILED, INTERRUPTED }
 
     public record SubtaskAssignment(
         String subtask,
@@ -599,6 +599,8 @@ public class IntentOrchestrator {
                 .toList();
             RunStatus status = RunStatus.PENDING;
             try { status = RunStatus.valueOf(String.valueOf(m.getOrDefault("status", "PENDING"))); } catch (Exception ignored) {}
+            String currentSubtask = stringOrNull(m.get("current_subtask"));
+            boolean interrupted = status == RunStatus.PENDING || status == RunStatus.RUNNING;
             IntentRun run = new IntentRun(
                 String.valueOf(m.get("run_id")),
                 String.valueOf(m.getOrDefault("intent", "")),
@@ -606,9 +608,9 @@ public class IntentOrchestrator {
                 stringOrNull(m.get("parent_run_id")),
                 String.valueOf(m.getOrDefault("control_action", "execute")),
                 longValue(m.get("started_at")),
-                longValue(m.get("completed_at")),
-                status,
-                stringOrNull(m.get("current_subtask"))
+                interrupted ? System.currentTimeMillis() : longValue(m.get("completed_at")),
+                interrupted ? RunStatus.INTERRUPTED : status,
+                currentSubtask
             );
             Object successes = m.get("successes");
             if (successes instanceof Map<?, ?> sm) sm.forEach((k, v) -> run.successes.put(String.valueOf(k), String.valueOf(v)));
@@ -616,6 +618,12 @@ public class IntentOrchestrator {
             if (failures instanceof Map<?, ?> fm) fm.forEach((k, v) -> run.failures.put(String.valueOf(k), String.valueOf(v)));
             for (Object x : (List<Object>) m.getOrDefault("attempts", List.of())) {
                 run.attempts.add(IntentAttempt.fromMap((Map<String, Object>) x));
+            }
+            if (interrupted) {
+                String subtask = currentSubtask;
+                if ((subtask == null || subtask.isBlank()) && !assignments.isEmpty()) subtask = assignments.get(0).subtask();
+                if (subtask == null || subtask.isBlank()) subtask = "run";
+                run.failures.putIfAbsent(subtask, "Interrupted by process restart before completion");
             }
             return run;
         }
