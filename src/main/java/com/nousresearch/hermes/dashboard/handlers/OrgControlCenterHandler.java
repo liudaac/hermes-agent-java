@@ -7,8 +7,11 @@ import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeProviderProbe;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
+import com.nousresearch.hermes.collaboration.DelegatedExecutorCapability;
+import com.nousresearch.hermes.collaboration.DelegatedExecutorSafetyPolicy;
 import com.nousresearch.hermes.collaboration.DelegatedTaskExecutionPolicy;
 import com.nousresearch.hermes.collaboration.DelegatedTaskResult;
+import com.nousresearch.hermes.collaboration.ExecutorSafetyViolation;
 import com.nousresearch.hermes.collaboration.ParentVerificationPolicy;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
 import io.javalin.http.ForbiddenResponse;
@@ -320,25 +323,64 @@ public class OrgControlCenterHandler {
         Map<String, Object> body = parseJsonBody(ctx);
         String actor = operatorActor(ctx, body);
         String executorName = stringOrDefault(body.get("executor"), stringOrDefault(body.get("executor_name"), "noop"));
-        DelegatedTaskExecutionPolicy policy = executionPolicyFromBody(body, task.verificationPolicy());
+        DelegatedExecutorSafetyPolicy safetyPolicy = safetyPolicyFromBody(body);
+        Set<DelegatedExecutorCapability> requestedCapabilities = requestedCapabilitiesFromBody(body, safetyPolicy);
+        List<String> requestedChangedFiles = listOfStrings(firstNonNull(
+            firstNonNull(body.get("changed_files"), body.get("changedFiles")),
+            firstNonNull(body.get("requested_changed_files"), body.get("requestedChangedFiles"))
+        ));
+        Map<String, Object> preSafety = safetyValidationMap(safetyPolicy, requestedCapabilities, requestedChangedFiles, null);
+        if (!Boolean.TRUE.equals(preSafety.get("accepted"))) {
+            Map<String, Object> audit = new LinkedHashMap<>();
+            audit.put("tenantId", tenant.getTenantId());
+            audit.put("actor", actor);
+            audit.put("taskId", taskId);
+            audit.put("executor", executorName);
+            audit.put("executed", false);
+            audit.put("submitted", false);
+            audit.put("status", "SAFETY_DENIED");
+            audit.put("taskStatus", task.status().name());
+            audit.put("message", "Delegated executor safety policy denied execute request");
+            audit.put("safetyAccepted", false);
+            audit.put("safetyViolations", preSafety.get("violation_count"));
+            audit.put("timestamp", System.currentTimeMillis());
+            tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_EXECUTED, audit);
+            ctx.status(400).json(Map.of(
+                "ok", false,
+                "tenant_id", tenant.getTenantId(),
+                "status", "SAFETY_DENIED",
+                "message", "Delegated executor safety policy denied execute request",
+                "safety", preSafety,
+                "task", task.toMap()
+            ));
+            return;
+        }
+        DelegatedTaskExecutionPolicy policy = executionPolicyFromBody(body, task.verificationPolicy(), safetyPolicy);
         var execution = tenant.getDelegatedTaskStore().executePending(taskId, executorName, policy);
         var updatedTask = tenant.getDelegatedTaskStore().get(taskId);
-        tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_EXECUTED, Map.of(
-            "tenantId", tenant.getTenantId(),
-            "actor", actor,
-            "taskId", taskId,
-            "executor", execution.executorName() != null ? execution.executorName() : executorName,
-            "executed", execution.executed(),
-            "submitted", execution.submitted(),
-            "status", execution.status() != null ? execution.status() : "",
-            "taskStatus", updatedTask != null ? updatedTask.status().name() : task.status().name(),
-            "message", execution.message() != null ? execution.message() : "",
-            "timestamp", System.currentTimeMillis()
-        ));
+        List<String> resultChangedFiles = execution != null && execution.delegatedTaskResult() != null
+            ? execution.delegatedTaskResult().changedFiles()
+            : List.of();
+        Map<String, Object> safety = safetyValidationMap(safetyPolicy, requestedCapabilities, requestedChangedFiles, resultChangedFiles);
+        Map<String, Object> audit = new LinkedHashMap<>();
+        audit.put("tenantId", tenant.getTenantId());
+        audit.put("actor", actor);
+        audit.put("taskId", taskId);
+        audit.put("executor", execution.executorName() != null ? execution.executorName() : executorName);
+        audit.put("executed", execution.executed());
+        audit.put("submitted", execution.submitted());
+        audit.put("status", execution.status() != null ? execution.status() : "");
+        audit.put("taskStatus", updatedTask != null ? updatedTask.status().name() : task.status().name());
+        audit.put("message", execution.message() != null ? execution.message() : "");
+        audit.put("safetyAccepted", safety.get("accepted"));
+        audit.put("safetyViolations", safety.get("violation_count"));
+        audit.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_EXECUTED, audit);
         ctx.json(Map.of(
-            "ok", true,
+            "ok", Boolean.TRUE.equals(safety.get("accepted")),
             "tenant_id", tenant.getTenantId(),
             "execution", execution.toMap(),
+            "safety", safety,
             "task", updatedTask != null ? updatedTask.toMap() : task.toMap()
         ));
     }
@@ -1051,17 +1093,19 @@ public class OrgControlCenterHandler {
 
 
 
-    private static DelegatedTaskExecutionPolicy executionPolicyFromBody(Map<String, Object> body, ParentVerificationPolicy fallbackParentPolicy) {
+    private static DelegatedTaskExecutionPolicy executionPolicyFromBody(Map<String, Object> body, ParentVerificationPolicy fallbackParentPolicy, DelegatedExecutorSafetyPolicy safetyPolicy) {
         Map<String, Object> policyBody = policyBody(body);
         ParentVerificationPolicy parentPolicy = ParentVerificationPolicy.fromMap(policyBody.isEmpty() && fallbackParentPolicy != null ? fallbackParentPolicy.toMap() : policyBody);
         boolean allowExternalExecution = booleanOrDefault(firstNonNull(body.get("allow_external_execution"), body.get("allowExternalExecution")), false);
         boolean allowFileChanges = booleanOrDefault(firstNonNull(body.get("allow_file_changes"), body.get("allowFileChanges")), false);
-        boolean allowCommands = booleanOrDefault(firstNonNull(body.get("allow_commands"), body.get("allowCommands")), false);
+        boolean allowCommands = booleanOrDefault(firstNonNull(firstNonNull(body.get("allow_commands"), body.get("allowCommands")), body.get("allow_command")), false);
         long timeoutMs = parseLong(firstNonNull(body.get("timeout_ms"), body.get("timeoutMs")), 30_000L);
-        List<String> prefixes = listOfStrings(firstNonNull(body.get("allowed_changed_file_prefixes"), body.get("allowed_paths")));
+        List<String> prefixes = listOfStrings(firstNonNull(firstNonNull(body.get("allowed_changed_file_prefixes"), body.get("allowed_changed_paths")), body.get("allowed_paths")));
+        if (prefixes.isEmpty() && safetyPolicy != null) prefixes = safetyPolicy.allowedChangedPathPrefixes();
         if (prefixes.isEmpty()) prefixes = parentPolicy.allowedChangedFilePrefixes();
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("source", "org-control");
+        if (safetyPolicy != null) metadata.put("safety_policy", safetyPolicy.toMap());
         if (body.get("metadata") instanceof Map<?, ?> rawMetadata) {
             for (var entry : rawMetadata.entrySet()) metadata.put(String.valueOf(entry.getKey()), entry.getValue());
         }
@@ -1074,6 +1118,101 @@ public class OrgControlCenterHandler {
             parentPolicy,
             metadata
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static DelegatedExecutorSafetyPolicy safetyPolicyFromBody(Map<String, Object> body) {
+        DelegatedExecutorSafetyPolicy defaults = DelegatedExecutorSafetyPolicy.restrictiveDefault();
+        Map<String, Object> source = body;
+        Object nested = firstNonNull(body.get("safety_policy"), body.get("safetyPolicy"));
+        if (nested instanceof Map<?, ?> map) source = (Map<String, Object>) map;
+        List<String> allowed = listOfStrings(firstNonNull(firstNonNull(firstNonNull(
+            source.get("allowed_changed_paths"), source.get("allowed_changed_path_prefixes")),
+            source.get("allowed_paths")), source.get("allowed_changed_file_prefixes")));
+        if (allowed.isEmpty() && !containsAny(source, "allowed_changed_paths", "allowed_changed_path_prefixes", "allowed_paths", "allowed_changed_file_prefixes")) {
+            allowed = defaults.allowedChangedPathPrefixes();
+        }
+        List<String> denied = listOfStrings(firstNonNull(firstNonNull(
+            source.get("denied_changed_paths"), source.get("denied_changed_path_prefixes")), source.get("denied_paths")));
+        if (denied.isEmpty() && !containsAny(source, "denied_changed_paths", "denied_changed_path_prefixes", "denied_paths")) {
+            denied = defaults.deniedChangedPathPrefixes();
+        }
+        boolean allowCommands = booleanOrDefault(firstNonNull(firstNonNull(source.get("allow_command"), source.get("allow_commands")), source.get("allowCommands")), defaults.allowCommands());
+        boolean allowNetwork = booleanOrDefault(firstNonNull(source.get("allow_network"), source.get("allowNetwork")), defaults.allowNetwork());
+        boolean allowBrowser = booleanOrDefault(firstNonNull(source.get("allow_browser"), source.get("allowBrowser")), defaults.allowBrowser());
+        boolean requirePatchSandbox = booleanOrDefault(firstNonNull(source.get("require_patch_sandbox"), source.get("requirePatchSandbox")), defaults.requirePatchSandbox());
+        boolean requireParentVerification = booleanOrDefault(firstNonNull(source.get("require_parent_verification"), source.get("requireParentVerification")), defaults.requireParentVerification());
+        boolean allowAutoMerge = booleanOrDefault(firstNonNull(source.get("allow_auto_merge"), source.get("allowAutoMerge")), defaults.allowAutoMerge());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("source", source == body ? "execute_request" : "execute_request.safety_policy");
+        return new DelegatedExecutorSafetyPolicy(
+            allowed, denied, allowCommands, allowNetwork, allowBrowser, requirePatchSandbox, requireParentVerification, allowAutoMerge, null, metadata
+        );
+    }
+
+    private static Set<DelegatedExecutorCapability> requestedCapabilitiesFromBody(Map<String, Object> body, DelegatedExecutorSafetyPolicy policy) {
+        Object raw = firstNonNull(firstNonNull(body.get("requested_capabilities"), body.get("requestedCapabilities")), body.get("capabilities"));
+        List<String> names = listOfStrings(raw);
+        if (names.isEmpty() && raw instanceof String s) names = splitCsv(s);
+        EnumSet<DelegatedExecutorCapability> set = EnumSet.noneOf(DelegatedExecutorCapability.class);
+        for (String name : names) {
+            DelegatedExecutorCapability capability = parseCapability(name);
+            if (capability != null) set.add(capability);
+        }
+        return set.isEmpty() && policy != null ? policy.defaultCapabilities() : set;
+    }
+
+    private static DelegatedExecutorCapability parseCapability(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        String normalized = raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        normalized = switch (normalized) {
+            case "COMMAND", "COMMANDS", "SHELL", "EXEC" -> "COMMAND_EXECUTION";
+            case "NETWORK", "NET" -> "NETWORK_ACCESS";
+            case "BROWSER", "WEB" -> "BROWSER_ACCESS";
+            case "PATCH", "WRITE", "FILE_WRITE" -> "PATCH_WRITE";
+            case "READ" -> "FILE_READ";
+            case "MERGE", "AUTOMERGE" -> "AUTO_MERGE";
+            default -> normalized;
+        };
+        try { return DelegatedExecutorCapability.valueOf(normalized); }
+        catch (Exception ignored) { return null; }
+    }
+
+    private static Map<String, Object> safetyValidationMap(DelegatedExecutorSafetyPolicy policy, Set<DelegatedExecutorCapability> requestedCapabilities, List<String> requestedChangedFiles, List<String> resultChangedFiles) {
+        List<ExecutorSafetyViolation> violations = new ArrayList<>();
+        violations.addAll(policy.validateRequestedCapabilities(requestedCapabilities));
+        violations.addAll(policy.validateChangedFiles(requestedChangedFiles));
+        if (resultChangedFiles != null && !resultChangedFiles.isEmpty()) violations.addAll(policy.validateChangedFiles(resultChangedFiles));
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("allowed_paths", policy.allowedChangedPathPrefixes());
+        summary.put("denied_paths", policy.deniedChangedPathPrefixes());
+        summary.put("requested_capabilities", requestedCapabilities.stream().map(Enum::name).toList());
+        summary.put("allow_command", policy.allowCommands());
+        summary.put("allow_network", policy.allowNetwork());
+        summary.put("allow_browser", policy.allowBrowser());
+        summary.put("require_patch_sandbox", policy.requirePatchSandbox());
+        summary.put("require_parent_verification", policy.requireParentVerification());
+        summary.put("allow_auto_merge", policy.allowAutoMerge());
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("accepted", violations.isEmpty());
+        m.put("summary", summary);
+        m.put("policy", policy.toMap());
+        m.put("requested_changed_files", requestedChangedFiles);
+        m.put("result_changed_files", resultChangedFiles == null ? List.of() : resultChangedFiles);
+        m.put("violations", violations.stream().map(ExecutorSafetyViolation::toMap).toList());
+        m.put("violation_count", violations.size());
+        m.put("violation_summary", violations.stream().map(v -> v.code() + ":" + v.subject()).toList());
+        return m;
+    }
+
+    private static boolean containsAny(Map<String, Object> body, String... keys) {
+        for (String key : keys) if (body.containsKey(key)) return true;
+        return false;
+    }
+
+    private static List<String> splitCsv(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return Arrays.stream(value.split(",")).map(String::trim).filter(s -> !s.isBlank()).toList();
     }
 
     private static Object firstNonNull(Object first, Object second) {

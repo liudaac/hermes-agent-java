@@ -73,6 +73,37 @@ class OrgControlCenterDelegatedTasksTest {
             assertFalse(noopBody.getJSONObject("execution").getBooleanValue("executed"));
             assertFalse(noopBody.getJSONObject("execution").getBooleanValue("submitted"));
             assertEquals("PENDING", noopBody.getJSONObject("task").getString("status"));
+            assertTrue(noopBody.getJSONObject("safety").getBooleanValue("accepted"));
+            assertTrue(noopBody.getJSONObject("safety").getJSONObject("summary").getBooleanValue("require_patch_sandbox"));
+            assertFalse(noopBody.getJSONObject("safety").getJSONObject("summary").getBooleanValue("allow_auto_merge"));
+
+            var deniedCapabilityTask = tenant.getDelegatedTaskStore().createPending(envelope());
+            String deniedCapabilityJson = """
+                {"actor":"dashboard","executor":"noop","requested_capabilities":["NETWORK_ACCESS"],"allow_network":false}
+                """;
+            HttpResponse<String> deniedCapability = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/delegated-tasks/" + tenantId + "/" + deniedCapabilityTask.taskId() + "/execute"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(deniedCapabilityJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertTrue(deniedCapability.statusCode() >= 400, deniedCapability.body());
+            assertEquals("PENDING", tenant.getDelegatedTaskStore().get(deniedCapabilityTask.taskId()).status().name());
+
+            var deniedPathTask = tenant.getDelegatedTaskStore().createPending(envelope());
+            String deniedPathJson = """
+                {"actor":"dashboard","executor":"noop","allowed_changed_paths":["src"],"denied_changed_paths":["src/main/resources/secrets"],"changed_files":["src/main/resources/secrets/key.txt"]}
+                """;
+            HttpResponse<String> deniedPath = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/delegated-tasks/" + tenantId + "/" + deniedPathTask.taskId() + "/execute"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(deniedPathJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertTrue(deniedPath.statusCode() >= 400, deniedPath.body());
+            assertEquals("PENDING", tenant.getDelegatedTaskStore().get(deniedPathTask.taskId()).status().name());
 
             var mockTask = tenant.getDelegatedTaskStore().createPending(envelope());
             String mockJson = """
@@ -88,6 +119,8 @@ class OrgControlCenterDelegatedTasksTest {
             assertEquals(200, mock.statusCode());
             JSONObject mockBody = JSON.parseObject(mock.body());
             assertEquals("ACCEPTED", mockBody.getJSONObject("execution").getString("status"));
+            assertTrue(mockBody.getJSONObject("safety").getBooleanValue("accepted"));
+            assertEquals(0, mockBody.getJSONObject("safety").getIntValue("violation_count"));
             assertTrue(mockBody.getJSONObject("execution").getBooleanValue("executed"));
             assertTrue(mockBody.getJSONObject("execution").getBooleanValue("submitted"));
             assertEquals("ACCEPTED", mockBody.getJSONObject("task").getString("status"));

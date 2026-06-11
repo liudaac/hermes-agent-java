@@ -310,17 +310,27 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
-  const executeDelegatedTask = useCallback((task: any, executor: "noop" | "mock") => {
-    const key = `${task.tenant_id}:${task.task_id}:delegated:execute:${executor}`;
+  const executeDelegatedTask = useCallback((task: any, payload: DelegatedExecutePayload) => {
+    const key = `${task.tenant_id}:${task.task_id}:delegated:execute:${payload.executor}`;
     return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         actor: "dashboard",
-        executor,
+        executor: payload.executor,
         require_tests: true,
         require_all_tests_passed: true,
-        allowed_changed_file_prefixes: [],
+        allowed_changed_paths: payload.allowed_paths,
+        allowed_changed_file_prefixes: payload.allowed_paths,
+        denied_changed_paths: payload.denied_paths,
+        requested_capabilities: payload.capabilities,
+        capabilities: payload.capabilities,
+        allow_command: payload.allow_command,
+        allow_network: payload.allow_network,
+        allow_browser: payload.allow_browser,
+        require_patch_sandbox: payload.require_patch_sandbox,
+        require_parent_verification: payload.require_parent_verification,
+        allow_auto_merge: payload.allow_auto_merge,
       }),
     }));
   }, [runControl]);
@@ -706,7 +716,7 @@ function DelegatedTaskCard({
   busyAction: string;
   onSubmit: (task: any, payload: { summary: string; changed_files: string[]; tests_run: any[]; risks: string[] }) => void;
   onVerify: (task: any, payload: { require_tests_reported: boolean; require_all_tests_passed: boolean; allowed_paths: string[] }) => void;
-  onExecute: (task: any, executor: "noop" | "mock") => void;
+  onExecute: (task: any, payload: DelegatedExecutePayload) => void;
 }) {
   const { t } = useI18n();
   const oc = t.orgControl;
@@ -721,8 +731,10 @@ function DelegatedTaskCard({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
+  const [executeOpen, setExecuteOpen] = useState(false);
   const closeSubmit = () => setSubmitOpen(false);
   const closeVerify = () => setVerifyOpen(false);
+  const closeExecute = () => setExecuteOpen(false);
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -745,6 +757,7 @@ function DelegatedTaskCard({
           <div className="font-medium text-foreground/80">{oc.delegated.lastExecution}: {task.last_execution.status}</div>
           <div>{oc.delegated.executor}: {task.last_execution.executor_name || "noop"} · {oc.delegated.executed}: {task.last_execution.executed ? oc.labels.ok : oc.labels.fail} · {oc.delegated.submitted}: {task.last_execution.submitted ? oc.labels.ok : oc.labels.fail}</div>
           {task.last_execution.message && <div className="line-clamp-2">{task.last_execution.message}</div>}
+          <SafetySummary safety={(task.last_execution.policy?.metadata || {}).safety_policy} />
         </div>
       )}
       {verification.reasons && (
@@ -774,13 +787,9 @@ function DelegatedTaskCard({
           {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {submitOpen ? oc.buttons.cancel : oc.buttons.submitResult}
         </Button>
-        <Button variant="outline" size="sm" disabled={busyAction === noopExecuteKey} onClick={() => onExecute(task, "noop")}>
-          {busyAction === noopExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
-          {oc.buttons.executeNoop}
-        </Button>
-        <Button variant="outline" size="sm" disabled={busyAction === mockExecuteKey} onClick={() => onExecute(task, "mock")}>
-          {busyAction === mockExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
-          {oc.buttons.executeMock}
+        <Button variant="outline" size="sm" disabled={busyAction === noopExecuteKey || busyAction === mockExecuteKey} onClick={() => setExecuteOpen((open) => !open)}>
+          {busyAction === noopExecuteKey || busyAction === mockExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {executeOpen ? oc.buttons.cancel : oc.buttons.execute}
         </Button>
         <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => setVerifyOpen((open) => !open)}>
           {busyAction === verifyKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
@@ -795,6 +804,15 @@ function DelegatedTaskCard({
           onSubmit={(payload) => { onSubmit(task, payload); closeSubmit(); }}
         />
       )}
+      {executeOpen && (
+        <DelegatedExecuteForm
+          task={task}
+          busyNoop={busyAction === noopExecuteKey}
+          busyMock={busyAction === mockExecuteKey}
+          onCancel={closeExecute}
+          onSubmit={(payload) => { onExecute(task, payload); closeExecute(); }}
+        />
+      )}
       {verifyOpen && (
         <DelegatedVerifyForm
           task={task}
@@ -803,6 +821,118 @@ function DelegatedTaskCard({
           onSubmit={(payload) => { onVerify(task, payload); closeVerify(); }}
         />
       )}
+    </div>
+  );
+}
+
+
+type DelegatedExecutePayload = {
+  executor: "noop" | "mock";
+  allowed_paths: string[];
+  denied_paths: string[];
+  capabilities: string[];
+  allow_command: boolean;
+  allow_network: boolean;
+  allow_browser: boolean;
+  require_patch_sandbox: boolean;
+  require_parent_verification: boolean;
+  allow_auto_merge: boolean;
+};
+
+function DelegatedExecuteForm({
+  task,
+  busyNoop,
+  busyMock,
+  onCancel,
+  onSubmit,
+}: {
+  task: any;
+  busyNoop: boolean;
+  busyMock: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: DelegatedExecutePayload) => void;
+}) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  const policy = task.verification_policy || {};
+  const [allowedPaths, setAllowedPaths] = useState((policy.allowed_changed_file_prefixes || ["src/main/java", "src/test/java", "docs"]).join("\n"));
+  const [deniedPaths, setDeniedPaths] = useState([".git", ".github", "target", "build", "out", "pom.xml", "gradle.properties", "settings.gradle"].join("\n"));
+  const [capabilities, setCapabilities] = useState("FILE_READ\nPATCH_WRITE");
+  const [allowCommand, setAllowCommand] = useState(false);
+  const [allowNetwork, setAllowNetwork] = useState(false);
+  const [allowBrowser, setAllowBrowser] = useState(false);
+  const [requirePatchSandbox, setRequirePatchSandbox] = useState(true);
+  const [requireParentVerification, setRequireParentVerification] = useState(true);
+  const [allowAutoMerge, setAllowAutoMerge] = useState(false);
+  const payload = (executor: "noop" | "mock") => ({
+    executor,
+    allowed_paths: splitLinesOrComma(allowedPaths),
+    denied_paths: splitLinesOrComma(deniedPaths),
+    capabilities: splitLinesOrComma(capabilities),
+    allow_command: allowCommand,
+    allow_network: allowNetwork,
+    allow_browser: allowBrowser,
+    require_patch_sandbox: requirePatchSandbox,
+    require_parent_verification: requireParentVerification,
+    allow_auto_merge: allowAutoMerge,
+  });
+  const safety = {
+    allowed_changed_path_prefixes: splitLinesOrComma(allowedPaths),
+    denied_changed_path_prefixes: splitLinesOrComma(deniedPaths),
+    default_capabilities: splitLinesOrComma(capabilities),
+    allow_commands: allowCommand,
+    allow_network: allowNetwork,
+    allow_browser: allowBrowser,
+    require_patch_sandbox: requirePatchSandbox,
+    require_parent_verification: requireParentVerification,
+    allow_auto_merge: allowAutoMerge,
+  };
+  return (
+    <div className="mt-3 rounded-md border border-current/10 bg-background/40 p-3">
+      <div className="mb-3 text-xs font-medium">{oc.delegated.executeFormTitle}</div>
+      <div className="space-y-3">
+        <TextAreaField label={oc.delegated.allowedPathsLabel} value={allowedPaths} onChange={setAllowedPaths} rows={3} placeholder={oc.delegated.allowedPathsPlaceholder} />
+        <TextAreaField label={oc.delegated.deniedPathsLabel} value={deniedPaths} onChange={setDeniedPaths} rows={3} placeholder={oc.delegated.deniedPathsPlaceholder} />
+        <TextAreaField label={oc.delegated.capabilitiesLabel} value={capabilities} onChange={setCapabilities} rows={3} placeholder={oc.delegated.capabilitiesPlaceholder} />
+        <div className="grid gap-2 sm:grid-cols-2">
+          <SwitchField label={oc.delegated.allowCommandLabel} checked={allowCommand} onCheckedChange={setAllowCommand} />
+          <SwitchField label={oc.delegated.allowNetworkLabel} checked={allowNetwork} onCheckedChange={setAllowNetwork} />
+          <SwitchField label={oc.delegated.allowBrowserLabel} checked={allowBrowser} onCheckedChange={setAllowBrowser} />
+          <SwitchField label={oc.delegated.requirePatchSandboxLabel} checked={requirePatchSandbox} onCheckedChange={setRequirePatchSandbox} />
+          <SwitchField label={oc.delegated.requireParentVerificationLabel} checked={requireParentVerification} onCheckedChange={setRequireParentVerification} />
+          <SwitchField label={oc.delegated.allowAutoMergeLabel} checked={allowAutoMerge} onCheckedChange={setAllowAutoMerge} />
+        </div>
+        <SafetySummary safety={safety} title={oc.delegated.safetySummary} />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" disabled={busyNoop || busyMock} onClick={onCancel}>{oc.buttons.cancel}</Button>
+        <Button variant="outline" size="sm" disabled={busyNoop || busyMock} onClick={() => onSubmit(payload("noop"))}>
+          {busyNoop ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.executeNoop}
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busyNoop || busyMock} onClick={() => onSubmit(payload("mock"))}>
+          {busyMock ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.executeMock}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SafetySummary({ safety, title }: { safety: any; title?: string }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  if (!safety) return null;
+  const allowed = safety.allowed_paths || safety.allowed_changed_path_prefixes || [];
+  const denied = safety.denied_paths || safety.denied_changed_path_prefixes || [];
+  const capabilities = safety.requested_capabilities || safety.default_capabilities || [];
+  return (
+    <div className="mt-2 rounded-sm border border-current/10 p-2 text-xs text-muted-foreground">
+      <div className="font-medium text-foreground/80">{title || oc.delegated.safetyResult}</div>
+      <div>{oc.delegated.allowedPathsShort}: {allowed.length ? allowed.join(", ") : "—"}</div>
+      <div>{oc.delegated.deniedPathsShort}: {denied.length ? denied.join(", ") : "—"}</div>
+      <div>{oc.delegated.capabilitiesShort}: {capabilities.length ? capabilities.join(", ") : "—"}</div>
+      <div>{oc.delegated.sandboxRequired}: {(safety.require_patch_sandbox ?? true) ? oc.labels.ok : oc.labels.fail} · {oc.delegated.parentVerificationRequired}: {(safety.require_parent_verification ?? true) ? oc.labels.ok : oc.labels.fail} · {oc.delegated.autoMerge}: {(safety.allow_auto_merge ?? false) ? oc.labels.ok : oc.labels.fail}</div>
     </div>
   );
 }
