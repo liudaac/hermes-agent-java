@@ -15,11 +15,21 @@ public interface BrowserBridge {
         return java.util.Map.of(
             "provider", getClass().getSimpleName(),
             "class", getClass().getName(),
-            "healthy", true
+            "healthy", true,
+            "capabilities", capabilities()
         );
     }
 
     default BrowserActionResult healthCheck() {
         return BrowserActionResult.ok(null, null, null, null, "Browser bridge is available", java.util.List.of());
+    }
+
+    default java.util.Map<String, Object> capabilities() {
+        return java.util.Map.of(
+            "ok", true,
+            "protocol", "hermes.browser.v1",
+            "actions", java.util.List.of("open", "observe", "click", "type", "extract", "scroll", "press", "submit", "close"),
+            "features", java.util.List.of("actions", "health")
+        );
     }
 }

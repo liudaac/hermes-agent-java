@@ -169,6 +169,16 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+
+  const checkBrowserCapabilities = useCallback((tenantId: string) => {
+    const key = `${tenantId}:browser:capabilities`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/capabilities`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason: "Operator checked browser bridge capabilities" }),
+    }));
+  }, [runControl]);
+
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(`Operator set browser bridge provider to ${provider}`);
     if (reason === null) return;
@@ -401,6 +411,7 @@ export default function OrgControlCenterPage() {
                     bridge={bridge}
                     busyAction={busyAction}
                     onHealth={checkBrowserHealth}
+                    onCapabilities={checkBrowserCapabilities}
                     onProvider={setBrowserProvider}
                   />
                 ))}
@@ -839,16 +850,20 @@ function BrowserBridgeControlCard({
   bridge,
   busyAction,
   onHealth,
+  onCapabilities,
   onProvider,
 }: {
   bridge: any;
   busyAction: string;
   onHealth: (tenantId: string) => void;
+  onCapabilities: (tenantId: string) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
   const tenantId = bridge.tenant_id;
   const provider = bridge.provider || bridge.class || "unknown";
   const healthKey = `${tenantId}:browser:health`;
+  const capabilitiesKey = `${tenantId}:browser:capabilities`;
+  const capabilities = bridge.capabilities || bridge.last_capabilities || {};
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -865,6 +880,10 @@ function BrowserBridgeControlCard({
           {busyAction === healthKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Health check
         </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === capabilitiesKey} onClick={() => onCapabilities(tenantId)}>
+          {busyAction === capabilitiesKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Capabilities
+        </Button>
         {(["mock", "kimi", "openclaw"] as const).map((p) => (
           <Button
             key={p}
@@ -877,6 +896,13 @@ function BrowserBridgeControlCard({
           </Button>
         ))}
       </div>
+      {capabilities && Object.keys(capabilities).length > 0 && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          {capabilities.protocol && <div>protocol: {capabilities.protocol}</div>}
+          {capabilities.actions && <div className="truncate">actions: {String(capabilities.actions)}</div>}
+          {capabilities.features && <div className="truncate">features: {String(capabilities.features)}</div>}
+        </div>
+      )}
     </div>
   );
 }

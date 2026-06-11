@@ -612,6 +612,19 @@ public class OrgControlCenterHandler {
         ctx.json(response);
     }
 
+
+    /** POST /api/org/control/browser/{tenantId}/capabilities */
+    public void browserCapabilities(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator checked browser bridge capabilities");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CHECK_BROWSER_BRIDGE, reason, Map.of());
+        Map<String, Object> capabilities = new LinkedHashMap<>(tenant.getBrowserBridge().capabilities());
+        capabilities.put("tenant_id", tenant.getTenantId());
+        ctx.json(capabilities);
+    }
+
     /** POST /api/org/control/browser/{tenantId}/health */
     public void browserHealth(Context ctx) {
         TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));

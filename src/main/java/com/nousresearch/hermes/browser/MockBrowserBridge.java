@@ -22,7 +22,20 @@ public class MockBrowserBridge implements BrowserBridge {
             "provider", "mock",
             "class", getClass().getName(),
             "sessions", sessions.size(),
-            "healthy", true
+            "healthy", true,
+            "capabilities", capabilities()
+        );
+    }
+
+
+    @Override
+    public Map<String, Object> capabilities() {
+        return Map.of(
+            "ok", true,
+            "provider", "mock",
+            "protocol", "hermes.browser.v1",
+            "actions", List.of("open", "observe", "click", "type", "extract", "scroll", "press", "submit", "close"),
+            "features", List.of("actions", "health", "capabilities", "mock-sessions")
         );
     }
 

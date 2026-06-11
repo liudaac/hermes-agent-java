@@ -3,7 +3,18 @@ package com.nousresearch.hermes.browser;
 /**
  * Runtime configuration for BrowserBridge provider selection.
  */
-public record BrowserBridgeConfig(String provider, String endpoint, int timeoutMs) {
+public record BrowserBridgeConfig(
+    String provider,
+    String endpoint,
+    int timeoutMs,
+    String actionPath,
+    String healthPath,
+    String capabilitiesPath
+) {
+    public BrowserBridgeConfig(String provider, String endpoint, int timeoutMs) {
+        this(provider, endpoint, timeoutMs, "/actions", "/health", "/capabilities");
+    }
+
     public static BrowserBridgeConfig fromEnvironment() {
         String provider = firstNonBlank(
             System.getProperty("hermes.browser.bridge.provider"),
@@ -23,7 +34,23 @@ public record BrowserBridgeConfig(String provider, String endpoint, int timeoutM
             "10000"
         ), 10000);
 
-        return new BrowserBridgeConfig(provider, endpoint, Math.max(1000, timeout));
+        String actionPath = firstNonBlank(
+            System.getProperty("hermes.browser.bridge.actionPath"),
+            System.getenv("HERMES_BROWSER_BRIDGE_ACTION_PATH"),
+            "/actions"
+        );
+        String healthPath = firstNonBlank(
+            System.getProperty("hermes.browser.bridge.healthPath"),
+            System.getenv("HERMES_BROWSER_BRIDGE_HEALTH_PATH"),
+            "/health"
+        );
+        String capabilitiesPath = firstNonBlank(
+            System.getProperty("hermes.browser.bridge.capabilitiesPath"),
+            System.getenv("HERMES_BROWSER_BRIDGE_CAPABILITIES_PATH"),
+            "/capabilities"
+        );
+
+        return new BrowserBridgeConfig(provider, endpoint, Math.max(1000, timeout), normalizePath(actionPath), normalizePath(healthPath), normalizePath(capabilitiesPath));
     }
 
     private static String defaultEndpoint(String provider) {
@@ -32,6 +59,12 @@ public record BrowserBridgeConfig(String provider, String endpoint, int timeoutM
             case "openclaw", "openclaw-relay", "openclaw_relay" -> "http://127.0.0.1:14511";
             default -> "";
         };
+    }
+
+    static String normalizePath(String value) {
+        if (value == null || value.isBlank()) return "/";
+        String trimmed = value.trim();
+        return trimmed.startsWith("/") ? trimmed : "/" + trimmed;
     }
 
     private static String firstNonBlank(String... values) {

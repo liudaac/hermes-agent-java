@@ -24,7 +24,17 @@ public final class BrowserBridgeFactory {
         @Override
         public BrowserActionResult execute(BrowserAction action) {
             return BrowserActionResult.error(action != null ? action.sessionId() : null,
-                reason + ". Supported providers: mock, kimi, openclaw");
+                "provider_unknown", reason + ". Supported providers: mock, kimi, openclaw");
+        }
+
+        @Override
+        public java.util.Map<String, Object> describe() {
+            return java.util.Map.of("provider", provider, "healthy", false, "error_code", "provider_unknown", "message", reason);
+        }
+
+        @Override
+        public java.util.Map<String, Object> capabilities() {
+            return java.util.Map.of("ok", false, "provider", provider, "error_code", "provider_unknown", "message", reason);
         }
     }
 }
