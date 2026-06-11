@@ -64,6 +64,7 @@ export interface Translations {
       tools: string;
       tenants: string;
       org: string;
+      orgManage: string;
       orgControl: string;
       config: string;
       keys: string;
@@ -553,6 +554,20 @@ export interface Translations {
     pendingSuggestions: string;
     residencyRules: string;
     agentsWithRegions: string;
+  };
+
+
+  orgManage: {
+    title: string;
+    subtitle: string;
+    failedToLoad: string;
+    saveFailed: string;
+    deleteFailed: string;
+    deleteConfirm: string;
+    relationship: { tenants: string; tenantsDesc: string; orgManagement: string; orgManagementDesc: string; orgControl: string; orgControlDesc: string; };
+    form: { title: string; saveRole: string; csvPlaceholder: string; note: string; };
+    fields: { tenant: string; agentId: string; roleName: string; description: string; level: string; skills: string; responsibilities: string; reportsTo: string; allowedTools: string; };
+    roles: { title: string; empty: string; edit: string; };
   };
 
   // ── Org Control Center ──

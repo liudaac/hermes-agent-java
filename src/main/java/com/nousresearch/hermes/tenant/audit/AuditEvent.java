@@ -9,6 +9,7 @@ public enum AuditEvent {
     TENANT_DESTROYED,
     TENANT_SUSPENDED,
     TENANT_RESUMED,
+    ORG_MANAGEMENT_ROLE_UPDATED,
     
     // Agent 生命周期
     AGENT_CREATED,

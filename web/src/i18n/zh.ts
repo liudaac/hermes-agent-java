@@ -62,6 +62,7 @@ export const zh: Translations = {
       tools: "工具",
       tenants: "租户",
       org: "组织",
+      orgManage: "组织管理",
       orgControl: "组织控制",
       config: "配置",
       keys: "密钥",
@@ -536,6 +537,20 @@ export const zh: Translations = {
     pendingSuggestions: "待处理建议",
     residencyRules: "驻留规则",
     agentsWithRegions: "带区域代理",
+  },
+
+
+  orgManage: {
+    title: "组织管理",
+    subtitle: "维护租户容器内的组织结构：代理角色、技能、汇报关系和权限边界。",
+    failedToLoad: "加载组织管理失败",
+    saveFailed: "保存角色失败",
+    deleteFailed: "删除角色失败",
+    deleteConfirm: "删除 {agent} 的角色？",
+    relationship: { tenants: "租户", tenantsDesc: "资源与隔离容器。", orgManagement: "组织管理", orgManagementDesc: "维护租户内的团队、代理、角色和组织结构。", orgControl: "组织控制", orgControlDesc: "运行时治理与干预，不负责基础结构维护。" },
+    form: { title: "代理角色", saveRole: "保存角色", csvPlaceholder: "用逗号分隔", note: "租户是容器；角色定义该租户内的组织结构。" },
+    fields: { tenant: "租户", agentId: "代理 ID", roleName: "角色名", description: "描述", level: "级别", skills: "技能", responsibilities: "职责", reportsTo: "汇报给", allowedTools: "允许工具" },
+    roles: { title: "代理角色", empty: "暂无代理角色", edit: "编辑" }
   },
 
   orgControl: {

@@ -22,6 +22,7 @@ import {
   Code,
   Eye,
   Monitor,
+  Network,
   Users,
   Bot,
   Layout,
@@ -41,6 +42,7 @@ const SkillsPage = lazy(() => import("@/pages/SkillsPage"));
 const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
 const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const OrgPage = lazy(() => import("@/pages/OrgPage"));
+const OrgManagePage = lazy(() => import("@/pages/OrgManagePage"));
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -82,6 +84,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
   { path: "/org", labelKey: "org", label: "Org", icon: Layout },
+  { path: "/org-manage", labelKey: "orgManage", label: "Org Manage", icon: Network },
   { path: "/org-control", labelKey: "orgControl", label: "Org Control", icon: Monitor },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
@@ -272,6 +275,7 @@ export default function App() {
           <Route path="/env" element={<EnvPage />} />
 
           <Route path="/org" element={<OrgPage />} />
+          <Route path="/org-manage" element={<OrgManagePage />} />
           <Route path="/org-control" element={<OrgControlCenterPage />} />
           {plugins.map(({ manifest, component: PluginComponent }) => (
             <Route

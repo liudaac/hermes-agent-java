@@ -82,6 +82,7 @@ public class DashboardServer {
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     private final OrgControlCenterHandler orgControlCenterHandler;
+    private final OrgManagementHandler orgManagementHandler;
     private final OrgApiHandler orgApiHandler = new OrgApiHandler()
             .with("identity", new AgentIdentityManager())
             .with("handoff", new HandoffProtocol())
@@ -126,6 +127,7 @@ public class DashboardServer {
         // Wire AI-native org overview/control center to real tenant data
         this.orgOverviewHandler.setTenantManager(tenantManager);
         this.orgControlCenterHandler = new OrgControlCenterHandler(tenantManager);
+        this.orgManagementHandler = new OrgManagementHandler(tenantManager);
         this.envHandler = new EnvHandler();
         this.logsHandler = new LogsHandler();
         this.skillsHandler = new SkillsHandler();
@@ -405,6 +407,11 @@ public class DashboardServer {
         app.get("/api/org/compliance", orgApiHandler::complianceSummary);
 
         // --- Org Control Center API (五刀可视化聚合) ---
+        app.get("/api/org/manage/summary", orgManagementHandler::summary);
+        app.get("/api/org/manage/roles", orgManagementHandler::listRoles);
+        app.post("/api/org/manage/roles", orgManagementHandler::upsertRole);
+        app.delete("/api/org/manage/roles/{tenantId}/{agentId}", orgManagementHandler::deleteRole);
+
         app.get("/api/org/control/overview", orgControlCenterHandler::overview);
         app.get("/api/org/control/teams", orgControlCenterHandler::teams);
         app.get("/api/org/control/intents", orgControlCenterHandler::intents);

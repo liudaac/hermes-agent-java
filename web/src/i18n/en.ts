@@ -62,6 +62,7 @@ export const en: Translations = {
       tools: "Tools",
       tenants: "Tenants",
       org: "Org",
+      orgManage: "Org Manage",
       orgControl: "Org Control",
       config: "Config",
       keys: "Keys",
@@ -536,6 +537,20 @@ export const en: Translations = {
     pendingSuggestions: "Pending Suggestions",
     residencyRules: "Residency Rules",
     agentsWithRegions: "Agents w/ Regions",
+  },
+
+
+  orgManage: {
+    title: "Org Management",
+    subtitle: "Maintain organization structure inside tenant containers: agent roles, skills, reporting lines, and permissions.",
+    failedToLoad: "Failed to load Org Management",
+    saveFailed: "Failed to save role",
+    deleteFailed: "Failed to delete role",
+    deleteConfirm: "Delete role for {agent}?",
+    relationship: { tenants: "Tenants", tenantsDesc: "Resource and isolation containers.", orgManagement: "Org Management", orgManagementDesc: "Maintains teams, agents, roles, and structure inside tenants.", orgControl: "Org Control", orgControlDesc: "Runtime governance and intervention, not base structure maintenance." },
+    form: { title: "Agent role", saveRole: "Save role", csvPlaceholder: "comma-separated", note: "Tenant is the container; this role defines organization structure within that tenant." },
+    fields: { tenant: "Tenant", agentId: "Agent ID", roleName: "Role name", description: "Description", level: "Level", skills: "Skills", responsibilities: "Responsibilities", reportsTo: "Reports to", allowedTools: "Allowed tools" },
+    roles: { title: "Agent roles", empty: "No agent roles yet", edit: "Edit" }
   },
 
   orgControl: {

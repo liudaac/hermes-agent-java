@@ -1,0 +1,166 @@
+package com.nousresearch.hermes.dashboard.handlers;
+
+import com.nousresearch.hermes.approval.ToolRisk;
+import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.tenant.audit.AuditEvent;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantManager;
+import io.javalin.http.Context;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/** Organization structure management APIs: teams/agents/roles inside tenant containers. */
+public class OrgManagementHandler {
+    private final TenantManager tenantManager;
+
+    public OrgManagementHandler(TenantManager tenantManager) {
+        this.tenantManager = tenantManager;
+    }
+
+    /** GET /api/org/manage/summary */
+    public void summary(Context ctx) {
+        var tenants = tenantManager.getAllTenants().values();
+        long roles = tenants.stream().mapToLong(t -> t.listAgentRoles().size()).sum();
+        ctx.json(Map.of(
+            "tenants", tenants.size(),
+            "agent_roles", roles,
+            "relationship", Map.of(
+                "tenant", "Resource/container boundary",
+                "org_management", "Maintains organization structure inside each tenant",
+                "org_overview", "Read-only organization observability",
+                "org_control", "Runtime governance and intervention"
+            )
+        ));
+    }
+
+    /** GET /api/org/manage/roles?tenantId=... */
+    public void listRoles(Context ctx) {
+        String tenantId = ctx.queryParam("tenantId");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext tenant : tenants(tenantId)) {
+            for (var entry : tenant.listAgentRoles().entrySet()) {
+                Map<String, Object> row = new LinkedHashMap<>(roleToMap(entry.getKey(), entry.getValue()));
+                row.put("tenant_id", tenant.getTenantId());
+                rows.add(row);
+            }
+        }
+        rows.sort((a, b) -> (String.valueOf(a.get("tenant_id")) + ":" + a.get("agent_id")).compareTo(String.valueOf(b.get("tenant_id")) + ":" + b.get("agent_id")));
+        ctx.json(Map.of("roles", rows, "count", rows.size()));
+    }
+
+    /** POST /api/org/manage/roles */
+    public void upsertRole(Context ctx) {
+        Map<String, Object> body = parseBody(ctx);
+        TenantContext tenant = requireTenant(string(body, "tenant_id", string(body, "tenantId", "default")));
+        String agentId = requireString(body, "agent_id", "agentId");
+        AgentRole role = roleFromBody(body);
+        tenant.registerAgentRole(agentId, role);
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "scope", "org_management",
+            "action", "upsert_agent_role",
+            "agentId", agentId,
+            "role", role.getRoleName(),
+            "timestamp", System.currentTimeMillis()
+        ));
+        Map<String, Object> response = new LinkedHashMap<>(roleToMap(agentId, role));
+        response.put("tenant_id", tenant.getTenantId());
+        response.put("ok", true);
+        ctx.json(response);
+    }
+
+    /** DELETE /api/org/manage/roles/{tenantId}/{agentId} */
+    public void deleteRole(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String agentId = ctx.pathParam("agentId");
+        AgentRole removed = tenant.unregisterAgentRole(agentId);
+        if (removed == null) {
+            ctx.status(404).json(Map.of("error", "Agent role not found", "tenant_id", tenant.getTenantId(), "agent_id", agentId));
+            return;
+        }
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "scope", "org_management",
+            "action", "delete_agent_role",
+            "agentId", agentId,
+            "role", removed.getRoleName(),
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of("ok", true, "tenant_id", tenant.getTenantId(), "agent_id", agentId));
+    }
+
+    private List<TenantContext> tenants(String tenantId) {
+        if (tenantId != null && !tenantId.isBlank()) return List.of(requireTenant(tenantId));
+        return new ArrayList<>(tenantManager.getAllTenants().values());
+    }
+
+    private TenantContext requireTenant(String tenantId) {
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        if (tenant == null) throw new IllegalArgumentException("Unknown tenant: " + tenantId);
+        return tenant;
+    }
+
+    private static Map<String, Object> parseBody(Context ctx) {
+        try {
+            return ctx.bodyAsClass(Map.class);
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    private static AgentRole roleFromBody(Map<String, Object> body) {
+        String name = requireString(body, "role_name", "roleName");
+        String description = string(body, "description", "");
+        AgentRole.Level level = parseLevel(string(body, "level", "MID"));
+        AgentRole role = new AgentRole(name, description, level);
+        list(body.get("skills")).forEach(role::addSkill);
+        list(body.get("responsibilities")).forEach(v -> role.responsibilities(v));
+        String reportsTo = string(body, "reports_to", string(body, "reportsTo", ""));
+        if (!reportsTo.isBlank()) role.reportsTo(reportsTo);
+        list(body.get("collaborators")).forEach(v -> role.collaborators(v));
+        list(body.get("manages")).forEach(v -> role.manages(v));
+        list(body.get("allowed_tools")).forEach(v -> role.allowedTools(v));
+        list(body.get("restricted_paths")).forEach(v -> role.restrictedPaths(v));
+        String risk = string(body, "max_auto_risk", string(body, "maxAutoRisk", ""));
+        if (!risk.isBlank()) {
+            try { role.maxAutoRisk(ToolRisk.valueOf(risk.toUpperCase(Locale.ROOT))); } catch (Exception ignored) {}
+        }
+        if (body.get("min_task_score") instanceof Number n) role.minTaskScore(n.doubleValue());
+        if (body.get("max_consecutive_failures") instanceof Number n) role.maxConsecutiveFailures(n.intValue());
+        return role;
+    }
+
+    private static Map<String, Object> roleToMap(String agentId, AgentRole role) {
+        Map<String, Object> map = new LinkedHashMap<>(role.toMap());
+        map.put("agent_id", agentId);
+        map.put("allowed_tools", new ArrayList<>(role.getAllowedTools()));
+        map.put("restricted_paths", new ArrayList<>(role.getRestrictedPaths()));
+        return map;
+    }
+
+    private static AgentRole.Level parseLevel(String raw) {
+        try { return AgentRole.Level.valueOf(raw.toUpperCase(Locale.ROOT)); }
+        catch (Exception ignored) { return AgentRole.Level.MID; }
+    }
+
+    private static List<String> list(Object value) {
+        if (value instanceof List<?> l) return l.stream().map(String::valueOf).filter(s -> !s.isBlank()).toList();
+        if (value == null) return List.of();
+        return java.util.Arrays.stream(String.valueOf(value).split(",")).map(String::trim).filter(s -> !s.isBlank()).toList();
+    }
+
+    private static String requireString(Map<String, Object> body, String snake, String camel) {
+        String value = string(body, snake, string(body, camel, ""));
+        if (value.isBlank()) throw new IllegalArgumentException("Missing required field: " + snake);
+        return value;
+    }
+
+    private static String string(Map<String, Object> body, String key, String fallback) {
+        Object value = body.get(key);
+        return value == null ? fallback : String.valueOf(value);
+    }
+}

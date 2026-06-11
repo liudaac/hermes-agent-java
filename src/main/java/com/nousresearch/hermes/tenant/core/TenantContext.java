@@ -873,6 +873,16 @@ public class TenantContext {
         logger.info("Tenant {}: registered role '{}' for agent {}", tenantId, role.getRoleName(), agentId);
     }
 
+    /** 删除 Agent 角色 */
+    public AgentRole unregisterAgentRole(String agentId) {
+        AgentRole removed = agentRoles.remove(agentId);
+        if (removed != null) {
+            saveAgentRoles();
+            logger.info("Tenant {}: unregistered role '{}' for agent {}", tenantId, removed.getRoleName(), agentId);
+        }
+        return removed;
+    }
+
     /** 获取 Agent 角色 */
     public AgentRole getAgentRole(String agentId) {
         return agentRoles.get(agentId);
