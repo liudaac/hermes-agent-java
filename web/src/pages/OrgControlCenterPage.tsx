@@ -35,6 +35,7 @@ export default function OrgControlCenterPage() {
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
   const [browserTimeline, setBrowserTimeline] = useState<any[]>([]);
+  const [browserBridges, setBrowserBridges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -44,7 +45,7 @@ export default function OrgControlCenterPage() {
     setLoading(true);
     setError("");
     try {
-      const [o, t, i, tr, e, a, au, b] = await Promise.all([
+      const [o, t, i, tr, e, a, au, b, bs] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
         fetchJSON<any>("/api/org/control/intents?limit=50&offset=0"),
@@ -53,6 +54,7 @@ export default function OrgControlCenterPage() {
         fetchJSON<any>("/api/org/control/anomalies?n=30"),
         fetchJSON<any>("/api/org/control/audit?n=30"),
         fetchJSON<any>("/api/org/control/browser?n=30"),
+        fetchJSON<any>("/api/org/control/browser/status"),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -62,6 +64,7 @@ export default function OrgControlCenterPage() {
       setAnomalies(a.anomalies || []);
       setAudit(au.audit || []);
       setBrowserTimeline(b.browser_timeline || []);
+      setBrowserBridges(bs.browser_bridges || []);
     } catch (err: any) {
       setError(err?.message || "Failed to load Org Control Center");
     } finally {
@@ -149,6 +152,29 @@ export default function OrgControlCenterPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode, penalty: mode === "deprioritized" ? 1.5 : undefined, ttl_ms: mode === "normal" ? undefined : 60 * 60 * 1000, actor: "dashboard", reason }),
+    }));
+  }, [askReason, runControl]);
+
+
+  const checkBrowserHealth = useCallback((tenantId: string) => {
+    const key = `${tenantId}:browser:health`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/health`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason: "Operator checked browser bridge health" }),
+    }));
+  }, [runControl]);
+
+  const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
+    const reason = askReason(`Operator set browser bridge provider to ${provider}`);
+    if (reason === null) return;
+    const endpoint = provider === "mock" ? "" : window.prompt("Endpoint URL", provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511");
+    if (endpoint === null) return;
+    const key = `${tenantId}:browser:provider:${provider}`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/provider`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", provider, endpoint, timeout_ms: 10000, reason }),
     }));
   }, [askReason, runControl]);
 
@@ -336,6 +362,31 @@ export default function OrgControlCenterPage() {
               <div className="space-y-2">
                 {audit.slice(0, 8).map((entry, idx) => (
                   <AuditEntryCard key={`${entry.tenant_id}:${entry.time}:${idx}`} entry={entry} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Globe className="h-4 w-4" /> Browser Bridge Controls
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {browserBridges.length === 0 ? (
+              <Empty label="No browser bridge status" />
+            ) : (
+              <div className="space-y-2">
+                {browserBridges.slice(0, 8).map((bridge) => (
+                  <BrowserBridgeControlCard
+                    key={bridge.tenant_id}
+                    bridge={bridge}
+                    busyAction={busyAction}
+                    onHealth={checkBrowserHealth}
+                    onProvider={setBrowserProvider}
+                  />
                 ))}
               </div>
             )}
@@ -685,6 +736,52 @@ function StatusBadge({ status }: { status?: string }) {
   const s = status || "UNKNOWN";
   const variant = s === "SUCCESS" || s === "COMPLETED" ? "default" : s === "FAILED" || s === "INTERRUPTED" ? "destructive" : "outline";
   return <Badge variant={variant as any}>{s}</Badge>;
+}
+
+function BrowserBridgeControlCard({
+  bridge,
+  busyAction,
+  onHealth,
+  onProvider,
+}: {
+  bridge: any;
+  busyAction: string;
+  onHealth: (tenantId: string) => void;
+  onProvider: (tenantId: string, provider: string) => void;
+}) {
+  const tenantId = bridge.tenant_id;
+  const provider = bridge.provider || bridge.class || "unknown";
+  const healthKey = `${tenantId}:browser:health`;
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{tenantId}</div>
+          <div className="text-xs text-muted-foreground">
+            provider: {provider}{bridge.endpoint ? ` · ${bridge.endpoint}` : ""}
+          </div>
+        </div>
+        <Badge variant={bridge.healthy === false ? "destructive" : "default"}>{bridge.healthy === false ? "unhealthy" : "ready"}</Badge>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" disabled={busyAction === healthKey} onClick={() => onHealth(tenantId)}>
+          {busyAction === healthKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Health check
+        </Button>
+        {(["mock", "kimi", "openclaw"] as const).map((p) => (
+          <Button
+            key={p}
+            variant={String(provider).includes(p) ? "secondary" : "ghost"}
+            size="sm"
+            disabled={busyAction === `${tenantId}:browser:provider:${p}`}
+            onClick={() => onProvider(tenantId, p)}
+          >
+            {p}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function BrowserEntryCard({ entry }: { entry: any }) {

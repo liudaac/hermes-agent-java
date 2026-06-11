@@ -15,6 +15,22 @@ public class MockBrowserBridge implements BrowserBridge {
     private final ConcurrentHashMap<String, MockSession> sessions = new ConcurrentHashMap<>();
     private volatile String lastSessionId;
 
+
+    @Override
+    public Map<String, Object> describe() {
+        return Map.of(
+            "provider", "mock",
+            "class", getClass().getName(),
+            "sessions", sessions.size(),
+            "healthy", true
+        );
+    }
+
+    @Override
+    public BrowserActionResult healthCheck() {
+        return BrowserActionResult.ok(lastSessionId, null, "Mock BrowserBridge", "mock bridge ready", "Mock browser bridge is healthy", List.of());
+    }
+
     @Override
     public BrowserActionResult execute(BrowserAction action) {
         return switch (action.action()) {

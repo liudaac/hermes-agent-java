@@ -38,6 +38,38 @@ public class HttpBrowserBridge implements BrowserBridge {
     }
 
     @Override
+    public java.util.Map<String, Object> describe() {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("provider", providerName);
+        m.put("class", getClass().getName());
+        m.put("endpoint", endpoint != null ? endpoint : "");
+        m.put("timeout_ms", timeoutMs);
+        m.put("healthy", endpoint != null && !endpoint.isBlank());
+        return m;
+    }
+
+    @Override
+    public BrowserActionResult healthCheck() {
+        if (endpoint == null) {
+            return BrowserActionResult.error(null, providerName + " endpoint is not configured");
+        }
+        try {
+            HttpRequest request = HttpRequest.newBuilder(resolve("/health"))
+                .timeout(Duration.ofMillis(timeoutMs))
+                .header("X-Hermes-Browser-Bridge", providerName)
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return BrowserActionResult.error(null, providerName + " health HTTP " + response.statusCode() + ": " + truncate(response.body()));
+            }
+            return BrowserActionResult.ok(null, endpoint, providerName, truncate(response.body()), providerName + " bridge is healthy", java.util.List.of());
+        } catch (Exception e) {
+            return BrowserActionResult.error(null, providerName + " bridge unavailable: " + e.getMessage());
+        }
+    }
+
+    @Override
     public BrowserActionResult execute(BrowserAction action) {
         if (endpoint == null) {
             return BrowserActionResult.error(action.sessionId(), providerName + " endpoint is not configured");

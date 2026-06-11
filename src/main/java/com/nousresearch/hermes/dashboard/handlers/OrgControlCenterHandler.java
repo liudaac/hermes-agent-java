@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
 import com.nousresearch.hermes.org.observe.AgentTrace;
+import com.nousresearch.hermes.browser.BrowserBridgeConfig;
+import com.nousresearch.hermes.browser.BrowserBridgeFactory;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
 import io.javalin.http.ForbiddenResponse;
@@ -457,6 +459,78 @@ public class OrgControlCenterHandler {
             "duration_ms", duration,
             "started_at", t.getStartTime().toString()
         );
+    }
+
+
+    /** GET /api/org/control/browser/status */
+    public void browserStatus(Context ctx) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext t : tenants()) {
+            Map<String, Object> row = new LinkedHashMap<>(t.getBrowserBridge().describe());
+            row.put("tenant_id", t.getTenantId());
+            rows.add(row);
+        }
+        ctx.json(Map.of("browser_bridges", rows, "count", rows.size()));
+    }
+
+    /** POST /api/org/control/browser/{tenantId}/provider */
+    public void configureBrowserProvider(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator configured browser bridge provider");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CONFIGURE_BROWSER_BRIDGE, reason, Map.of());
+
+        String provider = stringOrDefault(body.get("provider"), "mock").toLowerCase(Locale.ROOT).trim();
+        String endpoint = stringOrDefault(body.get("endpoint"), "");
+        int timeoutMs = (int) parseLong(body.get("timeout_ms"), 10000L);
+        var config = new BrowserBridgeConfig(provider, endpoint, timeoutMs);
+        var bridge = BrowserBridgeFactory.create(config);
+        tenant.setBrowserBridge(bridge);
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("tenantId", tenant.getTenantId());
+        details.put("actor", actor);
+        details.put("provider", provider);
+        details.put("endpoint", endpoint);
+        details.put("timeoutMs", timeoutMs);
+        details.put("reason", reason);
+        details.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_BRIDGE_CONFIGURED, details);
+
+        Map<String, Object> response = new LinkedHashMap<>(bridge.describe());
+        response.put("ok", true);
+        response.put("tenant_id", tenant.getTenantId());
+        ctx.json(response);
+    }
+
+    /** POST /api/org/control/browser/{tenantId}/health */
+    public void browserHealth(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator checked browser bridge health");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CHECK_BROWSER_BRIDGE, reason, Map.of());
+
+        long started = System.currentTimeMillis();
+        var result = tenant.getBrowserBridge().healthCheck();
+        long durationMs = System.currentTimeMillis() - started;
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("tenantId", tenant.getTenantId());
+        details.put("actor", actor);
+        details.put("ok", result.ok());
+        details.put("message", result.message() != null ? result.message() : "");
+        details.put("durationMs", durationMs);
+        details.put("reason", reason);
+        details.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_HEALTH_CHECK, details);
+
+        Map<String, Object> response = new LinkedHashMap<>(result.toMap());
+        response.put("tenant_id", tenant.getTenantId());
+        response.put("duration_ms", durationMs);
+        response.put("provider", tenant.getBrowserBridge().describe());
+        ctx.json(response);
     }
 
     /** GET /api/org/control/browser?n=50 */
