@@ -116,7 +116,6 @@ export const zh: Translations = {
     deleteSession: "删除会话",
     previousPage: "上一页",
     nextPage: "下一页",
-    filters: { title: "筛选", all: "全部", team: "团队", search: "搜索", searchPlaceholder: "代理、角色、技能、使命……", missingOnly: "只看缺少角色" },
     roles: {
       user: "用户",
       assistant: "助手",

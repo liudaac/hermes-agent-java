@@ -116,7 +116,6 @@ export const en: Translations = {
     deleteSession: "Delete session",
     previousPage: "Previous page",
     nextPage: "Next page",
-    filters: { title: "Filters", all: "All", team: "Team", search: "Search", searchPlaceholder: "agent, role, skill, mission...", missingOnly: "Missing roles only" },
     roles: {
       user: "User",
       assistant: "Assistant",
