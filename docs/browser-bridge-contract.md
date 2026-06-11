@@ -184,3 +184,26 @@ The endpoint reads the latest `probe_report.recommended_config`, configures the 
 - `contract_report`
 
 This is intentionally tenant-scoped runtime configuration, not a global deployment config mutation.
+
+## Tenant provider config persistence
+
+Applied BrowserBridge provider configuration is persisted per tenant at:
+
+```text
+{tenantDir}/state/browser-bridge-config.json
+```
+
+Fields:
+
+```json
+{
+  "provider": "kimi",
+  "endpoint": "http://127.0.0.1:17361",
+  "timeout_ms": 10000,
+  "action_path": "/actions",
+  "health_path": "/health",
+  "capabilities_path": "/capabilities"
+}
+```
+
+`TenantContext.getBrowserBridge()` loads this config lazily and restores the provider after restart. The persisted config is tenant-scoped and does not mutate process-wide defaults or environment variables.

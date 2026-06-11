@@ -580,6 +580,7 @@ public class OrgControlCenterHandler {
             row.put("tenant_id", t.getTenantId());
             if (!t.getBrowserContractReport().isEmpty()) row.put("contract_report", t.getBrowserContractReport());
             if (!t.getBrowserProbeReport().isEmpty()) row.put("probe_report", t.getBrowserProbeReport());
+            if (!t.getBrowserBridgeConfigMap().isEmpty()) row.put("config", t.getBrowserBridgeConfigMap());
             rows.add(row);
         }
         ctx.json(Map.of("browser_bridges", rows, "count", rows.size()));
@@ -600,8 +601,8 @@ public class OrgControlCenterHandler {
         String healthPath = stringOrDefault(body.get("health_path"), stringOrDefault(body.get("healthPath"), "/health"));
         String capabilitiesPath = stringOrDefault(body.get("capabilities_path"), stringOrDefault(body.get("capabilitiesPath"), "/capabilities"));
         var config = new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath);
-        var bridge = BrowserBridgeFactory.create(config);
-        tenant.setBrowserBridge(bridge);
+        tenant.configureBrowserBridge(config, true);
+        var bridge = tenant.getBrowserBridge();
 
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("tenantId", tenant.getTenantId());
@@ -676,8 +677,8 @@ public class OrgControlCenterHandler {
         String capabilitiesPath = stringOrDefault(recommended.get("capabilities_path"), "/capabilities");
         int timeoutMs = (int) parseLong(body.get("timeout_ms"), 10000L);
 
-        var bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath));
-        tenant.setBrowserBridge(bridge);
+        tenant.configureBrowserBridge(new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath), true);
+        var bridge = tenant.getBrowserBridge();
         var health = bridge.healthCheck();
         var contractReport = new BrowserBridgeContractVerifier(bridge, endpoint).verify();
         Map<String, Object> contractMap = new LinkedHashMap<>(contractReport.toMap());

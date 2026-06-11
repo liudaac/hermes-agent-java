@@ -919,6 +919,7 @@ function BrowserBridgeControlCard({
           <div className="text-xs text-muted-foreground">
             provider: {provider}{bridge.endpoint ? ` · ${bridge.endpoint}` : ""}
           </div>
+          {bridge.config && <div className="text-[10px] text-muted-foreground/70">persisted: {bridge.config.action_path} · {bridge.config.health_path}</div>}
         </div>
         <Badge variant={bridge.healthy === false ? "destructive" : "default"}>{bridge.healthy === false ? "unhealthy" : "ready"}</Badge>
       </div>

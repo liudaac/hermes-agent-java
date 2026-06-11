@@ -118,6 +118,7 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.browser.BrowserApprovalQueue browserApprovalQueue;
     private volatile java.util.Map<String, Object> browserContractReport = java.util.Map.of();
     private volatile java.util.Map<String, Object> browserProbeReport = java.util.Map.of();
+    private volatile com.nousresearch.hermes.browser.BrowserBridgeConfig browserBridgeConfig;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -1014,7 +1015,10 @@ public class TenantContext {
         if (browserBridge == null) {
             synchronized (this) {
                 if (browserBridge == null) {
-                    browserBridge = com.nousresearch.hermes.browser.BrowserBridgeFactory.create();
+                    browserBridgeConfig = loadBrowserBridgeConfig();
+                    browserBridge = browserBridgeConfig != null
+                        ? com.nousresearch.hermes.browser.BrowserBridgeFactory.create(browserBridgeConfig)
+                        : com.nousresearch.hermes.browser.BrowserBridgeFactory.create();
                 }
             }
         }
@@ -1023,6 +1027,73 @@ public class TenantContext {
 
     public void setBrowserBridge(com.nousresearch.hermes.browser.BrowserBridge browserBridge) {
         this.browserBridge = browserBridge;
+    }
+
+    public void configureBrowserBridge(com.nousresearch.hermes.browser.BrowserBridgeConfig config, boolean persist) {
+        this.browserBridgeConfig = config;
+        this.browserBridge = com.nousresearch.hermes.browser.BrowserBridgeFactory.create(config);
+        if (persist) saveBrowserBridgeConfig(config);
+    }
+
+    public com.nousresearch.hermes.browser.BrowserBridgeConfig getBrowserBridgeConfig() {
+        if (browserBridgeConfig == null) browserBridgeConfig = loadBrowserBridgeConfig();
+        return browserBridgeConfig;
+    }
+
+    public java.util.Map<String, Object> getBrowserBridgeConfigMap() {
+        var config = getBrowserBridgeConfig();
+        if (config == null) return java.util.Map.of();
+        java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("provider", config.provider());
+        map.put("endpoint", config.endpoint());
+        map.put("timeout_ms", config.timeoutMs());
+        map.put("action_path", config.actionPath());
+        map.put("health_path", config.healthPath());
+        map.put("capabilities_path", config.capabilitiesPath());
+        return map;
+    }
+
+    private Path browserBridgeConfigPath() {
+        return tenantDir.resolve("state").resolve("browser-bridge-config.json");
+    }
+
+    private com.nousresearch.hermes.browser.BrowserBridgeConfig loadBrowserBridgeConfig() {
+        Path path = browserBridgeConfigPath();
+        if (!Files.exists(path)) return null;
+        try {
+            Map<String, Object> map = JSON_MAPPER.readValue(path.toFile(), new TypeReference<Map<String, Object>>() {});
+            String provider = stringValue(map.getOrDefault("provider", "mock"));
+            String endpoint = stringValue(map.getOrDefault("endpoint", ""));
+            int timeoutMs = parseIntValue(map.get("timeout_ms"), 10000);
+            String actionPath = stringValue(map.getOrDefault("action_path", "/actions"));
+            String healthPath = stringValue(map.getOrDefault("health_path", "/health"));
+            String capabilitiesPath = stringValue(map.getOrDefault("capabilities_path", "/capabilities"));
+            return new com.nousresearch.hermes.browser.BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath);
+        } catch (Exception e) {
+            logger.warn("Failed to load browser bridge config for tenant {}: {}", tenantId, e.getMessage());
+            return null;
+        }
+    }
+
+    private void saveBrowserBridgeConfig(com.nousresearch.hermes.browser.BrowserBridgeConfig config) {
+        if (config == null) return;
+        try {
+            Path path = browserBridgeConfigPath();
+            Files.createDirectories(path.getParent());
+            JSON_MAPPER.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), getBrowserBridgeConfigMap());
+        } catch (Exception e) {
+            logger.warn("Failed to save browser bridge config for tenant {}: {}", tenantId, e.getMessage());
+        }
+    }
+
+    private static int parseIntValue(Object value, int fallback) {
+        if (value instanceof Number n) return n.intValue();
+        try { return value != null ? Integer.parseInt(String.valueOf(value)) : fallback; }
+        catch (Exception ignored) { return fallback; }
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     public java.util.Map<String, Object> getBrowserContractReport() {
