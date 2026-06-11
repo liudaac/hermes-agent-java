@@ -305,10 +305,10 @@ export default function OrgManagePage() {
                 {LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
               </select>
             </Field>
-            <Field label={om.fields.skills}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.skills} placeholder={om.form.csvPlaceholder} onChange={(e) => setForm({ ...form, skills: e.target.value })} /></Field>
-            <Field label={om.fields.responsibilities}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.responsibilities} placeholder={om.form.csvPlaceholder} onChange={(e) => setForm({ ...form, responsibilities: e.target.value })} /></Field>
+            <Field label={om.fields.skills}><TagEditor value={form.skills} onChange={(value) => setForm({ ...form, skills: value })} placeholder={om.form.tagPlaceholder} addLabel={om.form.addTag} /></Field>
+            <Field label={om.fields.responsibilities}><TagEditor value={form.responsibilities} onChange={(value) => setForm({ ...form, responsibilities: value })} placeholder={om.form.tagPlaceholder} addLabel={om.form.addTag} /></Field>
             <Field label={om.fields.reportsTo}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.reports_to} onChange={(e) => setForm({ ...form, reports_to: e.target.value })} /></Field>
-            <Field label={om.fields.allowedTools}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.allowed_tools} placeholder={om.form.csvPlaceholder} onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })} /></Field>
+            <Field label={om.fields.allowedTools}><TagEditor value={form.allowed_tools} onChange={(value) => setForm({ ...form, allowed_tools: value })} placeholder={om.form.tagPlaceholder} addLabel={om.form.addTag} /></Field>
             <Field label={om.fields.teams}>
               <select
                 multiple
@@ -427,6 +427,50 @@ function TeamMemberRoles({ members, fallback }: { members: TeamMemberRole[]; fal
               <ChipRow label={om.fields.responsibilities} values={member.responsibilities || []} />
               <ChipRow label={om.fields.allowedTools} values={member.allowed_tools || []} />
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function TagEditor({ value, onChange, placeholder, addLabel }: { value: string; onChange: (value: string) => void; placeholder: string; addLabel: string }) {
+  const [draft, setDraft] = useState("");
+  const values = split(value);
+  const commit = () => {
+    const next = draft.trim();
+    if (!next || values.includes(next)) {
+      setDraft("");
+      return;
+    }
+    onChange([...values, next].join(", "));
+    setDraft("");
+  };
+  const remove = (item: string) => onChange(values.filter((v) => v !== item).join(", "));
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+          value={draft}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={commit}>{addLabel}</Button>
+      </div>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {values.map((item) => (
+            <button key={item} type="button" className="rounded-full bg-secondary px-2 py-1 text-xs text-secondary-foreground" onClick={() => remove(item)}>
+              {item} ×
+            </button>
           ))}
         </div>
       )}
