@@ -18,8 +18,19 @@ type RoleRow = {
   allowed_tools?: string[];
 };
 
+type TeamRow = {
+  tenant_id: string;
+  team_id: string;
+  name: string;
+  mission?: string;
+  members?: string[];
+  lead?: string;
+  size?: number;
+};
+
 type Summary = {
   tenants: number;
+  teams: number;
   agent_roles: number;
   relationship?: Record<string, string>;
 };
@@ -31,9 +42,18 @@ export default function OrgManagePage() {
   const om = t.orgManage;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [tenantOptions, setTenantOptions] = useState<string[]>(["default"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [teamForm, setTeamForm] = useState({
+    tenant_id: "default",
+    team_id: "",
+    name: "",
+    mission: "",
+    members: "",
+    lead: "",
+  });
   const [form, setForm] = useState({
     tenant_id: "default",
     agent_id: "",
@@ -46,19 +66,21 @@ export default function OrgManagePage() {
     allowed_tools: "",
   });
 
-  const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id)])).sort(), [tenantOptions, roles]);
+  const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id), ...teams.map((team) => team.tenant_id)])).sort(), [tenantOptions, roles, teams]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [s, r, tenantsResponse] = await Promise.all([
+      const [s, r, tm, tenantsResponse] = await Promise.all([
         fetchJSON<Summary>("/api/org/manage/summary"),
         fetchJSON<{ roles: RoleRow[] }>("/api/org/manage/roles"),
+        fetchJSON<{ teams: TeamRow[] }>("/api/org/manage/teams"),
         api.getTenants(),
       ]);
       setSummary(s);
       setRoles(r.roles || []);
+      setTeams(tm.teams || []);
       setTenantOptions((tenantsResponse.tenants || []).map((tenant) => tenant.tenantId));
     } catch (err: any) {
       setError(err?.message || om.failedToLoad);
@@ -68,6 +90,46 @@ export default function OrgManagePage() {
   }, [om.failedToLoad]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const submitTeam = async () => {
+    setError(null);
+    try {
+      await fetchJSON("/api/org/manage/teams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...teamForm,
+          members: split(teamForm.members),
+        }),
+      });
+      setTeamForm((f) => ({ ...f, team_id: "", name: "", mission: "", members: "", lead: "" }));
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || om.teams.saveFailed);
+    }
+  };
+
+  const editTeam = (team: TeamRow) => {
+    setTeamForm({
+      tenant_id: team.tenant_id,
+      team_id: team.team_id,
+      name: team.name,
+      mission: team.mission || "",
+      members: (team.members || []).join(", "),
+      lead: team.lead || "",
+    });
+  };
+
+  const removeTeam = async (team: TeamRow) => {
+    if (!window.confirm(om.teams.deleteConfirm.replace("{team}", team.team_id))) return;
+    setError(null);
+    try {
+      await fetchJSON(`/api/org/manage/teams/${encodeURIComponent(team.tenant_id)}/${encodeURIComponent(team.team_id)}`, { method: "DELETE" });
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || om.teams.deleteFailed);
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -130,8 +192,59 @@ export default function OrgManagePage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <InfoCard title={om.relationship.tenants} value={summary?.tenants ?? 0} desc={om.relationship.tenantsDesc} />
-        <InfoCard title={om.relationship.orgManagement} value={summary?.agent_roles ?? 0} desc={om.relationship.orgManagementDesc} />
+        <InfoCard title={om.relationship.orgManagement} value={summary?.teams ?? 0} desc={om.relationship.orgManagementDesc} />
         <InfoCard title={om.relationship.orgControl} value={roles.length} desc={om.relationship.orgControlDesc} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[420px,1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4" /> {om.teams.formTitle}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Field label={om.fields.tenant}>
+              <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.tenant_id} onChange={(e) => setTeamForm({ ...teamForm, tenant_id: e.target.value })}>
+                {tenants.map((tenant) => <option key={tenant} value={tenant}>{tenant}</option>)}
+              </select>
+            </Field>
+            <Field label={om.teams.teamId}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.team_id} onChange={(e) => setTeamForm({ ...teamForm, team_id: e.target.value })} /></Field>
+            <Field label={om.teams.name}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} /></Field>
+            <Field label={om.teams.mission}><textarea className="w-full rounded-md border bg-background px-3 py-2 text-sm" rows={2} value={teamForm.mission} onChange={(e) => setTeamForm({ ...teamForm, mission: e.target.value })} /></Field>
+            <Field label={om.teams.members}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.members} placeholder={om.form.csvPlaceholder} onChange={(e) => setTeamForm({ ...teamForm, members: e.target.value })} /></Field>
+            <Field label={om.teams.lead}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.lead} onChange={(e) => setTeamForm({ ...teamForm, lead: e.target.value })} /></Field>
+            <Button className="w-full" onClick={submitTeam} disabled={!teamForm.tenant_id || !teamForm.team_id || !teamForm.name}>{om.teams.saveTeam}</Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Network className="h-4 w-4" /> {om.teams.title}</CardTitle></CardHeader>
+          <CardContent>
+            {teams.length === 0 ? <div className="text-sm text-muted-foreground">{om.teams.empty}</div> : (
+              <div className="space-y-3">
+                {teams.map((team) => (
+                  <div key={`${team.tenant_id}:${team.team_id}`} className="rounded-lg border border-current/15 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{team.tenant_id}</Badge>
+                          <span className="font-medium">{team.name}</span>
+                          <Badge variant="secondary">{team.team_id}</Badge>
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">{team.mission || t.common.none}</div>
+                        {team.lead && <div className="mt-1 text-xs text-muted-foreground">{om.teams.lead}: {team.lead}</div>}
+                        <ChipRow label={om.teams.members} values={team.members || []} />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => editTeam(team)}>{om.roles.edit}</Button>
+                        <Button variant="ghost" size="sm" onClick={() => removeTeam(team)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[420px,1fr]">

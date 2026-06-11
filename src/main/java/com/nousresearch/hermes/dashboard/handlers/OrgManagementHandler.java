@@ -2,6 +2,7 @@ package com.nousresearch.hermes.dashboard.handlers;
 
 import com.nousresearch.hermes.approval.ToolRisk;
 import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.Team;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
@@ -25,9 +26,11 @@ public class OrgManagementHandler {
     public void summary(Context ctx) {
         var tenants = tenantManager.getAllTenants().values();
         long roles = tenants.stream().mapToLong(t -> t.listAgentRoles().size()).sum();
+        long teams = tenants.stream().mapToLong(t -> t.getTeamManager().teamCount()).sum();
         ctx.json(Map.of(
             "tenants", tenants.size(),
             "agent_roles", roles,
+            "teams", teams,
             "relationship", Map.of(
                 "tenant", "Resource/container boundary",
                 "org_management", "Maintains organization structure inside each tenant",
@@ -35,6 +38,73 @@ public class OrgManagementHandler {
                 "org_control", "Runtime governance and intervention"
             )
         ));
+    }
+
+
+    /** GET /api/org/manage/teams?tenantId=... */
+    public void listTeams(Context ctx) {
+        String tenantId = ctx.queryParam("tenantId");
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext tenant : tenants(tenantId)) {
+            for (Team team : tenant.getTeamManager().listTeams()) {
+                rows.add(new LinkedHashMap<>(team.toMap()));
+            }
+        }
+        rows.sort((a, b) -> (String.valueOf(a.get("tenant_id")) + ":" + a.get("team_id")).compareTo(String.valueOf(b.get("tenant_id")) + ":" + b.get("team_id")));
+        ctx.json(Map.of("teams", rows, "count", rows.size()));
+    }
+
+    /** POST /api/org/manage/teams */
+    public void upsertTeam(Context ctx) {
+        Map<String, Object> body = parseBody(ctx);
+        TenantContext tenant = requireTenant(string(body, "tenant_id", string(body, "tenantId", "default")));
+        String teamId = requireString(body, "team_id", "teamId");
+        String name = requireString(body, "name", "name");
+        String mission = string(body, "mission", "");
+        String createdBy = string(body, "created_by", string(body, "createdBy", "dashboard"));
+        List<String> members = list(body.get("members"));
+        String lead = string(body, "lead", string(body, "lead_agent_id", string(body, "leadAgentId", "")));
+
+        Team existing = tenant.getTeamManager().getTeam(teamId);
+        Team team = existing != null ? existing : tenant.getTeamManager().createTeam(teamId, name, mission, createdBy);
+        if (!members.isEmpty()) {
+            for (String current : new ArrayList<>(team.getMemberIds())) {
+                if (!members.contains(current)) team.removeMember(current);
+            }
+            members.forEach(team::addMember);
+        }
+        if (!lead.isBlank()) team.setLead(lead);
+
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "scope", "org_management",
+            "action", existing != null ? "update_team" : "create_team",
+            "teamId", teamId,
+            "name", name,
+            "timestamp", System.currentTimeMillis()
+        ));
+        Map<String, Object> response = new LinkedHashMap<>(team.toMap());
+        response.put("ok", true);
+        ctx.json(response);
+    }
+
+    /** DELETE /api/org/manage/teams/{tenantId}/{teamId} */
+    public void deleteTeam(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String teamId = ctx.pathParam("teamId");
+        boolean removed = tenant.getTeamManager().deleteTeam(teamId);
+        if (!removed) {
+            ctx.status(404).json(Map.of("error", "Team not found", "tenant_id", tenant.getTenantId(), "team_id", teamId));
+            return;
+        }
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "scope", "org_management",
+            "action", "delete_team",
+            "teamId", teamId,
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of("ok", true, "tenant_id", tenant.getTenantId(), "team_id", teamId));
     }
 
     /** GET /api/org/manage/roles?tenantId=... */

@@ -31,6 +31,9 @@ class OrgManagementHandlerTest {
         Javalin app = Javalin.create(config -> config.showJavalinBanner = false);
         OrgManagementHandler handler = new OrgManagementHandler(manager);
         app.get("/api/org/manage/summary", handler::summary);
+        app.get("/api/org/manage/teams", handler::listTeams);
+        app.post("/api/org/manage/teams", handler::upsertTeam);
+        app.delete("/api/org/manage/teams/{tenantId}/{teamId}", handler::deleteTeam);
         app.get("/api/org/manage/roles", handler::listRoles);
         app.post("/api/org/manage/roles", handler::upsertRole);
         app.delete("/api/org/manage/roles/{tenantId}/{agentId}", handler::deleteRole);
@@ -39,6 +42,31 @@ class OrgManagementHandlerTest {
             app.start("127.0.0.1", port);
             HttpClient client = HttpClient.newHttpClient();
             String base = "http://127.0.0.1:" + port;
+
+
+            HttpResponse<String> createTeam = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/org/manage/teams"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                        {"tenant_id":"%s","team_id":"release","name":"Release Team","mission":"Ship safely","members":["planner","builder"],"lead":"planner"}
+                        """.formatted(tenantId)))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, createTeam.statusCode());
+            JSONObject createdTeam = JSON.parseObject(createTeam.body());
+            assertTrue(createdTeam.getBooleanValue("ok"));
+            assertEquals("Release Team", createdTeam.getString("name"));
+            assertEquals("planner", createdTeam.getString("lead"));
+
+            HttpResponse<String> listTeams = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/org/manage/teams?tenantId=" + tenantId)).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, listTeams.statusCode());
+            JSONArray teams = JSON.parseObject(listTeams.body()).getJSONArray("teams");
+            assertEquals(1, teams.size());
+            assertTrue(teams.getJSONObject(0).getJSONArray("members").contains("builder"));
 
             HttpResponse<String> create = client.send(
                 HttpRequest.newBuilder(URI.create(base + "/api/org/manage/roles"))
@@ -69,7 +97,18 @@ class OrgManagementHandlerTest {
                 HttpResponse.BodyHandlers.ofString()
             );
             assertEquals(200, summary.statusCode());
-            assertTrue(JSON.parseObject(summary.body()).getLongValue("agent_roles") >= 1);
+            JSONObject summaryBody = JSON.parseObject(summary.body());
+            assertTrue(summaryBody.getLongValue("agent_roles") >= 1);
+            assertTrue(summaryBody.getLongValue("teams") >= 1);
+
+            HttpResponse<String> deleteTeam = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/org/manage/teams/" + tenantId + "/release"))
+                    .DELETE()
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, deleteTeam.statusCode());
+            assertTrue(JSON.parseObject(deleteTeam.body()).getBooleanValue("ok"));
 
             HttpResponse<String> delete = client.send(
                 HttpRequest.newBuilder(URI.create(base + "/api/org/manage/roles/" + tenantId + "/planner"))
