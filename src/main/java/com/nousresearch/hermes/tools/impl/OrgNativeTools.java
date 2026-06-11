@@ -242,6 +242,35 @@ public class OrgNativeTools {
             .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
             .build());
 
+        // —— browser_bridge (下一阶段：真实浏览器执行层抽象) ——
+        registry.register(new ToolEntry.Builder()
+            .name("browser_bridge")
+            .toolset("organization")
+            .emoji("🌉")
+            .description("Execute a browser action through the tenant BrowserBridge. Supports mock today and future Kimi WebBridge / OpenClaw Relay / Playwright adapters.")
+            .schema(Map.of(
+                "description", "Provider-neutral browser automation action. Use for web tasks that need a real or bridged browser session.",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "action", Map.of("type", "string", "enum", List.of("open", "observe", "click", "type", "extract", "scroll", "press", "submit", "close"), "description", "Browser action to perform"),
+                        "session_id", Map.of("type", "string", "description", "Browser session id returned by open; omitted uses latest mock session when available"),
+                        "url", Map.of("type", "string", "description", "http(s) URL for open"),
+                        "target", Map.of("type", "string", "description", "Natural-language target or selector, e.g. 'Search box' or '#submit'"),
+                        "text", Map.of("type", "string", "description", "Text to type or send"),
+                        "instruction", Map.of("type", "string", "description", "Extraction or action instruction"),
+                        "actor", Map.of("type", "string", "description", "Operator/agent identity for audit"),
+                        "reason", Map.of("type", "string", "description", "Why this browser action is needed"),
+                        "confirmed", Map.of("type", "boolean", "description", "Required for sensitive submit/publish/delete/pay actions")
+                    ),
+                    "required", List.of("action")
+                )
+            ))
+            .handler(OrgNativeTools::browserBridgeStub)
+            .risk(com.nousresearch.hermes.approval.ToolRisk.MEDIUM)
+            .requiresApproval(false)
+            .build());
+
         // —— org_anomalies (第五刀：可观测性——异常事件) ——
         registry.register(new ToolEntry.Builder()
             .name("org_anomalies")
@@ -262,7 +291,7 @@ public class OrgNativeTools {
             .risk(com.nousresearch.hermes.approval.ToolRisk.NONE)
             .build());
 
-        logger.info("Registered 11 org-native tools: find_teammate, delegate_task, query_org_knowledge, escalate_to_human, team_post, team_read, team_status, orchestrate_intent, intent_status, org_traces, org_anomalies");
+        logger.info("Registered 12 org-native tools: find_teammate, delegate_task, query_org_knowledge, escalate_to_human, team_post, team_read, team_status, orchestrate_intent, intent_status, org_traces, org_anomalies, browser_bridge");
     }
 
     // Stub handlers — actual execution is in TenantAwareToolDispatcher
@@ -308,5 +337,9 @@ public class OrgNativeTools {
 
     private static String anomaliesStub(Map<String, Object> args) {
         return "[org] org_anomalies should be dispatched by TenantAwareToolDispatcher";
+    }
+
+    private static String browserBridgeStub(Map<String, Object> args) {
+        return "[org] browser_bridge should be dispatched by TenantAwareToolDispatcher";
     }
 }

@@ -113,6 +113,8 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.org.observe.AgentObservability observability;
     // 自进化引擎（租户级共享，供 Dashboard 与 Agent 共用）
     private volatile com.nousresearch.hermes.org.evolution.SelfEvolutionEngine evolutionEngine;
+    // 浏览器桥接执行层（Playwright / OpenClaw Relay / Kimi WebBridge / mock）
+    private volatile com.nousresearch.hermes.browser.BrowserBridge browserBridge;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -1002,6 +1004,22 @@ public class TenantContext {
             }
         }
         return observability;
+    }
+
+    /** 获取浏览器桥接执行层（默认 mock，后续可替换为 Kimi WebBridge/OpenClaw Relay/Playwright adapter） */
+    public com.nousresearch.hermes.browser.BrowserBridge getBrowserBridge() {
+        if (browserBridge == null) {
+            synchronized (this) {
+                if (browserBridge == null) {
+                    browserBridge = new com.nousresearch.hermes.browser.MockBrowserBridge();
+                }
+            }
+        }
+        return browserBridge;
+    }
+
+    public void setBrowserBridge(com.nousresearch.hermes.browser.BrowserBridge browserBridge) {
+        this.browserBridge = browserBridge;
     }
 
     /** 获取租户级自进化引擎（失败学习、成功模式、技能建议） */

@@ -30,6 +30,10 @@ import java.util.Optional;
  * FIXED: Tenant-aware tool dispatcher that routes all tool calls through tenant sandbox.
  */
 import com.nousresearch.hermes.approval.ApprovalMessageHandler;
+import com.nousresearch.hermes.browser.BrowserAction;
+import com.nousresearch.hermes.browser.BrowserBridgePolicy;
+import com.nousresearch.hermes.org.observe.AgentTrace;
+import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.approval.ApprovalResult;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.collaboration.Negotiator;
@@ -157,7 +161,7 @@ public class TenantAwareToolDispatcher {
                 case "execute_python", "execute_javascript", "execute_bash" -> dispatchCodeTool(toolName, safeArgs);
                 case "terminal", "execute_command" -> dispatchTerminalTool(toolName, safeArgs);
                 case "memory_read", "memory_write", "memory_search" -> dispatchMemoryTool(toolName, safeArgs);
-                case "find_teammate", "delegate_task", "query_org_knowledge", "escalate_to_human", "team_post", "team_read", "team_status", "orchestrate_intent", "intent_status", "org_traces", "org_anomalies" -> dispatchOrgTool(toolName, safeArgs);
+                case "find_teammate", "delegate_task", "query_org_knowledge", "escalate_to_human", "team_post", "team_read", "team_status", "orchestrate_intent", "intent_status", "org_traces", "org_anomalies", "browser_bridge" -> dispatchOrgTool(toolName, safeArgs);
                 default -> dispatchGenericTool(toolName, safeArgs);
             };
         } catch (Exception e) {
@@ -403,6 +407,7 @@ public class TenantAwareToolDispatcher {
             case "intent_status" -> intentStatus(args);
             case "org_traces" -> orgTraces(args);
             case "org_anomalies" -> orgAnomalies(args);
+            case "browser_bridge" -> browserBridge(args);
             default -> ToolRegistry.toolError("Unknown org tool: " + toolName);
         };
     }
@@ -810,6 +815,70 @@ public class TenantAwareToolDispatcher {
         } catch (Exception e) {
             return ToolRegistry.toolError("Failed to get anomalies: " + e.getMessage());
         }
+    }
+
+    /**
+     * Execute a provider-neutral browser action through the tenant BrowserBridge.
+     */
+    private String browserBridge(Map<String, Object> args) {
+        BrowserAction action = BrowserAction.from(args);
+        BrowserBridgePolicy.Decision decision = new BrowserBridgePolicy().check(action, args);
+        String actor = action.actor() != null ? action.actor() : "agent";
+        String reason = action.reason() != null ? action.reason() : "";
+
+        if (!decision.allowed()) {
+            tenantContext.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_ACTION_DENIED, java.util.Map.of(
+                "tenantId", tenantContext.getTenantId(),
+                "actor", actor,
+                "action", action.action(),
+                "target", action.target() != null ? action.target() : "",
+                "url", action.url() != null ? action.url() : "",
+                "reason", reason,
+                "denyReason", decision.reason(),
+                "requiresConfirmation", decision.requiresConfirmation(),
+                "timestamp", System.currentTimeMillis()
+            ));
+            return ToolRegistry.toolError(decision.reason(), java.util.Map.of(
+                "requires_confirmation", decision.requiresConfirmation()
+            ));
+        }
+
+        var obs = tenantContext.getObservability();
+        var trace = obs.startTrace("browser-bridge", tenantContext.getTenantId(), "browser_bridge:" + action.action());
+        long started = System.currentTimeMillis();
+        trace.meta("browser_action", action.action())
+            .meta("actor", actor)
+            .meta("reason", reason)
+            .step(AgentTrace.Step.toolCall("browser_bridge", args.toString(), java.util.List.of("manual browser", "provider-specific browser tool"), 0.86, 0, 0));
+
+        var result = tenantContext.getBrowserBridge().execute(action);
+        long duration = System.currentTimeMillis() - started;
+        trace.step(AgentTrace.Step.toolResult("browser_bridge", result.toMap().toString(), duration));
+        if (!result.ok()) {
+            trace.step(AgentTrace.Step.error(result.message()));
+        }
+        trace.end(result.ok() ? AgentTrace.Status.SUCCESS : AgentTrace.Status.FAILED);
+        obs.completeTrace(trace);
+
+        tenantContext.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_ACTION, java.util.Map.of(
+            "tenantId", tenantContext.getTenantId(),
+            "actor", actor,
+            "action", action.action(),
+            "sessionId", result.sessionId() != null ? result.sessionId() : (action.sessionId() != null ? action.sessionId() : ""),
+            "url", result.url() != null ? result.url() : (action.url() != null ? action.url() : ""),
+            "ok", result.ok(),
+            "reason", reason,
+            "traceId", trace.getTraceId(),
+            "durationMs", duration,
+            "timestamp", System.currentTimeMillis()
+        ));
+
+        java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>(result.toMap());
+        payload.put("trace_id", trace.getTraceId());
+        payload.put("provider", tenantContext.getBrowserBridge().getClass().getSimpleName());
+        return result.ok()
+            ? ToolRegistry.toolResult(payload)
+            : ToolRegistry.toolError(result.message(), payload);
     }
 
     private String dispatchGenericTool(String toolName, Map<String, Object> args) {
