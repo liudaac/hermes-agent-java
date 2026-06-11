@@ -14,6 +14,7 @@ import { fetchJSON } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/i18n";
 
 interface Overview {
   tenants: number;
@@ -27,6 +28,8 @@ interface Overview {
 }
 
 export default function OrgControlCenterPage() {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const [overview, setOverview] = useState<Overview | null>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
@@ -70,7 +73,7 @@ export default function OrgControlCenterPage() {
       setBrowserBridges(bs.browser_bridges || []);
       setBrowserApprovals(ba.approvals || []);
     } catch (err: any) {
-      setError(err?.message || "Failed to load Org Control Center");
+      setError(err?.message || oc.failedToLoad);
     } finally {
       setLoading(false);
     }
@@ -108,20 +111,20 @@ export default function OrgControlCenterPage() {
       await action();
       await load();
     } catch (err: any) {
-      setError(err?.message || "Control action failed");
+      setError(err?.message || oc.controlActionFailed);
     } finally {
       setBusyAction("");
     }
   }, [load]);
 
   const askReason = useCallback((defaultReason: string) => {
-    const reason = window.prompt("Reason for this control action", defaultReason);
+    const reason = window.prompt(oc.reasonPrompt, defaultReason);
     if (reason === null) return null;
     return reason.trim() || defaultReason;
   }, []);
 
   const replayRun = useCallback((run: any) => {
-    const reason = askReason("Operator replayed failed subtasks from Control Center");
+    const reason = askReason(oc.reasons.replayFailed);
     if (reason === null) return;
     const key = `${run.tenant_id}:${run.run_id}:replay`;
     return runControl(key, () => fetchJSON(`/api/org/control/intents/${encodeURIComponent(run.tenant_id)}/${encodeURIComponent(run.run_id)}/replay`, {
@@ -132,12 +135,12 @@ export default function OrgControlCenterPage() {
   }, [askReason, runControl]);
 
   const rerouteRun = useCallback((run: any, subtask: string) => {
-    const reason = askReason("Operator rerouted failed subtask from Control Center");
+    const reason = askReason(oc.reasons.rerouteFailed);
     if (reason === null) return;
     const targetKey = `${run.tenant_id}:${run.run_id}:${subtask}`;
     const target = rerouteTargets[targetKey];
     if (!target) {
-      setError("Choose a target agent before rerouting");
+      setError(oc.chooseTargetAgentError);
       return;
     }
     const actionKey = `${targetKey}:reroute`;
@@ -149,7 +152,7 @@ export default function OrgControlCenterPage() {
   }, [askReason, rerouteTargets, runControl]);
 
   const overrideAgent = useCallback((tenantId: string, agentId: string, mode: "normal" | "disabled" | "deprioritized") => {
-    const reason = askReason(`Operator set agent routing mode to ${mode}`);
+    const reason = askReason(oc.reasons.overrideAgent.replace("{mode}", mode));
     if (reason === null) return;
     const key = `${tenantId}:${agentId}:override:${mode}`;
     return runControl(key, () => fetchJSON(`/api/org/control/agents/${encodeURIComponent(tenantId)}/${encodeURIComponent(agentId)}/override`, {
@@ -165,7 +168,7 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/health`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", reason: "Operator checked browser bridge health" }),
+      body: JSON.stringify({ actor: "dashboard", reason: oc.reasons.health }),
     }));
   }, [runControl]);
 
@@ -175,7 +178,7 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/capabilities`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", reason: "Operator checked browser bridge capabilities" }),
+      body: JSON.stringify({ actor: "dashboard", reason: oc.reasons.capabilities }),
     }));
   }, [runControl]);
 
@@ -185,20 +188,20 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/contract`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", reason: "Operator ran browser bridge contract test" }),
+      body: JSON.stringify({ actor: "dashboard", reason: oc.reasons.contract }),
     }));
   }, [runControl]);
 
 
   const probeBrowserProvider = useCallback((bridge: any) => {
     const tenantId = bridge.tenant_id;
-    const endpoint = window.prompt("Endpoint URL to probe", bridge.endpoint || "http://127.0.0.1:17361");
+    const endpoint = window.prompt(oc.endpointUrlToProbe, bridge.endpoint || "http://127.0.0.1:17361");
     if (endpoint === null) return;
     const key = `${tenantId}:browser:probe`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/probe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", endpoint, timeout_ms: 3000, reason: "Operator probed browser bridge provider" }),
+      body: JSON.stringify({ actor: "dashboard", endpoint, timeout_ms: 3000, reason: oc.reasons.probe }),
     }));
   }, [runControl]);
 
@@ -208,13 +211,13 @@ export default function OrgControlCenterPage() {
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/probe/apply`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", reason: "Operator applied browser bridge probe recommendation" }),
+      body: JSON.stringify({ actor: "dashboard", reason: oc.reasons.applyProbe }),
     }));
   }, [runControl]);
 
 
   const resetBrowserBridge = useCallback((tenantId: string) => {
-    const reason = askReason("Operator reset browser bridge to mock");
+    const reason = askReason(oc.reasons.resetMock);
     if (reason === null) return;
     const key = `${tenantId}:browser:reset`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/reset`, {
@@ -225,7 +228,7 @@ export default function OrgControlCenterPage() {
   }, [askReason, runControl]);
 
   const clearBrowserConfig = useCallback((tenantId: string) => {
-    const reason = askReason("Operator cleared browser bridge config");
+    const reason = askReason(oc.reasons.clearConfig);
     if (reason === null) return;
     const key = `${tenantId}:browser:clear-config`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/clear-config`, {
@@ -238,13 +241,13 @@ export default function OrgControlCenterPage() {
   const exportBrowserConfig = useCallback((bridge: any) => {
     const config = bridge.config || {};
     const payload = JSON.stringify({ tenant_id: bridge.tenant_id, config }, null, 2);
-    window.prompt("Browser bridge config JSON", payload);
+    window.prompt(oc.configJson, payload);
   }, []);
 
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
-    const reason = askReason(`Operator set browser bridge provider to ${provider}`);
+    const reason = askReason(oc.reasons.setProvider.replace("{provider}", provider));
     if (reason === null) return;
-    const endpoint = provider === "mock" ? "" : window.prompt("Endpoint URL", provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511");
+    const endpoint = provider === "mock" ? "" : window.prompt(oc.endpointUrl, provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511");
     if (endpoint === null) return;
     const key = `${tenantId}:browser:provider:${provider}`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/provider`, {
@@ -256,7 +259,7 @@ export default function OrgControlCenterPage() {
 
 
   const decideBrowserApproval = useCallback((approval: any, decision: "approve" | "reject") => {
-    const reason = askReason(`Operator ${decision}d browser action ${approval.action}`);
+    const reason = askReason(oc.reasons.approvalDecision.replace("{decision}", decision).replace("{action}", approval.action));
     if (reason === null) return;
     const key = `${approval.tenant_id}:browser:approval:${approval.id}:${decision}`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/approvals/${encodeURIComponent(approval.tenant_id)}/${encodeURIComponent(approval.id)}/${decision}`, {
@@ -277,7 +280,7 @@ export default function OrgControlCenterPage() {
   if (error) {
     return (
       <div className="space-y-4 p-6">
-        <h1 className="text-2xl font-bold">Org Control Center</h1>
+        <h1 className="text-2xl font-bold">{oc.title}</h1>
         <Card>
           <CardContent className="p-6 text-sm text-red-400">{error}</CardContent>
         </Card>
@@ -289,36 +292,36 @@ export default function OrgControlCenterPage() {
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Org Control Center</h1>
+          <h1 className="text-2xl font-bold">{oc.title}</h1>
           <p className="text-sm text-muted-foreground">
-            Five-knife AI-native organization loop: teams, intent runs, traces, evolution, anomalies.
+            {oc.subtitle}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+          <RefreshCw className="mr-2 h-4 w-4" /> {t.common.refresh}
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
-        <Metric icon={Network} label="Tenants" value={overview?.tenants ?? 0} />
-        <Metric icon={Users} label="Teams" value={overview?.teams ?? 0} />
-        <Metric icon={Users} label="Members" value={overview?.members ?? 0} />
-        <Metric icon={Zap} label="Intent Runs" value={overview?.intent_runs ?? 0} />
-        <Metric icon={Activity} label="Traces" value={overview?.traces ?? 0} />
-        <Metric icon={Brain} label="Failures" value={overview?.evolution_failures ?? 0} />
-        <Metric icon={AlertTriangle} label="Anomalies" value={overview?.anomalies ?? 0} />
+        <Metric icon={Network} label={oc.metrics.tenants} value={overview?.tenants ?? 0} />
+        <Metric icon={Users} label={oc.metrics.teams} value={overview?.teams ?? 0} />
+        <Metric icon={Users} label={oc.metrics.members} value={overview?.members ?? 0} />
+        <Metric icon={Zap} label={oc.metrics.intentRuns} value={overview?.intent_runs ?? 0} />
+        <Metric icon={Activity} label={oc.metrics.traces} value={overview?.traces ?? 0} />
+        <Metric icon={Brain} label={oc.metrics.failures} value={overview?.evolution_failures ?? 0} />
+        <Metric icon={AlertTriangle} label={oc.metrics.anomalies} value={overview?.anomalies ?? 0} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4" /> Teams
+              <Users className="h-4 w-4" /> {oc.sections.teams}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {teams.length === 0 ? (
-              <Empty label="No teams loaded yet" />
+              <Empty label={oc.empty.teams} />
             ) : (
               <div className="space-y-3">
                 {teams.slice(0, 8).map((team) => (
@@ -337,12 +340,12 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Zap className="h-4 w-4" /> Intent Runs
+              <Zap className="h-4 w-4" /> {oc.sections.intentRuns}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {recentRuns.length === 0 ? (
-              <Empty label="No intent runs yet" />
+              <Empty label={oc.empty.intentRuns} />
             ) : (
               <div className="space-y-3">
                 {recentRuns.map((run) => (
@@ -367,12 +370,12 @@ export default function OrgControlCenterPage() {
         <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Activity className="h-4 w-4" /> Recent Traces
+              <Activity className="h-4 w-4" /> {oc.sections.recentTraces}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {recentTraces.length === 0 ? (
-              <Empty label="No traces captured yet" />
+              <Empty label={oc.empty.traces} />
             ) : (
               <div className="space-y-2">
                 {recentTraces.map((trace) => (
@@ -394,12 +397,12 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4" /> Anomalies
+              <AlertTriangle className="h-4 w-4" /> {oc.sections.anomalies}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {anomalies.length === 0 ? (
-              <Empty label="No anomalies" />
+              <Empty label={oc.empty.anomalies} />
             ) : (
               <div className="space-y-2">
                 {anomalies.slice(0, 8).map((a, idx) => (
@@ -412,7 +415,7 @@ export default function OrgControlCenterPage() {
                     {a.suggestion && (
                       <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-current/10 p-2">
                         <div className="text-xs text-muted-foreground">
-                          Suggested: <span className="font-medium text-foreground">{a.suggestion.label}</span>
+                          {oc.labels.suggested}: <span className="font-medium text-foreground">{a.suggestion.label}</span>
                         </div>
                         {a.suggestion.kind === "agent_override" ? (
                           <Button
@@ -424,7 +427,7 @@ export default function OrgControlCenterPage() {
                             Apply
                           </Button>
                         ) : (
-                          <Badge variant="outline">Monitor</Badge>
+                          <Badge variant="outline">{oc.buttons.monitor}</Badge>
                         )}
                       </div>
                     )}
@@ -440,12 +443,12 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <GitBranch className="h-4 w-4" /> Control Action Timeline
+              <GitBranch className="h-4 w-4" /> {oc.sections.controlTimeline}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {audit.length === 0 ? (
-              <Empty label="No control actions audited yet" />
+              <Empty label={oc.empty.audit} />
             ) : (
               <div className="space-y-2">
                 {audit.slice(0, 8).map((entry, idx) => (
@@ -459,12 +462,12 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Globe className="h-4 w-4" /> Browser Bridge Controls
+              <Globe className="h-4 w-4" /> {oc.sections.browserControls}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {browserBridges.length === 0 ? (
-              <Empty label="No browser bridge status" />
+              <Empty label={oc.empty.browserStatus} />
             ) : (
               <div className="space-y-2">
                 {browserBridges.slice(0, 8).map((bridge) => (
@@ -492,7 +495,7 @@ export default function OrgControlCenterPage() {
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <AlertTriangle className="h-4 w-4" /> Browser Approval Queue
+                <AlertTriangle className="h-4 w-4" /> {oc.sections.browserApprovals}
               </CardTitle>
               <select
                 className="rounded-md border bg-background px-2 py-1 text-xs"
@@ -507,7 +510,7 @@ export default function OrgControlCenterPage() {
           </CardHeader>
           <CardContent>
             {browserApprovals.length === 0 ? (
-              <Empty label="No browser approvals" />
+              <Empty label={oc.empty.browserApprovals} />
             ) : (
               <div className="space-y-2">
                 {browserApprovals.slice(0, 8).map((approval) => (
@@ -526,12 +529,12 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Globe className="h-4 w-4" /> Browser Timeline
+              <Globe className="h-4 w-4" /> {oc.sections.browserTimeline}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {browserTimeline.length === 0 ? (
-              <Empty label="No browser actions yet" />
+              <Empty label={oc.empty.browserActions} />
             ) : (
               <div className="space-y-2">
                 {browserTimeline.slice(0, 8).map((b, idx) => (
@@ -545,19 +548,19 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <Brain className="h-4 w-4" /> Evolution
+              <Brain className="h-4 w-4" /> {oc.sections.evolution}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {evolution.length === 0 ? (
-              <Empty label="No evolution data" />
+              <Empty label={oc.empty.evolution} />
             ) : (
               <div className="space-y-2">
                 {evolution.map((e) => (
                   <div key={e.tenant_id} className="rounded-lg border border-current/15 p-3">
                     <div className="font-medium">{e.tenant_id}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      failures: {e.total_failures ?? 0} · resolved: {e.resolved ?? 0} · rate: {String(e.resolution_rate ?? 0)}
+                      {oc.labels.failed}: {e.total_failures ?? 0} · {oc.labels.resolved}: {e.resolved ?? 0} · {oc.labels.rate}: {String(e.resolution_rate ?? 0)}
                     </div>
                   </div>
                 ))}
@@ -569,7 +572,7 @@ export default function OrgControlCenterPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <GitBranch className="h-4 w-4" /> Tenant Rows
+              <GitBranch className="h-4 w-4" /> {oc.sections.tenantRows}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -581,7 +584,7 @@ export default function OrgControlCenterPage() {
                     <div className="text-xs text-muted-foreground">{tenant.state}</div>
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
-                    {tenant.teams} teams · {tenant.traces} traces
+                    {tenant.teams} {oc.labels.teams} · {tenant.traces} {oc.labels.traces}
                   </div>
                 </div>
               ))}
@@ -628,15 +631,17 @@ function TeamCard({
   busyAction: string;
   onOverride: (tenantId: string, agentId: string, mode: "normal" | "disabled" | "deprioritized") => void;
 }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const roles = team.agent_roles || [];
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-medium">{team.name}</div>
-          <div className="text-xs text-muted-foreground">{team.mission || "No mission"}</div>
+          <div className="text-xs text-muted-foreground">{team.mission || oc.labels.noMission}</div>
         </div>
-        <Badge variant="outline">{team.size ?? 0} members</Badge>
+        <Badge variant="outline">{team.size ?? 0} {oc.labels.members}</Badge>
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
         {(team.members || []).slice(0, 6).map((m: string) => (
@@ -646,7 +651,7 @@ function TeamCard({
 
       {roles.length > 0 && (
         <div className="mt-3 space-y-2 rounded-md border border-current/10 p-2">
-          <div className="text-xs font-medium">Agent routing controls</div>
+          <div className="text-xs font-medium"> {oc.labels.agentRoutingControls}</div>
           {roles.slice(0, 6).map((role: any) => {
             const agent = role.agent;
             const metrics = role.metrics || {};
@@ -654,7 +659,7 @@ function TeamCard({
             const penalty = Number(metrics.manual_penalty || 0);
             const mode = disabled ? "disabled" : penalty > 0 ? "deprioritized" : "normal";
             const expiresAt = Number(metrics.manual_expires_at || 0);
-            const expiresLabel = expiresAt > 0 ? ` · expires ${new Date(expiresAt).toLocaleTimeString()}` : "";
+            const expiresLabel = expiresAt > 0 ? ` · ${oc.labels.expires} ${new Date(expiresAt).toLocaleTimeString()}` : "";
             const baseKey = `${team.tenant_id}:${agent}:override`;
             return (
               <div key={agent} className="rounded border border-current/10 p-2">
@@ -721,6 +726,8 @@ function IntentRunCard({
   onReroute: (run: any, subtask: string) => void;
   onTargetChange: (targetKey: string, value: string) => void;
 }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const failedEntries = Object.entries(run.failures || {});
   const replayKey = `${run.tenant_id}:${run.run_id}:replay`;
   const isControlRun = Boolean(run.parent_run_id);
@@ -733,18 +740,18 @@ function IntentRunCard({
           <div className="text-xs text-muted-foreground">{run.run_id} · {run.tenant_id}</div>
           <div className="mt-1 flex flex-wrap gap-1">
             <Badge variant="outline">{run.control_action || "execute"}</Badge>
-            {isControlRun && <Badge variant="secondary">parent {run.parent_run_id}</Badge>}
+            {isControlRun && <Badge variant="secondary">{oc.labels.parent} {run.parent_run_id}</Badge>}
           </div>
         </div>
         <StatusBadge status={run.status} />
       </div>
       <div className="mt-2 text-xs text-muted-foreground">
-        {run.succeeded ?? 0} succeeded / {run.failed ?? 0} failed / {run.subtasks_total ?? 0} subtasks
+        {oc.labels.succeededFailedSubtasks.replace("{succeeded}", String(run.succeeded ?? 0)).replace("{failed}", String(run.failed ?? 0)).replace("{total}", String(run.subtasks_total ?? 0))}
       </div>
 
       {(run.assignments || []).length > 0 && (
         <div className="mt-3 space-y-2 rounded-md border border-current/10 p-2">
-          <div className="text-xs font-medium">Scoring explanation</div>
+          <div className="text-xs font-medium"> {oc.labels.scoringExplanation}</div>
           {(run.assignments || []).slice(0, 4).map((assignment: any, idx: number) => (
             <ScoreBreakdown key={`${assignment.subtask}:${idx}`} assignment={assignment} />
           ))}
@@ -754,7 +761,7 @@ function IntentRunCard({
       {failedEntries.length > 0 && (
         <div className="mt-3 space-y-2 rounded-md border border-red-500/20 bg-red-500/5 p-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium text-red-300">Failed subtasks</div>
+            <div className="text-xs font-medium text-red-300"> {oc.labels.failedSubtasks}</div>
             <Button
               variant="outline"
               size="sm"
@@ -779,7 +786,7 @@ function IntentRunCard({
                     value={rerouteTargets[targetKey] || ""}
                     onChange={(e) => onTargetChange(targetKey, e.target.value)}
                   >
-                    <option value="">Choose target agent</option>
+                    <option value="">{oc.labels.chooseTargetAgent}</option>
                     {agents.map((agent) => (
                       <option key={agent} value={agent}>{agent}</option>
                     ))}
@@ -805,6 +812,8 @@ function IntentRunCard({
 
 
 function ScoreBreakdown({ assignment }: { assignment: any }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const components = assignment.score_components || {};
   const entries = Object.entries(components);
   return (
@@ -813,7 +822,7 @@ function ScoreBreakdown({ assignment }: { assignment: any }) {
         <div className="min-w-0">
           <div className="truncate text-xs font-medium">{assignment.subtask}</div>
           <div className="text-xs text-muted-foreground">
-            {assignment.agent} · {assignment.role || "no role"} · score {Number(assignment.score || 0).toFixed(2)}
+            {assignment.agent} · {assignment.role || oc.labels.noRole} · {oc.labels.score} {Number(assignment.score || 0).toFixed(2)}
           </div>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -877,6 +886,8 @@ function BrowserApprovalCard({
   busyAction: string;
   onDecide: (approval: any, decision: "approve" | "reject") => void;
 }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const pending = approval.status === "PENDING";
   const approveKey = `${approval.tenant_id}:browser:approval:${approval.id}:approve`;
   const rejectKey = `${approval.tenant_id}:browser:approval:${approval.id}:reject`;
@@ -893,11 +904,11 @@ function BrowserApprovalCard({
         <Badge variant="outline">{new Date(approval.created_at).toLocaleTimeString()}</Badge>
       </div>
       <div className="mt-2 text-xs text-muted-foreground">
-        {approval.url && <div className="truncate">URL: {approval.url}</div>}
-        {approval.target && <div>Target: {approval.target}</div>}
+        {approval.url && <div className="truncate">{oc.labels.url}: {approval.url}</div>}
+        {approval.target && <div>{oc.labels.target}: {approval.target}</div>}
         {approval.reason && <div className="italic">"{approval.reason}"</div>}
-        {approval.expires_at && <div>expires: {new Date(approval.expires_at).toLocaleTimeString()}</div>}
-        {approval.deny_reason && <div className="text-red-400">blocked: {approval.deny_reason}</div>}
+        {approval.expires_at && <div>{oc.labels.expiresLower}: {new Date(approval.expires_at).toLocaleTimeString()}</div>}
+        {approval.deny_reason && <div className="text-red-400">{oc.labels.blocked}: {approval.deny_reason}</div>}
       </div>
       {pending && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -939,6 +950,8 @@ function BrowserBridgeControlCard({
   onExportConfig: (bridge: any) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const tenantId = bridge.tenant_id;
   const provider = bridge.provider || bridge.class || "unknown";
   const healthKey = `${tenantId}:browser:health`;
@@ -957,12 +970,12 @@ function BrowserBridgeControlCard({
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{tenantId}</div>
           <div className="text-xs text-muted-foreground">
-            provider: {provider}{bridge.endpoint ? ` · ${bridge.endpoint}` : ""}
+            {oc.labels.provider}: {provider}{bridge.endpoint ? ` · ${bridge.endpoint}` : ""}
           </div>
-          {bridge.config && <div className="text-[10px] text-muted-foreground/70">persisted: {bridge.config.action_path} · {bridge.config.health_path}</div>}
+          {bridge.config && <div className="text-[10px] text-muted-foreground/70">{oc.labels.persisted}: {bridge.config.action_path} · {bridge.config.health_path}</div>}
           {bridge.config?.file_path && <div className="text-[10px] text-muted-foreground/50 truncate">{bridge.config.file_path}</div>}
         </div>
-        <Badge variant={bridge.healthy === false ? "destructive" : "default"}>{bridge.healthy === false ? "unhealthy" : "ready"}</Badge>
+        <Badge variant={bridge.healthy === false ? "destructive" : "default"}>{bridge.healthy === false ? oc.labels.unhealthy : oc.labels.ready}</Badge>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={busyAction === healthKey} onClick={() => onHealth(tenantId)}>
@@ -1004,21 +1017,21 @@ function BrowserBridgeControlCard({
       </div>
       {capabilities && Object.keys(capabilities).length > 0 && (
         <div className="mt-2 text-xs text-muted-foreground">
-          {capabilities.protocol && <div>protocol: {capabilities.protocol}</div>}
-          {capabilities.actions && <div className="truncate">actions: {String(capabilities.actions)}</div>}
-          {capabilities.features && <div className="truncate">features: {String(capabilities.features)}</div>}
+          {capabilities.protocol && <div>{oc.labels.protocol}: {capabilities.protocol}</div>}
+          {capabilities.actions && <div className="truncate">{oc.labels.actions}: {String(capabilities.actions)}</div>}
+          {capabilities.features && <div className="truncate">{oc.labels.features}: {String(capabilities.features)}</div>}
         </div>
       )}
       {probeReport && Object.keys(probeReport).length > 0 && (
         <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
           <div className="flex items-center justify-between gap-2">
-            <span>probe score: {probeReport.score ?? 0}</span>
-            <Badge variant={probeReport.ok ? "default" : "secondary"}>{probeReport.ok ? "compatible" : "partial"}</Badge>
+            <span>{oc.labels.probeScore}: {probeReport.score ?? 0}</span>
+            <Badge variant={probeReport.ok ? "default" : "secondary"}>{probeReport.ok ? oc.labels.compatible : oc.labels.partial}</Badge>
           </div>
           {probeReport.recommended_config && (
-            <div className="mt-1 truncate">recommended: {probeReport.recommended_config.provider} {probeReport.recommended_config.action_path}</div>
+            <div className="mt-1 truncate">{oc.labels.recommended}: {probeReport.recommended_config.provider} {probeReport.recommended_config.action_path}</div>
           )}
-          {Array.isArray(probeReport.candidates) && <div className="truncate">candidates: {probeReport.candidates.length}</div>}
+          {Array.isArray(probeReport.candidates) && <div className="truncate">{oc.labels.candidates}: {probeReport.candidates.length}</div>}
           {probeReport.recommended_config && (
             <Button className="mt-2" variant="secondary" size="sm" disabled={busyAction === applyProbeKey} onClick={() => onApplyProbe(tenantId)}>
               {busyAction === applyProbeKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
@@ -1030,8 +1043,8 @@ function BrowserBridgeControlCard({
       {contractReport && Object.keys(contractReport).length > 0 && (
         <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
           <div className="flex items-center justify-between gap-2">
-            <span>contract: {contractReport.ok ? "compatible" : "failed"}</span>
-            <Badge variant={contractReport.ok ? "default" : "destructive"}>{contractReport.ok ? "PASS" : "FAIL"}</Badge>
+            <span>{oc.labels.contract}: {contractReport.ok ? oc.labels.compatible : oc.labels.failed}</span>
+            <Badge variant={contractReport.ok ? "default" : "destructive"}>{contractReport.ok ? oc.labels.pass : oc.labels.fail}</Badge>
           </div>
           {contractReport.timestamp && <div>{new Date(contractReport.timestamp).toLocaleTimeString()}</div>}
           {Array.isArray(contractReport.checks) && (
@@ -1039,7 +1052,7 @@ function BrowserBridgeControlCard({
               {contractReport.checks.slice(0, 5).map((check: any) => (
                 <div key={check.name} className="flex justify-between gap-2">
                   <span className="truncate">{check.name}</span>
-                  <span className={check.ok ? "text-green-400" : "text-red-400"}>{check.ok ? "ok" : "fail"}</span>
+                  <span className={check.ok ? "text-green-400" : "text-red-400"}>{check.ok ? oc.labels.ok : oc.labels.fail}</span>
                 </div>
               ))}
             </div>
@@ -1051,6 +1064,8 @@ function BrowserBridgeControlCard({
 }
 
 function BrowserEntryCard({ entry }: { entry: any }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
   const badgeVariant = entry.denied ? "destructive" : entry.ok === false ? "secondary" : "default";
   const badgeLabel = entry.denied ? "DENIED" : "OK";
   return (
@@ -1068,11 +1083,11 @@ function BrowserEntryCard({ entry }: { entry: any }) {
         <Badge variant="outline">{new Date(entry.time).toLocaleTimeString()}</Badge>
       </div>
       <div className="mt-2 text-xs text-muted-foreground">
-        {entry.url && <div className="truncate">URL: {entry.url}</div>}
-        {entry.target && <div>Target: {entry.target}</div>}
+        {entry.url && <div className="truncate">{oc.labels.url}: {entry.url}</div>}
+        {entry.target && <div>{oc.labels.target}: {entry.target}</div>}
         {entry.reason && <div className="italic">"{entry.reason}"</div>}
-        {entry.deny_reason && <div className="text-red-400">blocked: {entry.deny_reason}</div>}
-        {entry.session_id && <div className="text-[10px] text-muted-foreground/60">session: {entry.session_id}  trace: {entry.trace_id}</div>}
+        {entry.deny_reason && <div className="text-red-400">{oc.labels.blocked}: {entry.deny_reason}</div>}
+        {entry.session_id && <div className="text-[10px] text-muted-foreground/60">{oc.labels.session}: {entry.session_id}  {oc.labels.trace}: {entry.trace_id}</div>}
       </div>
     </div>
   );

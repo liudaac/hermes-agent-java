@@ -536,4 +536,22 @@ export const en: Translations = {
     residencyRules: "Residency Rules",
     agentsWithRegions: "Agents w/ Regions",
   },
+
+  orgControl: {
+    title: "Org Control Center",
+    subtitle: "AI-native organization loop: teams, intent runs, traces, evolution, anomalies, and browser governance.",
+    failedToLoad: "Failed to load Org Control Center",
+    controlActionFailed: "Control action failed",
+    reasonPrompt: "Reason for this control action",
+    chooseTargetAgentError: "Choose a target agent before rerouting",
+    endpointUrl: "Endpoint URL",
+    endpointUrlToProbe: "Endpoint URL to probe",
+    configJson: "Browser bridge config JSON",
+    metrics: { tenants: "Tenants", teams: "Teams", members: "Members", intentRuns: "Intent Runs", traces: "Traces", failures: "Failures", anomalies: "Anomalies" },
+    sections: { teams: "Teams", intentRuns: "Intent Runs", recentTraces: "Recent Traces", anomalies: "Anomalies", controlTimeline: "Control Action Timeline", browserControls: "Browser Bridge Controls", browserApprovals: "Browser Approval Queue", browserTimeline: "Browser Timeline", evolution: "Evolution", tenantRows: "Tenant Rows" },
+    empty: { teams: "No teams loaded yet", intentRuns: "No intent runs yet", traces: "No traces captured yet", anomalies: "No anomalies", audit: "No control actions audited yet", browserStatus: "No browser bridge status", browserApprovals: "No browser approvals", browserActions: "No browser actions yet", evolution: "No evolution data" },
+    buttons: { replayFailed: "Replay failed", reroute: "Reroute", apply: "Apply", monitor: "Monitor", healthCheck: "Health check", capabilities: "Capabilities", contractTest: "Contract test", probe: "Probe", resetMock: "Reset mock", clearConfig: "Clear config", exportConfig: "Export config", applyRecommendation: "Apply recommendation", approveOnce: "Approve once", reject: "Reject", disable: "Disable", deprioritize: "Deprioritize", restore: "Restore" },
+    labels: { noMission: "No mission", members: "members", agentRoutingControls: "Agent routing controls", expires: "expires", parent: "parent", succeededFailedSubtasks: "{succeeded} succeeded / {failed} failed / {total} subtasks", scoringExplanation: "Scoring explanation", noRole: "no role", score: "score", failedSubtasks: "Failed subtasks", chooseTargetAgent: "Choose target agent", suggested: "Suggested", provider: "provider", persisted: "persisted", ready: "ready", unhealthy: "unhealthy", protocol: "protocol", actions: "actions", features: "features", probeScore: "probe score", compatible: "compatible", partial: "partial", recommended: "recommended", candidates: "candidates", contract: "contract", failed: "failed", pass: "PASS", fail: "FAIL", ok: "ok", url: "URL", target: "Target", blocked: "blocked", session: "session", trace: "trace", expiresLower: "expires", teams: "teams", traces: "traces", resolved: "resolved", rate: "rate" },
+    reasons: { replayFailed: "Operator replayed failed subtasks from Control Center", rerouteFailed: "Operator rerouted failed subtask from Control Center", overrideAgent: "Operator set agent routing mode to {mode}", health: "Operator checked browser bridge health", capabilities: "Operator checked browser bridge capabilities", contract: "Operator ran browser bridge contract test", probe: "Operator probed browser bridge provider", applyProbe: "Operator applied browser bridge probe recommendation", resetMock: "Operator reset browser bridge to mock", clearConfig: "Operator cleared browser bridge config", setProvider: "Operator set browser bridge provider to {provider}", approvalDecision: "Operator {decision}d browser action {action}" }
+  },
 };

@@ -536,4 +536,22 @@ export const zh: Translations = {
     residencyRules: "驻留规则",
     agentsWithRegions: "带区域代理",
   },
-}; 
+
+  orgControl: {
+    title: "组织控制中心",
+    subtitle: "AI 原生组织闭环：团队、意图运行、追踪、进化、异常与浏览器治理。",
+    failedToLoad: "加载组织控制中心失败",
+    controlActionFailed: "控制操作失败",
+    reasonPrompt: "本次控制操作原因",
+    chooseTargetAgentError: "请先选择要重路由的目标代理",
+    endpointUrl: "端点 URL",
+    endpointUrlToProbe: "要探测的端点 URL",
+    configJson: "浏览器桥配置 JSON",
+    metrics: { tenants: "租户", teams: "团队", members: "成员", intentRuns: "意图运行", traces: "追踪", failures: "失败", anomalies: "异常" },
+    sections: { teams: "团队", intentRuns: "意图运行", recentTraces: "最近追踪", anomalies: "异常", controlTimeline: "控制操作时间线", browserControls: "浏览器桥控制", browserApprovals: "浏览器审批队列", browserTimeline: "浏览器时间线", evolution: "进化", tenantRows: "租户行" },
+    empty: { teams: "尚未加载团队", intentRuns: "暂无意图运行", traces: "暂无追踪", anomalies: "暂无异常", audit: "暂无已审计的控制操作", browserStatus: "暂无浏览器桥状态", browserApprovals: "暂无浏览器审批", browserActions: "暂无浏览器动作", evolution: "暂无进化数据" },
+    buttons: { replayFailed: "重放失败项", reroute: "重路由", apply: "应用", monitor: "监控", healthCheck: "健康检查", capabilities: "能力", contractTest: "契约测试", probe: "探测", resetMock: "重置为 mock", clearConfig: "清除配置", exportConfig: "导出配置", applyRecommendation: "应用推荐", approveOnce: "批准一次", reject: "拒绝", disable: "禁用", deprioritize: "降权", restore: "恢复" },
+    labels: { noMission: "无任务", members: "成员", agentRoutingControls: "代理路由控制", expires: "过期", parent: "父级", succeededFailedSubtasks: "{succeeded} 成功 / {failed} 失败 / {total} 子任务", scoringExplanation: "评分说明", noRole: "无角色", score: "分数", failedSubtasks: "失败子任务", chooseTargetAgent: "选择目标代理", suggested: "建议", provider: "提供方", persisted: "已持久化", ready: "就绪", unhealthy: "异常", protocol: "协议", actions: "动作", features: "特性", probeScore: "探测分数", compatible: "兼容", partial: "部分兼容", recommended: "推荐", candidates: "候选", contract: "契约", failed: "失败", pass: "通过", fail: "失败", ok: "正常", url: "URL", target: "目标", blocked: "已阻止", session: "会话", trace: "追踪", expiresLower: "过期", teams: "团队", traces: "追踪", resolved: "已解决", rate: "比率" },
+    reasons: { replayFailed: "操作员从控制中心重放失败子任务", rerouteFailed: "操作员从控制中心重路由失败子任务", overrideAgent: "操作员将代理路由模式设置为 {mode}", health: "操作员检查浏览器桥健康状态", capabilities: "操作员检查浏览器桥能力", contract: "操作员运行浏览器桥契约测试", probe: "操作员探测浏览器桥提供方", applyProbe: "操作员应用浏览器桥探测推荐", resetMock: "操作员将浏览器桥重置为 mock", clearConfig: "操作员清除浏览器桥配置", setProvider: "操作员将浏览器桥提供方设置为 {provider}", approvalDecision: "操作员{decision}浏览器动作 {action}" }
+  },
+};
