@@ -64,6 +64,7 @@ export interface Translations {
       tools: string;
       tenants: string;
       org: string;
+      orgOverview: string;
       orgManage: string;
       orgControl: string;
       config: string;

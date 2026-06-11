@@ -3,7 +3,7 @@ import { Network, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { fetchJSON } from "@/lib/api";
+import { api, fetchJSON } from "@/lib/api";
 import { useI18n } from "@/i18n";
 
 type RoleRow = {
@@ -31,6 +31,7 @@ export default function OrgManagePage() {
   const om = t.orgManage;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [tenantOptions, setTenantOptions] = useState<string[]>(["default"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -45,18 +46,20 @@ export default function OrgManagePage() {
     allowed_tools: "",
   });
 
-  const tenants = useMemo(() => Array.from(new Set(["default", ...roles.map((r) => r.tenant_id)])).sort(), [roles]);
+  const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id)])).sort(), [tenantOptions, roles]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, tenantsResponse] = await Promise.all([
         fetchJSON<Summary>("/api/org/manage/summary"),
         fetchJSON<{ roles: RoleRow[] }>("/api/org/manage/roles"),
+        api.getTenants(),
       ]);
       setSummary(s);
       setRoles(r.roles || []);
+      setTenantOptions((tenantsResponse.tenants || []).map((tenant) => tenant.tenantId));
     } catch (err: any) {
       setError(err?.message || om.failedToLoad);
     } finally {

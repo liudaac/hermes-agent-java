@@ -83,7 +83,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
   { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
-  { path: "/org", labelKey: "org", label: "Org", icon: Layout },
+  { path: "/org", labelKey: "orgOverview", label: "Org Overview", icon: Layout },
   { path: "/org-manage", labelKey: "orgManage", label: "Org Manage", icon: Network },
   { path: "/org-control", labelKey: "orgControl", label: "Org Control", icon: Monitor },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
