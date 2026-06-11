@@ -2,7 +2,6 @@ package com.nousresearch.hermes.collaboration;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -77,6 +76,69 @@ public record DelegatedTaskExecutionResult(
             policy,
             completedAt
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    public static DelegatedTaskExecutionResult fromMap(Map<String, Object> m) {
+        if (m == null) return null;
+        DelegatedTaskResult taskResult = m.get("delegated_task_result") instanceof Map<?, ?> tr
+            ? DelegatedTaskResult.fromMap((Map<String, Object>) tr)
+            : null;
+        ParentVerificationResult verification = m.get("verification_result") instanceof Map<?, ?> vr
+            ? ParentVerificationResult.fromMap((Map<String, Object>) vr)
+            : null;
+        DelegatedTaskExecutionPolicy policy = null;
+        if (m.get("policy") instanceof Map<?, ?> pm) {
+            Map<String, Object> policyMap = (Map<String, Object>) pm;
+            ParentVerificationPolicy parentPolicy = policyMap.get("parent_verification_policy") instanceof Map<?, ?> pvp
+                ? ParentVerificationPolicy.fromMap((Map<String, Object>) pvp)
+                : ParentVerificationPolicy.strict();
+            policy = new DelegatedTaskExecutionPolicy(
+                booleanOrDefault(policyMap.get("allow_external_execution"), false),
+                booleanOrDefault(policyMap.get("allow_file_changes"), false),
+                booleanOrDefault(policyMap.get("allow_commands"), false),
+                java.time.Duration.ofMillis(longOrDefault(policyMap.get("timeout_ms"), 300_000L)),
+                listOfStrings(policyMap.get("allowed_changed_file_prefixes")),
+                parentPolicy,
+                policyMap.get("metadata") instanceof Map<?, ?> meta ? new LinkedHashMap<>((Map<String, Object>) meta) : Map.of()
+            );
+        }
+        Instant completed = Instant.now();
+        try { if (m.get("completed_at") != null) completed = Instant.parse(String.valueOf(m.get("completed_at"))); } catch (Exception ignored) {}
+        return new DelegatedTaskExecutionResult(
+            stringOrNull(m.get("executor_name")),
+            booleanOrDefault(m.get("executed"), false),
+            booleanOrDefault(m.get("submitted"), false),
+            stringOrNull(m.get("status")),
+            stringOrNull(m.get("message")),
+            taskResult,
+            verification,
+            policy,
+            completed
+        );
+    }
+
+    private static boolean booleanOrDefault(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        if (value instanceof Boolean b) return b;
+        String s = String.valueOf(value).trim();
+        return s.isBlank() ? fallback : ("true".equalsIgnoreCase(s) || "1".equals(s));
+    }
+
+    private static long longOrDefault(Object value, long fallback) {
+        try { return value instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(value)); }
+        catch (Exception ignored) { return fallback; }
+    }
+
+    private static java.util.List<String> listOfStrings(Object value) {
+        if (!(value instanceof java.util.List<?> list)) return java.util.List.of();
+        return list.stream().filter(x -> x != null && !String.valueOf(x).isBlank()).map(String::valueOf).toList();
+    }
+
+    private static String stringOrNull(Object value) {
+        if (value == null) return null;
+        String s = String.valueOf(value);
+        return "null".equals(s) ? null : s;
     }
 
     public Map<String, Object> toMap() {

@@ -97,8 +97,14 @@ public class DelegatedTaskStore {
                 execution.delegatedTaskResult(),
                 effectivePolicy.parentVerificationPolicy()
             );
+            DelegatedTaskExecutionResult submitted = execution.withSubmission(verification);
+            task.recordExecution(submitted);
             save();
-            return execution.withSubmission(verification);
+            return submitted;
+        }
+        if (execution != null) {
+            task.recordExecution(execution);
+            save();
         }
         return execution;
     }

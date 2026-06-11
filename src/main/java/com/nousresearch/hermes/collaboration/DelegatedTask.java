@@ -24,6 +24,7 @@ public class DelegatedTask {
     private volatile Status status;
     private volatile DelegatedTaskResult result;
     private volatile ParentVerificationResult verification;
+    private volatile DelegatedTaskExecutionResult lastExecution;
 
     public DelegatedTask(String taskId, DelegatedTaskEnvelope envelope, ParentVerificationPolicy verificationPolicy) {
         this(taskId, envelope, verificationPolicy, Instant.now(), Status.PENDING, null, null, List.of());
@@ -103,6 +104,8 @@ public class DelegatedTask {
     public Status status() { return status; }
     public DelegatedTaskResult result() { return result; }
     public ParentVerificationResult verification() { return verification; }
+    public DelegatedTaskExecutionResult lastExecution() { return lastExecution; }
+    public void recordExecution(DelegatedTaskExecutionResult execution) { this.lastExecution = execution; }
     public synchronized List<DelegatedTaskVerificationEntry> verificationHistory() { return List.copyOf(verificationHistory); }
 
     public Map<String, Object> toMap() {
@@ -116,6 +119,7 @@ public class DelegatedTask {
         m.put("verification", verification != null ? verification.toMap() : null);
         m.put("latest_verification", verification != null ? verification.toMap() : null);
         m.put("verification_history", verificationHistory().stream().map(DelegatedTaskVerificationEntry::toMap).toList());
+        m.put("last_execution", lastExecution != null ? lastExecution.toMap() : null);
         return m;
     }
 
@@ -138,7 +142,7 @@ public class DelegatedTask {
                 }
             }
         }
-        return new DelegatedTask(
+        DelegatedTask task = new DelegatedTask(
             String.valueOf(m.get("task_id")),
             envelope,
             ParentVerificationPolicy.fromMap((Map<String, Object>) m.get("verification_policy")),
@@ -148,6 +152,10 @@ public class DelegatedTask {
             verification,
             history
         );
+        if (m.get("last_execution") instanceof Map<?, ?> le) {
+            task.recordExecution(DelegatedTaskExecutionResult.fromMap((Map<String, Object>) le));
+        }
+        return task;
     }
 
     private static DelegatedTaskEnvelope envelopeFromMap(Map<String, Object> m) {

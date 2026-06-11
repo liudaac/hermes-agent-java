@@ -40,6 +40,7 @@ class OrgControlCenterDelegatedTasksTest {
         app.get("/api/org/control/delegated-tasks", handler::delegatedTasks);
         app.post("/api/org/control/delegated-tasks/{tenantId}/{taskId}/submit", handler::submitDelegatedTask);
         app.post("/api/org/control/delegated-tasks/{tenantId}/{taskId}/verify", handler::verifyDelegatedTask);
+        app.post("/api/org/control/delegated-tasks/{tenantId}/{taskId}/execute", handler::executeDelegatedTask);
 
         try {
             app.start("127.0.0.1", port);
@@ -53,6 +54,44 @@ class OrgControlCenterDelegatedTasksTest {
             assertEquals(200, list.statusCode());
             JSONArray rows = JSON.parseObject(list.body()).getJSONArray("delegated_tasks");
             assertTrue(rows.stream().map(o -> (JSONObject) o).anyMatch(row -> tenantId.equals(row.getString("tenant_id")) && task.taskId().equals(row.getString("task_id"))));
+
+
+            var noopTask = tenant.getDelegatedTaskStore().createPending(envelope());
+            String noopJson = """
+                {"actor":"dashboard","executor":"noop","require_tests":true,"require_all_tests_passed":true}
+                """;
+            HttpResponse<String> noop = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/delegated-tasks/" + tenantId + "/" + noopTask.taskId() + "/execute"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(noopJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, noop.statusCode());
+            JSONObject noopBody = JSON.parseObject(noop.body());
+            assertEquals("EXTERNAL_EXECUTOR_REQUIRED", noopBody.getJSONObject("execution").getString("status"));
+            assertFalse(noopBody.getJSONObject("execution").getBooleanValue("executed"));
+            assertFalse(noopBody.getJSONObject("execution").getBooleanValue("submitted"));
+            assertEquals("PENDING", noopBody.getJSONObject("task").getString("status"));
+
+            var mockTask = tenant.getDelegatedTaskStore().createPending(envelope());
+            String mockJson = """
+                {"actor":"dashboard","executor":"mock","require_tests":true,"require_all_tests_passed":true,"allowed_changed_file_prefixes":[]}
+                """;
+            HttpResponse<String> mock = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/delegated-tasks/" + tenantId + "/" + mockTask.taskId() + "/execute"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(mockJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, mock.statusCode());
+            JSONObject mockBody = JSON.parseObject(mock.body());
+            assertEquals("ACCEPTED", mockBody.getJSONObject("execution").getString("status"));
+            assertTrue(mockBody.getJSONObject("execution").getBooleanValue("executed"));
+            assertTrue(mockBody.getJSONObject("execution").getBooleanValue("submitted"));
+            assertEquals("ACCEPTED", mockBody.getJSONObject("task").getString("status"));
+            assertEquals("ACCEPTED", mockBody.getJSONObject("execution").getJSONObject("verification_result").getString("status"));
 
             String submitJson = """
                 {"actor":"dashboard","summary":"simulated result","changed_files":["src/main/java/App.java"],"tests_run":[{"name":"mvn test","passed":true}],"risks":["none"]}

@@ -7,6 +7,7 @@ import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeProviderProbe;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
+import com.nousresearch.hermes.collaboration.DelegatedTaskExecutionPolicy;
 import com.nousresearch.hermes.collaboration.DelegatedTaskResult;
 import com.nousresearch.hermes.collaboration.ParentVerificationPolicy;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
@@ -309,6 +310,39 @@ public class OrgControlCenterHandler {
         ));
     }
 
+
+    /** POST /api/org/control/delegated-tasks/{tenantId}/{taskId}/execute */
+    public void executeDelegatedTask(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String taskId = ctx.pathParam("taskId");
+        var task = tenant.getDelegatedTaskStore().get(taskId);
+        if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String executorName = stringOrDefault(body.get("executor"), stringOrDefault(body.get("executor_name"), "noop"));
+        DelegatedTaskExecutionPolicy policy = executionPolicyFromBody(body, task.verificationPolicy());
+        var execution = tenant.getDelegatedTaskStore().executePending(taskId, executorName, policy);
+        var updatedTask = tenant.getDelegatedTaskStore().get(taskId);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_EXECUTED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "taskId", taskId,
+            "executor", execution.executorName() != null ? execution.executorName() : executorName,
+            "executed", execution.executed(),
+            "submitted", execution.submitted(),
+            "status", execution.status() != null ? execution.status() : "",
+            "taskStatus", updatedTask != null ? updatedTask.status().name() : task.status().name(),
+            "message", execution.message() != null ? execution.message() : "",
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of(
+            "ok", true,
+            "tenant_id", tenant.getTenantId(),
+            "execution", execution.toMap(),
+            "task", updatedTask != null ? updatedTask.toMap() : task.toMap()
+        ));
+    }
+
     /** POST /api/org/control/delegated-tasks/{tenantId}/{taskId}/verify */
     public void verifyDelegatedTask(Context ctx) {
         TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
@@ -497,8 +531,10 @@ public class OrgControlCenterHandler {
         if (nested instanceof Map<?, ?> map) return (Map<String, Object>) map;
         Map<String, Object> policy = new LinkedHashMap<>();
         if (body.containsKey("require_tests")) policy.put("require_tests", body.get("require_tests"));
+        else if (body.containsKey("require_tests_reported")) policy.put("require_tests", body.get("require_tests_reported"));
         if (body.containsKey("require_all_tests_passed")) policy.put("require_all_tests_passed", body.get("require_all_tests_passed"));
         if (body.containsKey("allowed_changed_file_prefixes")) policy.put("allowed_changed_file_prefixes", body.get("allowed_changed_file_prefixes"));
+        else if (body.containsKey("allowed_paths")) policy.put("allowed_changed_file_prefixes", body.get("allowed_paths"));
         return policy;
     }
 
@@ -1013,6 +1049,44 @@ public class OrgControlCenterHandler {
         return "true".equalsIgnoreCase(parsed) || "1".equals(parsed) || "yes".equalsIgnoreCase(parsed);
     }
 
+
+
+    private static DelegatedTaskExecutionPolicy executionPolicyFromBody(Map<String, Object> body, ParentVerificationPolicy fallbackParentPolicy) {
+        Map<String, Object> policyBody = policyBody(body);
+        ParentVerificationPolicy parentPolicy = ParentVerificationPolicy.fromMap(policyBody.isEmpty() && fallbackParentPolicy != null ? fallbackParentPolicy.toMap() : policyBody);
+        boolean allowExternalExecution = booleanOrDefault(firstNonNull(body.get("allow_external_execution"), body.get("allowExternalExecution")), false);
+        boolean allowFileChanges = booleanOrDefault(firstNonNull(body.get("allow_file_changes"), body.get("allowFileChanges")), false);
+        boolean allowCommands = booleanOrDefault(firstNonNull(body.get("allow_commands"), body.get("allowCommands")), false);
+        long timeoutMs = parseLong(firstNonNull(body.get("timeout_ms"), body.get("timeoutMs")), 30_000L);
+        List<String> prefixes = listOfStrings(firstNonNull(body.get("allowed_changed_file_prefixes"), body.get("allowed_paths")));
+        if (prefixes.isEmpty()) prefixes = parentPolicy.allowedChangedFilePrefixes();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("source", "org-control");
+        if (body.get("metadata") instanceof Map<?, ?> rawMetadata) {
+            for (var entry : rawMetadata.entrySet()) metadata.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return new DelegatedTaskExecutionPolicy(
+            allowExternalExecution,
+            allowFileChanges,
+            allowCommands,
+            Duration.ofMillis(Math.max(1L, timeoutMs)),
+            prefixes,
+            parentPolicy,
+            metadata
+        );
+    }
+
+    private static Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
+    }
+
+    private static boolean booleanOrDefault(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        if (value instanceof Boolean b) return b;
+        String s = String.valueOf(value).trim();
+        if (s.isBlank()) return fallback;
+        return "true".equalsIgnoreCase(s) || "1".equals(s) || "yes".equalsIgnoreCase(s);
+    }
 
     private static BrowserApprovalRequest.Status parseApprovalStatus(String raw) {
         if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("ALL")) return null;

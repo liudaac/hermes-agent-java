@@ -310,6 +310,21 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+  const executeDelegatedTask = useCallback((task: any, executor: "noop" | "mock") => {
+    const key = `${task.tenant_id}:${task.task_id}:delegated:execute:${executor}`;
+    return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "dashboard",
+        executor,
+        require_tests: true,
+        require_all_tests_passed: true,
+        allowed_changed_file_prefixes: [],
+      }),
+    }));
+  }, [runControl]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -531,6 +546,7 @@ export default function OrgControlCenterPage() {
                     busyAction={busyAction}
                     onSubmit={submitDelegatedTask}
                     onVerify={verifyDelegatedTask}
+                    onExecute={executeDelegatedTask}
                   />
                 ))}
               </div>
@@ -684,16 +700,20 @@ function DelegatedTaskCard({
   busyAction,
   onSubmit,
   onVerify,
+  onExecute,
 }: {
   task: any;
   busyAction: string;
   onSubmit: (task: any, payload: { summary: string; changed_files: string[]; tests_run: any[]; risks: string[] }) => void;
   onVerify: (task: any, payload: { require_tests_reported: boolean; require_all_tests_passed: boolean; allowed_paths: string[] }) => void;
+  onExecute: (task: any, executor: "noop" | "mock") => void;
 }) {
   const { t } = useI18n();
   const oc = t.orgControl;
   const submitKey = `${task.tenant_id}:${task.task_id}:delegated:submit`;
   const verifyKey = `${task.tenant_id}:${task.task_id}:delegated:verify`;
+  const noopExecuteKey = `${task.tenant_id}:${task.task_id}:delegated:execute:noop`;
+  const mockExecuteKey = `${task.tenant_id}:${task.task_id}:delegated:execute:mock`;
   const envelope = task.envelope || {};
   const result = task.result || {};
   const verification = task.latest_verification || task.verification || {};
@@ -720,6 +740,13 @@ function DelegatedTaskCard({
       <div className="mt-2 text-xs text-muted-foreground">
         {(result.changed_files || []).length} {oc.delegated.files} · {(result.tests_run || []).length} {oc.delegated.tests}
       </div>
+      {task.last_execution && (
+        <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
+          <div className="font-medium text-foreground/80">{oc.delegated.lastExecution}: {task.last_execution.status}</div>
+          <div>{oc.delegated.executor}: {task.last_execution.executor_name || "noop"} · {oc.delegated.executed}: {task.last_execution.executed ? oc.labels.ok : oc.labels.fail} · {oc.delegated.submitted}: {task.last_execution.submitted ? oc.labels.ok : oc.labels.fail}</div>
+          {task.last_execution.message && <div className="line-clamp-2">{task.last_execution.message}</div>}
+        </div>
+      )}
       {verification.reasons && (
         <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{verification.reasons.join("; ")}</div>
       )}
@@ -746,6 +773,14 @@ function DelegatedTaskCard({
         <Button variant="secondary" size="sm" disabled={busyAction === submitKey} onClick={() => setSubmitOpen((open) => !open)}>
           {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {submitOpen ? oc.buttons.cancel : oc.buttons.submitResult}
+        </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === noopExecuteKey} onClick={() => onExecute(task, "noop")}>
+          {busyAction === noopExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.executeNoop}
+        </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === mockExecuteKey} onClick={() => onExecute(task, "mock")}>
+          {busyAction === mockExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.executeMock}
         </Button>
         <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => setVerifyOpen((open) => !open)}>
           {busyAction === verifyKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
