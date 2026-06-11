@@ -202,6 +202,16 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+
+  const applyBrowserProbe = useCallback((tenantId: string) => {
+    const key = `${tenantId}:browser:probe:apply`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/probe/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason: "Operator applied browser bridge probe recommendation" }),
+    }));
+  }, [runControl]);
+
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(`Operator set browser bridge provider to ${provider}`);
     if (reason === null) return;
@@ -437,6 +447,7 @@ export default function OrgControlCenterPage() {
                     onCapabilities={checkBrowserCapabilities}
                     onContract={runBrowserContract}
                     onProbe={probeBrowserProvider}
+                    onApplyProbe={applyBrowserProbe}
                     onProvider={setBrowserProvider}
                   />
                 ))}
@@ -878,6 +889,7 @@ function BrowserBridgeControlCard({
   onCapabilities,
   onContract,
   onProbe,
+  onApplyProbe,
   onProvider,
 }: {
   bridge: any;
@@ -886,6 +898,7 @@ function BrowserBridgeControlCard({
   onCapabilities: (tenantId: string) => void;
   onContract: (tenantId: string) => void;
   onProbe: (bridge: any) => void;
+  onApplyProbe: (tenantId: string) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
   const tenantId = bridge.tenant_id;
@@ -894,6 +907,7 @@ function BrowserBridgeControlCard({
   const capabilitiesKey = `${tenantId}:browser:capabilities`;
   const contractKey = `${tenantId}:browser:contract`;
   const probeKey = `${tenantId}:browser:probe`;
+  const applyProbeKey = `${tenantId}:browser:probe:apply`;
   const capabilities = bridge.capabilities || bridge.last_capabilities || {};
   const contractReport = bridge.contract_report || {};
   const probeReport = bridge.probe_report || {};
@@ -954,6 +968,12 @@ function BrowserBridgeControlCard({
             <div className="mt-1 truncate">recommended: {probeReport.recommended_config.provider} {probeReport.recommended_config.action_path}</div>
           )}
           {Array.isArray(probeReport.candidates) && <div className="truncate">candidates: {probeReport.candidates.length}</div>}
+          {probeReport.recommended_config && (
+            <Button className="mt-2" variant="secondary" size="sm" disabled={busyAction === applyProbeKey} onClick={() => onApplyProbe(tenantId)}>
+              {busyAction === applyProbeKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+              Apply recommendation
+            </Button>
+          )}
         </div>
       )}
       {contractReport && Object.keys(contractReport).length > 0 && (

@@ -168,3 +168,19 @@ Scoring weights:
 - missing-session error classification: 10
 
 Control Center exposes this as a **Probe** action on Browser Bridge Controls. Probe results include `recommended_config`, candidate list, score, and the best contract report.
+
+### Apply recommendation
+
+Control Center can apply the best probe result to a tenant via:
+
+```text
+POST /api/org/control/browser/{tenantId}/probe/apply
+```
+
+The endpoint reads the latest `probe_report.recommended_config`, configures the tenant `BrowserBridge`, runs `healthCheck()`, then runs a contract test. The response includes:
+
+- `applied_config`
+- `health`
+- `contract_report`
+
+This is intentionally tenant-scoped runtime configuration, not a global deployment config mutation.

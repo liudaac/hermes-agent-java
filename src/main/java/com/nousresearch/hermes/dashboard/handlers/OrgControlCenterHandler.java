@@ -596,7 +596,10 @@ public class OrgControlCenterHandler {
         String provider = stringOrDefault(body.get("provider"), "mock").toLowerCase(Locale.ROOT).trim();
         String endpoint = stringOrDefault(body.get("endpoint"), "");
         int timeoutMs = (int) parseLong(body.get("timeout_ms"), 10000L);
-        var config = new BrowserBridgeConfig(provider, endpoint, timeoutMs);
+        String actionPath = stringOrDefault(body.get("action_path"), stringOrDefault(body.get("actionPath"), "/actions"));
+        String healthPath = stringOrDefault(body.get("health_path"), stringOrDefault(body.get("healthPath"), "/health"));
+        String capabilitiesPath = stringOrDefault(body.get("capabilities_path"), stringOrDefault(body.get("capabilitiesPath"), "/capabilities"));
+        var config = new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath);
         var bridge = BrowserBridgeFactory.create(config);
         tenant.setBrowserBridge(bridge);
 
@@ -606,6 +609,9 @@ public class OrgControlCenterHandler {
         details.put("provider", provider);
         details.put("endpoint", endpoint);
         details.put("timeoutMs", timeoutMs);
+        details.put("actionPath", actionPath);
+        details.put("healthPath", healthPath);
+        details.put("capabilitiesPath", capabilitiesPath);
         details.put("reason", reason);
         details.put("timestamp", System.currentTimeMillis());
         tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_BRIDGE_CONFIGURED, details);
@@ -646,6 +652,68 @@ public class OrgControlCenterHandler {
             "timestamp", System.currentTimeMillis()
         ));
         ctx.json(payload);
+    }
+
+
+    /** POST /api/org/control/browser/{tenantId}/probe/apply */
+    @SuppressWarnings("unchecked")
+    public void applyBrowserProbeRecommendation(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator applied browser bridge probe recommendation");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CONFIGURE_BROWSER_BRIDGE, reason, Map.of());
+
+        Map<String, Object> probe = tenant.getBrowserProbeReport();
+        if (probe.isEmpty()) throw new IllegalArgumentException("No browser probe recommendation available");
+        Object rawConfig = probe.get("recommended_config");
+        if (!(rawConfig instanceof Map<?, ?> cfg)) throw new IllegalArgumentException("Probe report has no recommended_config");
+        Map<String, Object> recommended = (Map<String, Object>) cfg;
+        String endpoint = stringOrDefault(probe.get("endpoint"), "");
+        String provider = stringOrDefault(recommended.get("provider"), "mock");
+        String actionPath = stringOrDefault(recommended.get("action_path"), "/actions");
+        String healthPath = stringOrDefault(recommended.get("health_path"), "/health");
+        String capabilitiesPath = stringOrDefault(recommended.get("capabilities_path"), "/capabilities");
+        int timeoutMs = (int) parseLong(body.get("timeout_ms"), 10000L);
+
+        var bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath));
+        tenant.setBrowserBridge(bridge);
+        var health = bridge.healthCheck();
+        var contractReport = new BrowserBridgeContractVerifier(bridge, endpoint).verify();
+        Map<String, Object> contractMap = new LinkedHashMap<>(contractReport.toMap());
+        contractMap.put("tenant_id", tenant.getTenantId());
+        contractMap.put("timestamp", java.time.Instant.now().toString());
+        contractMap.put("applied_from_probe", true);
+        tenant.setBrowserContractReport(contractMap);
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("tenantId", tenant.getTenantId());
+        details.put("actor", actor);
+        details.put("provider", provider);
+        details.put("endpoint", endpoint);
+        details.put("actionPath", actionPath);
+        details.put("healthPath", healthPath);
+        details.put("capabilitiesPath", capabilitiesPath);
+        details.put("healthOk", health.ok());
+        details.put("contractOk", contractReport.ok());
+        details.put("reason", reason);
+        details.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_BRIDGE_CONFIGURED, details);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("ok", true);
+        response.put("tenant_id", tenant.getTenantId());
+        response.put("applied_config", Map.of(
+            "provider", provider,
+            "endpoint", endpoint,
+            "action_path", actionPath,
+            "health_path", healthPath,
+            "capabilities_path", capabilitiesPath,
+            "timeout_ms", timeoutMs
+        ));
+        response.put("health", health.toMap());
+        response.put("contract_report", contractMap);
+        ctx.json(response);
     }
 
     /** POST /api/org/control/browser/{tenantId}/contract */

@@ -7,6 +7,7 @@ import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.browser.contract.BrowserBridgeMockDaemon;
 import io.javalin.Javalin;
 import org.junit.jupiter.api.Test;
 
@@ -36,6 +37,7 @@ class OrgControlCenterBrowserControlTest {
         app.post("/api/org/control/browser/{tenantId}/provider", handler::configureBrowserProvider);
         app.post("/api/org/control/browser/{tenantId}/contract", handler::browserContractTest);
         app.post("/api/org/control/browser/{tenantId}/probe", handler::browserProviderProbe);
+        app.post("/api/org/control/browser/{tenantId}/probe/apply", handler::applyBrowserProbeRecommendation);
 
         try {
             app.start("127.0.0.1", port);
@@ -85,17 +87,33 @@ class OrgControlCenterBrowserControlTest {
             assertFalse(report.getJSONArray("checks").isEmpty());
             assertFalse(tenant.getBrowserContractReport().isEmpty());
 
-            HttpResponse<String> probe = client.send(
-                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/probe"))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"endpoint\":\"http://127.0.0.1:9\",\"reason\":\"test probe\"}"))
-                    .build(),
-                HttpResponse.BodyHandlers.ofString()
-            );
-            assertEquals(200, probe.statusCode());
-            JSONObject probeBody = JSON.parseObject(probe.body());
-            assertTrue(probeBody.containsKey("recommended_config"));
-            assertFalse(tenant.getBrowserProbeReport().isEmpty());
+            try (BrowserBridgeMockDaemon daemon = BrowserBridgeMockDaemon.start(0)) {
+                HttpResponse<String> probe = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/probe"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"endpoint\":\"" + daemon.endpoint() + "\",\"reason\":\"test probe\"}"))
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString()
+                );
+                assertEquals(200, probe.statusCode());
+                JSONObject probeBody = JSON.parseObject(probe.body());
+                assertTrue(probeBody.containsKey("recommended_config"));
+                assertTrue(probeBody.getIntValue("score") > 0);
+                assertFalse(tenant.getBrowserProbeReport().isEmpty());
+
+                HttpResponse<String> apply = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/probe/apply"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"reason\":\"apply probe\"}"))
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString()
+                );
+                assertEquals(200, apply.statusCode());
+                JSONObject applyBody = JSON.parseObject(apply.body());
+                assertTrue(applyBody.getBooleanValue("ok"));
+                assertTrue(applyBody.getJSONObject("contract_report").getBooleanValue("ok"));
+                assertFalse(tenant.getBrowserContractReport().isEmpty());
+            }
         } finally {
             app.stop();
             manager.shutdown();
