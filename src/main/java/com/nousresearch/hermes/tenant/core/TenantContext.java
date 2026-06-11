@@ -116,6 +116,7 @@ public class TenantContext {
     // 浏览器桥接执行层（Playwright / OpenClaw Relay / Kimi WebBridge / mock）
     private volatile com.nousresearch.hermes.browser.BrowserBridge browserBridge;
     private volatile com.nousresearch.hermes.browser.BrowserApprovalQueue browserApprovalQueue;
+    private volatile java.util.Map<String, Object> browserContractReport = java.util.Map.of();
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -1021,6 +1022,14 @@ public class TenantContext {
 
     public void setBrowserBridge(com.nousresearch.hermes.browser.BrowserBridge browserBridge) {
         this.browserBridge = browserBridge;
+    }
+
+    public java.util.Map<String, Object> getBrowserContractReport() {
+        return browserContractReport != null ? browserContractReport : java.util.Map.of();
+    }
+
+    public void setBrowserContractReport(java.util.Map<String, Object> browserContractReport) {
+        this.browserContractReport = browserContractReport != null ? browserContractReport : java.util.Map.of();
     }
 
     public com.nousresearch.hermes.browser.BrowserApprovalQueue getBrowserApprovalQueue() {

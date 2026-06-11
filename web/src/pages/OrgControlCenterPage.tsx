@@ -179,6 +179,16 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+
+  const runBrowserContract = useCallback((tenantId: string) => {
+    const key = `${tenantId}:browser:contract`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/contract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason: "Operator ran browser bridge contract test" }),
+    }));
+  }, [runControl]);
+
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(`Operator set browser bridge provider to ${provider}`);
     if (reason === null) return;
@@ -412,6 +422,7 @@ export default function OrgControlCenterPage() {
                     busyAction={busyAction}
                     onHealth={checkBrowserHealth}
                     onCapabilities={checkBrowserCapabilities}
+                    onContract={runBrowserContract}
                     onProvider={setBrowserProvider}
                   />
                 ))}
@@ -851,19 +862,23 @@ function BrowserBridgeControlCard({
   busyAction,
   onHealth,
   onCapabilities,
+  onContract,
   onProvider,
 }: {
   bridge: any;
   busyAction: string;
   onHealth: (tenantId: string) => void;
   onCapabilities: (tenantId: string) => void;
+  onContract: (tenantId: string) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
   const tenantId = bridge.tenant_id;
   const provider = bridge.provider || bridge.class || "unknown";
   const healthKey = `${tenantId}:browser:health`;
   const capabilitiesKey = `${tenantId}:browser:capabilities`;
+  const contractKey = `${tenantId}:browser:contract`;
   const capabilities = bridge.capabilities || bridge.last_capabilities || {};
+  const contractReport = bridge.contract_report || {};
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -884,6 +899,10 @@ function BrowserBridgeControlCard({
           {busyAction === capabilitiesKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Capabilities
         </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === contractKey} onClick={() => onContract(tenantId)}>
+          {busyAction === contractKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Contract test
+        </Button>
         {(["mock", "kimi", "openclaw"] as const).map((p) => (
           <Button
             key={p}
@@ -901,6 +920,25 @@ function BrowserBridgeControlCard({
           {capabilities.protocol && <div>protocol: {capabilities.protocol}</div>}
           {capabilities.actions && <div className="truncate">actions: {String(capabilities.actions)}</div>}
           {capabilities.features && <div className="truncate">features: {String(capabilities.features)}</div>}
+        </div>
+      )}
+      {contractReport && Object.keys(contractReport).length > 0 && (
+        <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <span>contract: {contractReport.ok ? "compatible" : "failed"}</span>
+            <Badge variant={contractReport.ok ? "default" : "destructive"}>{contractReport.ok ? "PASS" : "FAIL"}</Badge>
+          </div>
+          {contractReport.timestamp && <div>{new Date(contractReport.timestamp).toLocaleTimeString()}</div>}
+          {Array.isArray(contractReport.checks) && (
+            <div className="mt-1 space-y-1">
+              {contractReport.checks.slice(0, 5).map((check: any) => (
+                <div key={check.name} className="flex justify-between gap-2">
+                  <span className="truncate">{check.name}</span>
+                  <span className={check.ok ? "text-green-400" : "text-red-400"}>{check.ok ? "ok" : "fail"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

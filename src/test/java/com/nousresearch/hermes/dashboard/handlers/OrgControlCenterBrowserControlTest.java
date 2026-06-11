@@ -34,6 +34,7 @@ class OrgControlCenterBrowserControlTest {
         app.get("/api/org/control/browser/status", handler::browserStatus);
         app.post("/api/org/control/browser/{tenantId}/health", handler::browserHealth);
         app.post("/api/org/control/browser/{tenantId}/provider", handler::configureBrowserProvider);
+        app.post("/api/org/control/browser/{tenantId}/contract", handler::browserContractTest);
 
         try {
             app.start("127.0.0.1", port);
@@ -70,6 +71,18 @@ class OrgControlCenterBrowserControlTest {
             assertTrue(body.getBooleanValue("ok"));
             assertEquals("kimi-webbridge", body.getString("provider"));
             assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("kimi"));
+
+            HttpResponse<String> contract = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/contract"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"reason\":\"test contract\"}"))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, contract.statusCode());
+            JSONObject report = JSON.parseObject(contract.body());
+            assertFalse(report.getJSONArray("checks").isEmpty());
+            assertFalse(tenant.getBrowserContractReport().isEmpty());
         } finally {
             app.stop();
             manager.shutdown();

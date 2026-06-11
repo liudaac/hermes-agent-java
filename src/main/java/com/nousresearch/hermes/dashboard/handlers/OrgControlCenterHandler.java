@@ -3,6 +3,7 @@ package com.nousresearch.hermes.dashboard.handlers;
 import com.nousresearch.hermes.browser.BrowserBridgeConfig;
 import com.nousresearch.hermes.browser.BrowserBridgeFactory;
 import com.nousresearch.hermes.browser.BrowserApprovalRequest;
+import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
@@ -576,6 +577,7 @@ public class OrgControlCenterHandler {
         for (TenantContext t : tenants()) {
             Map<String, Object> row = new LinkedHashMap<>(t.getBrowserBridge().describe());
             row.put("tenant_id", t.getTenantId());
+            if (!t.getBrowserContractReport().isEmpty()) row.put("contract_report", t.getBrowserContractReport());
             rows.add(row);
         }
         ctx.json(Map.of("browser_bridges", rows, "count", rows.size()));
@@ -612,6 +614,35 @@ public class OrgControlCenterHandler {
         ctx.json(response);
     }
 
+
+
+    /** POST /api/org/control/browser/{tenantId}/contract */
+    public void browserContractTest(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator ran browser bridge contract test");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CHECK_BROWSER_BRIDGE, reason, Map.of());
+
+        long started = System.currentTimeMillis();
+        String endpoint = stringOrDefault(tenant.getBrowserBridge().describe().get("endpoint"), "");
+        var report = new BrowserBridgeContractVerifier(tenant.getBrowserBridge(), endpoint).verify();
+        Map<String, Object> reportMap = new LinkedHashMap<>(report.toMap());
+        reportMap.put("tenant_id", tenant.getTenantId());
+        reportMap.put("duration_ms", System.currentTimeMillis() - started);
+        reportMap.put("timestamp", java.time.Instant.now().toString());
+        tenant.setBrowserContractReport(reportMap);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_CONTRACT_TEST, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "ok", report.ok(),
+            "endpoint", endpoint,
+            "checks", report.checks().size(),
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(reportMap);
+    }
 
     /** POST /api/org/control/browser/{tenantId}/capabilities */
     public void browserCapabilities(Context ctx) {
