@@ -37,6 +37,7 @@ import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.approval.ApprovalResult;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.collaboration.Negotiator;
+import com.nousresearch.hermes.collaboration.ContextPressureDetector;
 
 public class TenantAwareToolDispatcher {
     private static final Logger logger = LoggerFactory.getLogger(TenantAwareToolDispatcher.class);
@@ -707,6 +708,8 @@ public class TenantAwareToolDispatcher {
         String intent = (String) args.get("intent");
         String mode = (String) args.getOrDefault("mode", "execute");
         String preferredTeamId = preferredTeamId(args);
+        boolean allowDelegation = booleanArg(args, "allow_delegation", "allowDelegation");
+        var contextSignals = ContextPressureDetector.extractSignals(args);
 
         if (intent == null || intent.isBlank()) {
             return ToolRegistry.toolError("Intent is required");
@@ -716,25 +719,44 @@ public class TenantAwareToolDispatcher {
             var orchestrator = tenantContext.getIntentOrchestrator();
 
             if ("plan".equalsIgnoreCase(mode)) {
-                var plan = orchestrator.plan(intent, preferredTeamId);
+                var plan = orchestrator.plan(intent, preferredTeamId, allowDelegation, contextSignals);
                 return ToolRegistry.toolResult(plan.toMap());
             } else {
-                var run = orchestrator.execute(intent, preferredTeamId);
-                return ToolRegistry.toolResult(java.util.Map.of(
-                    "run_id", run.runId,
-                    "intent", run.intent,
-                    "status", run.status.name(),
-                    "subtasks_total", run.assignments.size(),
-                    "preferred_team_id", run.preferredTeamId != null ? run.preferredTeamId : "",
-                    "preferred_team_name", run.preferredTeamName != null ? run.preferredTeamName : "",
-                    "hint", "Use intent_status(run_id) to check progress"
-                ));
+                var run = orchestrator.execute(intent, preferredTeamId, allowDelegation, contextSignals);
+                var out = new java.util.LinkedHashMap<String, Object>();
+                out.put("run_id", run.runId);
+                out.put("intent", run.intent);
+                out.put("status", run.status.name());
+                out.put("subtasks_total", run.assignments.size());
+                out.put("preferred_team_id", run.preferredTeamId != null ? run.preferredTeamId : "");
+                out.put("preferred_team_name", run.preferredTeamName != null ? run.preferredTeamName : "");
+                var runMap = run.toMap();
+                if (runMap.containsKey("delegation_recommended")) {
+                    out.put("delegation_recommended", runMap.get("delegation_recommended"));
+                    out.put("delegation_reason", runMap.get("delegation_reason"));
+                    out.put("context_pressure", runMap.get("context_pressure"));
+                    out.put("suggested_team_id", runMap.get("suggested_team_id"));
+                    out.put("suggested_profile", runMap.get("suggested_profile"));
+                }
+                if (runMap.containsKey("delegated_task_envelope")) out.put("delegated_task_envelope", runMap.get("delegated_task_envelope"));
+                out.put("hint", "Use intent_status(run_id) to check progress");
+                return ToolRegistry.toolResult(out);
             }
         } catch (Exception e) {
             return ToolRegistry.toolError("Orchestration failed: " + e.getMessage());
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static boolean booleanArg(Map<String, Object> args, String snake, String camel) {
+        Object value = args.getOrDefault(snake, args.get(camel));
+        if (value == null && args.get("metadata") instanceof Map<?, ?> m) {
+            value = m.get(snake);
+            if (value == null) value = m.get(camel);
+        }
+        if (value instanceof Boolean b) return b;
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
+    }
 
     @SuppressWarnings("unchecked")
     private static String preferredTeamId(Map<String, Object> args) {

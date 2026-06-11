@@ -58,12 +58,23 @@ public class IntentOrchestrator {
      * Decompose and plan an intent with an optional preferred team context.
      */
     public IntentPlan plan(String intent, String preferredTeamId) {
+        return plan(intent, preferredTeamId, false, List.of());
+    }
+
+    /**
+     * Decompose and plan an intent with optional context-aware delegation advice.
+     */
+    public IntentPlan plan(String intent, String preferredTeamId, boolean allowDelegation, List<?> contextSignals) {
         tenantContext.initCollaboration();
         var roles = tenantContext.listAgentRoles();
         String normalizedTeamId = normalizeTeamId(preferredTeamId);
+        boolean delegationInputsProvided = allowDelegation || (contextSignals != null && !contextSignals.isEmpty());
+        DelegationDecision delegation = delegationInputsProvided
+            ? DelegationPolicy.evaluate(allowDelegation, ContextPressureDetector.detect(contextSignals), tenantContext, normalizedTeamId)
+            : null;
 
         if (roles.isEmpty()) {
-            return new IntentPlan(intent, List.of(), "no teammates available", normalizedTeamId, teamName(normalizedTeamId));
+            return new IntentPlan(intent, List.of(), "no teammates available", normalizedTeamId, teamName(normalizedTeamId), delegation);
         }
 
         // Heuristic decomposition: split on conjunctions and key verbs
@@ -73,10 +84,10 @@ public class IntentOrchestrator {
         List<SubtaskAssignment> assignments = new ArrayList<>();
         for (String subtask : subtasks) {
             SubtaskAssignment best = findBestMatch(subtask, roles, tenantContext, normalizedTeamId);
-            assignments.add(best);
+            assignments.add(best.withDelegation(delegation));
         }
 
-        return new IntentPlan(intent, assignments, "planned", normalizedTeamId, teamName(normalizedTeamId));
+        return new IntentPlan(intent, assignments, "planned", normalizedTeamId, teamName(normalizedTeamId), delegation);
     }
 
     /**
@@ -90,7 +101,13 @@ public class IntentOrchestrator {
     /** Execute an intent using an optional preferred team context. */
     public IntentRun execute(String intent, String preferredTeamId) {
         IntentPlan plan = plan(intent, preferredTeamId);
-        return startRun(intent, plan.assignments(), null, "execute", plan.preferredTeamId(), plan.preferredTeamName());
+        return startRun(intent, plan.assignments(), null, "execute", plan.preferredTeamId(), plan.preferredTeamName(), plan.delegationDecision());
+    }
+
+    /** Execute an intent with optional context-aware delegation advice. */
+    public IntentRun execute(String intent, String preferredTeamId, boolean allowDelegation, List<?> contextSignals) {
+        IntentPlan plan = plan(intent, preferredTeamId, allowDelegation, contextSignals);
+        return startRun(intent, plan.assignments(), null, "execute", plan.preferredTeamId(), plan.preferredTeamName(), plan.delegationDecision());
     }
 
     /** Replay only the failed subtasks from a previous run. */
@@ -105,7 +122,7 @@ public class IntentOrchestrator {
         if (failedAssignments.isEmpty()) {
             throw new IllegalStateException("Intent run has no failed subtasks to replay: " + runId);
         }
-        return startRun(original.intent, failedAssignments, runId, "replay_failed", original.preferredTeamId, original.preferredTeamName);
+        return startRun(original.intent, failedAssignments, runId, "replay_failed", original.preferredTeamId, original.preferredTeamName, original.delegationDecision);
     }
 
     /** Reroute a subtask from a previous run to a specific target agent. */
@@ -141,16 +158,20 @@ public class IntentOrchestrator {
                 throw new IllegalStateException("No alternative teammate available for subtask: " + targetSubtask);
             }
         }
-        return startRun(original.intent, List.of(target), runId, "reroute", original.preferredTeamId, original.preferredTeamName);
+        return startRun(original.intent, List.of(target.withDelegation(original.delegationDecision)), runId, "reroute", original.preferredTeamId, original.preferredTeamName, original.delegationDecision);
     }
 
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
-        return startRun(intent, assignments, parentRunId, controlAction, null, null);
+        return startRun(intent, assignments, parentRunId, controlAction, null, null, null);
     }
 
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName) {
+        return startRun(intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName, null);
+    }
+
+    private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName, DelegationDecision delegationDecision) {
         String runId = "run_" + TASK_ID_GEN.incrementAndGet();
-        IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName);
+        IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName, delegationDecision);
         runs.put(runId, run);
         saveRuns();
 
@@ -209,6 +230,13 @@ public class IntentOrchestrator {
         if (a.teamId() != null) trace.meta("team_id", a.teamId());
         if (a.teamName() != null) trace.meta("team_name", a.teamName());
         if (run.preferredTeamId != null) trace.meta("preferred_team_id", run.preferredTeamId);
+        if (run.delegationDecision != null && run.delegationDecision.recommended()) {
+            trace.meta("delegation_recommended", true);
+            trace.meta("delegation_reason", run.delegationDecision.reason());
+            trace.meta("context_pressure", run.delegationDecision.contextPressure().toMap());
+            trace.meta("suggested_team_id", run.delegationDecision.suggestedTeamId());
+            trace.meta("suggested_profile", run.delegationDecision.suggestedProfile());
+        }
         if (reassignedFrom != null) trace.meta("reassigned_from", reassignedFrom);
 
         var bus = tenantContext.getTenantBus();
@@ -499,7 +527,8 @@ public class IntentOrchestrator {
         List<String> matchedSkills,
         Map<String, Double> scoreComponents,
         String teamId,
-        String teamName
+        String teamName,
+        DelegationDecision delegationDecision
     ) {
         public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills) {
             this(subtask, agentId, roleName, score, matchedSkills, Map.of());
@@ -507,6 +536,14 @@ public class IntentOrchestrator {
 
         public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills, Map<String, Double> scoreComponents) {
             this(subtask, agentId, roleName, score, matchedSkills, scoreComponents, null, null);
+        }
+
+        public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills, Map<String, Double> scoreComponents, String teamId, String teamName) {
+            this(subtask, agentId, roleName, score, matchedSkills, scoreComponents, teamId, teamName, null);
+        }
+
+        public SubtaskAssignment withDelegation(DelegationDecision decision) {
+            return new SubtaskAssignment(subtask, agentId, roleName, score, matchedSkills, scoreComponents, teamId, teamName, decision);
         }
 
         @SuppressWarnings("unchecked")
@@ -519,6 +556,7 @@ public class IntentOrchestrator {
             List<String> skills = ((List<Object>) m.getOrDefault("matched_skills", List.of())).stream().map(String::valueOf).toList();
             Object agent = m.get("agent");
             String agentId = agent == null || "(unassigned)".equals(String.valueOf(agent)) ? null : String.valueOf(agent);
+            DelegationDecision delegation = delegationFromMap(m);
             return new SubtaskAssignment(
                 String.valueOf(m.getOrDefault("subtask", "")),
                 agentId,
@@ -527,10 +565,47 @@ public class IntentOrchestrator {
                 skills,
                 components,
                 stringOrNull(m.get("team_id")),
-                stringOrNull(m.get("team_name"))
+                stringOrNull(m.get("team_name")),
+                delegation
             );
         }
 
+        @SuppressWarnings("unchecked")
+        public static DelegationDecision delegationFromMap(Map<String, Object> m) {
+            if (!Boolean.parseBoolean(String.valueOf(m.getOrDefault("delegation_recommended", "false")))
+                && !m.containsKey("context_pressure")) return null;
+            ContextPressureReport report = ContextPressureReport.none();
+            Object cp = m.get("context_pressure");
+            if (cp instanceof Map<?, ?> cm) {
+                Object rawSignals = cm.get("signals");
+                Object rawReasons = cm.get("reasons");
+                List<String> signals = rawSignals instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
+                List<String> reasons = rawReasons instanceof List<?> list ? list.stream().map(String::valueOf).toList() : List.of();
+                report = new ContextPressureReport(
+                    signals,
+                    doubleValue(cm.get("score")),
+                    cm.get("level") != null ? String.valueOf(cm.get("level")) : ContextPressureReport.levelFor(doubleValue(cm.get("score"))),
+                    Boolean.parseBoolean(String.valueOf(cm.get("compacted"))),
+                    Boolean.parseBoolean(String.valueOf(cm.get("critical_path"))),
+                    Boolean.parseBoolean(String.valueOf(cm.get("near_limit"))),
+                    Boolean.parseBoolean(String.valueOf(cm.get("long_running"))),
+                    Boolean.parseBoolean(String.valueOf(cm.get("high_complexity"))),
+                    reasons
+                );
+            }
+            return new DelegationDecision(
+                Boolean.parseBoolean(String.valueOf(m.getOrDefault("delegation_recommended", "false"))),
+                String.valueOf(m.getOrDefault("delegation_reason", "")),
+                report,
+                stringOrNull(m.get("suggested_team_id")),
+                stringOrNull(m.get("suggested_profile"))
+            );
+        }
+
+        private static double doubleValue(Object value) {
+            if (value == null) return 0.0;
+            return value instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(value));
+        }
 
         private static String stringOrNull(Object value) {
             if (value == null) return null;
@@ -548,7 +623,21 @@ public class IntentOrchestrator {
             m.put("score_components", scoreComponents != null ? scoreComponents : Map.of());
             m.put("team_id", teamId);
             m.put("team_name", teamName);
+            putDelegation(m, delegationDecision);
             return m;
+        }
+    }
+
+    private static void putDelegation(Map<String, Object> m, DelegationDecision decision) {
+        if (decision == null) return;
+        DelegationDecision d = decision;
+        m.put("delegation_recommended", d.recommended());
+        m.put("delegation_reason", d.reason());
+        m.put("context_pressure", d.contextPressure() != null ? d.contextPressure().toMap() : ContextPressureReport.none().toMap());
+        m.put("suggested_team_id", d.suggestedTeamId());
+        m.put("suggested_profile", d.suggestedProfile());
+        if (d.recommended()) {
+            m.put("delegated_task_envelope", DelegatedTaskEnvelope.of(String.valueOf(m.getOrDefault("subtask", "")), null, d).toMap());
         }
     }
 
@@ -557,10 +646,15 @@ public class IntentOrchestrator {
         List<SubtaskAssignment> assignments,
         String status,
         String preferredTeamId,
-        String preferredTeamName
+        String preferredTeamName,
+        DelegationDecision delegationDecision
     ) {
         public IntentPlan(String intent, List<SubtaskAssignment> assignments, String status) {
             this(intent, assignments, status, null, null);
+        }
+
+        public IntentPlan(String intent, List<SubtaskAssignment> assignments, String status, String preferredTeamId, String preferredTeamName) {
+            this(intent, assignments, status, preferredTeamId, preferredTeamName, null);
         }
 
         public Map<String, Object> toMap() {
@@ -569,6 +663,7 @@ public class IntentOrchestrator {
             m.put("status", status);
             m.put("preferred_team_id", preferredTeamId);
             m.put("preferred_team_name", preferredTeamName);
+            putDelegation(m, delegationDecision);
             m.put("subtasks", assignments.stream().map(SubtaskAssignment::toMap).toList());
             return m;
         }
@@ -651,6 +746,15 @@ public class IntentOrchestrator {
         }
     }
 
+    private static DelegationDecision firstDelegation(List<SubtaskAssignment> assignments) {
+        if (assignments == null) return null;
+        return assignments.stream()
+            .map(SubtaskAssignment::delegationDecision)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null);
+    }
+
     public static class IntentRun {
         public final String runId;
         public final String intent;
@@ -659,6 +763,7 @@ public class IntentOrchestrator {
         public final String controlAction;
         public final String preferredTeamId;
         public final String preferredTeamName;
+        public final DelegationDecision delegationDecision;
         public final Map<String, String> successes = new ConcurrentHashMap<>();
         public final Map<String, String> failures = new ConcurrentHashMap<>();
         public final List<IntentAttempt> attempts = Collections.synchronizedList(new ArrayList<>());
@@ -676,7 +781,11 @@ public class IntentOrchestrator {
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName) {
-            this(runId, intent, assignments, parentRunId, controlAction, System.currentTimeMillis(), 0L, RunStatus.PENDING, null, preferredTeamId, preferredTeamName);
+            this(runId, intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName, null);
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName, DelegationDecision delegationDecision) {
+            this(runId, intent, assignments, parentRunId, controlAction, System.currentTimeMillis(), 0L, RunStatus.PENDING, null, preferredTeamId, preferredTeamName, delegationDecision);
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask) {
@@ -684,6 +793,10 @@ public class IntentOrchestrator {
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask, String preferredTeamId, String preferredTeamName) {
+            this(runId, intent, assignments, parentRunId, controlAction, startedAt, completedAt, status, currentSubtask, preferredTeamId, preferredTeamName, null);
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask, String preferredTeamId, String preferredTeamName, DelegationDecision delegationDecision) {
             this.runId = runId;
             this.intent = intent;
             this.assignments = List.copyOf(assignments);
@@ -691,6 +804,7 @@ public class IntentOrchestrator {
             this.controlAction = controlAction != null ? controlAction : "execute";
             this.preferredTeamId = preferredTeamId;
             this.preferredTeamName = preferredTeamName;
+            this.delegationDecision = delegationDecision != null ? delegationDecision : firstDelegation(assignments);
             this.startedAt = startedAt > 0 ? startedAt : System.currentTimeMillis();
             this.completedAt = completedAt;
             this.status = status != null ? status : RunStatus.PENDING;
@@ -745,7 +859,8 @@ public class IntentOrchestrator {
                 interrupted ? RunStatus.INTERRUPTED : status,
                 currentSubtask,
                 stringOrNull(m.get("preferred_team_id")),
-                stringOrNull(m.get("preferred_team_name"))
+                stringOrNull(m.get("preferred_team_name")),
+                SubtaskAssignment.delegationFromMap(m)
             );
             Object successes = m.get("successes");
             if (successes instanceof Map<?, ?> sm) sm.forEach((k, v) -> run.successes.put(String.valueOf(k), String.valueOf(v)));
@@ -782,6 +897,10 @@ public class IntentOrchestrator {
             m.put("control_action", controlAction);
             m.put("preferred_team_id", preferredTeamId);
             m.put("preferred_team_name", preferredTeamName);
+            putDelegation(m, delegationDecision);
+            if (delegationDecision != null && delegationDecision.recommended()) {
+                m.put("delegated_task_envelope", DelegatedTaskEnvelope.of(intent, runId, delegationDecision).toMap());
+            }
             m.put("status", status.name());
             m.put("current_subtask", currentSubtask);
             m.put("subtasks_total", assignments.size());

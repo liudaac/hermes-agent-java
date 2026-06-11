@@ -194,7 +194,9 @@ public class OrgNativeTools {
                         "intent", Map.of("type", "string", "description", "The high-level task/intent. Can be a single goal or a multi-step plan (e.g. 'review code and run tests, then deploy')"),
                         "mode", Map.of("type", "string", "enum", List.of("plan", "execute"), "description", "plan = show who would do what without executing; execute = run the plan (default: execute)"),
                         "preferred_team_id", Map.of("type", "string", "description", "Optional team ID to prefer when matching equally capable agents"),
-                        "team_id", Map.of("type", "string", "description", "Alias for preferred_team_id")
+                        "team_id", Map.of("type", "string", "description", "Alias for preferred_team_id"),
+                        "allow_delegation", Map.of("type", "boolean", "description", "When true, return advisory delegation recommendations if context pressure signals show main-agent risk"),
+                        "context_signals", Map.of("type", "array", "items", Map.of("type", "string"), "description", "Context pressure signals such as compacted, critical_path, near_limit, long_running, high_complexity")
                     ),
                     "required", List.of("intent")
                 )
