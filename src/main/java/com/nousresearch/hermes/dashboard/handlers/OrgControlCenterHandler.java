@@ -1,8 +1,9 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.browser.BrowserBridgeConfig;
 import com.nousresearch.hermes.browser.BrowserBridgeFactory;
+import com.nousresearch.hermes.browser.BrowserApprovalRequest;
+import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
 import io.javalin.http.ForbiddenResponse;
@@ -461,6 +462,108 @@ public class OrgControlCenterHandler {
         );
     }
 
+
+
+    /** GET /api/org/control/browser/approvals?n=50 */
+    public void browserApprovals(Context ctx) {
+        int n = parseInt(ctx.queryParam("n"), 50);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext t : tenants()) {
+            for (var request : t.getBrowserApprovalQueue().list(n)) {
+                rows.add(request.toMap());
+            }
+        }
+        rows.sort((a, b) -> ((String)b.get("created_at")).compareTo((String)a.get("created_at")));
+        if (rows.size() > n) rows = rows.subList(0, n);
+        ctx.json(Map.of("approvals", rows, "count", rows.size()));
+    }
+
+    /** POST /api/org/control/browser/approvals/{tenantId}/{approvalId}/reject */
+    public void rejectBrowserApproval(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator rejected browser approval");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.REJECT_BROWSER_ACTION, reason, Map.of());
+
+        var updated = tenant.getBrowserApprovalQueue().update(ctx.pathParam("approvalId"), BrowserApprovalRequest.Status.REJECTED, actor, reason);
+        if (updated == null) throw new IllegalArgumentException("Unknown browser approval: " + ctx.pathParam("approvalId"));
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_APPROVAL_REJECTED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "approvalId", updated.id(),
+            "action", updated.action().action(),
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of("ok", true, "approval", updated.toMap()));
+    }
+
+    /** POST /api/org/control/browser/approvals/{tenantId}/{approvalId}/approve */
+    public void approveBrowserApproval(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator approved browser action once");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.APPROVE_BROWSER_ACTION, reason, Map.of());
+
+        var request = tenant.getBrowserApprovalQueue().get(ctx.pathParam("approvalId"));
+        if (request == null) throw new IllegalArgumentException("Unknown browser approval: " + ctx.pathParam("approvalId"));
+        if (request.status() != BrowserApprovalRequest.Status.PENDING) {
+            throw new IllegalArgumentException("Browser approval is not pending: " + request.status());
+        }
+        tenant.getBrowserApprovalQueue().update(request.id(), BrowserApprovalRequest.Status.APPROVED, actor, reason);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_APPROVAL_APPROVED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "approvalId", request.id(),
+            "action", request.action().action(),
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+
+        Map<String, Object> execution = executeApprovedBrowserAction(tenant, request, actor, reason);
+        ctx.json(Map.of("ok", true, "approval_id", request.id(), "execution", execution));
+    }
+
+    private Map<String, Object> executeApprovedBrowserAction(TenantContext tenant, BrowserApprovalRequest request, String actor, String reason) {
+        var action = request.action();
+        var obs = tenant.getObservability();
+        var trace = obs.startTrace("browser-bridge", tenant.getTenantId(), "browser_bridge:approved:" + action.action());
+        long started = System.currentTimeMillis();
+        trace.meta("browser_action", action.action())
+            .meta("actor", actor)
+            .meta("approval_id", request.id())
+            .meta("reason", reason)
+            .step(AgentTrace.Step.toolCall("browser_bridge", request.rawArgs().toString(), java.util.List.of("approved browser action"), 0.96, 0, 0));
+
+        var result = tenant.getBrowserBridge().execute(action);
+        long duration = System.currentTimeMillis() - started;
+        trace.step(AgentTrace.Step.toolResult("browser_bridge", result.toMap().toString(), duration));
+        if (!result.ok()) trace.step(AgentTrace.Step.error(result.message()));
+        trace.end(result.ok() ? AgentTrace.Status.SUCCESS : AgentTrace.Status.FAILED);
+        obs.completeTrace(trace);
+
+        tenant.getBrowserApprovalQueue().update(request.id(), result.ok() ? BrowserApprovalRequest.Status.EXECUTED : BrowserApprovalRequest.Status.FAILED, actor, reason);
+        Map<String, Object> actionAudit = new LinkedHashMap<>();
+        actionAudit.put("tenantId", tenant.getTenantId());
+        actionAudit.put("actor", actor);
+        actionAudit.put("action", action.action());
+        actionAudit.put("sessionId", result.sessionId() != null ? result.sessionId() : (action.sessionId() != null ? action.sessionId() : ""));
+        actionAudit.put("url", result.url() != null ? result.url() : (action.url() != null ? action.url() : ""));
+        actionAudit.put("ok", result.ok());
+        actionAudit.put("reason", reason);
+        actionAudit.put("approvalId", request.id());
+        actionAudit.put("traceId", trace.getTraceId());
+        actionAudit.put("durationMs", duration);
+        actionAudit.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_ACTION, actionAudit);
+
+        Map<String, Object> payload = new LinkedHashMap<>(result.toMap());
+        payload.put("trace_id", trace.getTraceId());
+        payload.put("approval_id", request.id());
+        return payload;
+    }
 
     /** GET /api/org/control/browser/status */
     public void browserStatus(Context ctx) {

@@ -827,6 +827,9 @@ public class TenantAwareToolDispatcher {
         String reason = action.reason() != null ? action.reason() : "";
 
         if (!decision.allowed()) {
+            var approval = decision.requiresConfirmation()
+                ? tenantContext.getBrowserApprovalQueue().create(action, args, decision.reason())
+                : null;
             tenantContext.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_ACTION_DENIED, java.util.Map.of(
                 "tenantId", tenantContext.getTenantId(),
                 "actor", actor,
@@ -836,11 +839,29 @@ public class TenantAwareToolDispatcher {
                 "reason", reason,
                 "denyReason", decision.reason(),
                 "requiresConfirmation", decision.requiresConfirmation(),
+                "approvalId", approval != null ? approval.id() : "",
                 "timestamp", System.currentTimeMillis()
             ));
-            return ToolRegistry.toolError(decision.reason(), java.util.Map.of(
-                "requires_confirmation", decision.requiresConfirmation()
-            ));
+            if (approval != null) {
+                tenantContext.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_APPROVAL_REQUESTED, java.util.Map.of(
+                    "tenantId", tenantContext.getTenantId(),
+                    "actor", actor,
+                    "approvalId", approval.id(),
+                    "action", action.action(),
+                    "url", action.url() != null ? action.url() : "",
+                    "target", action.target() != null ? action.target() : "",
+                    "reason", reason,
+                    "denyReason", decision.reason(),
+                    "timestamp", System.currentTimeMillis()
+                ));
+            }
+            java.util.Map<String, Object> errorPayload = new java.util.LinkedHashMap<>();
+            errorPayload.put("requires_confirmation", decision.requiresConfirmation());
+            if (approval != null) {
+                errorPayload.put("approval_id", approval.id());
+                errorPayload.put("approval_status", approval.status().name());
+            }
+            return ToolRegistry.toolError(decision.reason(), errorPayload);
         }
 
         var obs = tenantContext.getObservability();

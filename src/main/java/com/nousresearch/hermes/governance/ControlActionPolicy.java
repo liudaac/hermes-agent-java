@@ -5,7 +5,7 @@ import java.util.Set;
 
 /** Lightweight policy gate for high-impact Org Control Center actions. */
 public final class ControlActionPolicy {
-    public enum Action { REPLAY_INTENT, REROUTE_INTENT, OVERRIDE_AGENT, CONFIGURE_BROWSER_BRIDGE, CHECK_BROWSER_BRIDGE }
+    public enum Action { REPLAY_INTENT, REROUTE_INTENT, OVERRIDE_AGENT, CONFIGURE_BROWSER_BRIDGE, CHECK_BROWSER_BRIDGE, APPROVE_BROWSER_ACTION, REJECT_BROWSER_ACTION }
 
     private static final Set<String> FULL_ACCESS = Set.of("dashboard", "operator", "admin", "system");
     private static final Set<String> READ_ONLY = Set.of("viewer", "readonly", "read-only", "guest");

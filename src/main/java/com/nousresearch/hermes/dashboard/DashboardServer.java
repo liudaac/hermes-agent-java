@@ -419,6 +419,9 @@ public class DashboardServer {
         app.get("/api/org/control/browser/status", orgControlCenterHandler::browserStatus);
         app.post("/api/org/control/browser/{tenantId}/provider", orgControlCenterHandler::configureBrowserProvider);
         app.post("/api/org/control/browser/{tenantId}/health", orgControlCenterHandler::browserHealth);
+        app.get("/api/org/control/browser/approvals", orgControlCenterHandler::browserApprovals);
+        app.post("/api/org/control/browser/approvals/{tenantId}/{approvalId}/approve", orgControlCenterHandler::approveBrowserApproval);
+        app.post("/api/org/control/browser/approvals/{tenantId}/{approvalId}/reject", orgControlCenterHandler::rejectBrowserApproval);
 
         // Dashboard themes API
         app.get("/api/dashboard/themes", ctx -> {

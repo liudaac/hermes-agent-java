@@ -36,6 +36,7 @@ export default function OrgControlCenterPage() {
   const [audit, setAudit] = useState<any[]>([]);
   const [browserTimeline, setBrowserTimeline] = useState<any[]>([]);
   const [browserBridges, setBrowserBridges] = useState<any[]>([]);
+  const [browserApprovals, setBrowserApprovals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -45,7 +46,7 @@ export default function OrgControlCenterPage() {
     setLoading(true);
     setError("");
     try {
-      const [o, t, i, tr, e, a, au, b, bs] = await Promise.all([
+      const [o, t, i, tr, e, a, au, b, bs, ba] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
         fetchJSON<any>("/api/org/control/intents?limit=50&offset=0"),
@@ -55,6 +56,7 @@ export default function OrgControlCenterPage() {
         fetchJSON<any>("/api/org/control/audit?n=30"),
         fetchJSON<any>("/api/org/control/browser?n=30"),
         fetchJSON<any>("/api/org/control/browser/status"),
+        fetchJSON<any>("/api/org/control/browser/approvals?n=30"),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -65,6 +67,7 @@ export default function OrgControlCenterPage() {
       setAudit(au.audit || []);
       setBrowserTimeline(b.browser_timeline || []);
       setBrowserBridges(bs.browser_bridges || []);
+      setBrowserApprovals(ba.approvals || []);
     } catch (err: any) {
       setError(err?.message || "Failed to load Org Control Center");
     } finally {
@@ -175,6 +178,18 @@ export default function OrgControlCenterPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ actor: "dashboard", provider, endpoint, timeout_ms: 10000, reason }),
+    }));
+  }, [askReason, runControl]);
+
+
+  const decideBrowserApproval = useCallback((approval: any, decision: "approve" | "reject") => {
+    const reason = askReason(`Operator ${decision}d browser action ${approval.action}`);
+    if (reason === null) return;
+    const key = `${approval.tenant_id}:browser:approval:${approval.id}:${decision}`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/approvals/${encodeURIComponent(approval.tenant_id)}/${encodeURIComponent(approval.id)}/${decision}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason }),
     }));
   }, [askReason, runControl]);
 
@@ -386,6 +401,30 @@ export default function OrgControlCenterPage() {
                     busyAction={busyAction}
                     onHealth={checkBrowserHealth}
                     onProvider={setBrowserProvider}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4" /> Browser Approval Queue
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {browserApprovals.length === 0 ? (
+              <Empty label="No browser approvals" />
+            ) : (
+              <div className="space-y-2">
+                {browserApprovals.slice(0, 8).map((approval) => (
+                  <BrowserApprovalCard
+                    key={approval.id}
+                    approval={approval}
+                    busyAction={busyAction}
+                    onDecide={decideBrowserApproval}
                   />
                 ))}
               </div>
@@ -736,6 +775,51 @@ function StatusBadge({ status }: { status?: string }) {
   const s = status || "UNKNOWN";
   const variant = s === "SUCCESS" || s === "COMPLETED" ? "default" : s === "FAILED" || s === "INTERRUPTED" ? "destructive" : "outline";
   return <Badge variant={variant as any}>{s}</Badge>;
+}
+
+function BrowserApprovalCard({
+  approval,
+  busyAction,
+  onDecide,
+}: {
+  approval: any;
+  busyAction: string;
+  onDecide: (approval: any, decision: "approve" | "reject") => void;
+}) {
+  const pending = approval.status === "PENDING";
+  const approveKey = `${approval.tenant_id}:browser:approval:${approval.id}:approve`;
+  const rejectKey = `${approval.tenant_id}:browser:approval:${approval.id}:reject`;
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Badge variant={pending ? "destructive" : "outline"}>{approval.status}</Badge>
+            <span className="truncate text-sm font-medium">{approval.action}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">{approval.tenant_id} · {approval.actor} · {approval.id}</div>
+        </div>
+        <Badge variant="outline">{new Date(approval.created_at).toLocaleTimeString()}</Badge>
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        {approval.url && <div className="truncate">URL: {approval.url}</div>}
+        {approval.target && <div>Target: {approval.target}</div>}
+        {approval.reason && <div className="italic">"{approval.reason}"</div>}
+        {approval.deny_reason && <div className="text-red-400">blocked: {approval.deny_reason}</div>}
+      </div>
+      {pending && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="secondary" size="sm" disabled={busyAction === approveKey} onClick={() => onDecide(approval, "approve")}>
+            {busyAction === approveKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+            Approve once
+          </Button>
+          <Button variant="outline" size="sm" disabled={busyAction === rejectKey} onClick={() => onDecide(approval, "reject")}>
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function BrowserBridgeControlCard({

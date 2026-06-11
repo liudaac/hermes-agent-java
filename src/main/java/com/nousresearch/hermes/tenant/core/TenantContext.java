@@ -115,6 +115,7 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.org.evolution.SelfEvolutionEngine evolutionEngine;
     // 浏览器桥接执行层（Playwright / OpenClaw Relay / Kimi WebBridge / mock）
     private volatile com.nousresearch.hermes.browser.BrowserBridge browserBridge;
+    private volatile com.nousresearch.hermes.browser.BrowserApprovalQueue browserApprovalQueue;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -1020,6 +1021,17 @@ public class TenantContext {
 
     public void setBrowserBridge(com.nousresearch.hermes.browser.BrowserBridge browserBridge) {
         this.browserBridge = browserBridge;
+    }
+
+    public com.nousresearch.hermes.browser.BrowserApprovalQueue getBrowserApprovalQueue() {
+        if (browserApprovalQueue == null) {
+            synchronized (this) {
+                if (browserApprovalQueue == null) {
+                    browserApprovalQueue = new com.nousresearch.hermes.browser.BrowserApprovalQueue(getTenantId());
+                }
+            }
+        }
+        return browserApprovalQueue;
     }
 
     /** 获取租户级自进化引擎（失败学习、成功模式、技能建议） */
