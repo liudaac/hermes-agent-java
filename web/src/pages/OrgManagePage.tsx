@@ -54,6 +54,7 @@ export default function OrgManagePage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [audit, setAudit] = useState<any[]>([]);
   const [tenantOptions, setTenantOptions] = useState<string[]>(["default"]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,15 +89,17 @@ export default function OrgManagePage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, r, tm, tenantsResponse] = await Promise.all([
+      const [s, r, tm, a, tenantsResponse] = await Promise.all([
         fetchJSON<Summary>("/api/org/manage/summary"),
         fetchJSON<{ roles: RoleRow[] }>("/api/org/manage/roles"),
         fetchJSON<{ teams: TeamRow[] }>("/api/org/manage/teams"),
+        fetchJSON<{ audit: any[] }>("/api/org/manage/audit?n=30"),
         api.getTenants(),
       ]);
       setSummary(s);
       setRoles(r.roles || []);
       setTeams(tm.teams || []);
+      setAudit(a.audit || []);
       setTenantOptions((tenantsResponse.tenants || []).map((tenant) => tenant.tenantId));
     } catch (err: any) {
       setError(err?.message || om.failedToLoad);
@@ -349,6 +352,31 @@ export default function OrgManagePage() {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardHeader><CardTitle className="text-base">{om.audit.title}</CardTitle></CardHeader>
+        <CardContent>
+          {audit.length === 0 ? <div className="text-sm text-muted-foreground">{om.audit.empty}</div> : (
+            <div className="space-y-2">
+              {audit.slice(0, 12).map((entry, idx) => (
+                <div key={`${entry.tenant_id}:${entry.time}:${idx}`} className="rounded-md border border-current/10 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">{entry.event}</div>
+                    <Badge variant="outline">{new Date(entry.time).toLocaleTimeString()}</Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {entry.tenant_id} · {entry.action || "—"}
+                    {entry.team_id && ` · ${om.teams.teamId}: ${entry.team_id}`}
+                    {entry.agent_id && ` · ${om.fields.agentId}: ${entry.agent_id}`}
+                    {entry.role && ` · ${om.fields.roleName}: ${entry.role}`}
+                    {entry.name && ` · ${om.teams.name}: ${entry.name}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }

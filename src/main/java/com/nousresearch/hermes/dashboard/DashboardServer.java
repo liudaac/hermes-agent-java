@@ -408,6 +408,7 @@ public class DashboardServer {
 
         // --- Org Control Center API (五刀可视化聚合) ---
         app.get("/api/org/manage/summary", orgManagementHandler::summary);
+        app.get("/api/org/manage/audit", orgManagementHandler::audit);
         app.get("/api/org/manage/teams", orgManagementHandler::listTeams);
         app.post("/api/org/manage/teams", orgManagementHandler::upsertTeam);
         app.delete("/api/org/manage/teams/{tenantId}/{teamId}", orgManagementHandler::deleteTeam);

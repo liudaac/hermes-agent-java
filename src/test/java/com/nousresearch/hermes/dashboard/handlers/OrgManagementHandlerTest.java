@@ -31,6 +31,7 @@ class OrgManagementHandlerTest {
         Javalin app = Javalin.create(config -> config.showJavalinBanner = false);
         OrgManagementHandler handler = new OrgManagementHandler(manager);
         app.get("/api/org/manage/summary", handler::summary);
+        app.get("/api/org/manage/audit", handler::audit);
         app.get("/api/org/manage/teams", handler::listTeams);
         app.post("/api/org/manage/teams", handler::upsertTeam);
         app.delete("/api/org/manage/teams/{tenantId}/{teamId}", handler::deleteTeam);
@@ -127,6 +128,15 @@ class OrgManagementHandlerTest {
             );
             assertEquals(200, delete.statusCode());
             assertTrue(JSON.parseObject(delete.body()).getBooleanValue("ok"));
+
+            HttpResponse<String> audit = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/org/manage/audit?n=20")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, audit.statusCode());
+            JSONArray auditRows = JSON.parseObject(audit.body()).getJSONArray("audit");
+            assertTrue(auditRows.stream().map(o -> (JSONObject) o).anyMatch(row -> "ORG_MANAGEMENT_TEAM_CREATED".equals(row.getString("event"))));
+            assertTrue(auditRows.stream().map(o -> (JSONObject) o).anyMatch(row -> "ORG_MANAGEMENT_ROLE_DELETED".equals(row.getString("event"))));
         } finally {
             app.stop();
             manager.shutdown();

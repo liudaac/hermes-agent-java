@@ -552,7 +552,8 @@ export const en: Translations = {
     form: { title: "Agent role", saveRole: "Save role", csvPlaceholder: "comma-separated", note: "Tenant is the container; this role defines organization structure within that tenant." },
     fields: { tenant: "Tenant", agentId: "Agent ID", roleName: "Role name", description: "Description", level: "Level", skills: "Skills", responsibilities: "Responsibilities", reportsTo: "Reports to", allowedTools: "Allowed tools", teams: "Teams" },
     roles: { title: "Agent roles", empty: "No agent roles yet", edit: "Edit" },
-    teams: { title: "Teams", formTitle: "Team", empty: "No teams yet", saveTeam: "Save team", saveFailed: "Failed to save team", deleteFailed: "Failed to delete team", deleteConfirm: "Delete team {team}?", teamId: "Team ID", name: "Name", mission: "Mission", members: "Members", lead: "Lead" }
+    teams: { title: "Teams", formTitle: "Team", empty: "No teams yet", saveTeam: "Save team", saveFailed: "Failed to save team", deleteFailed: "Failed to delete team", deleteConfirm: "Delete team {team}?", teamId: "Team ID", name: "Name", mission: "Mission", members: "Members", lead: "Lead" },
+    audit: { title: "Structure change history", empty: "No organization structure changes yet" }
   },
 
   orgControl: {

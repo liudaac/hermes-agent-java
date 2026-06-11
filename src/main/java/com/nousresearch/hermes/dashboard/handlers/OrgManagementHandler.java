@@ -41,6 +41,34 @@ public class OrgManagementHandler {
     }
 
 
+
+    /** GET /api/org/manage/audit?n=50 */
+    public void audit(Context ctx) {
+        int n = parseInt(ctx.queryParam("n"), 50);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext tenant : tenants(null)) {
+            for (var entry : tenant.getAuditLogger().getRecentEvents(n * 2 + 20)) {
+                String event = entry.event().name();
+                if (!event.startsWith("ORG_MANAGEMENT_")) continue;
+                Map<String, Object> details = entry.details();
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("tenant_id", tenant.getTenantId());
+                row.put("event", event);
+                row.put("time", entry.timestamp().toString());
+                row.put("actor", detailString(details, "actor", "system"));
+                row.put("action", detailString(details, "action", ""));
+                row.put("team_id", detailString(details, "teamId", ""));
+                row.put("agent_id", detailString(details, "agentId", ""));
+                row.put("role", detailString(details, "role", ""));
+                row.put("name", detailString(details, "name", ""));
+                rows.add(row);
+            }
+        }
+        rows.sort((a, b) -> ((String)b.get("time")).compareTo((String)a.get("time")));
+        if (rows.size() > n) rows = rows.subList(0, n);
+        ctx.json(Map.of("audit", rows, "count", rows.size()));
+    }
+
     /** GET /api/org/manage/teams?tenantId=... */
     public void listTeams(Context ctx) {
         String tenantId = ctx.queryParam("tenantId");
@@ -265,6 +293,28 @@ public class OrgManagementHandler {
         map.put("allowed_tools", new ArrayList<>(role.getAllowedTools()));
         map.put("restricted_paths", new ArrayList<>(role.getRestrictedPaths()));
         return map;
+    }
+
+
+    private static int parseInt(String raw, int fallback) {
+        if (raw == null || raw.isBlank()) return fallback;
+        try { return Integer.parseInt(raw); } catch (Exception ignored) { return fallback; }
+    }
+
+    private static String detailString(Map<String, Object> details, String key, String fallback) {
+        Object value = details.get(key);
+        if (value != null) return String.valueOf(value);
+        String raw = String.valueOf(details.getOrDefault("raw", ""));
+        if (raw.isBlank()) return fallback;
+        String needle = key + "=";
+        int start = raw.indexOf(needle);
+        if (start < 0) return fallback;
+        start += needle.length();
+        int comma = raw.indexOf(", ", start);
+        int endBrace = raw.indexOf('}', start);
+        int end = comma >= 0 ? comma : (endBrace >= 0 ? endBrace : raw.length());
+        String parsed = raw.substring(start, end).trim();
+        return parsed.isBlank() ? fallback : parsed;
     }
 
     private static AgentRole.Level parseLevel(String raw) {
