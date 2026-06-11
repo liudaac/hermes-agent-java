@@ -8,12 +8,18 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Unit tests for TenantAwareToolDispatcher.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TenantAwareToolDispatcherTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private TenantContext tenantContext;
     private TenantAwareToolDispatcher dispatcher;

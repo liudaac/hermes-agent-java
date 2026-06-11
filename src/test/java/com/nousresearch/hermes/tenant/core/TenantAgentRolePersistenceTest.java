@@ -5,8 +5,14 @@ import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 class TenantAgentRolePersistenceTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @Test
     void agentRoleMetricsPersistAcrossTenantReload() {

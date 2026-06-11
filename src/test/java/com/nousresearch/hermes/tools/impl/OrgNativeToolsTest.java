@@ -12,12 +12,18 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Tests for org-native tools: find_teammate, delegate_task,
  * query_org_knowledge, escalate_to_human.
  */
 class OrgNativeToolsTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private ToolRegistry registry;
     private TenantContext tenantContext;

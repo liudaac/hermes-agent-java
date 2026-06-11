@@ -8,12 +8,18 @@ import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.junit.jupiter.api.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Integration tests for tenant isolation.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TenantIsolationIntegrationTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private static final String RUN_ID = Long.toHexString(System.nanoTime());
 

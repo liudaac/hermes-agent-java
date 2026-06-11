@@ -9,8 +9,14 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 class DashboardServerStatusTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @Test
     @DisplayName("Dashboard status should reflect injected gateway runtime status")

@@ -17,8 +17,14 @@ import java.net.http.HttpResponse;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 class DashboardTenantRoutesTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @Test
     @DisplayName("Dashboard tenant API should use tenantId as canonical response field")

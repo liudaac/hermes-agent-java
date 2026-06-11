@@ -12,12 +12,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * ProcessSandbox 集成测试
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class ProcessSandboxIntegrationTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @TempDir
     Path tempDir;

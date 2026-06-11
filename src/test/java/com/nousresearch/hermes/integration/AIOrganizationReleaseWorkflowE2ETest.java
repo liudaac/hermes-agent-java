@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * End-to-end release workflow demo for the AI-native organization stack.
@@ -33,6 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * </ol>
  */
 class AIOrganizationReleaseWorkflowE2ETest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @Test
     void releaseWorkflowExercisesFullOrgNativeLoop() throws Exception {

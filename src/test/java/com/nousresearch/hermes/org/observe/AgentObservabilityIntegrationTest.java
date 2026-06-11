@@ -12,11 +12,17 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Tests for AI原生组织 第五刀：Org-wide 可观测性
  */
 class AgentObservabilityIntegrationTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private ToolRegistry registry;
     private TenantContext tenantContext;

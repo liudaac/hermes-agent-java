@@ -10,12 +10,18 @@ import java.util.concurrent.TimeUnit;
 
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Tests for AI原生组织 第四刀：IntentOrchestrator
  * Verifies task decomposition, agent matching, and run tracking.
  */
 class IntentOrchestratorTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private TenantContext tenantContext;
     private IntentOrchestrator orchestrator;

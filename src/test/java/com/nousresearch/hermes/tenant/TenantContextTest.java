@@ -9,12 +9,18 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Unit tests for TenantContext.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TenantContextTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @TempDir
     Path tempDir;

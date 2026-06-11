@@ -10,8 +10,14 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 class GatewayServerV2Test {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     private static class TestAdapter implements PlatformAdapter {
         @Override

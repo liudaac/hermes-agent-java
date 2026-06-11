@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
  * Repeatable organization runtime soak harness.
@@ -27,6 +29,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code -Dhermes.soak=true} to run a larger local soak without changing CI time.</p>
  */
 class OrganizationSoakHarnessTest {
+
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
 
     @Test
     void organizationRuntimeSoakHarness() throws Exception {
