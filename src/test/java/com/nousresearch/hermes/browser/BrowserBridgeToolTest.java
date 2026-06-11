@@ -3,7 +3,7 @@ package com.nousresearch.hermes.browser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nousresearch.hermes.tenant.core.TenantContext;
-import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.testutil.TestTenants;
 import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tools.impl.OrgNativeTools;
@@ -18,8 +18,8 @@ class BrowserBridgeToolTest {
 
     @Test
     void browserBridgeExecutesThroughMockAndRecordsTrace() throws Exception {
-        TenantContext tenant = TenantContext.create("browser-bridge-test-" + System.nanoTime(),
-            new TenantProvisioningRequest());
+        TenantContext tenant = TestTenants.create("browser-bridge-test");
+        try {
         ToolRegistry registry = ToolRegistry.getInstance();
         OrgNativeTools.register(registry);
         TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(tenant, registry);
@@ -50,12 +50,13 @@ class BrowserBridgeToolTest {
         var traces = tenant.getObservability().getRecentTraces("browser-bridge", 10);
         assertTrue(traces.size() >= 2);
         assertTrue(traces.stream().anyMatch(t -> t.getTaskDescription().contains("browser_bridge:open")));
+        } finally { TestTenants.cleanup(tenant); }
     }
 
     @Test
     void browserBridgeBlocksSensitiveActionsWithoutConfirmation() throws Exception {
-        TenantContext tenant = TenantContext.create("browser-bridge-policy-test-" + System.nanoTime(),
-            new TenantProvisioningRequest());
+        TenantContext tenant = TestTenants.create("browser-bridge-policy-test");
+        try {
         ToolRegistry registry = ToolRegistry.getInstance();
         OrgNativeTools.register(registry);
         TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(tenant, registry);
@@ -71,12 +72,13 @@ class BrowserBridgeToolTest {
         assertTrue(json.has("error"));
         assertTrue(json.get("requires_confirmation").asBoolean());
         assertTrue(tenant.getObservability().getRecentTraces("browser-bridge", 10).isEmpty());
+        } finally { TestTenants.cleanup(tenant); }
     }
 
     @Test
     void browserBridgeAllowsSensitiveActionsWhenConfirmed() throws Exception {
-        TenantContext tenant = TenantContext.create("browser-bridge-confirmed-test-" + System.nanoTime(),
-            new TenantProvisioningRequest());
+        TenantContext tenant = TestTenants.create("browser-bridge-confirmed-test");
+        try {
         ToolRegistry registry = ToolRegistry.getInstance();
         OrgNativeTools.register(registry);
         TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(tenant, registry);
@@ -100,5 +102,6 @@ class BrowserBridgeToolTest {
         JsonNode json = MAPPER.readTree(result);
         assertTrue(json.get("ok").asBoolean());
         assertEquals("performed click", json.get("message").asText());
+        } finally { TestTenants.cleanup(tenant); }
     }
 }

@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.browser;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
-import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.testutil.TestTenants;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -10,8 +10,9 @@ class BrowserBridgeConfigPersistenceTest {
 
     @Test
     void tenantPersistsAndReloadsBrowserBridgeConfig() {
-        String tenantId = "browser-config-persist-" + System.nanoTime();
-        TenantContext tenant = TenantContext.create(tenantId, new TenantProvisioningRequest());
+        TenantContext tenant = TestTenants.create("browser-config-persist");
+        String tenantId = tenant.getTenantId();
+        try {
         tenant.configureBrowserBridge(new BrowserBridgeConfig(
             "kimi",
             "http://127.0.0.1:17361",
@@ -36,5 +37,6 @@ class BrowserBridgeConfigPersistenceTest {
         assertEquals("/v1/health", loadedConfig.healthPath());
         assertEquals("/v1/capabilities", loadedConfig.capabilitiesPath());
         assertTrue(loaded.getBrowserBridge().describe().get("provider").toString().contains("kimi"));
+        } finally { TestTenants.cleanup(tenantId); }
     }
 }
