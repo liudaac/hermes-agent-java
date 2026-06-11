@@ -68,9 +68,13 @@ public class DelegatedTask {
     }
 
     public synchronized ParentVerificationResult submitResult(DelegatedTaskResult result) {
+        return submitResult(result, verificationPolicy);
+    }
+
+    public synchronized ParentVerificationResult submitResult(DelegatedTaskResult result, ParentVerificationPolicy policy) {
         this.result = result;
         this.status = Status.SUBMITTED;
-        return verifyWithPolicy(verificationPolicy);
+        return verifyWithPolicy(policy != null ? policy : verificationPolicy);
     }
 
     /**

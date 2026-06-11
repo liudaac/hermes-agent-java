@@ -25,6 +25,7 @@ public class DelegatedTaskStore {
     private final AtomicLong ids = new AtomicLong();
     private final ConcurrentHashMap<String, DelegatedTask> tasks = new ConcurrentHashMap<>();
     private final Path storePath;
+    private final DelegatedTaskExecutorRegistry executorRegistry = new DelegatedTaskExecutorRegistry();
 
     public DelegatedTaskStore() {
         this(null);
@@ -63,6 +64,47 @@ public class DelegatedTaskStore {
         ParentVerificationResult verification = task.submitResult(result);
         save();
         return verification;
+    }
+
+    /**
+     * Execute a pending delegated task through a named safe executor adapter and,
+     * when an adapter produces a DelegatedTaskResult, submit it for parent
+     * verification. This does not add any real external execution by itself;
+     * the default noop adapter returns NOT_EXECUTED.
+     */
+    public synchronized DelegatedTaskExecutionResult executePending(
+        String taskId,
+        String executorName,
+        DelegatedTaskExecutionPolicy policy
+    ) {
+        DelegatedTask task = tasks.get(taskId);
+        if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
+        DelegatedTaskExecutionPolicy effectivePolicy = policy != null
+            ? policy
+            : DelegatedTaskExecutionPolicy.safeDefault().withParentVerificationPolicy(task.verificationPolicy());
+        DelegatedTaskExecutor executor = executorRegistry.find(executorName).orElse(null);
+        if (executor == null) {
+            return DelegatedTaskExecutionResult.notExecuted(
+                DelegatedTaskExecutorRegistry.normalize(executorName),
+                "UNSUPPORTED_EXECUTOR",
+                "Unsupported delegated task executor: " + executorName,
+                effectivePolicy
+            );
+        }
+        DelegatedTaskExecutionResult execution = executor.execute(task, effectivePolicy);
+        if (execution != null && execution.executed() && execution.delegatedTaskResult() != null) {
+            ParentVerificationResult verification = task.submitResult(
+                execution.delegatedTaskResult(),
+                effectivePolicy.parentVerificationPolicy()
+            );
+            save();
+            return execution.withSubmission(verification);
+        }
+        return execution;
+    }
+
+    public DelegatedTaskExecutorRegistry executorRegistry() {
+        return executorRegistry;
     }
 
     public synchronized ParentVerificationResult verify(String taskId, ParentVerificationPolicy policy) {
