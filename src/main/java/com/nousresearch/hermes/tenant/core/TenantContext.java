@@ -1011,7 +1011,7 @@ public class TenantContext {
         if (browserBridge == null) {
             synchronized (this) {
                 if (browserBridge == null) {
-                    browserBridge = new com.nousresearch.hermes.browser.MockBrowserBridge();
+                    browserBridge = com.nousresearch.hermes.browser.BrowserBridgeFactory.create();
                 }
             }
         }

@@ -1,0 +1,30 @@
+package com.nousresearch.hermes.browser;
+
+/**
+ * Selects a concrete BrowserBridge implementation from runtime config.
+ */
+public final class BrowserBridgeFactory {
+    private BrowserBridgeFactory() {}
+
+    public static BrowserBridge create() {
+        return create(BrowserBridgeConfig.fromEnvironment());
+    }
+
+    public static BrowserBridge create(BrowserBridgeConfig config) {
+        String provider = config != null && config.provider() != null ? config.provider().trim().toLowerCase() : "mock";
+        return switch (provider) {
+            case "mock", "test", "memory", "" -> new MockBrowserBridge();
+            case "kimi", "kimi-webbridge", "kimi_webbridge" -> new KimiWebBridgeAdapter(config);
+            case "openclaw", "openclaw-relay", "openclaw_relay", "relay" -> new OpenClawRelayBrowserBridge(config);
+            default -> new UnavailableBrowserBridge(provider, "Unknown browser bridge provider: " + provider);
+        };
+    }
+
+    private record UnavailableBrowserBridge(String provider, String reason) implements BrowserBridge {
+        @Override
+        public BrowserActionResult execute(BrowserAction action) {
+            return BrowserActionResult.error(action != null ? action.sessionId() : null,
+                reason + ". Supported providers: mock, kimi, openclaw");
+        }
+    }
+}
