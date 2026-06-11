@@ -75,7 +75,7 @@ public class OrgManagementHandler {
         }
         if (!lead.isBlank()) team.setLead(lead);
 
-        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+        tenant.getAuditLogger().log(existing != null ? AuditEvent.ORG_MANAGEMENT_TEAM_UPDATED : AuditEvent.ORG_MANAGEMENT_TEAM_CREATED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
             "action", existing != null ? "update_team" : "create_team",
@@ -97,7 +97,7 @@ public class OrgManagementHandler {
             ctx.status(404).json(Map.of("error", "Team not found", "tenant_id", tenant.getTenantId(), "team_id", teamId));
             return;
         }
-        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_TEAM_DELETED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
             "action", "delete_team",
@@ -128,15 +128,16 @@ public class OrgManagementHandler {
         Map<String, Object> body = parseBody(ctx);
         TenantContext tenant = requireTenant(string(body, "tenant_id", string(body, "tenantId", "default")));
         String agentId = requireString(body, "agent_id", "agentId");
+        AgentRole previousRole = tenant.getAgentRole(agentId);
         AgentRole role = roleFromBody(body);
         tenant.registerAgentRole(agentId, role);
         if (body.containsKey("team_ids") || body.containsKey("teamIds")) {
             syncRoleTeams(tenant, agentId, list(body.getOrDefault("team_ids", body.get("teamIds"))));
         }
-        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+        tenant.getAuditLogger().log(previousRole == null ? AuditEvent.ORG_MANAGEMENT_ROLE_CREATED : AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
-            "action", "upsert_agent_role",
+            "action", previousRole == null ? "create_agent_role" : "update_agent_role",
             "agentId", agentId,
             "role", role.getRoleName(),
             "timestamp", System.currentTimeMillis()
@@ -158,7 +159,7 @@ public class OrgManagementHandler {
             return;
         }
         removeAgentFromAllTeams(tenant, agentId);
-        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
+        tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_DELETED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
             "action", "delete_agent_role",
