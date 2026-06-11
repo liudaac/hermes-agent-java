@@ -43,6 +43,7 @@ export default function OrgControlCenterPage() {
   const [browserApprovals, setBrowserApprovals] = useState<any[]>([]);
   const [delegatedTasks, setDelegatedTasks] = useState<any[]>([]);
   const [browserApprovalStatus, setBrowserApprovalStatus] = useState<string>("PENDING");
+  const [delegatedTaskStatus, setDelegatedTaskStatus] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -89,6 +90,10 @@ export default function OrgControlCenterPage() {
 
   const recentTraces = useMemo(() => traces.slice(0, 8), [traces]);
   const recentRuns = useMemo(() => runs.slice(0, 8), [runs]);
+  const visibleDelegatedTasks = useMemo(() => {
+    if (delegatedTaskStatus === "ALL") return delegatedTasks;
+    return delegatedTasks.filter((task) => String(task.status || "").toUpperCase() === delegatedTaskStatus);
+  }, [delegatedTaskStatus, delegatedTasks]);
   const agentsByTenant = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const team of teams) {
@@ -512,16 +517,28 @@ export default function OrgControlCenterPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardCheck className="h-4 w-4" /> {oc.sections.delegatedTasks}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ClipboardCheck className="h-4 w-4" /> {oc.sections.delegatedTasks}
+              </CardTitle>
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                value={delegatedTaskStatus}
+                aria-label={oc.delegated.statusFilter}
+                onChange={(event) => setDelegatedTaskStatus(event.target.value)}
+              >
+                {(["ALL", "PENDING", "SUBMITTED", "ACCEPTED", "REJECTED"] as const).map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
           </CardHeader>
           <CardContent>
-            {delegatedTasks.length === 0 ? (
+            {visibleDelegatedTasks.length === 0 ? (
               <Empty label={oc.empty.delegatedTasks} />
             ) : (
               <div className="space-y-2">
-                {delegatedTasks.slice(0, 8).map((task) => (
+                {visibleDelegatedTasks.slice(0, 8).map((task) => (
                   <DelegatedTaskCard
                     key={`${task.tenant_id}:${task.task_id}`}
                     task={task}
@@ -694,7 +711,8 @@ function DelegatedTaskCard({
   const envelope = task.envelope || {};
   const result = task.result || {};
   const verification = task.latest_verification || task.verification || {};
-  const history = task.verification_history || [];
+  const history = Array.isArray(task.verification_history) ? task.verification_history : [];
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -716,8 +734,22 @@ function DelegatedTaskCard({
         <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{verification.reasons.join("; ")}</div>
       )}
       {history.length > 0 && (
-        <div className="mt-2 text-xs text-muted-foreground">
-          Verification history: {history.length} · latest {verification.status || task.status}
+        <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 text-left"
+            onClick={() => setHistoryOpen((open) => !open)}
+          >
+            <span>{oc.delegated.verificationHistory}: {history.length} · {oc.delegated.latest} {verification.status || task.status}</span>
+            <span>{historyOpen ? oc.delegated.hideHistory : oc.delegated.showHistory}</span>
+          </button>
+          {historyOpen && (
+            <div className="mt-2 space-y-2">
+              {history.map((entry: any, idx: number) => (
+                <VerificationHistoryEntry key={entry.sequence_id || idx} entry={entry} />
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
@@ -732,6 +764,43 @@ function DelegatedTaskCard({
       </div>
     </div>
   );
+}
+
+function VerificationHistoryEntry({ entry }: { entry: any }) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  const result = entry.result || {};
+  const policy = entry.policy || {};
+  const reasons = Array.isArray(result.reasons) ? result.reasons : [];
+  const timestamp = entry.recorded_at || result.verified_at;
+  const accepted = result.accepted === true || String(result.accepted).toLowerCase() === "true";
+  return (
+    <div className="rounded border border-current/10 p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={accepted ? "default" : "destructive"}>{result.status || "UNKNOWN"}</Badge>
+          <span>{oc.delegated.accepted}: {accepted ? oc.labels.ok : oc.labels.fail}</span>
+        </div>
+        {timestamp && <span>{new Date(timestamp).toLocaleString()}</span>}
+      </div>
+      {reasons.length > 0 && (
+        <div className="mt-1 line-clamp-2">{oc.delegated.reason}: {reasons.join("; ")}</div>
+      )}
+      {policy && Object.keys(policy).length > 0 && (
+        <div className="mt-1 line-clamp-2">{oc.delegated.policy}: {formatVerificationPolicy(policy, oc)}</div>
+      )}
+    </div>
+  );
+}
+
+function formatVerificationPolicy(policy: any, oc: any) {
+  const prefixes = Array.isArray(policy.allowed_changed_file_prefixes) ? policy.allowed_changed_file_prefixes : [];
+  const parts = [
+    policy.require_tests === false ? oc.delegated.testsOptional : oc.delegated.testsRequired,
+    policy.require_all_tests_passed === false ? oc.delegated.failedTestsAllowed : oc.delegated.allTestsPassed,
+  ];
+  if (prefixes.length > 0) parts.push(`${oc.delegated.paths}: ${prefixes.slice(0, 3).join(", ")}${prefixes.length > 3 ? "…" : ""}`);
+  return parts.join(" · ");
 }
 
 function AuditEntryCard({ entry }: { entry: any }) {
