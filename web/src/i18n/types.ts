@@ -569,7 +569,7 @@ export interface Translations {
     form: { title: string; saveRole: string; csvPlaceholder: string; note: string; };
     fields: { tenant: string; agentId: string; roleName: string; description: string; level: string; skills: string; responsibilities: string; reportsTo: string; allowedTools: string; teams: string; };
     roles: { title: string; empty: string; edit: string; };
-    teams: { title: string; formTitle: string; empty: string; saveTeam: string; saveFailed: string; deleteFailed: string; deleteConfirm: string; teamId: string; name: string; mission: string; members: string; lead: string; };
+    teams: { title: string; formTitle: string; empty: string; saveTeam: string; saveFailed: string; deleteFailed: string; deleteConfirm: string; teamId: string; name: string; mission: string; members: string; lead: string; showDetails: string; hideDetails: string; missingRole: string; };
     audit: {
       title: string;
       empty: string;

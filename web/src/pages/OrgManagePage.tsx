@@ -22,8 +22,11 @@ type RoleRow = {
 type TeamMemberRole = {
   agent_id: string;
   name?: string;
+  description?: string;
   level?: string;
   skills?: string[];
+  responsibilities?: string[];
+  allowed_tools?: string[];
   missing_role?: boolean;
   is_lead?: boolean;
 };
@@ -393,15 +396,40 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function TeamMemberRoles({ members, fallback }: { members: TeamMemberRole[]; fallback: string[] }) {
   const { t } = useI18n();
   const om = t.orgManage;
+  const [expanded, setExpanded] = useState(false);
   if (!members.length) return <ChipRow label={om.teams.members} values={fallback} />;
   return (
-    <div className="mt-2 flex flex-wrap gap-1 text-xs">
-      <span className="mr-1 text-muted-foreground">{om.teams.members}</span>
-      {members.map((member) => (
-        <Badge key={member.agent_id} variant={member.is_lead ? "default" : "secondary"}>
-          {member.agent_id}{member.name ? ` · ${member.name}` : ""}{member.level ? ` · ${member.level}` : ""}{member.missing_role ? " · missing role" : ""}
-        </Badge>
-      ))}
+    <div className="mt-2 space-y-2 text-xs">
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="mr-1 text-muted-foreground">{om.teams.members}</span>
+        {members.map((member) => (
+          <Badge key={member.agent_id} variant={member.is_lead ? "default" : "secondary"}>
+            {member.agent_id}{member.name ? ` · ${member.name}` : ""}{member.level ? ` · ${member.level}` : ""}{member.missing_role ? ` · ${om.teams.missingRole}` : ""}
+          </Badge>
+        ))}
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setExpanded(!expanded)}>
+          {expanded ? om.teams.hideDetails : om.teams.showDetails}
+        </Button>
+      </div>
+      {expanded && (
+        <div className="space-y-2 rounded-md border border-current/10 p-2">
+          {members.map((member) => (
+            <div key={member.agent_id} className="rounded-md bg-muted/30 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{member.agent_id}</span>
+                {member.name && <Badge variant="outline">{member.name}</Badge>}
+                {member.level && <Badge variant="secondary">{member.level}</Badge>}
+                {member.is_lead && <Badge>{om.teams.lead}</Badge>}
+                {member.missing_role && <Badge variant="destructive">{om.teams.missingRole}</Badge>}
+              </div>
+              {member.description && <div className="mt-1 text-muted-foreground">{member.description}</div>}
+              <ChipRow label={om.fields.skills} values={member.skills || []} />
+              <ChipRow label={om.fields.responsibilities} values={member.responsibilities || []} />
+              <ChipRow label={om.fields.allowedTools} values={member.allowed_tools || []} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
