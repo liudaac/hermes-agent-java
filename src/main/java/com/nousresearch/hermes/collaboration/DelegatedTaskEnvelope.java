@@ -30,6 +30,14 @@ public record DelegatedTaskEnvelope(
         );
     }
 
+    public DelegatedTask toPendingTask(String taskId) {
+        return new DelegatedTask(taskId, this, ParentVerificationPolicy.strict());
+    }
+
+    public DelegatedTask toPendingTask(String taskId, ParentVerificationPolicy policy) {
+        return new DelegatedTask(taskId, this, policy != null ? policy : ParentVerificationPolicy.strict());
+    }
+
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("intent", intent);
