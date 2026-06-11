@@ -1027,7 +1027,7 @@ public class TenantContext {
         if (browserApprovalQueue == null) {
             synchronized (this) {
                 if (browserApprovalQueue == null) {
-                    browserApprovalQueue = new com.nousresearch.hermes.browser.BrowserApprovalQueue(getTenantId());
+                    browserApprovalQueue = new com.nousresearch.hermes.browser.BrowserApprovalQueue(getTenantId(), tenantDir.resolve("state").resolve("browser-approvals.json"));
                 }
             }
         }

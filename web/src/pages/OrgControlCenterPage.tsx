@@ -37,6 +37,7 @@ export default function OrgControlCenterPage() {
   const [browserTimeline, setBrowserTimeline] = useState<any[]>([]);
   const [browserBridges, setBrowserBridges] = useState<any[]>([]);
   const [browserApprovals, setBrowserApprovals] = useState<any[]>([]);
+  const [browserApprovalStatus, setBrowserApprovalStatus] = useState<string>("PENDING");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -56,7 +57,7 @@ export default function OrgControlCenterPage() {
         fetchJSON<any>("/api/org/control/audit?n=30"),
         fetchJSON<any>("/api/org/control/browser?n=30"),
         fetchJSON<any>("/api/org/control/browser/status"),
-        fetchJSON<any>("/api/org/control/browser/approvals?n=30"),
+        fetchJSON<any>(`/api/org/control/browser/approvals?n=30&status=${encodeURIComponent(browserApprovalStatus)}`),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -73,7 +74,7 @@ export default function OrgControlCenterPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [browserApprovalStatus]);
 
   useEffect(() => {
     load();
@@ -410,9 +411,20 @@ export default function OrgControlCenterPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4" /> Browser Approval Queue
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertTriangle className="h-4 w-4" /> Browser Approval Queue
+              </CardTitle>
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                value={browserApprovalStatus}
+                onChange={(event) => setBrowserApprovalStatus(event.target.value)}
+              >
+                {(["PENDING", "EXECUTED", "REJECTED", "FAILED", "EXPIRED", "ALL"] as const).map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
           </CardHeader>
           <CardContent>
             {browserApprovals.length === 0 ? (
@@ -805,6 +817,7 @@ function BrowserApprovalCard({
         {approval.url && <div className="truncate">URL: {approval.url}</div>}
         {approval.target && <div>Target: {approval.target}</div>}
         {approval.reason && <div className="italic">"{approval.reason}"</div>}
+        {approval.expires_at && <div>expires: {new Date(approval.expires_at).toLocaleTimeString()}</div>}
         {approval.deny_reason && <div className="text-red-400">blocked: {approval.deny_reason}</div>}
       </div>
       {pending && (

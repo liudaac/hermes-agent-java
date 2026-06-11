@@ -467,15 +467,20 @@ public class OrgControlCenterHandler {
     /** GET /api/org/control/browser/approvals?n=50 */
     public void browserApprovals(Context ctx) {
         int n = parseInt(ctx.queryParam("n"), 50);
+        BrowserApprovalRequest.Status status = parseApprovalStatus(ctx.queryParam("status"));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (TenantContext t : tenants()) {
-            for (var request : t.getBrowserApprovalQueue().list(n)) {
+            for (var request : t.getBrowserApprovalQueue().list(n, status)) {
                 rows.add(request.toMap());
             }
         }
         rows.sort((a, b) -> ((String)b.get("created_at")).compareTo((String)a.get("created_at")));
         if (rows.size() > n) rows = rows.subList(0, n);
-        ctx.json(Map.of("approvals", rows, "count", rows.size()));
+        ctx.json(Map.of(
+            "approvals", rows,
+            "count", rows.size(),
+            "status", status != null ? status.name() : "ALL"
+        ));
     }
 
     /** POST /api/org/control/browser/approvals/{tenantId}/{approvalId}/reject */
@@ -691,6 +696,13 @@ public class OrgControlCenterHandler {
         if (value instanceof Boolean b) return b;
         String parsed = value != null ? String.valueOf(value) : detailString(details, key, String.valueOf(fallback));
         return "true".equalsIgnoreCase(parsed) || "1".equals(parsed) || "yes".equalsIgnoreCase(parsed);
+    }
+
+
+    private static BrowserApprovalRequest.Status parseApprovalStatus(String raw) {
+        if (raw == null || raw.isBlank() || raw.equalsIgnoreCase("ALL")) return null;
+        try { return BrowserApprovalRequest.Status.valueOf(raw.trim().toUpperCase(Locale.ROOT)); }
+        catch (Exception ignored) { return null; }
     }
 
     private static int parseInt(String raw, int fallback) {
