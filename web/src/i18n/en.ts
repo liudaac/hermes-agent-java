@@ -62,6 +62,7 @@ export const en: Translations = {
       tools: "Tools",
       tenants: "Tenants",
       org: "Org",
+      orgControl: "Org Control",
       config: "Config",
       keys: "Keys",
       playground: "Playground",

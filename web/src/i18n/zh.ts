@@ -62,6 +62,7 @@ export const zh: Translations = {
       tools: "工具",
       tenants: "租户",
       org: "组织",
+      orgControl: "组织控制",
       config: "配置",
       keys: "密钥",
       playground: "对话测试",
