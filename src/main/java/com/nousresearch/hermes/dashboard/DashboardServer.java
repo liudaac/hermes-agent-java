@@ -419,6 +419,9 @@ public class DashboardServer {
         app.get("/api/org/control/overview", orgControlCenterHandler::overview);
         app.get("/api/org/control/teams", orgControlCenterHandler::teams);
         app.get("/api/org/control/intents", orgControlCenterHandler::intents);
+        app.get("/api/org/control/delegated-tasks", orgControlCenterHandler::delegatedTasks);
+        app.post("/api/org/control/delegated-tasks/{tenantId}/{taskId}/submit", orgControlCenterHandler::submitDelegatedTask);
+        app.post("/api/org/control/delegated-tasks/{tenantId}/{taskId}/verify", orgControlCenterHandler::verifyDelegatedTask);
         app.post("/api/org/control/intents/{tenantId}/{runId}/replay", orgControlCenterHandler::replayIntent);
         app.post("/api/org/control/intents/{tenantId}/{runId}/reroute", orgControlCenterHandler::rerouteIntent);
         app.post("/api/org/control/agents/{tenantId}/{agentId}/override", orgControlCenterHandler::agentOverride);

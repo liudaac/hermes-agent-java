@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   Brain,
+  ClipboardCheck,
   GitBranch,
   Globe,
   Network,
@@ -40,6 +41,7 @@ export default function OrgControlCenterPage() {
   const [browserTimeline, setBrowserTimeline] = useState<any[]>([]);
   const [browserBridges, setBrowserBridges] = useState<any[]>([]);
   const [browserApprovals, setBrowserApprovals] = useState<any[]>([]);
+  const [delegatedTasks, setDelegatedTasks] = useState<any[]>([]);
   const [browserApprovalStatus, setBrowserApprovalStatus] = useState<string>("PENDING");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,7 +52,7 @@ export default function OrgControlCenterPage() {
     setLoading(true);
     setError("");
     try {
-      const [o, t, i, tr, e, a, au, b, bs, ba] = await Promise.all([
+      const [o, t, i, tr, e, a, au, b, bs, ba, dt] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
         fetchJSON<any>("/api/org/control/intents?limit=50&offset=0"),
@@ -61,6 +63,7 @@ export default function OrgControlCenterPage() {
         fetchJSON<any>("/api/org/control/browser?n=30"),
         fetchJSON<any>("/api/org/control/browser/status"),
         fetchJSON<any>(`/api/org/control/browser/approvals?n=30&status=${encodeURIComponent(browserApprovalStatus)}`),
+        fetchJSON<any>("/api/org/control/delegated-tasks?n=50"),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -72,6 +75,7 @@ export default function OrgControlCenterPage() {
       setBrowserTimeline(b.browser_timeline || []);
       setBrowserBridges(bs.browser_bridges || []);
       setBrowserApprovals(ba.approvals || []);
+      setDelegatedTasks(dt.delegated_tasks || []);
     } catch (err: any) {
       setError(err?.message || oc.failedToLoad);
     } finally {
@@ -269,6 +273,52 @@ export default function OrgControlCenterPage() {
     }));
   }, [askReason, runControl]);
 
+  const submitDelegatedTask = useCallback((task: any) => {
+    const summary = window.prompt(oc.delegated.summaryPrompt, task.result?.summary || "Simulated specialist completed the task");
+    if (summary === null) return;
+    const changedFilesRaw = window.prompt(oc.delegated.changedFilesPrompt, (task.result?.changed_files || []).join(", ") || "src/main/java/example.java");
+    if (changedFilesRaw === null) return;
+    const testsRaw = window.prompt(oc.delegated.testsPrompt, "mvn test:pass");
+    if (testsRaw === null) return;
+    const risksRaw = window.prompt(oc.delegated.risksPrompt, (task.result?.risks || []).join(", "));
+    if (risksRaw === null) return;
+    const tests_run = testsRaw.split(",").map((item) => item.trim()).filter(Boolean).map((item) => {
+      const [name, status = "pass", ...rest] = item.split(":");
+      const passed = !["fail", "failed", "false"].includes(status.trim().toLowerCase());
+      return { name: name.trim(), passed, details: rest.join(":").trim() };
+    });
+    const key = `${task.tenant_id}:${task.task_id}:delegated:submit`;
+    return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "dashboard",
+        summary: summary.trim() || "Simulated specialist result",
+        changed_files: changedFilesRaw.split(",").map((x) => x.trim()).filter(Boolean),
+        tests_run,
+        risks: risksRaw.split(",").map((x) => x.trim()).filter(Boolean),
+      }),
+    }));
+  }, [runControl]);
+
+  const verifyDelegatedTask = useCallback((task: any) => {
+    const prefixes = window.prompt(oc.delegated.allowedPrefixesPrompt, (task.verification_policy?.allowed_changed_file_prefixes || []).join(", "));
+    if (prefixes === null) return;
+    const requireTests = window.confirm(oc.delegated.requireTestsConfirm);
+    const requireAllTestsPassed = window.confirm(oc.delegated.requireAllTestsPassedConfirm);
+    const key = `${task.tenant_id}:${task.task_id}:delegated:verify`;
+    return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "dashboard",
+        require_tests: requireTests,
+        require_all_tests_passed: requireAllTestsPassed,
+        allowed_changed_file_prefixes: prefixes.split(",").map((x) => x.trim()).filter(Boolean),
+      }),
+    }));
+  }, [runControl]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -459,6 +509,32 @@ export default function OrgControlCenterPage() {
           </CardContent>
         </Card>
 
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardCheck className="h-4 w-4" /> {oc.sections.delegatedTasks}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {delegatedTasks.length === 0 ? (
+              <Empty label={oc.empty.delegatedTasks} />
+            ) : (
+              <div className="space-y-2">
+                {delegatedTasks.slice(0, 8).map((task) => (
+                  <DelegatedTaskCard
+                    key={`${task.tenant_id}:${task.task_id}`}
+                    task={task}
+                    busyAction={busyAction}
+                    onSubmit={submitDelegatedTask}
+                    onVerify={verifyDelegatedTask}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -598,6 +674,59 @@ export default function OrgControlCenterPage() {
 
 
 
+
+
+function DelegatedTaskCard({
+  task,
+  busyAction,
+  onSubmit,
+  onVerify,
+}: {
+  task: any;
+  busyAction: string;
+  onSubmit: (task: any) => void;
+  onVerify: (task: any) => void;
+}) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  const submitKey = `${task.tenant_id}:${task.task_id}:delegated:submit`;
+  const verifyKey = `${task.tenant_id}:${task.task_id}:delegated:verify`;
+  const envelope = task.envelope || {};
+  const result = task.result || {};
+  const verification = task.verification || {};
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{envelope.intent || task.task_id}</div>
+          <div className="text-xs text-muted-foreground">{task.tenant_id} · {task.task_id}</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {envelope.suggested_team_id && <Badge variant="outline">{envelope.suggested_team_id}</Badge>}
+            {envelope.suggested_profile && <Badge variant="secondary">{envelope.suggested_profile}</Badge>}
+          </div>
+        </div>
+        <StatusBadge status={task.status} />
+      </div>
+      {result.summary && <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{result.summary}</div>}
+      <div className="mt-2 text-xs text-muted-foreground">
+        {(result.changed_files || []).length} {oc.delegated.files} · {(result.tests_run || []).length} {oc.delegated.tests}
+      </div>
+      {verification.reasons && (
+        <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{verification.reasons.join("; ")}</div>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" disabled={busyAction === submitKey || task.status === "ACCEPTED" || task.status === "REJECTED"} onClick={() => onSubmit(task)}>
+          {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.submitResult}
+        </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => onVerify(task)}>
+          {busyAction === verifyKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.verify}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function AuditEntryCard({ entry }: { entry: any }) {
   const raw = entry.details?.raw || "";

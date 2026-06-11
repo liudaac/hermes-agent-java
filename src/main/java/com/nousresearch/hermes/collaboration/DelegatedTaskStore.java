@@ -42,6 +42,12 @@ public class DelegatedTaskStore {
         return task.submitResult(result);
     }
 
+    public ParentVerificationResult verify(String taskId, ParentVerificationPolicy policy) {
+        DelegatedTask task = tasks.get(taskId);
+        if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
+        return task.verifyWithPolicy(policy);
+    }
+
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("tasks", list().stream().map(DelegatedTask::toMap).toList());

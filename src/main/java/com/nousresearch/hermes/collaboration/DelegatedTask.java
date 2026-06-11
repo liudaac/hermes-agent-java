@@ -52,7 +52,18 @@ public class DelegatedTask {
         }
         this.result = result;
         this.status = Status.SUBMITTED;
-        ParentVerificationResult checked = verificationPolicy.verify(this, result);
+        return verifyWithPolicy(verificationPolicy);
+    }
+
+    /**
+     * Re-run parent-side verification with a supplied policy.
+     *
+     * <p>This remains an inert simulation: it only updates local lifecycle
+     * state and never executes specialist work or external processes.</p>
+     */
+    public synchronized ParentVerificationResult verifyWithPolicy(ParentVerificationPolicy policy) {
+        ParentVerificationPolicy effective = policy != null ? policy : verificationPolicy;
+        ParentVerificationResult checked = effective.verify(this, result);
         this.verification = checked;
         this.status = checked.accepted() ? Status.ACCEPTED : Status.REJECTED;
         return checked;

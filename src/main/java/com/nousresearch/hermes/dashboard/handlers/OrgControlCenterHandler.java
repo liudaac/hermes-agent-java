@@ -7,6 +7,8 @@ import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeProviderProbe;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
+import com.nousresearch.hermes.collaboration.DelegatedTaskResult;
+import com.nousresearch.hermes.collaboration.ParentVerificationPolicy;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
 import io.javalin.http.ForbiddenResponse;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -261,6 +263,80 @@ public class OrgControlCenterHandler {
         ));
     }
 
+    /** GET /api/org/control/delegated-tasks?n=50 */
+    public void delegatedTasks(Context ctx) {
+        int n = parseInt(ctx.queryParam("n"), 50);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext t : tenants()) {
+            for (var task : t.getDelegatedTaskStore().list()) {
+                Map<String, Object> row = new LinkedHashMap<>(task.toMap());
+                row.put("tenant_id", t.getTenantId());
+                rows.add(row);
+            }
+        }
+        rows.sort((a, b) -> ((String)b.getOrDefault("created_at", "")).compareTo((String)a.getOrDefault("created_at", "")));
+        if (rows.size() > n) rows = rows.subList(0, n);
+        ctx.json(Map.of("delegated_tasks", rows, "count", rows.size()));
+    }
+
+    /** POST /api/org/control/delegated-tasks/{tenantId}/{taskId}/submit */
+    public void submitDelegatedTask(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String taskId = ctx.pathParam("taskId");
+        var task = tenant.getDelegatedTaskStore().get(taskId);
+        if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        DelegatedTaskResult result = delegatedTaskResultFromBody(body);
+        var verification = tenant.getDelegatedTaskStore().submitResult(taskId, result);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_SUBMITTED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "taskId", taskId,
+            "status", task.status().name(),
+            "accepted", verification.accepted(),
+            "summary", result.summary() != null ? result.summary() : "",
+            "changedFiles", result.changedFiles(),
+            "testsRun", result.testsRun().size(),
+            "risks", result.risks(),
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of(
+            "ok", true,
+            "tenant_id", tenant.getTenantId(),
+            "task", task.toMap(),
+            "verification", verification.toMap()
+        ));
+    }
+
+    /** POST /api/org/control/delegated-tasks/{tenantId}/{taskId}/verify */
+    public void verifyDelegatedTask(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        String taskId = ctx.pathParam("taskId");
+        var task = tenant.getDelegatedTaskStore().get(taskId);
+        if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        ParentVerificationPolicy policy = ParentVerificationPolicy.fromMap(policyBody(body));
+        var verification = tenant.getDelegatedTaskStore().verify(taskId, policy);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_DELEGATED_TASK_VERIFIED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "taskId", taskId,
+            "status", task.status().name(),
+            "accepted", verification.accepted(),
+            "policy", policy.toMap(),
+            "reasons", verification.reasons(),
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of(
+            "ok", true,
+            "tenant_id", tenant.getTenantId(),
+            "task", task.toMap(),
+            "verification", verification.toMap()
+        ));
+    }
+
     /** GET /api/org/control/traces?n=50 */
     public void traces(Context ctx) {
         int n = parseInt(ctx.queryParam("n"), 50);
@@ -413,6 +489,37 @@ public class OrgControlCenterHandler {
         if (header != null && !header.isBlank()) return header;
         String query = ctx.queryParam("actor");
         return query != null && !query.isBlank() ? query : "dashboard";
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> policyBody(Map<String, Object> body) {
+        Object nested = body.get("policy");
+        if (nested instanceof Map<?, ?> map) return (Map<String, Object>) map;
+        Map<String, Object> policy = new LinkedHashMap<>();
+        if (body.containsKey("require_tests")) policy.put("require_tests", body.get("require_tests"));
+        if (body.containsKey("require_all_tests_passed")) policy.put("require_all_tests_passed", body.get("require_all_tests_passed"));
+        if (body.containsKey("allowed_changed_file_prefixes")) policy.put("allowed_changed_file_prefixes", body.get("allowed_changed_file_prefixes"));
+        return policy;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static DelegatedTaskResult delegatedTaskResultFromBody(Map<String, Object> body) {
+        List<String> changedFiles = listOfStrings(body.get("changed_files"));
+        List<String> risks = listOfStrings(body.get("risks"));
+        List<DelegatedTaskResult.TestRun> tests = new ArrayList<>();
+        Object rawTests = body.get("tests_run");
+        if (rawTests instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) tests.add(DelegatedTaskResult.TestRun.fromMap((Map<String, Object>) map));
+                else if (item != null && !String.valueOf(item).isBlank()) tests.add(DelegatedTaskResult.TestRun.passed(String.valueOf(item)));
+            }
+        }
+        return DelegatedTaskResult.of(stringOrDefault(body.get("summary"), "Simulated specialist result"), changedFiles, tests, risks);
+    }
+
+    private static List<String> listOfStrings(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(x -> x != null && !String.valueOf(x).isBlank()).map(String::valueOf).toList();
     }
 
     private static void applyOverrideTtl(com.nousresearch.hermes.collaboration.AgentRole role, Map<String, Object> body) {
