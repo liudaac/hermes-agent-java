@@ -69,6 +69,13 @@ export default function OrgManagePage() {
     members: "",
     lead: "",
   });
+  const [filters, setFilters] = useState({
+    tenant: "ALL",
+    team: "ALL",
+    level: "ALL",
+    query: "",
+    missingOnly: false,
+  });
   const [form, setForm] = useState({
     tenant_id: "default",
     agent_id: "",
@@ -84,6 +91,23 @@ export default function OrgManagePage() {
 
   const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id), ...teams.map((team) => team.tenant_id)])).sort(), [tenantOptions, roles, teams]);
   const roleOptionsForTeam = useMemo(() => roles.filter((role) => role.tenant_id === teamForm.tenant_id), [roles, teamForm.tenant_id]);
+  const teamFilterOptions = useMemo(() => Array.from(new Set(teams.map((team) => team.team_id))).sort(), [teams]);
+  const filteredRoles = useMemo(() => roles.filter((role) => {
+    if (filters.tenant !== "ALL" && role.tenant_id !== filters.tenant) return false;
+    if (filters.level !== "ALL" && role.level !== filters.level) return false;
+    if (filters.team !== "ALL" && !(role.team_ids || []).includes(filters.team)) return false;
+    if (filters.missingOnly) return false;
+    const haystack = [role.tenant_id, role.agent_id, role.name, role.description, role.level, ...(role.skills || []), ...(role.responsibilities || []), ...(role.allowed_tools || []), ...(role.team_ids || [])].join(" ").toLowerCase();
+    return !filters.query || haystack.includes(filters.query.toLowerCase());
+  }), [roles, filters]);
+  const filteredTeams = useMemo(() => teams.filter((team) => {
+    if (filters.tenant !== "ALL" && team.tenant_id !== filters.tenant) return false;
+    if (filters.team !== "ALL" && team.team_id !== filters.team) return false;
+    if (filters.level !== "ALL" && !(team.member_roles || []).some((member) => member.level === filters.level)) return false;
+    if (filters.missingOnly && !(team.member_roles || []).some((member) => member.missing_role)) return false;
+    const haystack = [team.tenant_id, team.team_id, team.name, team.mission, team.lead, ...(team.members || []), ...((team.member_roles || []).flatMap((member) => [member.agent_id, member.name, member.level, ...(member.skills || []), ...(member.responsibilities || [])]))].join(" ").toLowerCase();
+    return !filters.query || haystack.includes(filters.query.toLowerCase());
+  }), [teams, filters]);
   const teamOptionsForRole = useMemo(() => teams.filter((team) => team.tenant_id === form.tenant_id), [teams, form.tenant_id]);
   const selectedRoleTeams = useMemo(() => split(form.team_ids), [form.team_ids]);
   const selectedTeamMembers = useMemo(() => split(teamForm.members), [teamForm.members]);
@@ -214,6 +238,37 @@ export default function OrgManagePage() {
 
       {error && <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
 
+      <Card>
+        <CardHeader><CardTitle className="text-base">{om.filters.title}</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-5">
+          <Field label={om.fields.tenant}>
+            <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={filters.tenant} onChange={(e) => setFilters({ ...filters, tenant: e.target.value })}>
+              <option value="ALL">{om.filters.all}</option>
+              {tenants.map((tenant) => <option key={tenant} value={tenant}>{tenant}</option>)}
+            </select>
+          </Field>
+          <Field label={om.filters.team}>
+            <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={filters.team} onChange={(e) => setFilters({ ...filters, team: e.target.value })}>
+              <option value="ALL">{om.filters.all}</option>
+              {teamFilterOptions.map((team) => <option key={team} value={team}>{team}</option>)}
+            </select>
+          </Field>
+          <Field label={om.fields.level}>
+            <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={filters.level} onChange={(e) => setFilters({ ...filters, level: e.target.value })}>
+              <option value="ALL">{om.filters.all}</option>
+              {LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
+            </select>
+          </Field>
+          <Field label={om.filters.search}>
+            <input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={filters.query} placeholder={om.filters.searchPlaceholder} onChange={(e) => setFilters({ ...filters, query: e.target.value })} />
+          </Field>
+          <label className="flex items-end gap-2 pb-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={filters.missingOnly} onChange={(e) => setFilters({ ...filters, missingOnly: e.target.checked })} />
+            {om.filters.missingOnly}
+          </label>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-3">
         <InfoCard title={om.relationship.tenants} value={summary?.tenants ?? 0} desc={om.relationship.tenantsDesc} />
         <InfoCard title={om.relationship.orgManagement} value={summary?.teams ?? 0} desc={om.relationship.orgManagementDesc} />
@@ -258,9 +313,9 @@ export default function OrgManagePage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Network className="h-4 w-4" /> {om.teams.title}</CardTitle></CardHeader>
           <CardContent>
-            {teams.length === 0 ? <div className="text-sm text-muted-foreground">{om.teams.empty}</div> : (
+            {filteredTeams.length === 0 ? <div className="text-sm text-muted-foreground">{om.teams.empty}</div> : (
               <div className="space-y-3">
-                {teams.map((team) => (
+                {filteredTeams.map((team) => (
                   <div key={`${team.tenant_id}:${team.team_id}`} className="rounded-lg border border-current/15 p-3">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">
@@ -327,9 +382,9 @@ export default function OrgManagePage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Network className="h-4 w-4" /> {om.roles.title}</CardTitle></CardHeader>
           <CardContent>
-            {roles.length === 0 ? <div className="text-sm text-muted-foreground">{om.roles.empty}</div> : (
+            {filteredRoles.length === 0 ? <div className="text-sm text-muted-foreground">{om.roles.empty}</div> : (
               <div className="space-y-3">
-                {roles.map((role) => (
+                {filteredRoles.map((role) => (
                   <div key={`${role.tenant_id}:${role.agent_id}`} className="rounded-lg border border-current/15 p-3">
                     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                       <div className="min-w-0">

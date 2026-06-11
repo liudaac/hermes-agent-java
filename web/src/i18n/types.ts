@@ -570,6 +570,7 @@ export interface Translations {
     fields: { tenant: string; agentId: string; roleName: string; description: string; level: string; skills: string; responsibilities: string; reportsTo: string; allowedTools: string; teams: string; };
     roles: { title: string; empty: string; edit: string; };
     teams: { title: string; formTitle: string; empty: string; saveTeam: string; saveFailed: string; deleteFailed: string; deleteConfirm: string; teamId: string; name: string; mission: string; members: string; lead: string; showDetails: string; hideDetails: string; missingRole: string; };
+    filters: { title: string; all: string; team: string; search: string; searchPlaceholder: string; missingOnly: string; };
     audit: {
       title: string;
       empty: string;

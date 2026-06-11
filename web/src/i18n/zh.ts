@@ -116,6 +116,7 @@ export const zh: Translations = {
     deleteSession: "删除会话",
     previousPage: "上一页",
     nextPage: "下一页",
+    filters: { title: "筛选", all: "全部", team: "团队", search: "搜索", searchPlaceholder: "代理、角色、技能、使命……", missingOnly: "只看缺少角色" },
     roles: {
       user: "用户",
       assistant: "助手",
@@ -551,6 +552,7 @@ export const zh: Translations = {
     relationship: { tenants: "租户", tenantsDesc: "资源与隔离容器。", orgManagement: "组织管理", orgManagementDesc: "维护租户内的团队、代理、角色和组织结构。", orgControl: "组织控制", orgControlDesc: "运行时治理与干预，不负责基础结构维护。" },
     form: { title: "代理角色", saveRole: "保存角色", csvPlaceholder: "用逗号分隔", tagPlaceholder: "输入后按回车", addTag: "添加", note: "租户是容器；角色定义该租户内的组织结构。" },
     fields: { tenant: "租户", agentId: "代理 ID", roleName: "角色名", description: "描述", level: "级别", skills: "技能", responsibilities: "职责", reportsTo: "汇报给", allowedTools: "允许工具", teams: "团队" },
+    filters: { title: "筛选", all: "全部", team: "团队", search: "搜索", searchPlaceholder: "代理、角色、技能、使命……", missingOnly: "只看缺少角色" },
     roles: { title: "代理角色", empty: "暂无代理角色", edit: "编辑" },
     teams: { title: "团队", formTitle: "团队", empty: "暂无团队", saveTeam: "保存团队", saveFailed: "保存团队失败", deleteFailed: "删除团队失败", deleteConfirm: "删除团队 {team}？", teamId: "团队 ID", name: "名称", mission: "使命", members: "成员", lead: "负责人", showDetails: "显示详情", hideDetails: "隐藏详情", missingRole: "缺少角色" },
     audit: { title: "结构变更历史", empty: "暂无组织结构变更", events: { roleCreated: "角色已创建", roleUpdated: "角色已更新", roleDeleted: "角色已删除", teamCreated: "团队已创建", teamUpdated: "团队已更新", teamDeleted: "团队已删除" } }
