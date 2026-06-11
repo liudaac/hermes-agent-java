@@ -43,6 +43,33 @@ class DelegatedTaskLifecycleTest {
         assertEquals(DelegatedTask.Status.ACCEPTED, task.status());
         assertNotNull(task.result());
         assertTrue(task.result().allTestsPassed());
+        assertEquals(1, task.verificationHistory().size());
+        assertTrue(task.verificationHistory().get(0).result().accepted());
+    }
+
+    @Test
+    void multipleVerificationsAppendImmutableHistoryAndUpdateLatestStatus() {
+        DelegatedTask task = new DelegatedTaskStore().createPending(envelope());
+        task.submitResult(DelegatedTaskResult.of(
+            "Changed source without test",
+            List.of("src/main/java/Example.java"),
+            List.of(),
+            List.of()
+        ));
+
+        assertEquals(DelegatedTask.Status.REJECTED, task.status());
+        assertFalse(task.verification().accepted());
+        assertEquals(1, task.verificationHistory().size());
+        assertFalse(task.verificationHistory().get(0).result().accepted());
+
+        ParentVerificationResult accepted = task.verifyWithPolicy(new ParentVerificationPolicy(false, false, List.of()));
+
+        assertTrue(accepted.accepted());
+        assertEquals(DelegatedTask.Status.ACCEPTED, task.status());
+        assertTrue(task.verification().accepted());
+        assertEquals(2, task.verificationHistory().size());
+        assertFalse(task.verificationHistory().get(0).result().accepted());
+        assertTrue(task.verificationHistory().get(1).result().accepted());
     }
 
     @Test
@@ -98,6 +125,8 @@ class DelegatedTaskLifecycleTest {
         assertNotNull(map.get("envelope"));
         assertNotNull(map.get("result"));
         assertNotNull(map.get("verification"));
+        assertNotNull(map.get("latest_verification"));
+        assertEquals(1, ((List<?>) map.get("verification_history")).size());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> decoded = new ObjectMapper().readValue(new ObjectMapper().writeValueAsString(map), Map.class);
@@ -107,6 +136,29 @@ class DelegatedTaskLifecycleTest {
         assertEquals(DelegatedTask.Status.ACCEPTED, restored.status());
         assertEquals("Done", restored.result().summary());
         assertTrue(restored.verification().accepted());
+        assertEquals(1, restored.verificationHistory().size());
+        assertTrue(restored.verificationHistory().get(0).result().accepted());
+    }
+
+    @Test
+    void oldMapWithoutVerificationHistoryBackfillsHistoryFromLatestVerification() {
+        DelegatedTask task = new DelegatedTaskStore().createPending(envelope());
+        task.submitResult(DelegatedTaskResult.of(
+            "Done",
+            List.of("src/main/java/Example.java"),
+            List.of(DelegatedTaskResult.TestRun.passed("mvn test")),
+            List.of()
+        ));
+        Map<String, Object> oldMap = new java.util.LinkedHashMap<>(task.toMap());
+        oldMap.remove("verification_history");
+        oldMap.remove("latest_verification");
+
+        DelegatedTask restored = DelegatedTask.fromMap(oldMap);
+
+        assertEquals(DelegatedTask.Status.ACCEPTED, restored.status());
+        assertTrue(restored.verification().accepted());
+        assertEquals(1, restored.verificationHistory().size());
+        assertTrue(restored.verificationHistory().get(0).result().accepted());
     }
 
     private static DelegatedTaskEnvelope envelope() {

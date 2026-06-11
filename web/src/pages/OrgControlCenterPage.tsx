@@ -693,7 +693,8 @@ function DelegatedTaskCard({
   const verifyKey = `${task.tenant_id}:${task.task_id}:delegated:verify`;
   const envelope = task.envelope || {};
   const result = task.result || {};
-  const verification = task.verification || {};
+  const verification = task.latest_verification || task.verification || {};
+  const history = task.verification_history || [];
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -714,8 +715,13 @@ function DelegatedTaskCard({
       {verification.reasons && (
         <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{verification.reasons.join("; ")}</div>
       )}
+      {history.length > 0 && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          Verification history: {history.length} · latest {verification.status || task.status}
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" disabled={busyAction === submitKey || task.status === "ACCEPTED" || task.status === "REJECTED"} onClick={() => onSubmit(task)}>
+        <Button variant="secondary" size="sm" disabled={busyAction === submitKey} onClick={() => onSubmit(task)}>
           {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {oc.buttons.submitResult}
         </Button>

@@ -1,7 +1,9 @@
 package com.nousresearch.hermes.collaboration;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,12 +20,13 @@ public class DelegatedTask {
     private final DelegatedTaskEnvelope envelope;
     private final ParentVerificationPolicy verificationPolicy;
     private final Instant createdAt;
+    private final List<DelegatedTaskVerificationEntry> verificationHistory;
     private volatile Status status;
     private volatile DelegatedTaskResult result;
     private volatile ParentVerificationResult verification;
 
     public DelegatedTask(String taskId, DelegatedTaskEnvelope envelope, ParentVerificationPolicy verificationPolicy) {
-        this(taskId, envelope, verificationPolicy, Instant.now(), Status.PENDING, null, null);
+        this(taskId, envelope, verificationPolicy, Instant.now(), Status.PENDING, null, null, List.of());
     }
 
     public DelegatedTask(
@@ -35,6 +38,19 @@ public class DelegatedTask {
         DelegatedTaskResult result,
         ParentVerificationResult verification
     ) {
+        this(taskId, envelope, verificationPolicy, createdAt, status, result, verification, List.of());
+    }
+
+    public DelegatedTask(
+        String taskId,
+        DelegatedTaskEnvelope envelope,
+        ParentVerificationPolicy verificationPolicy,
+        Instant createdAt,
+        Status status,
+        DelegatedTaskResult result,
+        ParentVerificationResult verification,
+        List<DelegatedTaskVerificationEntry> verificationHistory
+    ) {
         if (taskId == null || taskId.isBlank()) throw new IllegalArgumentException("taskId is required");
         if (envelope == null) throw new IllegalArgumentException("delegated task envelope is required");
         this.taskId = taskId;
@@ -44,12 +60,14 @@ public class DelegatedTask {
         this.status = status != null ? status : Status.PENDING;
         this.result = result;
         this.verification = verification;
+        List<DelegatedTaskVerificationEntry> history = verificationHistory != null ? new ArrayList<>(verificationHistory) : new ArrayList<>();
+        if (history.isEmpty() && verification != null) {
+            history.add(new DelegatedTaskVerificationEntry("verification_1", this.verificationPolicy, verification, verification.verifiedAt()));
+        }
+        this.verificationHistory = history;
     }
 
     public synchronized ParentVerificationResult submitResult(DelegatedTaskResult result) {
-        if (status == Status.ACCEPTED || status == Status.REJECTED) {
-            throw new IllegalStateException("delegated task already finalized: " + status);
-        }
         this.result = result;
         this.status = Status.SUBMITTED;
         return verifyWithPolicy(verificationPolicy);
@@ -65,6 +83,7 @@ public class DelegatedTask {
         ParentVerificationPolicy effective = policy != null ? policy : verificationPolicy;
         ParentVerificationResult checked = effective.verify(this, result);
         this.verification = checked;
+        this.verificationHistory.add(DelegatedTaskVerificationEntry.of(this.verificationHistory.size() + 1, effective, checked));
         this.status = checked.accepted() ? Status.ACCEPTED : Status.REJECTED;
         return checked;
     }
@@ -80,6 +99,7 @@ public class DelegatedTask {
     public Status status() { return status; }
     public DelegatedTaskResult result() { return result; }
     public ParentVerificationResult verification() { return verification; }
+    public synchronized List<DelegatedTaskVerificationEntry> verificationHistory() { return List.copyOf(verificationHistory); }
 
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -90,6 +110,8 @@ public class DelegatedTask {
         m.put("verification_policy", verificationPolicy.toMap());
         m.put("result", result != null ? result.toMap() : null);
         m.put("verification", verification != null ? verification.toMap() : null);
+        m.put("latest_verification", verification != null ? verification.toMap() : null);
+        m.put("verification_history", verificationHistory().stream().map(DelegatedTaskVerificationEntry::toMap).toList());
         return m;
     }
 
@@ -100,6 +122,18 @@ public class DelegatedTask {
         Status status = Status.PENDING;
         try { status = Status.valueOf(String.valueOf(m.getOrDefault("status", "PENDING"))); }
         catch (Exception ignored) {}
+        ParentVerificationResult verification = ParentVerificationResult.fromMap((Map<String, Object>) m.get("verification"));
+        if (verification == null) verification = ParentVerificationResult.fromMap((Map<String, Object>) m.get("latest_verification"));
+        List<DelegatedTaskVerificationEntry> history = new ArrayList<>();
+        Object rawHistory = m.get("verification_history");
+        if (rawHistory instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> hm) {
+                    DelegatedTaskVerificationEntry entry = DelegatedTaskVerificationEntry.fromMap((Map<String, Object>) hm);
+                    if (entry != null) history.add(entry);
+                }
+            }
+        }
         return new DelegatedTask(
             String.valueOf(m.get("task_id")),
             envelope,
@@ -107,7 +141,8 @@ public class DelegatedTask {
             parseInstant(m.get("created_at")),
             status,
             DelegatedTaskResult.fromMap((Map<String, Object>) m.get("result")),
-            ParentVerificationResult.fromMap((Map<String, Object>) m.get("verification"))
+            verification,
+            history
         );
     }
 

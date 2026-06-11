@@ -1,5 +1,12 @@
 package com.nousresearch.hermes.collaboration;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -8,21 +15,35 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Small in-memory store for simulated delegated-task lifecycle state.
- * Intended as a future orchestrator API surface, not persistent execution infra.
+ * Store for simulated delegated-task lifecycle state.
+ * Intended as an orchestrator API surface and persisted tenant state, not
+ * external execution infrastructure.
  */
 public class DelegatedTaskStore {
+    private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
     private final AtomicLong ids = new AtomicLong();
     private final ConcurrentHashMap<String, DelegatedTask> tasks = new ConcurrentHashMap<>();
+    private final Path storePath;
 
-    public DelegatedTask createPending(DelegatedTaskEnvelope envelope) {
+    public DelegatedTaskStore() {
+        this(null);
+    }
+
+    public DelegatedTaskStore(Path storePath) {
+        this.storePath = storePath;
+        load();
+    }
+
+    public synchronized DelegatedTask createPending(DelegatedTaskEnvelope envelope) {
         return createPending(envelope, ParentVerificationPolicy.strict());
     }
 
-    public DelegatedTask createPending(DelegatedTaskEnvelope envelope, ParentVerificationPolicy policy) {
+    public synchronized DelegatedTask createPending(DelegatedTaskEnvelope envelope, ParentVerificationPolicy policy) {
         String id = "delegated_" + ids.incrementAndGet();
         DelegatedTask task = new DelegatedTask(id, envelope, policy != null ? policy : ParentVerificationPolicy.strict());
         tasks.put(id, task);
+        save();
         return task;
     }
 
@@ -36,16 +57,20 @@ public class DelegatedTaskStore {
             .toList();
     }
 
-    public ParentVerificationResult submitResult(String taskId, DelegatedTaskResult result) {
+    public synchronized ParentVerificationResult submitResult(String taskId, DelegatedTaskResult result) {
         DelegatedTask task = tasks.get(taskId);
         if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
-        return task.submitResult(result);
+        ParentVerificationResult verification = task.submitResult(result);
+        save();
+        return verification;
     }
 
-    public ParentVerificationResult verify(String taskId, ParentVerificationPolicy policy) {
+    public synchronized ParentVerificationResult verify(String taskId, ParentVerificationPolicy policy) {
         DelegatedTask task = tasks.get(taskId);
         if (task == null) throw new IllegalArgumentException("Unknown delegated task: " + taskId);
-        return task.verifyWithPolicy(policy);
+        ParentVerificationResult verification = task.verifyWithPolicy(policy);
+        save();
+        return verification;
     }
 
     public Map<String, Object> toMap() {
@@ -53,5 +78,62 @@ public class DelegatedTaskStore {
         m.put("tasks", list().stream().map(DelegatedTask::toMap).toList());
         m.put("count", tasks.size());
         return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static DelegatedTaskStore fromMap(Map<String, Object> m) {
+        DelegatedTaskStore store = new DelegatedTaskStore();
+        store.loadFromMap(m);
+        return store;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadFromMap(Map<String, Object> m) {
+        if (m == null) return;
+        Object rawTasks = m.get("tasks");
+        long maxId = 0;
+        if (rawTasks instanceof List<?> list) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> tm)) continue;
+                try {
+                    DelegatedTask task = DelegatedTask.fromMap((Map<String, Object>) tm);
+                    if (task.taskId() != null && !task.taskId().isBlank() && !"null".equals(task.taskId())) {
+                        tasks.put(task.taskId(), task);
+                        maxId = Math.max(maxId, numericSuffix(task.taskId()));
+                    }
+                } catch (Exception ignored) {
+                    // A single corrupt task should not block loading remaining tenant state.
+                }
+            }
+        }
+        ids.set(Math.max(ids.get(), maxId));
+    }
+
+    private void load() {
+        if (storePath == null || !Files.exists(storePath)) return;
+        try {
+            Map<String, Object> map = MAPPER.readValue(storePath.toFile(), new TypeReference<Map<String, Object>>() {});
+            loadFromMap(map);
+        } catch (Exception ignored) {
+            // Corrupt delegated-task state should not block tenant startup; later writes will repair it.
+        }
+    }
+
+    private synchronized void save() {
+        if (storePath == null) return;
+        try {
+            Files.createDirectories(storePath.getParent());
+            MAPPER.writeValue(storePath.toFile(), toMap());
+        } catch (IOException ignored) {
+            // Best-effort persistence; callers still receive in-memory state and audit events.
+        }
+    }
+
+    private static long numericSuffix(String id) {
+        if (id == null) return 0;
+        int idx = id.lastIndexOf('_');
+        if (idx < 0 || idx == id.length() - 1) return 0;
+        try { return Long.parseLong(id.substring(idx + 1)); }
+        catch (Exception ignored) { return 0; }
     }
 }

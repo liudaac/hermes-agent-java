@@ -1015,7 +1015,7 @@ public class TenantContext {
         if (delegatedTaskStore == null) {
             synchronized (this) {
                 if (delegatedTaskStore == null) {
-                    delegatedTaskStore = new com.nousresearch.hermes.collaboration.DelegatedTaskStore();
+                    delegatedTaskStore = new com.nousresearch.hermes.collaboration.DelegatedTaskStore(tenantDir.resolve("state").resolve("delegated-tasks.json"));
                 }
             }
         }
