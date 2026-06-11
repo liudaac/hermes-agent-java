@@ -15,6 +15,8 @@ import { fetchJSON } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n";
 
 interface Overview {
@@ -278,48 +280,32 @@ export default function OrgControlCenterPage() {
     }));
   }, [askReason, runControl]);
 
-  const submitDelegatedTask = useCallback((task: any) => {
-    const summary = window.prompt(oc.delegated.summaryPrompt, task.result?.summary || "Simulated specialist completed the task");
-    if (summary === null) return;
-    const changedFilesRaw = window.prompt(oc.delegated.changedFilesPrompt, (task.result?.changed_files || []).join(", ") || "src/main/java/example.java");
-    if (changedFilesRaw === null) return;
-    const testsRaw = window.prompt(oc.delegated.testsPrompt, "mvn test:pass");
-    if (testsRaw === null) return;
-    const risksRaw = window.prompt(oc.delegated.risksPrompt, (task.result?.risks || []).join(", "));
-    if (risksRaw === null) return;
-    const tests_run = testsRaw.split(",").map((item) => item.trim()).filter(Boolean).map((item) => {
-      const [name, status = "pass", ...rest] = item.split(":");
-      const passed = !["fail", "failed", "false"].includes(status.trim().toLowerCase());
-      return { name: name.trim(), passed, details: rest.join(":").trim() };
-    });
+  const submitDelegatedTask = useCallback((task: any, payload: { summary: string; changed_files: string[]; tests_run: any[]; risks: string[] }) => {
     const key = `${task.tenant_id}:${task.task_id}:delegated:submit`;
     return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         actor: "dashboard",
-        summary: summary.trim() || "Simulated specialist result",
-        changed_files: changedFilesRaw.split(",").map((x) => x.trim()).filter(Boolean),
-        tests_run,
-        risks: risksRaw.split(",").map((x) => x.trim()).filter(Boolean),
+        summary: payload.summary.trim() || "Simulated specialist result",
+        changed_files: payload.changed_files,
+        tests_run: payload.tests_run,
+        risks: payload.risks,
       }),
     }));
   }, [runControl]);
 
-  const verifyDelegatedTask = useCallback((task: any) => {
-    const prefixes = window.prompt(oc.delegated.allowedPrefixesPrompt, (task.verification_policy?.allowed_changed_file_prefixes || []).join(", "));
-    if (prefixes === null) return;
-    const requireTests = window.confirm(oc.delegated.requireTestsConfirm);
-    const requireAllTestsPassed = window.confirm(oc.delegated.requireAllTestsPassedConfirm);
+  const verifyDelegatedTask = useCallback((task: any, payload: { require_tests_reported: boolean; require_all_tests_passed: boolean; allowed_paths: string[] }) => {
     const key = `${task.tenant_id}:${task.task_id}:delegated:verify`;
     return runControl(key, () => fetchJSON(`/api/org/control/delegated-tasks/${encodeURIComponent(task.tenant_id)}/${encodeURIComponent(task.task_id)}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         actor: "dashboard",
-        require_tests: requireTests,
-        require_all_tests_passed: requireAllTestsPassed,
-        allowed_changed_file_prefixes: prefixes.split(",").map((x) => x.trim()).filter(Boolean),
+        require_tests_reported: payload.require_tests_reported,
+        require_tests: payload.require_tests_reported,
+        require_all_tests_passed: payload.require_all_tests_passed,
+        allowed_changed_file_prefixes: payload.allowed_paths,
       }),
     }));
   }, [runControl]);
@@ -701,8 +687,8 @@ function DelegatedTaskCard({
 }: {
   task: any;
   busyAction: string;
-  onSubmit: (task: any) => void;
-  onVerify: (task: any) => void;
+  onSubmit: (task: any, payload: { summary: string; changed_files: string[]; tests_run: any[]; risks: string[] }) => void;
+  onVerify: (task: any, payload: { require_tests_reported: boolean; require_all_tests_passed: boolean; allowed_paths: string[] }) => void;
 }) {
   const { t } = useI18n();
   const oc = t.orgControl;
@@ -713,6 +699,10 @@ function DelegatedTaskCard({
   const verification = task.latest_verification || task.verification || {};
   const history = Array.isArray(task.verification_history) ? task.verification_history : [];
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const closeSubmit = () => setSubmitOpen(false);
+  const closeVerify = () => setVerifyOpen(false);
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -753,17 +743,170 @@ function DelegatedTaskCard({
         </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="secondary" size="sm" disabled={busyAction === submitKey} onClick={() => onSubmit(task)}>
+        <Button variant="secondary" size="sm" disabled={busyAction === submitKey} onClick={() => setSubmitOpen((open) => !open)}>
           {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {submitOpen ? oc.buttons.cancel : oc.buttons.submitResult}
+        </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => setVerifyOpen((open) => !open)}>
+          {busyAction === verifyKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {verifyOpen ? oc.buttons.cancel : oc.buttons.verify}
+        </Button>
+      </div>
+      {submitOpen && (
+        <DelegatedSubmitForm
+          task={task}
+          busy={busyAction === submitKey}
+          onCancel={closeSubmit}
+          onSubmit={(payload) => { onSubmit(task, payload); closeSubmit(); }}
+        />
+      )}
+      {verifyOpen && (
+        <DelegatedVerifyForm
+          task={task}
+          busy={busyAction === verifyKey}
+          onCancel={closeVerify}
+          onSubmit={(payload) => { onVerify(task, payload); closeVerify(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DelegatedSubmitForm({
+  task,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  task: any;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: { summary: string; changed_files: string[]; tests_run: any[]; risks: string[] }) => void;
+}) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  const result = task.result || {};
+  const [summary, setSummary] = useState(result.summary || "");
+  const [changedFiles, setChangedFiles] = useState((result.changed_files || []).join("\n"));
+  const [tests, setTests] = useState(formatTestsForForm(result.tests_run || []));
+  const [risks, setRisks] = useState((result.risks || []).join("\n"));
+  return (
+    <div className="mt-3 rounded-md border border-current/10 bg-background/40 p-3">
+      <div className="mb-3 text-xs font-medium">{oc.delegated.submitFormTitle}</div>
+      <div className="space-y-3">
+        <TextAreaField label={oc.delegated.summaryLabel} value={summary} onChange={setSummary} rows={2} placeholder={oc.delegated.summaryPlaceholder} />
+        <TextAreaField label={oc.delegated.changedFilesLabel} value={changedFiles} onChange={setChangedFiles} rows={3} placeholder={oc.delegated.changedFilesPlaceholder} />
+        <TextAreaField label={oc.delegated.testsRunLabel} value={tests} onChange={setTests} rows={3} placeholder={oc.delegated.testsRunPlaceholder} />
+        <TextAreaField label={oc.delegated.risksLabel} value={risks} onChange={setRisks} rows={2} placeholder={oc.delegated.risksPlaceholder} />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" disabled={busy} onClick={onCancel}>{oc.buttons.cancel}</Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() => onSubmit({
+            summary,
+            changed_files: splitLinesOrComma(changedFiles),
+            tests_run: parseTestsRun(tests),
+            risks: splitLinesOrComma(risks),
+          })}
+        >
+          {busy ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {oc.buttons.submitResult}
         </Button>
-        <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => onVerify(task)}>
-          {busyAction === verifyKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+      </div>
+    </div>
+  );
+}
+
+function DelegatedVerifyForm({
+  task,
+  busy,
+  onCancel,
+  onSubmit,
+}: {
+  task: any;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (payload: { require_tests_reported: boolean; require_all_tests_passed: boolean; allowed_paths: string[] }) => void;
+}) {
+  const { t } = useI18n();
+  const oc = t.orgControl;
+  const policy = task.verification_policy || {};
+  const [requireTests, setRequireTests] = useState(policy.require_tests !== false);
+  const [requireAllTestsPassed, setRequireAllTestsPassed] = useState(policy.require_all_tests_passed !== false);
+  const [allowedPaths, setAllowedPaths] = useState((policy.allowed_changed_file_prefixes || []).join("\n"));
+  return (
+    <div className="mt-3 rounded-md border border-current/10 bg-background/40 p-3">
+      <div className="mb-3 text-xs font-medium">{oc.delegated.verifyFormTitle}</div>
+      <div className="space-y-3">
+        <SwitchField label={oc.delegated.requireTestsReportedLabel} checked={requireTests} onCheckedChange={setRequireTests} />
+        <SwitchField label={oc.delegated.requireAllTestsPassedLabel} checked={requireAllTestsPassed} onCheckedChange={setRequireAllTestsPassed} />
+        <TextAreaField label={oc.delegated.allowedPathsLabel} value={allowedPaths} onChange={setAllowedPaths} rows={3} placeholder={oc.delegated.allowedPathsPlaceholder} />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" disabled={busy} onClick={onCancel}>{oc.buttons.cancel}</Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() => onSubmit({
+            require_tests_reported: requireTests,
+            require_all_tests_passed: requireAllTestsPassed,
+            allowed_paths: splitLinesOrComma(allowedPaths),
+          })}
+        >
+          {busy ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {oc.buttons.verify}
         </Button>
       </div>
     </div>
   );
+}
+
+function TextAreaField({ label, value, onChange, rows, placeholder }: { label: string; value: string; onChange: (value: string) => void; rows: number; placeholder?: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <textarea
+        className="w-full rounded-sm border border-border bg-background/40 px-3 py-2 font-courier text-sm placeholder:text-muted-foreground/60 focus-visible:border-midground/40 focus-visible:bg-background/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground/40"
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function SwitchField({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-sm border border-current/10 px-3 py-2">
+      <Label>{label}</Label>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function splitLinesOrComma(value: string) {
+  return value.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+function parseTestsRun(value: string) {
+  return splitLinesOrComma(value).map((item) => {
+    const [name, status = "pass", ...rest] = item.split(":");
+    const passed = !["fail", "failed", "false"].includes(status.trim().toLowerCase());
+    return { name: name.trim(), passed, details: rest.join(":").trim() };
+  }).filter((test) => test.name);
+}
+
+function formatTestsForForm(tests: any[]) {
+  return tests.map((test) => {
+    if (typeof test === "string") return test;
+    const status = test.passed === false ? "fail" : "pass";
+    return `${test.name || "test"}:${status}${test.details ? `:${test.details}` : ""}`;
+  }).join("\n");
 }
 
 function VerificationHistoryEntry({ entry }: { entry: any }) {
