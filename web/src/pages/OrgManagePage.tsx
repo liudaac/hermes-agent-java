@@ -18,6 +18,15 @@ type RoleRow = {
   allowed_tools?: string[];
 };
 
+type TeamMemberRole = {
+  agent_id: string;
+  name?: string;
+  level?: string;
+  skills?: string[];
+  missing_role?: boolean;
+  is_lead?: boolean;
+};
+
 type TeamRow = {
   tenant_id: string;
   team_id: string;
@@ -26,6 +35,7 @@ type TeamRow = {
   members?: string[];
   lead?: string;
   size?: number;
+  member_roles?: TeamMemberRole[];
 };
 
 type Summary = {
@@ -67,6 +77,8 @@ export default function OrgManagePage() {
   });
 
   const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id), ...teams.map((team) => team.tenant_id)])).sort(), [tenantOptions, roles, teams]);
+  const roleOptionsForTeam = useMemo(() => roles.filter((role) => role.tenant_id === teamForm.tenant_id), [roles, teamForm.tenant_id]);
+  const selectedTeamMembers = useMemo(() => split(teamForm.members), [teamForm.members]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -210,8 +222,23 @@ export default function OrgManagePage() {
             <Field label={om.teams.teamId}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.team_id} onChange={(e) => setTeamForm({ ...teamForm, team_id: e.target.value })} /></Field>
             <Field label={om.teams.name}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} /></Field>
             <Field label={om.teams.mission}><textarea className="w-full rounded-md border bg-background px-3 py-2 text-sm" rows={2} value={teamForm.mission} onChange={(e) => setTeamForm({ ...teamForm, mission: e.target.value })} /></Field>
-            <Field label={om.teams.members}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.members} placeholder={om.form.csvPlaceholder} onChange={(e) => setTeamForm({ ...teamForm, members: e.target.value })} /></Field>
-            <Field label={om.teams.lead}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.lead} onChange={(e) => setTeamForm({ ...teamForm, lead: e.target.value })} /></Field>
+            <Field label={om.teams.members}>
+              <select
+                multiple
+                className="h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={selectedTeamMembers}
+                onChange={(e) => setTeamForm({ ...teamForm, members: Array.from(e.target.selectedOptions).map((option) => option.value).join(", ") })}
+              >
+                {roleOptionsForTeam.map((role) => <option key={role.agent_id} value={role.agent_id}>{role.agent_id} · {role.name} · {role.level}</option>)}
+              </select>
+              <input className="mt-2 w-full rounded-md border bg-background px-3 py-2 text-xs" value={teamForm.members} placeholder={om.form.csvPlaceholder} onChange={(e) => setTeamForm({ ...teamForm, members: e.target.value })} />
+            </Field>
+            <Field label={om.teams.lead}>
+              <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={teamForm.lead} onChange={(e) => setTeamForm({ ...teamForm, lead: e.target.value })}>
+                <option value="">—</option>
+                {roleOptionsForTeam.map((role) => <option key={role.agent_id} value={role.agent_id}>{role.agent_id} · {role.name}</option>)}
+              </select>
+            </Field>
             <Button className="w-full" onClick={submitTeam} disabled={!teamForm.tenant_id || !teamForm.team_id || !teamForm.name}>{om.teams.saveTeam}</Button>
           </CardContent>
         </Card>
@@ -232,7 +259,7 @@ export default function OrgManagePage() {
                         </div>
                         <div className="mt-1 text-sm text-muted-foreground">{team.mission || t.common.none}</div>
                         {team.lead && <div className="mt-1 text-xs text-muted-foreground">{om.teams.lead}: {team.lead}</div>}
-                        <ChipRow label={om.teams.members} values={team.members || []} />
+                        <TeamMemberRoles members={team.member_roles || []} fallback={team.members || []} />
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => editTeam(team)}>{om.roles.edit}</Button>
@@ -315,6 +342,23 @@ function InfoCard({ title, value, desc }: { title: string; value: number; desc: 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block space-y-1"><span className="text-xs font-medium text-muted-foreground">{label}</span>{children}</label>;
+}
+
+
+function TeamMemberRoles({ members, fallback }: { members: TeamMemberRole[]; fallback: string[] }) {
+  const { t } = useI18n();
+  const om = t.orgManage;
+  if (!members.length) return <ChipRow label={om.teams.members} values={fallback} />;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1 text-xs">
+      <span className="mr-1 text-muted-foreground">{om.teams.members}</span>
+      {members.map((member) => (
+        <Badge key={member.agent_id} variant={member.is_lead ? "default" : "secondary"}>
+          {member.agent_id}{member.name ? ` · ${member.name}` : ""}{member.level ? ` · ${member.level}` : ""}{member.missing_role ? " · missing role" : ""}
+        </Badge>
+      ))}
+    </div>
+  );
 }
 
 function ChipRow({ label, values }: { label: string; values: string[] }) {

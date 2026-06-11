@@ -47,7 +47,7 @@ public class OrgManagementHandler {
         List<Map<String, Object>> rows = new ArrayList<>();
         for (TenantContext tenant : tenants(tenantId)) {
             for (Team team : tenant.getTeamManager().listTeams()) {
-                rows.add(new LinkedHashMap<>(team.toMap()));
+                rows.add(teamToMap(tenant, team));
             }
         }
         rows.sort((a, b) -> (String.valueOf(a.get("tenant_id")) + ":" + a.get("team_id")).compareTo(String.valueOf(b.get("tenant_id")) + ":" + b.get("team_id")));
@@ -83,7 +83,7 @@ public class OrgManagementHandler {
             "name", name,
             "timestamp", System.currentTimeMillis()
         ));
-        Map<String, Object> response = new LinkedHashMap<>(team.toMap());
+        Map<String, Object> response = teamToMap(tenant, team);
         response.put("ok", true);
         ctx.json(response);
     }
@@ -202,6 +202,28 @@ public class OrgManagementHandler {
         if (body.get("min_task_score") instanceof Number n) role.minTaskScore(n.doubleValue());
         if (body.get("max_consecutive_failures") instanceof Number n) role.maxConsecutiveFailures(n.intValue());
         return role;
+    }
+
+
+    private static Map<String, Object> teamToMap(TenantContext tenant, Team team) {
+        Map<String, Object> map = new LinkedHashMap<>(team.toMap());
+        List<Map<String, Object>> memberRoles = new ArrayList<>();
+        for (String memberId : team.getMemberIds()) {
+            AgentRole role = tenant.getAgentRole(memberId);
+            if (role != null) {
+                Map<String, Object> roleMap = new LinkedHashMap<>(roleToMap(memberId, role));
+                roleMap.put("is_lead", memberId.equals(team.getLead()));
+                memberRoles.add(roleMap);
+            } else {
+                memberRoles.add(Map.of(
+                    "agent_id", memberId,
+                    "missing_role", true,
+                    "is_lead", memberId.equals(team.getLead())
+                ));
+            }
+        }
+        map.put("member_roles", memberRoles);
+        return map;
     }
 
     private static Map<String, Object> roleToMap(String agentId, AgentRole role) {
