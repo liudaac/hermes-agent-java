@@ -152,4 +152,36 @@ class CapabilityScorerTest {
         assertTrue(role.getMetrics().containsKey("manual_expires_at"));
     }
 
+    @Test
+    void preferredTeamBoostsMemberOverEquallyCapableNonMember() {
+        var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
+        team.addMember("agent-team");
+
+        var teamRole = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa");
+        var otherRole = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa");
+
+        var teamScore = CapabilityScorer.score("run tests", "agent-team", teamRole, tenant, "release");
+        var otherScore = CapabilityScorer.score("run tests", "agent-other", otherRole, tenant, "release");
+
+        assertTrue(teamScore.total() > otherScore.total(), "preferred team member should receive a scheduling boost");
+        assertTrue(teamScore.components().get("team_preference") > 0);
+        assertEquals(0.0, otherScore.components().get("team_preference"), 0.001);
+    }
+
+    @Test
+    void noPreferredTeamLeavesEquallyCapableScoresUnchanged() {
+        var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
+        team.addMember("agent-team");
+
+        var teamRole = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa");
+        var otherRole = new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa");
+
+        var teamScore = CapabilityScorer.score("run tests", "agent-team", teamRole, tenant);
+        var otherScore = CapabilityScorer.score("run tests", "agent-other", otherRole, tenant);
+
+        assertEquals(otherScore.total(), teamScore.total(), 0.001);
+        assertEquals(0.0, teamScore.components().get("team_preference"), 0.001);
+        assertEquals(0.0, otherScore.components().get("team_preference"), 0.001);
+    }
+
 }

@@ -192,7 +192,9 @@ public class OrgNativeTools {
                     "type", "object",
                     "properties", Map.of(
                         "intent", Map.of("type", "string", "description", "The high-level task/intent. Can be a single goal or a multi-step plan (e.g. 'review code and run tests, then deploy')"),
-                        "mode", Map.of("type", "string", "enum", List.of("plan", "execute"), "description", "plan = show who would do what without executing; execute = run the plan (default: execute)")
+                        "mode", Map.of("type", "string", "enum", List.of("plan", "execute"), "description", "plan = show who would do what without executing; execute = run the plan (default: execute)"),
+                        "preferred_team_id", Map.of("type", "string", "description", "Optional team ID to prefer when matching equally capable agents"),
+                        "team_id", Map.of("type", "string", "description", "Alias for preferred_team_id")
                     ),
                     "required", List.of("intent")
                 )

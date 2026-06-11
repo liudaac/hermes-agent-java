@@ -377,6 +377,50 @@ class IntentOrchestratorTest {
         }
     }
 
+    @Test
+    void preferredTeamMemberWinsOverEquallyCapableNonTeamAgent() {
+        String tenantId = "intent-team-tenant-" + System.nanoTime();
+        var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
+        var tenant = TenantContext.create(tenantId, request);
+        tenant.registerAgentRole("agent-outsider",
+            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+        tenant.registerAgentRole("agent-team",
+            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+        var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
+        team.addMember("agent-team");
+
+        var plan = tenant.getIntentOrchestrator().plan("run tests", "release");
+        var assignment = plan.assignments().get(0);
+
+        assertEquals("release", plan.preferredTeamId());
+        assertEquals("Release Team", plan.preferredTeamName());
+        assertEquals("agent-team", assignment.agentId());
+        assertEquals("release", assignment.teamId());
+        assertEquals("Release Team", assignment.teamName());
+        assertTrue(assignment.scoreComponents().get("team_preference") > 0);
+        assertEquals("release", assignment.toMap().get("team_id"));
+    }
+
+    @Test
+    void noPreferredTeamKeepsExistingTieBehavior() {
+        String tenantId = "intent-no-team-tenant-" + System.nanoTime();
+        var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
+        var tenant = TenantContext.create(tenantId, request);
+        tenant.registerAgentRole("agent-outsider",
+            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+        tenant.registerAgentRole("agent-team",
+            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+        var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
+        team.addMember("agent-team");
+
+        var baseline = IntentOrchestrator.findBestMatch("run tests", tenant.listAgentRoles(), tenant);
+        var planned = tenant.getIntentOrchestrator().plan("run tests").assignments().get(0);
+
+        assertEquals(baseline.agentId(), planned.agentId());
+        assertNull(tenant.getIntentOrchestrator().plan("run tests").preferredTeamId());
+        assertEquals(0.0, planned.scoreComponents().get("team_preference"), 0.001);
+    }
+
     private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {

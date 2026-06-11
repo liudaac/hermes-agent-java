@@ -22,6 +22,10 @@ public class CapabilityScorer {
     private CapabilityScorer() {}
 
     public static CapabilityScore score(String subtask, String agentId, AgentRole role, TenantContext ctx) {
+        return score(subtask, agentId, role, ctx, null);
+    }
+
+    public static CapabilityScore score(String subtask, String agentId, AgentRole role, TenantContext ctx, String preferredTeamId) {
         String lower = subtask == null ? "" : subtask.toLowerCase();
         String[] tokens = lower.split("\\W+");
 
@@ -35,6 +39,7 @@ public class CapabilityScorer {
         double availabilityScore = availabilityBonus(agentId, ctx);
         double reliabilityScore = reliabilityBonus(agentId, ctx);
         double evolutionScore = evolutionBonus(agentId, lower, role, ctx);
+        double teamPreferenceScore = teamPreferenceBonus(agentId, ctx, preferredTeamId);
         double manualOverrideScore = manualOverrideScore(role);
 
         components.put("skill_match", skillScore);
@@ -43,9 +48,10 @@ public class CapabilityScorer {
         components.put("availability", availabilityScore);
         components.put("reliability", reliabilityScore);
         components.put("evolution", evolutionScore);
+        components.put("team_preference", teamPreferenceScore);
         components.put("manual_override", manualOverrideScore);
 
-        double total = skillScore + roleScore + levelScore + availabilityScore + reliabilityScore + evolutionScore + manualOverrideScore;
+        double total = skillScore + roleScore + levelScore + availabilityScore + reliabilityScore + evolutionScore + teamPreferenceScore + manualOverrideScore;
         return new CapabilityScore(agentId, role.getRoleName(), total, matchedSkills, components);
     }
 
@@ -109,6 +115,19 @@ public class CapabilityScorer {
             double errorPenalty = Math.min(1.0, status.getErrorRate());
             double latencyPenalty = Math.min(0.35, status.getAverageLatencyMs() / 120_000.0);
             return 0.3 - errorPenalty - latencyPenalty;
+        } catch (Exception ignored) {
+            return 0.0;
+        }
+    }
+
+
+    private static double teamPreferenceBonus(String agentId, TenantContext ctx, String preferredTeamId) {
+        if (ctx == null || preferredTeamId == null || preferredTeamId.isBlank()) return 0.0;
+        try {
+            Team team = ctx.getTeamManager().getTeam(preferredTeamId);
+            if (team == null) return 0.0;
+            if (!team.hasMember(agentId)) return 0.0;
+            return agentId != null && agentId.equals(team.getLead()) ? 1.4 : 1.25;
         } catch (Exception ignored) {
             return 0.0;
         }

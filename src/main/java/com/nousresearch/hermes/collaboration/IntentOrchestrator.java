@@ -51,11 +51,19 @@ public class IntentOrchestrator {
      * Returns an IntentPlan describing who would do what (without executing).
      */
     public IntentPlan plan(String intent) {
+        return plan(intent, null);
+    }
+
+    /**
+     * Decompose and plan an intent with an optional preferred team context.
+     */
+    public IntentPlan plan(String intent, String preferredTeamId) {
         tenantContext.initCollaboration();
         var roles = tenantContext.listAgentRoles();
+        String normalizedTeamId = normalizeTeamId(preferredTeamId);
 
         if (roles.isEmpty()) {
-            return new IntentPlan(intent, List.of(), "no teammates available");
+            return new IntentPlan(intent, List.of(), "no teammates available", normalizedTeamId, teamName(normalizedTeamId));
         }
 
         // Heuristic decomposition: split on conjunctions and key verbs
@@ -64,11 +72,11 @@ public class IntentOrchestrator {
         // For each subtask, find the best agent
         List<SubtaskAssignment> assignments = new ArrayList<>();
         for (String subtask : subtasks) {
-            SubtaskAssignment best = findBestMatch(subtask, roles, tenantContext);
+            SubtaskAssignment best = findBestMatch(subtask, roles, tenantContext, normalizedTeamId);
             assignments.add(best);
         }
 
-        return new IntentPlan(intent, assignments, "planned");
+        return new IntentPlan(intent, assignments, "planned", normalizedTeamId, teamName(normalizedTeamId));
     }
 
     /**
@@ -76,8 +84,13 @@ public class IntentOrchestrator {
      * Use {@link #getRun(String)} to poll for status.
      */
     public IntentRun execute(String intent) {
-        IntentPlan plan = plan(intent);
-        return startRun(intent, plan.assignments(), null, "execute");
+        return execute(intent, null);
+    }
+
+    /** Execute an intent using an optional preferred team context. */
+    public IntentRun execute(String intent, String preferredTeamId) {
+        IntentPlan plan = plan(intent, preferredTeamId);
+        return startRun(intent, plan.assignments(), null, "execute", plan.preferredTeamId(), plan.preferredTeamName());
     }
 
     /** Replay only the failed subtasks from a previous run. */
@@ -92,7 +105,7 @@ public class IntentOrchestrator {
         if (failedAssignments.isEmpty()) {
             throw new IllegalStateException("Intent run has no failed subtasks to replay: " + runId);
         }
-        return startRun(original.intent, failedAssignments, runId, "replay_failed");
+        return startRun(original.intent, failedAssignments, runId, "replay_failed", original.preferredTeamId, original.preferredTeamName);
     }
 
     /** Reroute a subtask from a previous run to a specific target agent. */
@@ -119,20 +132,25 @@ public class IntentOrchestrator {
             if (role == null) {
                 throw new IllegalArgumentException("Unknown target agent role: " + targetAgentId);
             }
-            var score = CapabilityScorer.score(targetSubtask, targetAgentId, role, tenantContext);
-            target = new SubtaskAssignment(targetSubtask, targetAgentId, role.getRoleName(), score.total(), score.matchedSkills(), score.components());
+            var score = CapabilityScorer.score(targetSubtask, targetAgentId, role, tenantContext, original.preferredTeamId);
+            Team team = teamForAgent(targetAgentId, original.preferredTeamId);
+            target = new SubtaskAssignment(targetSubtask, targetAgentId, role.getRoleName(), score.total(), score.matchedSkills(), score.components(), teamId(team), teamName(team));
         } else {
             target = findAlternative(base, base.agentId());
             if (target == null || target.agentId() == null) {
                 throw new IllegalStateException("No alternative teammate available for subtask: " + targetSubtask);
             }
         }
-        return startRun(original.intent, List.of(target), runId, "reroute");
+        return startRun(original.intent, List.of(target), runId, "reroute", original.preferredTeamId, original.preferredTeamName);
     }
 
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
+        return startRun(intent, assignments, parentRunId, controlAction, null, null);
+    }
+
+    private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName) {
         String runId = "run_" + TASK_ID_GEN.incrementAndGet();
-        IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction);
+        IntentRun run = new IntentRun(runId, intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName);
         runs.put(runId, run);
         saveRuns();
 
@@ -188,6 +206,9 @@ public class IntentOrchestrator {
             .meta("score", a.score())
             .meta("matched_skills", a.matchedSkills())
             .meta("reassigned", reassigned);
+        if (a.teamId() != null) trace.meta("team_id", a.teamId());
+        if (a.teamName() != null) trace.meta("team_name", a.teamName());
+        if (run.preferredTeamId != null) trace.meta("preferred_team_id", run.preferredTeamId);
         if (reassignedFrom != null) trace.meta("reassigned_from", reassignedFrom);
 
         var bus = tenantContext.getTenantBus();
@@ -207,6 +228,9 @@ public class IntentOrchestrator {
                 "subtask", a.subtask(),
                 "score", a.score(),
                 "matched_skills", a.matchedSkills(),
+                "team_id", a.teamId() != null ? a.teamId() : "",
+                "team_name", a.teamName() != null ? a.teamName() : "",
+                "preferred_team_id", run.preferredTeamId != null ? run.preferredTeamId : "",
                 "reassigned", reassigned,
                 "reassigned_from", reassignedFrom != null ? reassignedFrom : ""
             ))
@@ -248,6 +272,7 @@ public class IntentOrchestrator {
                 .lesson("Intent subtask failed; prefer healthier or more specialized agents for similar work")
                 .contextHint("intent", run.intent)
                 .contextHint("role", a.roleName() != null ? a.roleName() : "")
+                .contextHint("team_id", a.teamId() != null ? a.teamId() : "")
                 .contextHint("reassigned", String.valueOf(reassigned));
             if (reassignedFrom != null) failure.contextHint("reassigned_from", reassignedFrom);
             tenantContext.getEvolutionEngine().recordFailure(failure.build());
@@ -396,10 +421,17 @@ public class IntentOrchestrator {
      * Find the best teammate for a subtask using organization-aware capability scoring.
      */
     static SubtaskAssignment findBestMatch(String subtask, Map<String, AgentRole> roles, TenantContext ctx) {
+        return findBestMatch(subtask, roles, ctx, null);
+    }
+
+    /**
+     * Find the best teammate for a subtask using organization-aware capability scoring.
+     */
+    static SubtaskAssignment findBestMatch(String subtask, Map<String, AgentRole> roles, TenantContext ctx, String preferredTeamId) {
         CapabilityScorer.CapabilityScore best = null;
 
         for (var entry : roles.entrySet()) {
-            var score = CapabilityScorer.score(subtask, entry.getKey(), entry.getValue(), ctx);
+            var score = CapabilityScorer.score(subtask, entry.getKey(), entry.getValue(), ctx, preferredTeamId);
             if (best == null || score.total() > best.total()) {
                 best = score;
             }
@@ -408,7 +440,8 @@ public class IntentOrchestrator {
         if (best == null || best.total() < 0.1) {
             return new SubtaskAssignment(subtask, null, null, 0.0, List.of());
         }
-        return new SubtaskAssignment(subtask, best.agentId(), best.roleName(), best.total(), best.matchedSkills(), best.components());
+        Team team = teamForAgent(ctx, best.agentId(), preferredTeamId);
+        return new SubtaskAssignment(subtask, best.agentId(), best.roleName(), best.total(), best.matchedSkills(), best.components(), teamId(team), teamName(team));
     }
 
     /**
@@ -419,8 +452,40 @@ public class IntentOrchestrator {
         Map<String, AgentRole> filtered = new java.util.HashMap<>(roles);
         filtered.remove(excludeAgentId);
         if (filtered.isEmpty()) return null;
-        return findBestMatch(original.subtask(), filtered, tenantContext);
+        return findBestMatch(original.subtask(), filtered, tenantContext, original.teamId());
     }
+
+
+    private String normalizeTeamId(String preferredTeamId) {
+        if (preferredTeamId == null || preferredTeamId.isBlank()) return null;
+        return tenantContext.getTeamManager().getTeam(preferredTeamId) != null ? preferredTeamId : preferredTeamId;
+    }
+
+    private String teamName(String teamId) {
+        Team team = teamId == null ? null : tenantContext.getTeamManager().getTeam(teamId);
+        return teamName(team);
+    }
+
+    private Team teamForAgent(String agentId, String preferredTeamId) {
+        return teamForAgent(tenantContext, agentId, preferredTeamId);
+    }
+
+    private static Team teamForAgent(TenantContext ctx, String agentId, String preferredTeamId) {
+        if (ctx == null || agentId == null) return null;
+        try {
+            if (preferredTeamId != null && !preferredTeamId.isBlank()) {
+                Team preferred = ctx.getTeamManager().getTeam(preferredTeamId);
+                if (preferred != null && preferred.hasMember(agentId)) return preferred;
+            }
+            var teams = ctx.getTeamManager().getTeamsForAgent(agentId);
+            return teams.isEmpty() ? null : teams.get(0);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String teamId(Team team) { return team != null ? team.getTeamId() : null; }
+    private static String teamName(Team team) { return team != null ? team.getName() : null; }
 
     // ======== Data Classes ========
 
@@ -432,10 +497,16 @@ public class IntentOrchestrator {
         String roleName,
         double score,
         List<String> matchedSkills,
-        Map<String, Double> scoreComponents
+        Map<String, Double> scoreComponents,
+        String teamId,
+        String teamName
     ) {
         public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills) {
             this(subtask, agentId, roleName, score, matchedSkills, Map.of());
+        }
+
+        public SubtaskAssignment(String subtask, String agentId, String roleName, double score, List<String> matchedSkills, Map<String, Double> scoreComponents) {
+            this(subtask, agentId, roleName, score, matchedSkills, scoreComponents, null, null);
         }
 
         @SuppressWarnings("unchecked")
@@ -454,10 +525,18 @@ public class IntentOrchestrator {
                 String.valueOf(m.getOrDefault("role", "")),
                 m.get("score") instanceof Number n ? n.doubleValue() : Double.parseDouble(String.valueOf(m.getOrDefault("score", "0"))),
                 skills,
-                components
+                components,
+                stringOrNull(m.get("team_id")),
+                stringOrNull(m.get("team_name"))
             );
         }
 
+
+        private static String stringOrNull(Object value) {
+            if (value == null) return null;
+            String s = String.valueOf(value);
+            return s.isBlank() || "null".equals(s) ? null : s;
+        }
 
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -467,6 +546,8 @@ public class IntentOrchestrator {
             m.put("score", score);
             m.put("matched_skills", matchedSkills != null ? matchedSkills : List.of());
             m.put("score_components", scoreComponents != null ? scoreComponents : Map.of());
+            m.put("team_id", teamId);
+            m.put("team_name", teamName);
             return m;
         }
     }
@@ -474,12 +555,20 @@ public class IntentOrchestrator {
     public record IntentPlan(
         String intent,
         List<SubtaskAssignment> assignments,
-        String status
+        String status,
+        String preferredTeamId,
+        String preferredTeamName
     ) {
+        public IntentPlan(String intent, List<SubtaskAssignment> assignments, String status) {
+            this(intent, assignments, status, null, null);
+        }
+
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("intent", intent);
             m.put("status", status);
+            m.put("preferred_team_id", preferredTeamId);
+            m.put("preferred_team_name", preferredTeamName);
             m.put("subtasks", assignments.stream().map(SubtaskAssignment::toMap).toList());
             return m;
         }
@@ -497,14 +586,16 @@ public class IntentOrchestrator {
         boolean success,
         String error,
         long latencyMs,
-        long timestamp
+        long timestamp,
+        String teamId,
+        String teamName
     ) {
         static IntentAttempt success(SubtaskAssignment a, boolean reassigned, String reassignedFrom, String traceId, long latencyMs) {
-            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, true, null, latencyMs, System.currentTimeMillis());
+            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, true, null, latencyMs, System.currentTimeMillis(), a.teamId(), a.teamName());
         }
 
         static IntentAttempt failure(SubtaskAssignment a, boolean reassigned, String reassignedFrom, String traceId, long latencyMs, String error) {
-            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, false, error, latencyMs, System.currentTimeMillis());
+            return new IntentAttempt(a.subtask(), a.agentId(), a.roleName(), a.score(), reassigned, reassignedFrom, traceId, false, error, latencyMs, System.currentTimeMillis(), a.teamId(), a.teamName());
         }
         public static IntentAttempt fromMap(Map<String, Object> m) {
             return new IntentAttempt(
@@ -518,7 +609,9 @@ public class IntentOrchestrator {
                 Boolean.parseBoolean(String.valueOf(m.getOrDefault("success", "false"))),
                 stringOrNull(m.get("error")),
                 longValue(m.get("latency_ms")),
-                longValue(m.get("timestamp"))
+                longValue(m.get("timestamp")),
+                stringOrNull(m.get("team_id")),
+                stringOrNull(m.get("team_name"))
             );
         }
 
@@ -552,6 +645,8 @@ public class IntentOrchestrator {
             m.put("error", error);
             m.put("latency_ms", latencyMs);
             m.put("timestamp", timestamp);
+            m.put("team_id", teamId);
+            m.put("team_name", teamName);
             return m;
         }
     }
@@ -562,6 +657,8 @@ public class IntentOrchestrator {
         public final List<SubtaskAssignment> assignments;
         public final String parentRunId;
         public final String controlAction;
+        public final String preferredTeamId;
+        public final String preferredTeamName;
         public final Map<String, String> successes = new ConcurrentHashMap<>();
         public final Map<String, String> failures = new ConcurrentHashMap<>();
         public final List<IntentAttempt> attempts = Collections.synchronizedList(new ArrayList<>());
@@ -575,15 +672,25 @@ public class IntentOrchestrator {
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
-            this(runId, intent, assignments, parentRunId, controlAction, System.currentTimeMillis(), 0L, RunStatus.PENDING, null);
+            this(runId, intent, assignments, parentRunId, controlAction, null, null);
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName) {
+            this(runId, intent, assignments, parentRunId, controlAction, System.currentTimeMillis(), 0L, RunStatus.PENDING, null, preferredTeamId, preferredTeamName);
         }
 
         public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask) {
+            this(runId, intent, assignments, parentRunId, controlAction, startedAt, completedAt, status, currentSubtask, null, null);
+        }
+
+        public IntentRun(String runId, String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, long startedAt, long completedAt, RunStatus status, String currentSubtask, String preferredTeamId, String preferredTeamName) {
             this.runId = runId;
             this.intent = intent;
             this.assignments = List.copyOf(assignments);
             this.parentRunId = parentRunId;
             this.controlAction = controlAction != null ? controlAction : "execute";
+            this.preferredTeamId = preferredTeamId;
+            this.preferredTeamName = preferredTeamName;
             this.startedAt = startedAt > 0 ? startedAt : System.currentTimeMillis();
             this.completedAt = completedAt;
             this.status = status != null ? status : RunStatus.PENDING;
@@ -636,7 +743,9 @@ public class IntentOrchestrator {
                 longValue(m.get("started_at")),
                 interrupted ? System.currentTimeMillis() : longValue(m.get("completed_at")),
                 interrupted ? RunStatus.INTERRUPTED : status,
-                currentSubtask
+                currentSubtask,
+                stringOrNull(m.get("preferred_team_id")),
+                stringOrNull(m.get("preferred_team_name"))
             );
             Object successes = m.get("successes");
             if (successes instanceof Map<?, ?> sm) sm.forEach((k, v) -> run.successes.put(String.valueOf(k), String.valueOf(v)));
@@ -671,6 +780,8 @@ public class IntentOrchestrator {
             m.put("intent", intent);
             m.put("parent_run_id", parentRunId);
             m.put("control_action", controlAction);
+            m.put("preferred_team_id", preferredTeamId);
+            m.put("preferred_team_name", preferredTeamName);
             m.put("status", status.name());
             m.put("current_subtask", currentSubtask);
             m.put("subtasks_total", assignments.size());

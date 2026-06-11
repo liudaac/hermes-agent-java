@@ -706,6 +706,7 @@ public class TenantAwareToolDispatcher {
     private String orchestrateIntent(Map<String, Object> args) {
         String intent = (String) args.get("intent");
         String mode = (String) args.getOrDefault("mode", "execute");
+        String preferredTeamId = preferredTeamId(args);
 
         if (intent == null || intent.isBlank()) {
             return ToolRegistry.toolError("Intent is required");
@@ -715,21 +716,38 @@ public class TenantAwareToolDispatcher {
             var orchestrator = tenantContext.getIntentOrchestrator();
 
             if ("plan".equalsIgnoreCase(mode)) {
-                var plan = orchestrator.plan(intent);
+                var plan = orchestrator.plan(intent, preferredTeamId);
                 return ToolRegistry.toolResult(plan.toMap());
             } else {
-                var run = orchestrator.execute(intent);
+                var run = orchestrator.execute(intent, preferredTeamId);
                 return ToolRegistry.toolResult(java.util.Map.of(
                     "run_id", run.runId,
                     "intent", run.intent,
                     "status", run.status.name(),
                     "subtasks_total", run.assignments.size(),
+                    "preferred_team_id", run.preferredTeamId != null ? run.preferredTeamId : "",
+                    "preferred_team_name", run.preferredTeamName != null ? run.preferredTeamName : "",
                     "hint", "Use intent_status(run_id) to check progress"
                 ));
             }
         } catch (Exception e) {
             return ToolRegistry.toolError("Orchestration failed: " + e.getMessage());
         }
+    }
+
+
+    @SuppressWarnings("unchecked")
+    private static String preferredTeamId(Map<String, Object> args) {
+        Object explicit = args.getOrDefault("preferred_team_id", args.getOrDefault("preferredTeamId", args.get("team_id")));
+        if (explicit != null && !String.valueOf(explicit).isBlank()) return String.valueOf(explicit);
+        Object meta = args.get("metadata");
+        if (meta instanceof Map<?, ?> m) {
+            Object value = m.get("preferred_team_id");
+            if (value == null) value = m.get("preferredTeamId");
+            if (value == null) value = m.get("team_id");
+            if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value);
+        }
+        return null;
     }
 
     /**
