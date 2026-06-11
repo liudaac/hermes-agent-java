@@ -550,7 +550,7 @@ export const zh: Translations = {
     deleteConfirm: "删除 {agent} 的角色？",
     relationship: { tenants: "租户", tenantsDesc: "资源与隔离容器。", orgManagement: "组织管理", orgManagementDesc: "维护租户内的团队、代理、角色和组织结构。", orgControl: "组织控制", orgControlDesc: "运行时治理与干预，不负责基础结构维护。" },
     form: { title: "代理角色", saveRole: "保存角色", csvPlaceholder: "用逗号分隔", note: "租户是容器；角色定义该租户内的组织结构。" },
-    fields: { tenant: "租户", agentId: "代理 ID", roleName: "角色名", description: "描述", level: "级别", skills: "技能", responsibilities: "职责", reportsTo: "汇报给", allowedTools: "允许工具" },
+    fields: { tenant: "租户", agentId: "代理 ID", roleName: "角色名", description: "描述", level: "级别", skills: "技能", responsibilities: "职责", reportsTo: "汇报给", allowedTools: "允许工具", teams: "团队" },
     roles: { title: "代理角色", empty: "暂无代理角色", edit: "编辑" },
     teams: { title: "团队", formTitle: "团队", empty: "暂无团队", saveTeam: "保存团队", saveFailed: "保存团队失败", deleteFailed: "删除团队失败", deleteConfirm: "删除团队 {team}？", teamId: "团队 ID", name: "名称", mission: "使命", members: "成员", lead: "负责人" }
   },

@@ -550,7 +550,7 @@ export const en: Translations = {
     deleteConfirm: "Delete role for {agent}?",
     relationship: { tenants: "Tenants", tenantsDesc: "Resource and isolation containers.", orgManagement: "Org Management", orgManagementDesc: "Maintains teams, agents, roles, and structure inside tenants.", orgControl: "Org Control", orgControlDesc: "Runtime governance and intervention, not base structure maintenance." },
     form: { title: "Agent role", saveRole: "Save role", csvPlaceholder: "comma-separated", note: "Tenant is the container; this role defines organization structure within that tenant." },
-    fields: { tenant: "Tenant", agentId: "Agent ID", roleName: "Role name", description: "Description", level: "Level", skills: "Skills", responsibilities: "Responsibilities", reportsTo: "Reports to", allowedTools: "Allowed tools" },
+    fields: { tenant: "Tenant", agentId: "Agent ID", roleName: "Role name", description: "Description", level: "Level", skills: "Skills", responsibilities: "Responsibilities", reportsTo: "Reports to", allowedTools: "Allowed tools", teams: "Teams" },
     roles: { title: "Agent roles", empty: "No agent roles yet", edit: "Edit" },
     teams: { title: "Teams", formTitle: "Team", empty: "No teams yet", saveTeam: "Save team", saveFailed: "Failed to save team", deleteFailed: "Failed to delete team", deleteConfirm: "Delete team {team}?", teamId: "Team ID", name: "Name", mission: "Mission", members: "Members", lead: "Lead" }
   },

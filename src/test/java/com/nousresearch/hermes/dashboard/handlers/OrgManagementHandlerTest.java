@@ -72,7 +72,7 @@ class OrgManagementHandlerTest {
                 HttpRequest.newBuilder(URI.create(base + "/api/org/manage/roles"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString("""
-                        {"tenant_id":"%s","agent_id":"planner","role_name":"Planner","description":"Plans work","level":"LEAD","skills":["planning","routing"],"responsibilities":["break down tasks"],"allowed_tools":["orchestrate_intent"]}
+                        {"tenant_id":"%s","agent_id":"planner","role_name":"Planner","description":"Plans work","level":"LEAD","skills":["planning","routing"],"responsibilities":["break down tasks"],"allowed_tools":["orchestrate_intent"],"team_ids":["release"]}
                         """.formatted(tenantId)))
                     .build(),
                 HttpResponse.BodyHandlers.ofString()
@@ -91,6 +91,15 @@ class OrgManagementHandlerTest {
             assertEquals(1, roles.size());
             assertEquals("planner", roles.getJSONObject(0).getString("agent_id"));
             assertTrue(roles.getJSONObject(0).getJSONArray("skills").contains("planning"));
+            assertTrue(roles.getJSONObject(0).getJSONArray("team_ids").contains("release"));
+
+            HttpResponse<String> listTeamsAfterRole = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/org/manage/teams?tenantId=" + tenantId)).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            JSONArray teamsAfterRole = JSON.parseObject(listTeamsAfterRole.body()).getJSONArray("teams");
+            JSONArray memberRoles = teamsAfterRole.getJSONObject(0).getJSONArray("member_roles");
+            assertTrue(memberRoles.stream().map(o -> (JSONObject) o).anyMatch(row -> "planner".equals(row.getString("agent_id")) && "Planner".equals(row.getString("name"))));
 
             HttpResponse<String> summary = client.send(
                 HttpRequest.newBuilder(URI.create(base + "/api/org/manage/summary")).GET().build(),

@@ -567,7 +567,7 @@ export interface Translations {
     deleteConfirm: string;
     relationship: { tenants: string; tenantsDesc: string; orgManagement: string; orgManagementDesc: string; orgControl: string; orgControlDesc: string; };
     form: { title: string; saveRole: string; csvPlaceholder: string; note: string; };
-    fields: { tenant: string; agentId: string; roleName: string; description: string; level: string; skills: string; responsibilities: string; reportsTo: string; allowedTools: string; };
+    fields: { tenant: string; agentId: string; roleName: string; description: string; level: string; skills: string; responsibilities: string; reportsTo: string; allowedTools: string; teams: string; };
     roles: { title: string; empty: string; edit: string; };
     teams: { title: string; formTitle: string; empty: string; saveTeam: string; saveFailed: string; deleteFailed: string; deleteConfirm: string; teamId: string; name: string; mission: string; members: string; lead: string; };
   };

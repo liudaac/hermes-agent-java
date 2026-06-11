@@ -16,6 +16,7 @@ type RoleRow = {
   responsibilities?: string[];
   reports_to?: string;
   allowed_tools?: string[];
+  team_ids?: string[];
 };
 
 type TeamMemberRole = {
@@ -74,10 +75,13 @@ export default function OrgManagePage() {
     responsibilities: "",
     reports_to: "",
     allowed_tools: "",
+    team_ids: "",
   });
 
   const tenants = useMemo(() => Array.from(new Set(["default", ...tenantOptions, ...roles.map((r) => r.tenant_id), ...teams.map((team) => team.tenant_id)])).sort(), [tenantOptions, roles, teams]);
   const roleOptionsForTeam = useMemo(() => roles.filter((role) => role.tenant_id === teamForm.tenant_id), [roles, teamForm.tenant_id]);
+  const teamOptionsForRole = useMemo(() => teams.filter((team) => team.tenant_id === form.tenant_id), [teams, form.tenant_id]);
+  const selectedRoleTeams = useMemo(() => split(form.team_ids), [form.team_ids]);
   const selectedTeamMembers = useMemo(() => split(teamForm.members), [teamForm.members]);
 
   const loadData = useCallback(async () => {
@@ -154,9 +158,10 @@ export default function OrgManagePage() {
           skills: split(form.skills),
           responsibilities: split(form.responsibilities),
           allowed_tools: split(form.allowed_tools),
+          team_ids: split(form.team_ids),
         }),
       });
-      setForm((f) => ({ ...f, agent_id: "", role_name: "", description: "", skills: "", responsibilities: "", reports_to: "", allowed_tools: "" }));
+      setForm((f) => ({ ...f, agent_id: "", role_name: "", description: "", skills: "", responsibilities: "", reports_to: "", allowed_tools: "", team_ids: "" }));
       await loadData();
     } catch (err: any) {
       setError(err?.message || om.saveFailed);
@@ -174,6 +179,7 @@ export default function OrgManagePage() {
       responsibilities: (role.responsibilities || []).join(", "),
       reports_to: role.reports_to || "",
       allowed_tools: (role.allowed_tools || []).join(", "),
+      team_ids: (role.team_ids || []).join(", "),
     });
   };
 
@@ -297,6 +303,16 @@ export default function OrgManagePage() {
             <Field label={om.fields.responsibilities}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.responsibilities} placeholder={om.form.csvPlaceholder} onChange={(e) => setForm({ ...form, responsibilities: e.target.value })} /></Field>
             <Field label={om.fields.reportsTo}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.reports_to} onChange={(e) => setForm({ ...form, reports_to: e.target.value })} /></Field>
             <Field label={om.fields.allowedTools}><input className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.allowed_tools} placeholder={om.form.csvPlaceholder} onChange={(e) => setForm({ ...form, allowed_tools: e.target.value })} /></Field>
+            <Field label={om.fields.teams}>
+              <select
+                multiple
+                className="h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={selectedRoleTeams}
+                onChange={(e) => setForm({ ...form, team_ids: Array.from(e.target.selectedOptions).map((option) => option.value).join(", ") })}
+              >
+                {teamOptionsForRole.map((team) => <option key={team.team_id} value={team.team_id}>{team.team_id} · {team.name}</option>)}
+              </select>
+            </Field>
             <Button className="w-full" onClick={submit} disabled={!form.tenant_id || !form.agent_id || !form.role_name}>{om.form.saveRole}</Button>
             <p className="text-xs text-muted-foreground">{om.form.note}</p>
           </CardContent>
@@ -319,6 +335,7 @@ export default function OrgManagePage() {
                         <div className="mt-1 text-sm text-muted-foreground">{role.name} · {role.description || t.common.none}</div>
                         <ChipRow label={om.fields.skills} values={role.skills || []} />
                         <ChipRow label={om.fields.responsibilities} values={role.responsibilities || []} />
+                        <ChipRow label={om.fields.teams} values={role.team_ids || []} />
                       </div>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={() => edit(role)}>{om.roles.edit}</Button>

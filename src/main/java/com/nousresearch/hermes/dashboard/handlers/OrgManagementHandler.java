@@ -115,6 +115,7 @@ public class OrgManagementHandler {
             for (var entry : tenant.listAgentRoles().entrySet()) {
                 Map<String, Object> row = new LinkedHashMap<>(roleToMap(entry.getKey(), entry.getValue()));
                 row.put("tenant_id", tenant.getTenantId());
+                row.put("team_ids", teamsForAgent(tenant, entry.getKey()));
                 rows.add(row);
             }
         }
@@ -129,6 +130,9 @@ public class OrgManagementHandler {
         String agentId = requireString(body, "agent_id", "agentId");
         AgentRole role = roleFromBody(body);
         tenant.registerAgentRole(agentId, role);
+        if (body.containsKey("team_ids") || body.containsKey("teamIds")) {
+            syncRoleTeams(tenant, agentId, list(body.getOrDefault("team_ids", body.get("teamIds"))));
+        }
         tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
@@ -139,6 +143,7 @@ public class OrgManagementHandler {
         ));
         Map<String, Object> response = new LinkedHashMap<>(roleToMap(agentId, role));
         response.put("tenant_id", tenant.getTenantId());
+        response.put("team_ids", teamsForAgent(tenant, agentId));
         response.put("ok", true);
         ctx.json(response);
     }
@@ -152,6 +157,7 @@ public class OrgManagementHandler {
             ctx.status(404).json(Map.of("error", "Agent role not found", "tenant_id", tenant.getTenantId(), "agent_id", agentId));
             return;
         }
+        removeAgentFromAllTeams(tenant, agentId);
         tenant.getAuditLogger().log(AuditEvent.ORG_MANAGEMENT_ROLE_UPDATED, Map.of(
             "tenantId", tenant.getTenantId(),
             "scope", "org_management",
@@ -204,6 +210,32 @@ public class OrgManagementHandler {
         return role;
     }
 
+
+
+    private static void syncRoleTeams(TenantContext tenant, String agentId, List<String> targetTeamIds) {
+        if (targetTeamIds == null) return;
+        for (Team team : tenant.getTeamManager().listTeams()) {
+            boolean shouldContain = targetTeamIds.contains(team.getTeamId());
+            boolean contains = team.getMemberIds().contains(agentId);
+            if (shouldContain && !contains) team.addMember(agentId);
+            if (!shouldContain && contains) team.removeMember(agentId);
+        }
+    }
+
+    private static void removeAgentFromAllTeams(TenantContext tenant, String agentId) {
+        for (Team team : tenant.getTeamManager().listTeams()) {
+            if (team.getMemberIds().contains(agentId)) team.removeMember(agentId);
+            if (agentId.equals(team.getLead())) team.setLead(null);
+        }
+    }
+
+    private static List<String> teamsForAgent(TenantContext tenant, String agentId) {
+        List<String> teamIds = new ArrayList<>();
+        for (Team team : tenant.getTeamManager().listTeams()) {
+            if (team.getMemberIds().contains(agentId)) teamIds.add(team.getTeamId());
+        }
+        return teamIds;
+    }
 
     private static Map<String, Object> teamToMap(TenantContext tenant, Team team) {
         Map<String, Object> map = new LinkedHashMap<>(team.toMap());
