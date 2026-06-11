@@ -12,6 +12,7 @@ public class DelegatedTaskExecutorRegistry {
     public DelegatedTaskExecutorRegistry() {
         register(new NoopDelegatedTaskExecutor());
         register(new MockDelegatedTaskExecutor());
+        register(new LocalPatchExecutor());
     }
 
     public synchronized DelegatedTaskExecutorRegistry register(DelegatedTaskExecutor executor) {

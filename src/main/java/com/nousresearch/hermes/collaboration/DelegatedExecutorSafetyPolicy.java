@@ -68,6 +68,24 @@ public record DelegatedExecutorSafetyPolicy(
         );
     }
 
+    @SuppressWarnings("unchecked")
+    public static DelegatedExecutorSafetyPolicy fromMap(Map<String, Object> m) {
+        if (m == null) return restrictiveDefault();
+        DelegatedExecutorSafetyPolicy defaults = restrictiveDefault();
+        return new DelegatedExecutorSafetyPolicy(
+            listOfStrings(firstNonNull(firstNonNull(m.get("allowed_changed_path_prefixes"), m.get("allowed_changed_paths")), m.get("allowed_paths")), defaults.allowedChangedPathPrefixes()),
+            listOfStrings(firstNonNull(firstNonNull(m.get("denied_changed_path_prefixes"), m.get("denied_changed_paths")), m.get("denied_paths")), defaults.deniedChangedPathPrefixes()),
+            booleanOrDefault(firstNonNull(firstNonNull(m.get("allow_commands"), m.get("allow_command")), m.get("allowCommands")), defaults.allowCommands()),
+            booleanOrDefault(firstNonNull(m.get("allow_network"), m.get("allowNetwork")), defaults.allowNetwork()),
+            booleanOrDefault(firstNonNull(m.get("allow_browser"), m.get("allowBrowser")), defaults.allowBrowser()),
+            booleanOrDefault(firstNonNull(m.get("require_patch_sandbox"), m.get("requirePatchSandbox")), defaults.requirePatchSandbox()),
+            booleanOrDefault(firstNonNull(m.get("require_parent_verification"), m.get("requireParentVerification")), defaults.requireParentVerification()),
+            booleanOrDefault(firstNonNull(m.get("allow_auto_merge"), m.get("allowAutoMerge")), defaults.allowAutoMerge()),
+            capabilitiesFrom(m.get("default_capabilities")),
+            m.get("metadata") instanceof Map<?, ?> meta ? new LinkedHashMap<>((Map<String, Object>) meta) : Map.of("source", "map")
+        );
+    }
+
     public List<ExecutorSafetyViolation> validateChangedFiles(List<String> changedFiles) {
         List<ExecutorSafetyViolation> violations = new ArrayList<>();
         if (changedFiles == null || changedFiles.isEmpty()) return violations;
@@ -209,6 +227,34 @@ public record DelegatedExecutorSafetyPolicy(
         if (allowBrowser) set.add(DelegatedExecutorCapability.BROWSER_ACCESS);
         if (allowAutoMerge) set.add(DelegatedExecutorCapability.AUTO_MERGE);
         return set;
+    }
+
+    private static Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
+    }
+
+    private static List<String> listOfStrings(Object value, List<String> fallback) {
+        if (!(value instanceof List<?> list)) return fallback;
+        List<String> values = list.stream().filter(x -> x != null && !String.valueOf(x).isBlank()).map(String::valueOf).toList();
+        return values.isEmpty() ? fallback : values;
+    }
+
+    private static boolean booleanOrDefault(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        if (value instanceof Boolean b) return b;
+        String s = String.valueOf(value).trim();
+        return s.isBlank() ? fallback : ("true".equalsIgnoreCase(s) || "1".equals(s) || "yes".equalsIgnoreCase(s));
+    }
+
+    private static Set<DelegatedExecutorCapability> capabilitiesFrom(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) return null;
+        EnumSet<DelegatedExecutorCapability> set = EnumSet.noneOf(DelegatedExecutorCapability.class);
+        for (Object item : list) {
+            if (item == null) continue;
+            try { set.add(DelegatedExecutorCapability.valueOf(String.valueOf(item).trim().toUpperCase(java.util.Locale.ROOT))); }
+            catch (Exception ignored) {}
+        }
+        return set.isEmpty() ? null : set;
     }
 
     private static ExecutorSafetyViolation deniedCapability(DelegatedExecutorCapability capability, String message) {
