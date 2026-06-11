@@ -417,6 +417,9 @@ public class DashboardServer {
         app.get("/api/org/control/audit", orgControlCenterHandler::audit);
         app.get("/api/org/control/browser", orgControlCenterHandler::browserTimeline);
         app.get("/api/org/control/browser/status", orgControlCenterHandler::browserStatus);
+        app.get("/api/org/control/browser/{tenantId}/config", orgControlCenterHandler::browserBridgeConfig);
+        app.post("/api/org/control/browser/{tenantId}/reset", orgControlCenterHandler::resetBrowserBridge);
+        app.post("/api/org/control/browser/{tenantId}/clear-config", orgControlCenterHandler::clearBrowserBridgeConfig);
         app.post("/api/org/control/browser/{tenantId}/provider", orgControlCenterHandler::configureBrowserProvider);
         app.post("/api/org/control/browser/{tenantId}/health", orgControlCenterHandler::browserHealth);
         app.post("/api/org/control/browser/{tenantId}/capabilities", orgControlCenterHandler::browserCapabilities);

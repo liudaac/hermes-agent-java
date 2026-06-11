@@ -212,6 +212,35 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+
+  const resetBrowserBridge = useCallback((tenantId: string) => {
+    const reason = askReason("Operator reset browser bridge to mock");
+    if (reason === null) return;
+    const key = `${tenantId}:browser:reset`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason }),
+    }));
+  }, [askReason, runControl]);
+
+  const clearBrowserConfig = useCallback((tenantId: string) => {
+    const reason = askReason("Operator cleared browser bridge config");
+    if (reason === null) return;
+    const key = `${tenantId}:browser:clear-config`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/clear-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", reason }),
+    }));
+  }, [askReason, runControl]);
+
+  const exportBrowserConfig = useCallback((bridge: any) => {
+    const config = bridge.config || {};
+    const payload = JSON.stringify({ tenant_id: bridge.tenant_id, config }, null, 2);
+    window.prompt("Browser bridge config JSON", payload);
+  }, []);
+
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(`Operator set browser bridge provider to ${provider}`);
     if (reason === null) return;
@@ -448,6 +477,9 @@ export default function OrgControlCenterPage() {
                     onContract={runBrowserContract}
                     onProbe={probeBrowserProvider}
                     onApplyProbe={applyBrowserProbe}
+                    onReset={resetBrowserBridge}
+                    onClearConfig={clearBrowserConfig}
+                    onExportConfig={exportBrowserConfig}
                     onProvider={setBrowserProvider}
                   />
                 ))}
@@ -890,6 +922,9 @@ function BrowserBridgeControlCard({
   onContract,
   onProbe,
   onApplyProbe,
+  onReset,
+  onClearConfig,
+  onExportConfig,
   onProvider,
 }: {
   bridge: any;
@@ -899,6 +934,9 @@ function BrowserBridgeControlCard({
   onContract: (tenantId: string) => void;
   onProbe: (bridge: any) => void;
   onApplyProbe: (tenantId: string) => void;
+  onReset: (tenantId: string) => void;
+  onClearConfig: (tenantId: string) => void;
+  onExportConfig: (bridge: any) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
   const tenantId = bridge.tenant_id;
@@ -908,6 +946,8 @@ function BrowserBridgeControlCard({
   const contractKey = `${tenantId}:browser:contract`;
   const probeKey = `${tenantId}:browser:probe`;
   const applyProbeKey = `${tenantId}:browser:probe:apply`;
+  const resetKey = `${tenantId}:browser:reset`;
+  const clearConfigKey = `${tenantId}:browser:clear-config`;
   const capabilities = bridge.capabilities || bridge.last_capabilities || {};
   const contractReport = bridge.contract_report || {};
   const probeReport = bridge.probe_report || {};
@@ -920,6 +960,7 @@ function BrowserBridgeControlCard({
             provider: {provider}{bridge.endpoint ? ` · ${bridge.endpoint}` : ""}
           </div>
           {bridge.config && <div className="text-[10px] text-muted-foreground/70">persisted: {bridge.config.action_path} · {bridge.config.health_path}</div>}
+          {bridge.config?.file_path && <div className="text-[10px] text-muted-foreground/50 truncate">{bridge.config.file_path}</div>}
         </div>
         <Badge variant={bridge.healthy === false ? "destructive" : "default"}>{bridge.healthy === false ? "unhealthy" : "ready"}</Badge>
       </div>
@@ -939,6 +980,15 @@ function BrowserBridgeControlCard({
         <Button variant="outline" size="sm" disabled={busyAction === probeKey} onClick={() => onProbe(bridge)}>
           {busyAction === probeKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Probe
+        </Button>
+        <Button variant="ghost" size="sm" disabled={busyAction === resetKey} onClick={() => onReset(tenantId)}>
+          Reset mock
+        </Button>
+        <Button variant="ghost" size="sm" disabled={busyAction === clearConfigKey} onClick={() => onClearConfig(tenantId)}>
+          Clear config
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => onExportConfig(bridge)}>
+          Export config
         </Button>
         {(["mock", "kimi", "openclaw"] as const).map((p) => (
           <Button

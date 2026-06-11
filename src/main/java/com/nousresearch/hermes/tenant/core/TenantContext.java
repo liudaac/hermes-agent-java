@@ -1050,7 +1050,22 @@ public class TenantContext {
         map.put("action_path", config.actionPath());
         map.put("health_path", config.healthPath());
         map.put("capabilities_path", config.capabilitiesPath());
+        map.put("file_path", browserBridgeConfigPath().toString());
         return map;
+    }
+
+    public String getBrowserBridgeConfigPath() {
+        return browserBridgeConfigPath().toString();
+    }
+
+    public boolean clearBrowserBridgeConfig() {
+        boolean existed = Files.exists(browserBridgeConfigPath());
+        try { Files.deleteIfExists(browserBridgeConfigPath()); } catch (Exception e) {
+            logger.warn("Failed to delete browser bridge config for tenant {}: {}", tenantId, e.getMessage());
+        }
+        browserBridgeConfig = null;
+        browserBridge = com.nousresearch.hermes.browser.BrowserBridgeFactory.create(new com.nousresearch.hermes.browser.BrowserBridgeConfig("mock", "", 10000));
+        return existed;
     }
 
     private Path browserBridgeConfigPath() {

@@ -586,6 +586,69 @@ public class OrgControlCenterHandler {
         ctx.json(Map.of("browser_bridges", rows, "count", rows.size()));
     }
 
+
+    /** POST /api/org/control/browser/{tenantId}/reset */
+    public void resetBrowserBridge(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator reset browser bridge to mock");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CONFIGURE_BROWSER_BRIDGE, reason, Map.of());
+        var config = new BrowserBridgeConfig("mock", "", 10000);
+        tenant.configureBrowserBridge(config, true);
+        tenant.setBrowserContractReport(Map.of());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_BRIDGE_CONFIGURED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "provider", "mock",
+            "endpoint", "",
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+        Map<String, Object> response = new LinkedHashMap<>(tenant.getBrowserBridge().describe());
+        response.put("ok", true);
+        response.put("tenant_id", tenant.getTenantId());
+        response.put("config", tenant.getBrowserBridgeConfigMap());
+        ctx.json(response);
+    }
+
+    /** POST /api/org/control/browser/{tenantId}/clear-config */
+    public void clearBrowserBridgeConfig(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator cleared browser bridge config");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CONFIGURE_BROWSER_BRIDGE, reason, Map.of());
+        boolean existed = tenant.clearBrowserBridgeConfig();
+        tenant.setBrowserContractReport(Map.of());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_BRIDGE_CONFIGURED, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "provider", "mock",
+            "cleared", existed,
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(Map.of(
+            "ok", true,
+            "tenant_id", tenant.getTenantId(),
+            "cleared", existed,
+            "config_path", tenant.getBrowserBridgeConfigPath(),
+            "provider", tenant.getBrowserBridge().describe()
+        ));
+    }
+
+    /** GET /api/org/control/browser/{tenantId}/config */
+    public void browserBridgeConfig(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        ctx.json(Map.of(
+            "tenant_id", tenant.getTenantId(),
+            "config", tenant.getBrowserBridgeConfigMap(),
+            "config_path", tenant.getBrowserBridgeConfigPath(),
+            "has_persisted_config", !tenant.getBrowserBridgeConfigMap().isEmpty()
+        ));
+    }
+
     /** POST /api/org/control/browser/{tenantId}/provider */
     public void configureBrowserProvider(Context ctx) {
         TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));

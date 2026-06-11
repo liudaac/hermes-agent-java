@@ -207,3 +207,19 @@ Fields:
 ```
 
 `TenantContext.getBrowserBridge()` loads this config lazily and restores the provider after restart. The persisted config is tenant-scoped and does not mutate process-wide defaults or environment variables.
+
+### Config management actions
+
+Control Center also exposes tenant-scoped config management:
+
+```text
+GET  /api/org/control/browser/{tenantId}/config
+POST /api/org/control/browser/{tenantId}/reset
+POST /api/org/control/browser/{tenantId}/clear-config
+```
+
+- `config` returns the persisted config and config file path.
+- `reset` persists a mock provider config and clears the latest contract report.
+- `clear-config` deletes the persisted config file and falls back to mock for the current runtime.
+
+The UI exposes these as **Export config**, **Reset mock**, and **Clear config** actions.

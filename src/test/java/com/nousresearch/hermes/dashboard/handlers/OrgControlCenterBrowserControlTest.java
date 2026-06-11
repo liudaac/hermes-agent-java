@@ -34,6 +34,9 @@ class OrgControlCenterBrowserControlTest {
         OrgControlCenterHandler handler = new OrgControlCenterHandler(manager);
         app.get("/api/org/control/browser/status", handler::browserStatus);
         app.post("/api/org/control/browser/{tenantId}/health", handler::browserHealth);
+        app.get("/api/org/control/browser/{tenantId}/config", handler::browserBridgeConfig);
+        app.post("/api/org/control/browser/{tenantId}/reset", handler::resetBrowserBridge);
+        app.post("/api/org/control/browser/{tenantId}/clear-config", handler::clearBrowserBridgeConfig);
         app.post("/api/org/control/browser/{tenantId}/provider", handler::configureBrowserProvider);
         app.post("/api/org/control/browser/{tenantId}/contract", handler::browserContractTest);
         app.post("/api/org/control/browser/{tenantId}/probe", handler::browserProviderProbe);
@@ -113,6 +116,35 @@ class OrgControlCenterBrowserControlTest {
                 assertTrue(applyBody.getBooleanValue("ok"));
                 assertTrue(applyBody.getJSONObject("contract_report").getBooleanValue("ok"));
                 assertFalse(tenant.getBrowserContractReport().isEmpty());
+
+                HttpResponse<String> config = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/config")).GET().build(),
+                    HttpResponse.BodyHandlers.ofString()
+                );
+                assertEquals(200, config.statusCode());
+                assertTrue(JSON.parseObject(config.body()).getBooleanValue("has_persisted_config"));
+
+                HttpResponse<String> reset = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/reset"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"reason\":\"reset test\"}"))
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString()
+                );
+                assertEquals(200, reset.statusCode());
+                assertEquals("mock", JSON.parseObject(reset.body()).getString("provider"));
+
+                HttpResponse<String> clear = client.send(
+                    HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/clear-config"))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"reason\":\"clear test\"}"))
+                        .build(),
+                    HttpResponse.BodyHandlers.ofString()
+                );
+                assertEquals(200, clear.statusCode());
+                JSONObject clearBody = JSON.parseObject(clear.body());
+                assertTrue(clearBody.getBooleanValue("ok"));
+                assertTrue(clearBody.getJSONObject("provider").getString("provider").contains("mock"));
             }
         } finally {
             app.stop();
