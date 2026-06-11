@@ -27,17 +27,19 @@ public class ConfigTest {
     
     @Test
     void testHermesHomeSystemPropertyOverride() {
+        String previous = System.getProperty("hermes.home");
         System.setProperty("hermes.home", tempDir.toString());
         try {
             assertEquals(tempDir, Constants.getHermesHome());
         } finally {
-            System.clearProperty("hermes.home");
+            restoreProperty("hermes.home", previous);
         }
     }
 
     @Test
     void testConfigLoad() throws IOException {
         // Set temp directory as HERMES_HOME
+        String previous = System.getProperty("HERMES_HOME");
         System.setProperty("HERMES_HOME", tempDir.toString());
         try {
             HermesConfig config = HermesConfig.load();
@@ -46,12 +48,13 @@ public class ConfigTest {
             assertNotNull(config.getCurrentModel());
             assertTrue(config.getMaxTurns() > 0);
         } finally {
-            System.clearProperty("HERMES_HOME");
+            restoreProperty("HERMES_HOME", previous);
         }
     }
     
     @Test
     void testConfigSetGet() throws IOException {
+        String previous = System.getProperty("HERMES_HOME");
         System.setProperty("HERMES_HOME", tempDir.toString());
         try {
             HermesConfig config = HermesConfig.load();
@@ -62,7 +65,12 @@ public class ConfigTest {
             config.setBaseUrlOverride("https://custom.api.com/v1");
             assertEquals("https://custom.api.com/v1", config.getBaseUrl());
         } finally {
-            System.clearProperty("HERMES_HOME");
+            restoreProperty("HERMES_HOME", previous);
         }
+    }
+
+    private static void restoreProperty(String key, String previous) {
+        if (previous == null) System.clearProperty(key);
+        else System.setProperty(key, previous);
     }
 }

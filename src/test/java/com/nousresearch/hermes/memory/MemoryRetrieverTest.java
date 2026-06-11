@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.memory;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,12 +20,20 @@ class MemoryRetrieverTest {
 
     private MemoryManager memory;
     private MemoryRetriever retriever;
+    private String previousHermesHome;
 
     @BeforeEach
     void setUp() {
+        previousHermesHome = System.getProperty("hermes.home");
         System.setProperty("hermes.home", tempDir.toString());
         memory = new MemoryManager();
         retriever = new MemoryRetriever(memory);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (previousHermesHome == null) System.clearProperty("hermes.home");
+        else System.setProperty("hermes.home", previousHermesHome);
     }
 
     @Test

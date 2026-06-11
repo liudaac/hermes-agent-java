@@ -265,6 +265,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- Default all tests to an isolated Hermes home so no test writes ~/.hermes. -->
+                        <hermes.home>${project.build.directory}/test-hermes-home</hermes.home>
+                        <HERMES_HOME>${project.build.directory}/test-hermes-home</HERMES_HOME>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>
