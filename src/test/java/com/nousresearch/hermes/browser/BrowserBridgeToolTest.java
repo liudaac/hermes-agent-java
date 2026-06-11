@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.testutil.TestTenants;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tools.impl.OrgNativeTools;
@@ -14,6 +16,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BrowserBridgeToolTest {
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test

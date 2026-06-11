@@ -199,6 +199,14 @@ public final class Constants {
      * Get the Hermes home directory.
      */
     public static Path getHermesHome() {
+        String propertyHome = System.getProperty("hermes.home");
+        if (propertyHome != null && !propertyHome.isEmpty()) {
+            return Paths.get(propertyHome);
+        }
+        String legacyPropertyHome = System.getProperty("HERMES_HOME");
+        if (legacyPropertyHome != null && !legacyPropertyHome.isEmpty()) {
+            return Paths.get(legacyPropertyHome);
+        }
         String envHome = System.getenv("HERMES_HOME");
         if (envHome != null && !envHome.isEmpty()) {
             return Paths.get(envHome);

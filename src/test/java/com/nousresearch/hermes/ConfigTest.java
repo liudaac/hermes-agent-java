@@ -26,27 +26,43 @@ public class ConfigTest {
     }
     
     @Test
+    void testHermesHomeSystemPropertyOverride() {
+        System.setProperty("hermes.home", tempDir.toString());
+        try {
+            assertEquals(tempDir, Constants.getHermesHome());
+        } finally {
+            System.clearProperty("hermes.home");
+        }
+    }
+
+    @Test
     void testConfigLoad() throws IOException {
         // Set temp directory as HERMES_HOME
         System.setProperty("HERMES_HOME", tempDir.toString());
-        
-        HermesConfig config = HermesConfig.load();
-        
-        assertNotNull(config);
-        assertNotNull(config.getCurrentModel());
-        assertTrue(config.getMaxTurns() > 0);
+        try {
+            HermesConfig config = HermesConfig.load();
+            
+            assertNotNull(config);
+            assertNotNull(config.getCurrentModel());
+            assertTrue(config.getMaxTurns() > 0);
+        } finally {
+            System.clearProperty("HERMES_HOME");
+        }
     }
     
     @Test
     void testConfigSetGet() throws IOException {
         System.setProperty("HERMES_HOME", tempDir.toString());
-        
-        HermesConfig config = HermesConfig.load();
-        
-        config.setModelOverride("openai:gpt-4");
-        assertEquals("openai:gpt-4", config.getCurrentModel());
-        
-        config.setBaseUrlOverride("https://custom.api.com/v1");
-        assertEquals("https://custom.api.com/v1", config.getBaseUrl());
+        try {
+            HermesConfig config = HermesConfig.load();
+            
+            config.setModelOverride("openai:gpt-4");
+            assertEquals("openai:gpt-4", config.getCurrentModel());
+            
+            config.setBaseUrlOverride("https://custom.api.com/v1");
+            assertEquals("https://custom.api.com/v1", config.getBaseUrl());
+        } finally {
+            System.clearProperty("HERMES_HOME");
+        }
     }
 }

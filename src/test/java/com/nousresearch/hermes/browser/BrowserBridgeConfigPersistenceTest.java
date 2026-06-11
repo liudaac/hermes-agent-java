@@ -2,11 +2,15 @@ package com.nousresearch.hermes.browser;
 
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.testutil.TestTenants;
+import com.nousresearch.hermes.testutil.IsolatedHermesHome;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class BrowserBridgeConfigPersistenceTest {
+    @RegisterExtension
+    final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
 
     @Test
     void tenantPersistsAndReloadsBrowserBridgeConfig() {

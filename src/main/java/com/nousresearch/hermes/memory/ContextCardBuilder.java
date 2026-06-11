@@ -55,9 +55,12 @@ public class ContextCardBuilder {
         int total = retriever.totalEntries();
         if (total == 0) return "";
 
-        // Tiny corpus → just dump everything; smart selection wastes tokens.
+        // Tiny corpus → dump current live entries; smart selection wastes tokens.
+        // Do not use the frozen system prompt snapshot here: mid-session memory writes
+        // intentionally do not mutate that snapshot, but the smart context card should
+        // reflect live memory state for the current turn.
         if (total <= topK + 2) {
-            return memoryManager.getSystemPromptSnapshot();
+            return buildLiveSnapshot();
         }
 
         List<MemoryRetriever.RetrievedEntry> top = retriever.retrieve(queryHint, topK);
@@ -99,6 +102,26 @@ public class ContextCardBuilder {
             logger.debug("Built context card: total={}, shown={}, remaining={}", total, shown, remaining);
         }
 
+        return sb.toString();
+    }
+
+    private String buildLiveSnapshot() {
+        StringBuilder sb = new StringBuilder();
+        List<String> memEntries = memoryManager.getByCategory("memory", Integer.MAX_VALUE);
+        if (!memEntries.isEmpty()) {
+            sb.append("## Memory\n\n");
+            for (String e : memEntries) {
+                sb.append("- ").append(e.replace("\n", "\n  ")).append("\n");
+            }
+        }
+        List<String> userEntries = memoryManager.getByCategory("user", Integer.MAX_VALUE);
+        if (!userEntries.isEmpty()) {
+            if (sb.length() > 0) sb.append("\n");
+            sb.append("## User Profile\n\n");
+            for (String e : userEntries) {
+                sb.append("- ").append(e.replace("\n", "\n  ")).append("\n");
+            }
+        }
         return sb.toString();
     }
 
