@@ -35,6 +35,7 @@ class OrgControlCenterBrowserControlTest {
         app.post("/api/org/control/browser/{tenantId}/health", handler::browserHealth);
         app.post("/api/org/control/browser/{tenantId}/provider", handler::configureBrowserProvider);
         app.post("/api/org/control/browser/{tenantId}/contract", handler::browserContractTest);
+        app.post("/api/org/control/browser/{tenantId}/probe", handler::browserProviderProbe);
 
         try {
             app.start("127.0.0.1", port);
@@ -83,6 +84,18 @@ class OrgControlCenterBrowserControlTest {
             JSONObject report = JSON.parseObject(contract.body());
             assertFalse(report.getJSONArray("checks").isEmpty());
             assertFalse(tenant.getBrowserContractReport().isEmpty());
+
+            HttpResponse<String> probe = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/probe"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"endpoint\":\"http://127.0.0.1:9\",\"reason\":\"test probe\"}"))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, probe.statusCode());
+            JSONObject probeBody = JSON.parseObject(probe.body());
+            assertTrue(probeBody.containsKey("recommended_config"));
+            assertFalse(tenant.getBrowserProbeReport().isEmpty());
         } finally {
             app.stop();
             manager.shutdown();

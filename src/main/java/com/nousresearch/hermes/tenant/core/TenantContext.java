@@ -117,6 +117,7 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.browser.BrowserBridge browserBridge;
     private volatile com.nousresearch.hermes.browser.BrowserApprovalQueue browserApprovalQueue;
     private volatile java.util.Map<String, Object> browserContractReport = java.util.Map.of();
+    private volatile java.util.Map<String, Object> browserProbeReport = java.util.Map.of();
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
     
     // 自动保存调度器
@@ -1030,6 +1031,14 @@ public class TenantContext {
 
     public void setBrowserContractReport(java.util.Map<String, Object> browserContractReport) {
         this.browserContractReport = browserContractReport != null ? browserContractReport : java.util.Map.of();
+    }
+
+    public java.util.Map<String, Object> getBrowserProbeReport() {
+        return browserProbeReport != null ? browserProbeReport : java.util.Map.of();
+    }
+
+    public void setBrowserProbeReport(java.util.Map<String, Object> browserProbeReport) {
+        this.browserProbeReport = browserProbeReport != null ? browserProbeReport : java.util.Map.of();
     }
 
     public com.nousresearch.hermes.browser.BrowserApprovalQueue getBrowserApprovalQueue() {

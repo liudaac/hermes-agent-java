@@ -4,6 +4,7 @@ import com.nousresearch.hermes.browser.BrowserBridgeConfig;
 import com.nousresearch.hermes.browser.BrowserBridgeFactory;
 import com.nousresearch.hermes.browser.BrowserApprovalRequest;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
+import com.nousresearch.hermes.browser.contract.BrowserBridgeProviderProbe;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import com.nousresearch.hermes.governance.ControlActionPolicy;
@@ -578,6 +579,7 @@ public class OrgControlCenterHandler {
             Map<String, Object> row = new LinkedHashMap<>(t.getBrowserBridge().describe());
             row.put("tenant_id", t.getTenantId());
             if (!t.getBrowserContractReport().isEmpty()) row.put("contract_report", t.getBrowserContractReport());
+            if (!t.getBrowserProbeReport().isEmpty()) row.put("probe_report", t.getBrowserProbeReport());
             rows.add(row);
         }
         ctx.json(Map.of("browser_bridges", rows, "count", rows.size()));
@@ -615,6 +617,36 @@ public class OrgControlCenterHandler {
     }
 
 
+
+
+    /** POST /api/org/control/browser/{tenantId}/probe */
+    public void browserProviderProbe(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator probed browser bridge provider");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CHECK_BROWSER_BRIDGE, reason, Map.of());
+
+        String endpoint = stringOrDefault(body.get("endpoint"), stringOrDefault(tenant.getBrowserBridge().describe().get("endpoint"), ""));
+        int timeoutMs = (int) parseLong(body.get("timeout_ms"), 3000L);
+        long started = System.currentTimeMillis();
+        var result = new BrowserBridgeProviderProbe(endpoint, timeoutMs).probe();
+        Map<String, Object> payload = new LinkedHashMap<>(result.toMap());
+        payload.put("tenant_id", tenant.getTenantId());
+        payload.put("duration_ms", System.currentTimeMillis() - started);
+        payload.put("timestamp", java.time.Instant.now().toString());
+        tenant.setBrowserProbeReport(payload);
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_PROVIDER_PROBE, Map.of(
+            "tenantId", tenant.getTenantId(),
+            "actor", actor,
+            "ok", result.ok(),
+            "endpoint", endpoint,
+            "score", result.score(),
+            "reason", reason,
+            "timestamp", System.currentTimeMillis()
+        ));
+        ctx.json(payload);
+    }
 
     /** POST /api/org/control/browser/{tenantId}/contract */
     public void browserContractTest(Context ctx) {

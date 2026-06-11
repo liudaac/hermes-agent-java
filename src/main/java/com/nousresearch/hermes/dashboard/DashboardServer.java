@@ -421,6 +421,7 @@ public class DashboardServer {
         app.post("/api/org/control/browser/{tenantId}/health", orgControlCenterHandler::browserHealth);
         app.post("/api/org/control/browser/{tenantId}/capabilities", orgControlCenterHandler::browserCapabilities);
         app.post("/api/org/control/browser/{tenantId}/contract", orgControlCenterHandler::browserContractTest);
+        app.post("/api/org/control/browser/{tenantId}/probe", orgControlCenterHandler::browserProviderProbe);
         app.get("/api/org/control/browser/approvals", orgControlCenterHandler::browserApprovals);
         app.post("/api/org/control/browser/approvals/{tenantId}/{approvalId}/approve", orgControlCenterHandler::approveBrowserApproval);
         app.post("/api/org/control/browser/approvals/{tenantId}/{approvalId}/reject", orgControlCenterHandler::rejectBrowserApproval);

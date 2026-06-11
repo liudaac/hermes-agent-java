@@ -189,6 +189,19 @@ export default function OrgControlCenterPage() {
     }));
   }, [runControl]);
 
+
+  const probeBrowserProvider = useCallback((bridge: any) => {
+    const tenantId = bridge.tenant_id;
+    const endpoint = window.prompt("Endpoint URL to probe", bridge.endpoint || "http://127.0.0.1:17361");
+    if (endpoint === null) return;
+    const key = `${tenantId}:browser:probe`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/probe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", endpoint, timeout_ms: 3000, reason: "Operator probed browser bridge provider" }),
+    }));
+  }, [runControl]);
+
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(`Operator set browser bridge provider to ${provider}`);
     if (reason === null) return;
@@ -423,6 +436,7 @@ export default function OrgControlCenterPage() {
                     onHealth={checkBrowserHealth}
                     onCapabilities={checkBrowserCapabilities}
                     onContract={runBrowserContract}
+                    onProbe={probeBrowserProvider}
                     onProvider={setBrowserProvider}
                   />
                 ))}
@@ -863,6 +877,7 @@ function BrowserBridgeControlCard({
   onHealth,
   onCapabilities,
   onContract,
+  onProbe,
   onProvider,
 }: {
   bridge: any;
@@ -870,6 +885,7 @@ function BrowserBridgeControlCard({
   onHealth: (tenantId: string) => void;
   onCapabilities: (tenantId: string) => void;
   onContract: (tenantId: string) => void;
+  onProbe: (bridge: any) => void;
   onProvider: (tenantId: string, provider: string) => void;
 }) {
   const tenantId = bridge.tenant_id;
@@ -877,8 +893,10 @@ function BrowserBridgeControlCard({
   const healthKey = `${tenantId}:browser:health`;
   const capabilitiesKey = `${tenantId}:browser:capabilities`;
   const contractKey = `${tenantId}:browser:contract`;
+  const probeKey = `${tenantId}:browser:probe`;
   const capabilities = bridge.capabilities || bridge.last_capabilities || {};
   const contractReport = bridge.contract_report || {};
+  const probeReport = bridge.probe_report || {};
   return (
     <div className="rounded-lg border border-current/15 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -903,6 +921,10 @@ function BrowserBridgeControlCard({
           {busyAction === contractKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Contract test
         </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === probeKey} onClick={() => onProbe(bridge)}>
+          {busyAction === probeKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Probe
+        </Button>
         {(["mock", "kimi", "openclaw"] as const).map((p) => (
           <Button
             key={p}
@@ -920,6 +942,18 @@ function BrowserBridgeControlCard({
           {capabilities.protocol && <div>protocol: {capabilities.protocol}</div>}
           {capabilities.actions && <div className="truncate">actions: {String(capabilities.actions)}</div>}
           {capabilities.features && <div className="truncate">features: {String(capabilities.features)}</div>}
+        </div>
+      )}
+      {probeReport && Object.keys(probeReport).length > 0 && (
+        <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <span>probe score: {probeReport.score ?? 0}</span>
+            <Badge variant={probeReport.ok ? "default" : "secondary"}>{probeReport.ok ? "compatible" : "partial"}</Badge>
+          </div>
+          {probeReport.recommended_config && (
+            <div className="mt-1 truncate">recommended: {probeReport.recommended_config.provider} {probeReport.recommended_config.action_path}</div>
+          )}
+          {Array.isArray(probeReport.candidates) && <div className="truncate">candidates: {probeReport.candidates.length}</div>}
         </div>
       )}
       {contractReport && Object.keys(contractReport).length > 0 && (

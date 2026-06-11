@@ -145,3 +145,26 @@ Exit code:
 - `0` compatible
 - `1` contract failed
 - `2` invalid CLI usage
+
+## Provider probe / autodetect
+
+`BrowserBridgeProviderProbe` tries several known path layouts against an endpoint and runs the verifier for each candidate. It recommends the highest-scoring configuration.
+
+Built-in candidates currently include:
+
+- `hermes-standard`: `/actions`, `/health`, `/capabilities`
+- `hermes-standard-openclaw`: same paths with provider `openclaw`
+- `versioned-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`
+- `versioned-v1-singular-action`: `/v1/action`, `/v1/health`, `/v1/capabilities`
+- `api-browser`: `/api/browser/actions`, `/api/browser/health`, `/api/browser/capabilities`
+- `api-bridge`: `/api/bridge/actions`, `/api/bridge/health`, `/api/bridge/capabilities`
+
+Scoring weights:
+
+- capabilities: 30
+- health: 20
+- open: 25
+- observe: 15
+- missing-session error classification: 10
+
+Control Center exposes this as a **Probe** action on Browser Bridge Controls. Probe results include `recommended_config`, candidate list, score, and the best contract report.
