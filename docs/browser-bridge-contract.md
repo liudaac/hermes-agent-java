@@ -117,3 +117,31 @@ Hermes normalizes common provider failures:
 | `provider_unknown` | Unknown Hermes provider id |
 
 Sensitive actions are still governed by `BrowserBridgePolicy` and may require Browser Approval before execution.
+
+## Contract harness
+
+Hermes includes a small contract harness for provider authors:
+
+- `BrowserBridgeMockDaemon` — starts a local daemon that implements this contract.
+- `BrowserBridgeContractVerifier` — runs compatibility checks against any endpoint.
+- `BrowserBridgeContractCli` — CLI-style entrypoint for external daemon verification.
+
+Verifier checks:
+
+1. `/capabilities` returns `protocol=hermes.browser.v1` and includes `open`.
+2. `/health` succeeds.
+3. `open` action succeeds and returns `session_id`.
+4. `observe` succeeds for that session.
+5. Missing-session action returns a classified error.
+
+CLI usage from a built classpath:
+
+```bash
+java com.nousresearch.hermes.browser.contract.BrowserBridgeContractCli http://127.0.0.1:17361 kimi
+```
+
+Exit code:
+
+- `0` compatible
+- `1` contract failed
+- `2` invalid CLI usage
