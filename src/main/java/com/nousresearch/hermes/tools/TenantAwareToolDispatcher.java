@@ -737,6 +737,8 @@ public class TenantAwareToolDispatcher {
                     out.put("context_pressure", runMap.get("context_pressure"));
                     out.put("suggested_team_id", runMap.get("suggested_team_id"));
                     out.put("suggested_profile", runMap.get("suggested_profile"));
+                    if (runMap.containsKey("delegated_task_id")) out.put("delegated_task_id", runMap.get("delegated_task_id"));
+                    if (runMap.containsKey("delegated_task_status")) out.put("delegated_task_status", runMap.get("delegated_task_status"));
                 }
                 if (runMap.containsKey("delegated_task_envelope")) out.put("delegated_task_envelope", runMap.get("delegated_task_envelope"));
                 out.put("hint", "Use intent_status(run_id) to check progress");

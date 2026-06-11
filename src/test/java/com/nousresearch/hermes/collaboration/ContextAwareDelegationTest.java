@@ -81,6 +81,9 @@ class ContextAwareDelegationTest {
         assertEquals("release", map.get("suggested_team_id"));
         assertEquals("critical-path-reviewer", map.get("suggested_profile"));
         assertTrue(map.containsKey("delegated_task_envelope"));
+        assertNotNull(map.get("delegated_task_id"));
+        assertEquals("PENDING", map.get("delegated_task_status"));
+        assertNotNull(tenant.getDelegatedTaskStore().get(String.valueOf(map.get("delegated_task_id"))));
     }
 
     @Test
@@ -103,5 +106,66 @@ class ContextAwareDelegationTest {
         assertEquals(true, json.get("delegation_recommended"));
         assertEquals("critical-path-reviewer", json.get("suggested_profile"));
         assertNotNull(json.get("context_pressure"));
+        assertNotNull(json.get("delegated_task_id"));
+        assertEquals("PENDING", json.get("delegated_task_status"));
+        assertNotNull(tenant.getDelegatedTaskStore().get(String.valueOf(json.get("delegated_task_id"))));
+    }
+
+    @Test
+    void orchestratePlanWithDelegationCreatesPendingTaskAndReturnsIdStatus() throws Exception {
+        ToolRegistry registry = ToolRegistry.getInstance();
+        OrgNativeTools.register(registry);
+        TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(tenant, registry);
+
+        String result = dispatcher.dispatch("orchestrate_intent", Map.of(
+            "intent", "deploy critical release",
+            "mode", "plan",
+            "allow_delegation", true,
+            "context_signals", List.of("compacted", "critical_path")
+        ));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> json = new ObjectMapper().readValue(result, Map.class);
+        String taskId = String.valueOf(json.get("delegated_task_id"));
+        assertTrue(taskId.startsWith("delegated_"));
+        assertEquals("PENDING", json.get("delegated_task_status"));
+        DelegatedTask task = tenant.getDelegatedTaskStore().get(taskId);
+        assertNotNull(task);
+        assertEquals(DelegatedTask.Status.PENDING, task.status());
+        assertEquals("deploy critical release", task.envelope().intent());
+    }
+
+    @Test
+    void normalPlanWithoutDelegationInputsCreatesNoTask() {
+        var plan = tenant.getIntentOrchestrator().plan("review code");
+        var map = plan.toMap();
+
+        assertFalse(map.containsKey("delegated_task_id"));
+        assertFalse(map.containsKey("delegated_task_status"));
+        assertTrue(tenant.getDelegatedTaskStore().list().isEmpty());
+    }
+
+    @Test
+    void executeWithDelegationCreatesPendingTaskAndReturnsIdStatus() throws Exception {
+        ToolRegistry registry = ToolRegistry.getInstance();
+        OrgNativeTools.register(registry);
+        TenantAwareToolDispatcher dispatcher = new TenantAwareToolDispatcher(tenant, registry);
+
+        String result = dispatcher.dispatch("orchestrate_intent", Map.of(
+            "intent", "deploy critical release",
+            "mode", "execute",
+            "allow_delegation", true,
+            "context_signals", List.of("compacted", "critical_path")
+        ));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> json = new ObjectMapper().readValue(result, Map.class);
+        String taskId = String.valueOf(json.get("delegated_task_id"));
+        assertTrue(taskId.startsWith("delegated_"));
+        assertEquals("PENDING", json.get("delegated_task_status"));
+        DelegatedTask task = tenant.getDelegatedTaskStore().get(taskId);
+        assertNotNull(task);
+        assertEquals(DelegatedTask.Status.PENDING, task.status());
+        assertEquals(String.valueOf(json.get("run_id")), task.envelope().runId());
     }
 }

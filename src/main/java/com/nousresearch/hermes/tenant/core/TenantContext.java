@@ -109,6 +109,8 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.collaboration.TeamManager teamManager;
     // 意图驱动的任务编排器（自我组织）
     private volatile com.nousresearch.hermes.collaboration.IntentOrchestrator intentOrchestrator;
+    // 模拟委派任务状态存储（advisory-only，不启动外部子进程/子 Agent）
+    private volatile com.nousresearch.hermes.collaboration.DelegatedTaskStore delegatedTaskStore;
     // 组织可观测性（第五刀：全链路追踪）
     private volatile com.nousresearch.hermes.org.observe.AgentObservability observability;
     // 自进化引擎（租户级共享，供 Dashboard 与 Agent 共用）
@@ -1006,6 +1008,18 @@ public class TenantContext {
             }
         }
         return intentOrchestrator;
+    }
+
+    /** 获取模拟委派任务存储（advisory-only 生命周期，不执行子进程/子 Agent） */
+    public com.nousresearch.hermes.collaboration.DelegatedTaskStore getDelegatedTaskStore() {
+        if (delegatedTaskStore == null) {
+            synchronized (this) {
+                if (delegatedTaskStore == null) {
+                    delegatedTaskStore = new com.nousresearch.hermes.collaboration.DelegatedTaskStore();
+                }
+            }
+        }
+        return delegatedTaskStore;
     }
 
     /** 获取组织可观测性（第五刀：全链路追踪、异常检测） */
