@@ -56,6 +56,10 @@ public record DelegatedTaskExecutionPolicy(
         );
     }
 
+    public DelegatedExecutorSafetyPolicy toExecutorSafetyPolicy() {
+        return DelegatedExecutorSafetyPolicy.fromExecutionPolicy(this);
+    }
+
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("allow_external_execution", allowExternalExecution);
