@@ -553,7 +553,7 @@ export const en: Translations = {
     fields: { tenant: "Tenant", agentId: "Agent ID", roleName: "Role name", description: "Description", level: "Level", skills: "Skills", responsibilities: "Responsibilities", reportsTo: "Reports to", allowedTools: "Allowed tools", teams: "Teams" },
     roles: { title: "Agent roles", empty: "No agent roles yet", edit: "Edit" },
     teams: { title: "Teams", formTitle: "Team", empty: "No teams yet", saveTeam: "Save team", saveFailed: "Failed to save team", deleteFailed: "Failed to delete team", deleteConfirm: "Delete team {team}?", teamId: "Team ID", name: "Name", mission: "Mission", members: "Members", lead: "Lead" },
-    audit: { title: "Structure change history", empty: "No organization structure changes yet" }
+    audit: { title: "Structure change history", empty: "No organization structure changes yet", events: { roleCreated: "Role created", roleUpdated: "Role updated", roleDeleted: "Role deleted", teamCreated: "Team created", teamUpdated: "Team updated", teamDeleted: "Team deleted" } }
   },
 
   orgControl: {

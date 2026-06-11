@@ -360,7 +360,7 @@ export default function OrgManagePage() {
               {audit.slice(0, 12).map((entry, idx) => (
                 <div key={`${entry.tenant_id}:${entry.time}:${idx}`} className="rounded-md border border-current/10 p-3 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-medium">{entry.event}</div>
+                    <div className="font-medium">{formatOrgManageEvent(entry.event, om)}</div>
                     <Badge variant="outline">{new Date(entry.time).toLocaleTimeString()}</Badge>
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
@@ -409,6 +409,20 @@ function TeamMemberRoles({ members, fallback }: { members: TeamMemberRole[]; fal
 function ChipRow({ label, values }: { label: string; values: string[] }) {
   if (!values.length) return null;
   return <div className="mt-2 flex flex-wrap gap-1 text-xs"><span className="mr-1 text-muted-foreground">{label}</span>{values.map((v) => <Badge key={v} variant="secondary">{v}</Badge>)}</div>;
+}
+
+
+function formatOrgManageEvent(event: string, om: ReturnType<typeof useI18n>["t"]["orgManage"]) {
+  const events = om.audit.events;
+  const map: Record<string, string> = {
+    ORG_MANAGEMENT_ROLE_CREATED: events.roleCreated,
+    ORG_MANAGEMENT_ROLE_UPDATED: events.roleUpdated,
+    ORG_MANAGEMENT_ROLE_DELETED: events.roleDeleted,
+    ORG_MANAGEMENT_TEAM_CREATED: events.teamCreated,
+    ORG_MANAGEMENT_TEAM_UPDATED: events.teamUpdated,
+    ORG_MANAGEMENT_TEAM_DELETED: events.teamDeleted,
+  };
+  return map[event] || event;
 }
 
 function split(value: string) {
