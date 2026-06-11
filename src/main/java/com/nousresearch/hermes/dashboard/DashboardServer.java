@@ -415,6 +415,7 @@ public class DashboardServer {
         app.get("/api/org/control/evolution", orgControlCenterHandler::evolution);
         app.get("/api/org/control/anomalies", orgControlCenterHandler::anomalies);
         app.get("/api/org/control/audit", orgControlCenterHandler::audit);
+        app.get("/api/org/control/browser", orgControlCenterHandler::browserTimeline);
 
         // Dashboard themes API
         app.get("/api/dashboard/themes", ctx -> {

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Brain,
   GitBranch,
+  Globe,
   Network,
   RefreshCw,
   Users,
@@ -33,6 +34,7 @@ export default function OrgControlCenterPage() {
   const [evolution, setEvolution] = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [audit, setAudit] = useState<any[]>([]);
+  const [browserTimeline, setBrowserTimeline] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -42,7 +44,7 @@ export default function OrgControlCenterPage() {
     setLoading(true);
     setError("");
     try {
-      const [o, t, i, tr, e, a, au] = await Promise.all([
+      const [o, t, i, tr, e, a, au, b] = await Promise.all([
         fetchJSON<Overview>("/api/org/control/overview"),
         fetchJSON<any>("/api/org/control/teams"),
         fetchJSON<any>("/api/org/control/intents?limit=50&offset=0"),
@@ -50,6 +52,7 @@ export default function OrgControlCenterPage() {
         fetchJSON<any>("/api/org/control/evolution"),
         fetchJSON<any>("/api/org/control/anomalies?n=30"),
         fetchJSON<any>("/api/org/control/audit?n=30"),
+        fetchJSON<any>("/api/org/control/browser?n=30"),
       ]);
       setOverview(o);
       setTeams(t.teams || []);
@@ -58,6 +61,7 @@ export default function OrgControlCenterPage() {
       setEvolution(e.evolution || []);
       setAnomalies(a.anomalies || []);
       setAudit(au.audit || []);
+      setBrowserTimeline(b.browser_timeline || []);
     } catch (err: any) {
       setError(err?.message || "Failed to load Org Control Center");
     } finally {
@@ -332,6 +336,25 @@ export default function OrgControlCenterPage() {
               <div className="space-y-2">
                 {audit.slice(0, 8).map((entry, idx) => (
                   <AuditEntryCard key={`${entry.tenant_id}:${entry.time}:${idx}`} entry={entry} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Globe className="h-4 w-4" /> Browser Timeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {browserTimeline.length === 0 ? (
+              <Empty label="No browser actions yet" />
+            ) : (
+              <div className="space-y-2">
+                {browserTimeline.slice(0, 8).map((b, idx) => (
+                  <BrowserEntryCard key={`${b.tenant_id}:${b.time}:${idx}`} entry={b} />
                 ))}
               </div>
             )}
@@ -662,6 +685,34 @@ function StatusBadge({ status }: { status?: string }) {
   const s = status || "UNKNOWN";
   const variant = s === "SUCCESS" || s === "COMPLETED" ? "default" : s === "FAILED" || s === "INTERRUPTED" ? "destructive" : "outline";
   return <Badge variant={variant as any}>{s}</Badge>;
+}
+
+function BrowserEntryCard({ entry }: { entry: any }) {
+  const badgeVariant = entry.denied ? "destructive" : entry.ok === false ? "secondary" : "default";
+  const badgeLabel = entry.denied ? "DENIED" : "OK";
+  return (
+    <div className="rounded-lg border border-current/15 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Badge variant={badgeVariant as any}>{badgeLabel}</Badge>
+            <span className="truncate text-sm font-medium">{entry.action}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {entry.tenant_id} · {entry.actor}
+          </div>
+        </div>
+        <Badge variant="outline">{new Date(entry.time).toLocaleTimeString()}</Badge>
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        {entry.url && <div className="truncate">URL: {entry.url}</div>}
+        {entry.target && <div>Target: {entry.target}</div>}
+        {entry.reason && <div className="italic">"{entry.reason}"</div>}
+        {entry.deny_reason && <div className="text-red-400">blocked: {entry.deny_reason}</div>}
+        {entry.session_id && <div className="text-[10px] text-muted-foreground/60">session: {entry.session_id}  trace: {entry.trace_id}</div>}
+      </div>
+    </div>
+  );
 }
 
 function Empty({ label }: { label: string }) {

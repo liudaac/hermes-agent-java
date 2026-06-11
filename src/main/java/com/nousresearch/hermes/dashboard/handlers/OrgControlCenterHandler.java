@@ -65,6 +65,15 @@ public class OrgControlCenterHandler {
             ));
         }
 
+        long browserActions = 0;
+        for (TenantContext t : tenants) {
+            for (var entry : t.getAuditLogger().getRecentEvents(500)) {
+                if (entry.event().name().startsWith("CONTROL_BROWSER_")) {
+                    browserActions++;
+                }
+            }
+        }
+
         ctx.json(Map.of(
             "tenants", tenants.size(),
             "teams", teams,
@@ -72,6 +81,7 @@ public class OrgControlCenterHandler {
             "intent_runs", runs,
             "traces", traces,
             "anomalies", anomalies,
+            "browser_actions", browserActions,
             "evolution_failures", failures,
             "tenant_rows", tenantRows
         ));
@@ -447,6 +457,63 @@ public class OrgControlCenterHandler {
             "duration_ms", duration,
             "started_at", t.getStartTime().toString()
         );
+    }
+
+    /** GET /api/org/control/browser?n=50 */
+    public void browserTimeline(Context ctx) {
+        int n = parseInt(ctx.queryParam("n"), 50);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (TenantContext t : tenants()) {
+            for (var entry : t.getAuditLogger().getRecentEvents(n * 2 + 20)) {
+                String event = entry.event().name();
+                if (!event.startsWith("CONTROL_BROWSER_")) continue;
+                Map<String, Object> details = entry.details();
+                boolean denied = event.equals("CONTROL_BROWSER_ACTION_DENIED");
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("tenant_id", t.getTenantId());
+                row.put("event", event);
+                row.put("denied", denied);
+                row.put("time", entry.timestamp().toString());
+                row.put("actor", detailString(details, "actor", "unknown"));
+                row.put("action", detailString(details, "action", ""));
+                row.put("url", detailString(details, "url", ""));
+                row.put("target", detailString(details, "target", ""));
+                row.put("session_id", detailString(details, "sessionId", ""));
+                row.put("trace_id", detailString(details, "traceId", ""));
+                row.put("reason", detailString(details, "reason", ""));
+                row.put("deny_reason", detailString(details, "denyReason", ""));
+                row.put("requires_confirmation", detailBoolean(details, "requiresConfirmation", false));
+                row.put("ok", detailBoolean(details, "ok", !denied));
+                rows.add(row);
+            }
+        }
+        rows.sort((a, b) -> ((String)b.get("time")).compareTo((String)a.get("time")));
+        if (rows.size() > n) rows = rows.subList(0, n);
+        ctx.json(Map.of("browser_timeline", rows, "count", rows.size()));
+    }
+
+
+    private static String detailString(Map<String, Object> details, String key, String fallback) {
+        Object value = details.get(key);
+        if (value != null) return stringOrDefault(value, fallback);
+        String raw = stringValue(details.get("raw"));
+        if (raw == null || raw.isBlank()) return fallback;
+        String needle = key + "=";
+        int start = raw.indexOf(needle);
+        if (start < 0) return fallback;
+        start += needle.length();
+        int comma = raw.indexOf(", ", start);
+        int endBrace = raw.indexOf('}', start);
+        int end = comma >= 0 ? comma : (endBrace >= 0 ? endBrace : raw.length());
+        String parsed = raw.substring(start, end).trim();
+        return parsed.isBlank() ? fallback : parsed;
+    }
+
+    private static boolean detailBoolean(Map<String, Object> details, String key, boolean fallback) {
+        Object value = details.get(key);
+        if (value instanceof Boolean b) return b;
+        String parsed = value != null ? String.valueOf(value) : detailString(details, key, String.valueOf(fallback));
+        return "true".equalsIgnoreCase(parsed) || "1".equals(parsed) || "yes".equalsIgnoreCase(parsed);
     }
 
     private static int parseInt(String raw, int fallback) {
