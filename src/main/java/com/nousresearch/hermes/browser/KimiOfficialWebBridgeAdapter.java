@@ -4,11 +4,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.net.ConnectException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +73,7 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         map.put("status_path", "/status");
         map.put("command_path", "/command");
         map.put("healthy", Boolean.TRUE.equals(lastStatus.get("running")));
+        addSkillDiscovery(map);
         if (!lastStatus.isEmpty()) map.put("last_status", lastStatus);
         return map;
     }
@@ -89,6 +94,7 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
             meta.put("skill", "kimi-webbridge");
             meta.put("endpoint", endpoint);
             meta.put("extension_required", true);
+            addSkillDiscovery(meta);
             return running
                 ? BrowserActionResult.ok(null, endpoint, "Kimi WebBridge", null, message, List.of(), meta)
                 : BrowserActionResult.error(null, "daemon_not_running", message, meta);
@@ -109,6 +115,7 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         map.put("command_path", "/command");
         map.put("actions", OFFICIAL_ACTIONS);
         map.put("features", List.of("real-browser", "local-daemon", "browser-extension", "cdp", "tabs", "screenshots", "pdf", "network", "skill-backed"));
+        addSkillDiscovery(map);
         try {
             Map<String, Object> status = fetchStatus();
             lastStatus = status;
@@ -136,6 +143,44 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         }
         JsonNode json = HttpBrowserBridge.MAPPER.readTree(response.body() == null || response.body().isBlank() ? "{}" : response.body());
         return HttpBrowserBridge.MAPPER.convertValue(json, new TypeReference<Map<String, Object>>() {});
+    }
+
+    private void addSkillDiscovery(Map<String, Object> map) {
+        Path skillPath = findKimiWebBridgeSkill();
+        boolean installed = skillPath != null;
+        map.put("skill_installed", installed);
+        if (installed) {
+            map.put("skill_path", skillPath.toString());
+            map.put("recommended_invocation", "skill_get(\"kimi-webbridge\") then follow the skill instructions");
+        } else {
+            map.put("recommended_install", "~/.kimi-webbridge/bin/kimi-webbridge install-skill -y");
+        }
+    }
+
+    private static Path findKimiWebBridgeSkill() {
+        String home = System.getProperty("user.home", "");
+        java.util.LinkedHashSet<Path> candidates = new java.util.LinkedHashSet<>();
+        addSkillPathCandidates(candidates, System.getProperty("hermes.skills.paths"));
+        addSkillPathCandidates(candidates, System.getenv("HERMES_SKILLS_PATHS"));
+        addSkillPathCandidates(candidates, System.getenv("HERMES_EXTRA_SKILLS_DIRS"));
+        candidates.add(Paths.get(home, ".openclaw", "skills", "kimi-webbridge"));
+        candidates.add(Paths.get(home, ".openclaw", "workspace", "skills", "kimi-webbridge"));
+        candidates.add(Paths.get(home, ".hermes", "skills", "kimi-webbridge"));
+        for (Path dir : candidates) {
+            Path skill = dir.resolve("SKILL.md");
+            if (Files.exists(skill)) return dir.toAbsolutePath().normalize();
+        }
+        return null;
+    }
+
+    private static void addSkillPathCandidates(java.util.Set<Path> candidates, String value) {
+        if (value == null || value.isBlank()) return;
+        for (String part : value.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+            if (part == null || part.isBlank()) continue;
+            Path base = Paths.get(part.trim());
+            Path fileName = base.getFileName();
+            candidates.add("kimi-webbridge".equals(fileName != null ? fileName.toString() : "") ? base : base.resolve("kimi-webbridge"));
+        }
     }
 
     private URI resolve(String path) {

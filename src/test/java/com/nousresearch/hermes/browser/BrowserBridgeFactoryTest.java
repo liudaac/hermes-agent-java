@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -68,9 +70,22 @@ class BrowserBridgeFactoryTest {
             assertTrue(health.ok());
             assertEquals("skill-backed", health.meta().get("mode"));
             assertEquals(false, health.meta().get("extension_connected"));
-            var capabilities = bridge.capabilities();
+            Path skills = Files.createTempDirectory("kimi-skill");
+            Path skillDir = skills.resolve("kimi-webbridge");
+            Files.createDirectories(skillDir);
+            Files.writeString(skillDir.resolve("SKILL.md"), "Kimi WebBridge skill", StandardCharsets.UTF_8);
+            String oldSkillPaths = System.getProperty("hermes.skills.paths");
+            Map<String, Object> capabilities;
+            try {
+                System.setProperty("hermes.skills.paths", skills.toString());
+                capabilities = bridge.capabilities();
+            } finally {
+                if (oldSkillPaths == null) System.clearProperty("hermes.skills.paths"); else System.setProperty("hermes.skills.paths", oldSkillPaths);
+            }
             assertEquals("skill-backed", capabilities.get("mode"));
             assertEquals(false, capabilities.get("usable"));
+            assertEquals(true, capabilities.get("skill_installed"));
+            assertEquals(skillDir.toAbsolutePath().normalize().toString(), capabilities.get("skill_path"));
             var execute = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "test", "should route to skill"));
             assertFalse(execute.ok());
             assertEquals("skill_backed_provider", execute.errorCode());

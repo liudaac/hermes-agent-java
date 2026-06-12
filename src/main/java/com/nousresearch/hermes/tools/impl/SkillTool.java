@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -17,7 +18,7 @@ import java.util.stream.Collectors;
 public class SkillTool {
     private static final Logger logger = LoggerFactory.getLogger(SkillTool.class);
     private static final SkillManager skillManager = new SkillManager();
-    
+
     /**
      * Register skill tools.
      */
@@ -55,7 +56,7 @@ public class SkillTool {
             .handler(SkillTool::createSkill)
             .emoji("📝")
             .build());
-        
+
         // skill_search
         registry.register(new ToolEntry.Builder()
             .name("skill_search")
@@ -81,7 +82,7 @@ public class SkillTool {
             .handler(SkillTool::searchSkills)
             .emoji("🔍")
             .build());
-        
+
         // skill_get
         registry.register(new ToolEntry.Builder()
             .name("skill_get")
@@ -102,7 +103,7 @@ public class SkillTool {
             .handler(SkillTool::getSkill)
             .emoji("📄")
             .build());
-        
+
         // skill_update
         registry.register(new ToolEntry.Builder()
             .name("skill_update")
@@ -131,7 +132,7 @@ public class SkillTool {
             .handler(SkillTool::updateSkill)
             .emoji("✏️")
             .build());
-        
+
         // skill_delete
         registry.register(new ToolEntry.Builder()
             .name("skill_delete")
@@ -152,7 +153,7 @@ public class SkillTool {
             .handler(SkillTool::deleteSkill)
             .emoji("🗑️")
             .build());
-        
+
         // skill_list
         registry.register(new ToolEntry.Builder()
             .name("skill_list")
@@ -174,7 +175,19 @@ public class SkillTool {
             .emoji("📚")
             .build());
     }
-    
+
+    private static Map<String, Object> skillSummaryMap(SkillManager.Skill s) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("name", s.name);
+        map.put("description", s.description != null ? s.description : "");
+        map.put("tags", s.tags != null ? s.tags : List.of());
+        map.put("version", s.version);
+        map.put("usage_count", s.usageCount);
+        if (s.source != null) map.put("source", s.source);
+        if (s.path != null) map.put("path", s.path);
+        return map;
+    }
+
     /**
      * Create a new skill.
      */
@@ -184,28 +197,28 @@ public class SkillTool {
         String content = (String) args.get("content");
         @SuppressWarnings("unchecked")
         List<String> tags = (List<String>) args.getOrDefault("tags", List.of());
-        
+
         if (name == null || name.trim().isEmpty()) {
             return ToolRegistry.toolError("Name is required");
         }
-        
+
         if (description == null || description.trim().isEmpty()) {
             return ToolRegistry.toolError("Description is required");
         }
-        
+
         if (content == null || content.trim().isEmpty()) {
             return ToolRegistry.toolError("Content is required");
         }
-        
+
         try {
             SkillManager.Skill skill = skillManager.createSkill(
                 name, description, content, tags, Map.of()
             );
-            
+
             if (skill == null) {
                 return ToolRegistry.toolError("Failed to create skill");
             }
-            
+
             return ToolRegistry.toolResult(Map.of(
                 "success", true,
                 "name", skill.name,
@@ -213,84 +226,73 @@ public class SkillTool {
                 "version", skill.version,
                 "created_at", skill.createdAt.toString()
             ));
-            
+
         } catch (Exception e) {
             logger.error("Failed to create skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Create failed: " + e.getMessage());
         }
     }
-    
+
     /**
      * Search skills.
      */
     private static String searchSkills(Map<String, Object> args) {
         String query = (String) args.get("query");
         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 10;
-        
+
         if (query == null || query.trim().isEmpty()) {
             return ToolRegistry.toolError("Query is required");
         }
-        
+
         try {
             List<SkillManager.Skill> skills = skillManager.searchSkills(query);
-            
+
             List<Map<String, Object>> results = skills.stream()
                 .limit(limit)
-                .map(s -> Map.of(
-                    "name", s.name,
-                    "description", s.description,
-                    "tags", s.tags,
-                    "version", s.version,
-                    "usage_count", s.usageCount
-                ))
+                .map(SkillTool::skillSummaryMap)
                 .collect(Collectors.toList());
-            
+
             return ToolRegistry.toolResult(Map.of(
                 "query", query,
                 "results", results,
                 "count", results.size()
             ));
-            
+
         } catch (Exception e) {
             logger.error("Failed to search skills: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Search failed: " + e.getMessage());
         }
     }
-    
+
     /**
      * Get a skill.
      */
     private static String getSkill(Map<String, Object> args) {
         String name = (String) args.get("name");
-        
+
         if (name == null || name.trim().isEmpty()) {
             return ToolRegistry.toolError("Name is required");
         }
-        
+
         try {
             SkillManager.Skill skill = skillManager.loadSkill(name);
-            
+
             if (skill == null) {
                 return ToolRegistry.toolError("Skill not found: " + name);
             }
-            
-            return ToolRegistry.toolResult(Map.of(
-                "name", skill.name,
-                "description", skill.description,
-                "content", skill.content,
-                "tags", skill.tags,
-                "version", skill.version,
-                "created_at", skill.createdAt.toString(),
-                "updated_at", skill.updatedAt.toString(),
-                "usage_count", skill.usageCount
-            ));
-            
+
+            Map<String, Object> result = skillSummaryMap(skill);
+            result.put("content", skill.content);
+            result.put("created_at", skill.createdAt != null ? skill.createdAt.toString() : null);
+            result.put("updated_at", skill.updatedAt != null ? skill.updatedAt.toString() : null);
+            return ToolRegistry.toolResult(result);
+
         } catch (Exception e) {
             logger.error("Failed to get skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Get failed: " + e.getMessage());
         }
     }
-    
+
     /**
      * Update a skill.
      */
@@ -298,92 +300,86 @@ public class SkillTool {
         String name = (String) args.get("name");
         String content = (String) args.get("content");
         String reason = (String) args.get("reason");
-        
+
         if (name == null || name.trim().isEmpty()) {
             return ToolRegistry.toolError("Name is required");
         }
-        
+
         if (content == null || content.trim().isEmpty()) {
             return ToolRegistry.toolError("Content is required");
         }
-        
+
         if (reason == null || reason.trim().isEmpty()) {
             return ToolRegistry.toolError("Reason is required");
         }
-        
+
         try {
             boolean success = skillManager.updateSkill(name, content, reason);
-            
+
             if (!success) {
                 return ToolRegistry.toolError("Skill not found or update failed");
             }
-            
+
             return ToolRegistry.toolResult(Map.of(
                 "success", true,
                 "name", name,
                 "reason", reason
             ));
-            
+
         } catch (Exception e) {
             logger.error("Failed to update skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Update failed: " + e.getMessage());
         }
     }
-    
+
     /**
      * Delete a skill.
      */
     private static String deleteSkill(Map<String, Object> args) {
         String name = (String) args.get("name");
-        
+
         if (name == null || name.trim().isEmpty()) {
             return ToolRegistry.toolError("Name is required");
         }
-        
+
         try {
             boolean success = skillManager.deleteSkill(name);
-            
+
             if (!success) {
                 return ToolRegistry.toolError("Skill not found");
             }
-            
+
             return ToolRegistry.toolResult(Map.of(
                 "success", true,
                 "name", name
             ));
-            
+
         } catch (Exception e) {
             logger.error("Failed to delete skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Delete failed: " + e.getMessage());
         }
     }
-    
+
     /**
      * List all skills.
      */
     private static String listSkills(Map<String, Object> args) {
         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 50;
-        
+
         try {
             List<SkillManager.Skill> skills = skillManager.listSkills();
-            
+
             List<Map<String, Object>> results = skills.stream()
                 .limit(limit)
-                .map(s -> Map.of(
-                    "name", s.name,
-                    "description", s.description,
-                    "tags", s.tags,
-                    "version", s.version,
-                    "usage_count", s.usageCount
-                ))
+                .map(SkillTool::skillSummaryMap)
                 .collect(Collectors.toList());
-            
+
             return ToolRegistry.toolResult(Map.of(
                 "results", results,
                 "count", results.size(),
                 "total", skills.size()
             ));
-            
+
         } catch (Exception e) {
             logger.error("Failed to list skills: {}", e.getMessage(), e);
             return ToolRegistry.toolError("List failed: " + e.getMessage());

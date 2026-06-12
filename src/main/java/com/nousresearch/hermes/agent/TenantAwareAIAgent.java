@@ -37,10 +37,10 @@ public class TenantAwareAIAgent {
     private final String tenantId;
     private final String sessionId;
     private final TenantContext tenantContext;
-    
+
     // Persistent tool dispatcher (created once, reused for all calls)
     private TenantAwareToolDispatcher toolDispatcher;
-    
+
     // Per-tenant approval system
     private ApprovalSystem approvalSystem;
     private ApprovalMessageHandler approvalMessageHandler;
@@ -1021,25 +1021,25 @@ public class TenantAwareAIAgent {
     }
 
     // ==================== Approval ====================
-    
+
     /**
      * Initialize per-tenant approval system and wire into the tool dispatcher.
      */
     private void initTenantApproval() {
         this.approvalSystem = new ApprovalSystem();
         this.approvalMessageHandler = new ApprovalMessageHandler();
-        
+
         // Wire to the persistent tool dispatcher
         if (toolDispatcher != null) {
             toolDispatcher.setApprovalSystem(approvalSystem);
             toolDispatcher.setApprovalMessageHandler(approvalMessageHandler);
         }
-        
+
         // Wire sub-agent shared memory callback for this tenant
-        
+
         logger.info("Tenant approval system initialized for: {}", tenantId);
     }
-    
+
     // ==================== Tool Execution ====================
 
     private String executeToolCall(ToolCall toolCall) {
@@ -1400,36 +1400,52 @@ public class TenantAwareAIAgent {
         }
     }
 
+    private String buildAutoLoadedSkillPrompt(com.nousresearch.hermes.tenant.core.TenantSkill skill) {
+        StringBuilder skillPrompt = new StringBuilder();
+        skillPrompt.append("=== AUTO-LOADED TENANT SKILL: ").append(skill.name()).append(" ===\n\n");
+        if (skill.description() != null && !skill.description().isBlank()) {
+            skillPrompt.append("Description: ").append(skill.description()).append("\n\n");
+        }
+        skillPrompt.append(skill.content() != null ? skill.content() : "");
+        skillPrompt.append("\n\n=== END TENANT SKILL ===");
+        return skillPrompt.toString();
+    }
+
     private void loadAutoSkills(String channelId) {
         try {
             // 从租户配置读取自动加载的技能列表
             List<String> autoSkills = tenantContext.getConfig()
                 .getStringList("skills.auto_load");
-            
+
             if (autoSkills.isEmpty()) {
                 logger.debug("No auto-skills configured for tenant: {}", tenantId);
                 return;
             }
-            
+
             TenantSkillManager skillManager = tenantContext.getSkillManager();
             int loaded = 0;
-            
+
+            if (conversationHistory.isEmpty()) {
+                conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
+            }
+
             for (String skillName : autoSkills) {
                 try {
                     var skill = skillManager.loadSkill(skillName);
                     if (skill != null) {
+                        conversationHistory.add(ModelMessage.system(buildAutoLoadedSkillPrompt(skill)));
                         logger.debug("Auto-loaded skill: {} for tenant: {}", skillName, tenantId);
                         loaded++;
                     }
                 } catch (Exception e) {
-                    logger.warn("Failed to auto-load skill '{}' for tenant: {}", skillName, tenantId);
+                    logger.warn("Failed to auto-load skill '{}' for tenant: {}", skillName, tenantId, e);
                 }
             }
-            
+
             if (loaded > 0) {
                 logger.info("Auto-loaded {} skills for tenant: {}", loaded, tenantId);
             }
-            
+
         } catch (Exception e) {
             logger.error("Failed to load auto-skills for tenant: {}", tenantId, e);
         }
@@ -1465,21 +1481,21 @@ public class TenantAwareAIAgent {
         Thread.startVirtualThread(() -> {
             try {
                 logger.debug("Starting background review: memory={}, skills={}", reviewMemory, reviewSkills);
-                
+
                 if (reviewMemory) {
                     reviewAndSaveMemory(messages);
                 }
-                
+
                 if (reviewSkills) {
                     reviewAndSuggestSkills(messages);
                 }
-                
+
             } catch (Exception e) {
                 logger.error("Background review failed", e);
             }
         });
     }
-    
+
     /**
      * 审查对话并保存有价值的记忆
      */
@@ -1491,30 +1507,30 @@ public class TenantAwareAIAgent {
                 .map(ModelMessage::getContent)
                 .filter(Objects::nonNull)
                 .toList();
-            
+
             if (userMessages.isEmpty()) {
                 return;
             }
-            
+
             // 检查是否有值得保存的新信息
             String lastUserMessage = userMessages.get(userMessages.size() - 1);
-            
+
             // 简单启发式：如果消息包含偏好、事实或上下文信息，则保存
             if (containsValuableInfo(lastUserMessage)) {
                 // 构建记忆摘要
                 String memory = extractMemorySummary(messages);
                 if (memory != null && !memory.isEmpty()) {
                     memoryManager.addUser(memory);
-                    logger.debug("Saved memory from conversation: {}", 
+                    logger.debug("Saved memory from conversation: {}",
                         memory.substring(0, Math.min(50, memory.length())));
                 }
             }
-            
+
         } catch (Exception e) {
             logger.error("Memory review failed", e);
         }
     }
-    
+
     /**
      * 审查对话并建议技能创建
      */
@@ -1525,7 +1541,7 @@ public class TenantAwareAIAgent {
             int turnCount = (int) messages.stream()
                 .filter(m -> "user".equals(m.getRole()))
                 .count();
-            
+
             // 启发式：如果对话超过5轮且使用了工具，可能是可复用的工作流
             if (turnCount >= 3 && toolCallCount >= 2) {
                 // 提取可能的技能描述
@@ -1539,12 +1555,12 @@ public class TenantAwareAIAgent {
                     }
                 }
             }
-            
+
         } catch (Exception e) {
             logger.error("Skill review failed", e);
         }
     }
-    
+
     /**
      * 检查消息是否包含有价值的信息
      */
@@ -1554,13 +1570,13 @@ public class TenantAwareAIAgent {
         }
         String lower = message.toLowerCase();
         // 偏好指示器
-        return lower.contains("prefer") || lower.contains("like") || 
+        return lower.contains("prefer") || lower.contains("like") ||
                lower.contains("always") || lower.contains("usually") ||
                lower.contains("don't") || lower.contains("never") ||
                lower.contains("my name is") || lower.contains("i am") ||
                lower.contains("remember") || lower.contains("important");
     }
-    
+
     /**
      * 从对话中提取记忆摘要
      */
@@ -1578,7 +1594,7 @@ public class TenantAwareAIAgent {
         }
         return sb.toString();
     }
-    
+
     /**
      * 统计工具调用次数
      */
@@ -1587,7 +1603,7 @@ public class TenantAwareAIAgent {
             .filter(m -> m.getToolCalls() != null && !m.getToolCalls().isEmpty())
             .count();
     }
-    
+
     /**
      * 从对话中提取技能描述
      */
@@ -1597,7 +1613,7 @@ public class TenantAwareAIAgent {
             ModelMessage msg = messages.get(i);
             if ("assistant".equals(msg.getRole()) && msg.getContent() != null) {
                 String content = msg.getContent().toLowerCase();
-                if (content.contains("done") || content.contains("completed") || 
+                if (content.contains("done") || content.contains("completed") ||
                     content.contains("finished") || content.contains("here is")) {
                     return "Workflow completion pattern detected";
                 }
