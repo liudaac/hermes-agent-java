@@ -62,6 +62,20 @@ class BrowserBridgeFactoryTest {
             exchange.getResponseBody().write(response);
             exchange.close();
         });
+        server.createContext("/command", exchange -> {
+            Map<String, Object> body = MAPPER.readValue(exchange.getRequestBody(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            byte[] response = MAPPER.writeValueAsBytes(Map.of(
+                "ok", true,
+                "url", "https://example.com",
+                "title", "Kimi Page",
+                "echo_action", body.get("action"),
+                "echo_session", body.get("session")
+            ));
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
         server.start();
         try {
             String endpoint = "http://127.0.0.1:" + server.getAddress().getPort();
@@ -86,9 +100,11 @@ class BrowserBridgeFactoryTest {
             assertEquals(false, capabilities.get("usable"));
             assertEquals(true, capabilities.get("skill_installed"));
             assertEquals(skillDir.toAbsolutePath().normalize().toString(), capabilities.get("skill_path"));
-            var execute = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "test", "should route to skill"));
-            assertFalse(execute.ok());
-            assertEquals("skill_backed_provider", execute.errorCode());
+            var execute = bridge.execute(new BrowserAction("open", "unit-session", "https://example.com", null, null, "Unit Test", "test", "should route to skill"));
+            assertTrue(execute.ok());
+            assertEquals("unit-session", execute.sessionId());
+            assertEquals("Kimi Page", execute.title());
+            assertEquals("navigate", execute.meta().get("mapped_action"));
         } finally {
             server.stop(0);
         }

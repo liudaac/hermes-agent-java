@@ -48,18 +48,27 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
 
     @Override
     public BrowserActionResult execute(BrowserAction action) {
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("provider", "kimi-webbridge");
-        meta.put("mode", "skill-backed");
-        meta.put("skill", "kimi-webbridge");
-        meta.put("endpoint", endpoint);
-        if (!lastStatus.isEmpty()) meta.put("status", lastStatus);
-        return BrowserActionResult.error(
-            action != null ? action.sessionId() : null,
-            "skill_backed_provider",
-            "Kimi WebBridge operations are provided by the installed kimi-webbridge skill; Hermes core only performs discovery/status for this provider.",
-            meta
-        );
+        if (action == null) {
+            return BrowserActionResult.error(null, "invalid_action", "Browser action is required", baseMeta(null));
+        }
+        try {
+            MappedCommand mapped = mapAction(action);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("action", mapped.action());
+            body.put("args", mapped.args());
+            body.put("session", session(action));
+            HttpRequest request = HttpRequest.newBuilder(resolve("/command"))
+                .timeout(Duration.ofMillis(timeoutMs))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(HttpBrowserBridge.MAPPER.writeValueAsString(body)))
+                .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            return toBrowserResult(action, mapped, response.statusCode(), response.body());
+        } catch (IllegalArgumentException e) {
+            return BrowserActionResult.error(action.sessionId(), "invalid_action", e.getMessage(), baseMeta(action));
+        } catch (Exception e) {
+            return exceptionError("execute", e, action.sessionId());
+        }
     }
 
     @Override
@@ -99,7 +108,7 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
                 ? BrowserActionResult.ok(null, endpoint, "Kimi WebBridge", null, message, List.of(), meta)
                 : BrowserActionResult.error(null, "daemon_not_running", message, meta);
         } catch (Exception e) {
-            return exceptionError("status", e);
+            return exceptionError("status", e, null);
         }
     }
 
@@ -130,6 +139,118 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         }
         return map;
     }
+
+
+    private BrowserActionResult toBrowserResult(BrowserAction original, MappedCommand mapped, int statusCode, String body) throws Exception {
+        Map<String, Object> response = parseResponse(body);
+        Map<String, Object> meta = baseMeta(original);
+        meta.put("mapped_action", mapped.action());
+        meta.put("http_status", statusCode);
+        meta.put("response", response);
+        if (statusCode < 200 || statusCode >= 300) {
+            return BrowserActionResult.error(session(original), "http_error", "Kimi WebBridge HTTP " + statusCode + ": " + truncate(body), meta);
+        }
+        Object okValue = response.get("ok");
+        if (Boolean.FALSE.equals(okValue)) {
+            Map<String, Object> error = response.get("error") instanceof Map<?, ?> raw
+                ? raw.entrySet().stream().collect(java.util.stream.Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue, (a, b) -> b, LinkedHashMap::new))
+                : Map.of();
+            String code = String.valueOf(error.getOrDefault("code", "tool_error"));
+            String message = String.valueOf(error.getOrDefault("message", "Kimi WebBridge command failed"));
+            return BrowserActionResult.error(session(original), code, message, meta);
+        }
+        String url = stringValue(response.getOrDefault("url", original.url()));
+        String title = stringValue(response.get("title"));
+        String content = firstText(response, "tree", "value", "text", "content", "path");
+        String message = "Kimi WebBridge command executed: " + mapped.action();
+        return BrowserActionResult.ok(session(original), url, title, content, message, List.of(), meta);
+    }
+
+    private Map<String, Object> parseResponse(String body) throws Exception {
+        if (body == null || body.isBlank()) return Map.of();
+        JsonNode json = HttpBrowserBridge.MAPPER.readTree(body);
+        return HttpBrowserBridge.MAPPER.convertValue(json, new TypeReference<Map<String, Object>>() {});
+    }
+
+    private Map<String, Object> baseMeta(BrowserAction action) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("provider", "kimi-webbridge");
+        meta.put("mode", "skill-backed");
+        meta.put("skill", "kimi-webbridge");
+        meta.put("endpoint", endpoint);
+        addSkillDiscovery(meta);
+        if (!lastStatus.isEmpty()) meta.put("status", lastStatus);
+        if (action != null) {
+            meta.put("requested_action", action.action());
+            meta.put("actor", action.actor());
+            meta.put("reason", action.reason());
+        }
+        return meta;
+    }
+
+    private MappedCommand mapAction(BrowserAction action) {
+        String requested = action.action() == null || action.action().isBlank() ? "snapshot" : action.action().trim().toLowerCase(java.util.Locale.ROOT);
+        Map<String, Object> args = new LinkedHashMap<>();
+        return switch (requested) {
+            case "open", "navigate" -> {
+                if (action.url() == null || action.url().isBlank()) throw new IllegalArgumentException("url is required for navigate/open");
+                args.put("url", action.url());
+                args.put("newTab", true);
+                if (action.instruction() != null && !action.instruction().isBlank()) args.put("group_title", action.instruction());
+                yield new MappedCommand("navigate", args);
+            }
+            case "observe", "snapshot", "extract", "read" -> new MappedCommand("snapshot", args);
+            case "click" -> {
+                if (action.target() == null || action.target().isBlank()) throw new IllegalArgumentException("target selector/ref is required for click");
+                args.put("selector", action.target());
+                yield new MappedCommand("click", args);
+            }
+            case "type", "fill" -> {
+                if (action.target() == null || action.target().isBlank()) throw new IllegalArgumentException("target selector/ref is required for fill");
+                args.put("selector", action.target());
+                args.put("value", action.text() != null ? action.text() : "");
+                yield new MappedCommand("fill", args);
+            }
+            case "evaluate" -> {
+                String code = action.instruction() != null && !action.instruction().isBlank() ? action.instruction() : action.text();
+                if (code == null || code.isBlank()) throw new IllegalArgumentException("instruction/text JavaScript code is required for evaluate");
+                args.put("code", code);
+                yield new MappedCommand("evaluate", args);
+            }
+            case "screenshot" -> new MappedCommand("screenshot", args);
+            case "list_tabs" -> new MappedCommand("list_tabs", args);
+            case "find_tab" -> {
+                if (action.url() != null && !action.url().isBlank()) args.put("url", action.url());
+                if (action.target() != null && !action.target().isBlank()) args.put("url", action.target());
+                if (!args.containsKey("url")) args.put("active", true);
+                yield new MappedCommand("find_tab", args);
+            }
+            case "close_tab" -> new MappedCommand("close_tab", args);
+            case "close", "close_session" -> new MappedCommand("close_session", args);
+            case "save_as_pdf" -> new MappedCommand("save_as_pdf", args);
+            default -> throw new IllegalArgumentException("Unsupported Kimi WebBridge browser action: " + requested);
+        };
+    }
+
+    private static String session(BrowserAction action) {
+        return action != null && action.sessionId() != null && !action.sessionId().isBlank()
+            ? action.sessionId()
+            : "hermes-browser";
+    }
+
+    private static String firstText(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value != null) return String.valueOf(value);
+        }
+        return null;
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private record MappedCommand(String action, Map<String, Object> args) {}
 
     private Map<String, Object> fetchStatus() throws Exception {
         HttpRequest request = HttpRequest.newBuilder(resolve("/status"))
@@ -188,15 +309,15 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         return URI.create(base + (path.startsWith("/") ? path : "/" + path));
     }
 
-    private BrowserActionResult exceptionError(String operation, Exception e) {
+    private BrowserActionResult exceptionError(String operation, Exception e, String sessionId) {
         String code = classifyException(e);
-        return BrowserActionResult.error(null, code, "Kimi WebBridge " + operation + " unavailable: " + e.getMessage(), Map.of(
-            "provider", "kimi-webbridge",
-            "mode", "skill-backed",
-            "operation", operation,
-            "endpoint", endpoint,
-            "exception", e.getClass().getSimpleName()
-        ));
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("provider", "kimi-webbridge");
+        meta.put("mode", "skill-backed");
+        meta.put("operation", operation);
+        meta.put("endpoint", endpoint);
+        meta.put("exception", e.getClass().getSimpleName());
+        return BrowserActionResult.error(sessionId, code, "Kimi WebBridge " + operation + " unavailable: " + e.getMessage(), meta);
     }
 
     private static String classifyException(Exception e) {
