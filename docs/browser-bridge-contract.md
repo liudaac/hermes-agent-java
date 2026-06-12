@@ -1,6 +1,6 @@
 # Browser Bridge Contract v1
 
-Hermes uses a provider-neutral `BrowserBridge` abstraction for real-browser automation. HTTP-backed providers such as Kimi WebBridge or OpenClaw Browser Relay should expose this minimal daemon contract.
+Hermes uses a provider-neutral `BrowserBridge` abstraction for real-browser automation. HTTP-backed providers such as the WebBridge plugin daemon, Kimi WebBridge, or OpenClaw Browser Relay should expose this minimal daemon contract.
 
 ## Runtime configuration
 
@@ -17,6 +17,7 @@ System properties or env vars:
 
 Provider defaults:
 
+- `webbridge`: `http://127.0.0.1:17362` — preferred WebBridge plugin daemon
 - `kimi`: `http://127.0.0.1:17361`
 - `openclaw`: `http://127.0.0.1:14511`
 
@@ -137,7 +138,7 @@ Verifier checks:
 CLI usage from a built classpath:
 
 ```bash
-java com.nousresearch.hermes.browser.contract.BrowserBridgeContractCli http://127.0.0.1:17361 kimi
+java com.nousresearch.hermes.browser.contract.BrowserBridgeContractCli http://127.0.0.1:17362 webbridge
 ```
 
 Exit code:
@@ -152,6 +153,10 @@ Exit code:
 
 Built-in candidates currently include:
 
+- `webbridge-standard`: `/actions`, `/health`, `/capabilities` with provider `webbridge`
+- `webbridge-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`
+- `webbridge-v1-singular-action`: `/v1/action`, `/v1/health`, `/v1/capabilities`
+- `webbridge-api`: `/api/webbridge/actions`, `/api/webbridge/health`, `/api/webbridge/capabilities`
 - `hermes-standard`: `/actions`, `/health`, `/capabilities`
 - `hermes-standard-openclaw`: same paths with provider `openclaw`
 - `versioned-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`

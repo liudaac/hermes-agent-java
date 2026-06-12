@@ -68,15 +68,15 @@ class OrgControlCenterBrowserControlTest {
             HttpResponse<String> configure = client.send(
                 HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/provider"))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"provider\":\"kimi\",\"endpoint\":\"http://127.0.0.1:9\",\"reason\":\"test provider\"}"))
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"provider\":\"webbridge\",\"endpoint\":\"http://127.0.0.1:9\",\"reason\":\"test provider\"}"))
                     .build(),
                 HttpResponse.BodyHandlers.ofString()
             );
             assertEquals(200, configure.statusCode());
             JSONObject body = JSON.parseObject(configure.body());
             assertTrue(body.getBooleanValue("ok"));
-            assertEquals("kimi-webbridge", body.getString("provider"));
-            assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("kimi"));
+            assertEquals("webbridge-plugin", body.getString("provider"));
+            assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("webbridge"));
 
             HttpResponse<String> contract = client.send(
                 HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/contract"))

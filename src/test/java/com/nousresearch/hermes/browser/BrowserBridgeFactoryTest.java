@@ -28,6 +28,14 @@ class BrowserBridgeFactoryTest {
         assertInstanceOf(KimiWebBridgeAdapter.class, bridge);
     }
 
+
+    @Test
+    void factoryCreatesWebBridgePluginHttpAdapter() {
+        BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", "http://127.0.0.1:1", 1000));
+        assertInstanceOf(WebBridgePluginBrowserBridge.class, bridge);
+        assertEquals("webbridge-plugin", bridge.describe().get("provider"));
+    }
+
     @Test
     void unknownProviderReturnsStructuredError() {
         BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("weird", "", 1000));
@@ -58,7 +66,7 @@ class BrowserBridgeFactoryTest {
         server.start();
         try {
             String endpoint = "http://127.0.0.1:" + server.getAddress().getPort();
-            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("kimi", endpoint, 3000));
+            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", endpoint, 3000));
             var result = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "operator", "integration test"));
             assertTrue(result.ok());
             assertEquals("daemon-session-1", result.sessionId());

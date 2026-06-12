@@ -95,6 +95,10 @@ public class BrowserBridgeProviderProbe {
 
     public static List<Candidate> defaultCandidates() {
         return List.of(
+            new Candidate("webbridge-standard", "webbridge", "/actions", "/health", "/capabilities"),
+            new Candidate("webbridge-v1", "webbridge", "/v1/actions", "/v1/health", "/v1/capabilities"),
+            new Candidate("webbridge-v1-singular-action", "webbridge", "/v1/action", "/v1/health", "/v1/capabilities"),
+            new Candidate("webbridge-api", "webbridge", "/api/webbridge/actions", "/api/webbridge/health", "/api/webbridge/capabilities"),
             new Candidate("hermes-standard", "kimi", "/actions", "/health", "/capabilities"),
             new Candidate("hermes-standard-openclaw", "openclaw", "/actions", "/health", "/capabilities"),
             new Candidate("versioned-v1", "kimi", "/v1/actions", "/v1/health", "/v1/capabilities"),

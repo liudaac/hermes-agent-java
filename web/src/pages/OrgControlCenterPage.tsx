@@ -206,7 +206,7 @@ export default function OrgControlCenterPage() {
 
   const probeBrowserProvider = useCallback((bridge: any) => {
     const tenantId = bridge.tenant_id;
-    const endpoint = window.prompt(oc.endpointUrlToProbe, bridge.endpoint || "http://127.0.0.1:17361");
+    const endpoint = window.prompt(oc.endpointUrlToProbe, bridge.endpoint || "http://127.0.0.1:17362");
     if (endpoint === null) return;
     const key = `${tenantId}:browser:probe`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/probe`, {
@@ -258,7 +258,8 @@ export default function OrgControlCenterPage() {
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(oc.reasons.setProvider.replace("{provider}", provider));
     if (reason === null) return;
-    const endpoint = provider === "mock" ? "" : window.prompt(oc.endpointUrl, provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511");
+    const defaultEndpoint = provider === "webbridge" ? "http://127.0.0.1:17362" : provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511";
+    const endpoint = provider === "mock" ? "" : window.prompt(oc.endpointUrl, defaultEndpoint);
     if (endpoint === null) return;
     const key = `${tenantId}:browser:provider:${provider}`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/provider`, {
@@ -1539,7 +1540,7 @@ function BrowserBridgeControlCard({
         <Button variant="ghost" size="sm" onClick={() => onExportConfig(bridge)}>
           Export config
         </Button>
-        {(["mock", "kimi", "openclaw"] as const).map((p) => (
+        {(["mock", "webbridge", "kimi", "openclaw"] as const).map((p) => (
           <Button
             key={p}
             variant={String(provider).includes(p) ? "secondary" : "ghost"}

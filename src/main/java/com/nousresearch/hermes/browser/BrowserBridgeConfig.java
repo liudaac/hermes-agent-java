@@ -55,6 +55,7 @@ public record BrowserBridgeConfig(
 
     private static String defaultEndpoint(String provider) {
         return switch (provider) {
+            case "webbridge", "webbridge-plugin", "webbridge_plugin", "web-bridge", "plugin" -> "http://127.0.0.1:17362";
             case "kimi", "kimi-webbridge", "kimi_webbridge" -> "http://127.0.0.1:17361";
             case "openclaw", "openclaw-relay", "openclaw_relay" -> "http://127.0.0.1:14511";
             default -> "";

@@ -251,7 +251,7 @@ public class OrgNativeTools {
             .name("browser_bridge")
             .toolset("organization")
             .emoji("🌉")
-            .description("Execute a browser action through the tenant BrowserBridge. Supports mock today and future Kimi WebBridge / OpenClaw Relay / Playwright adapters.")
+            .description("Execute a browser action through the tenant BrowserBridge. Supports mock plus HTTP-backed WebBridge plugin, Kimi WebBridge, OpenClaw Relay, and Playwright-style adapters.")
             .schema(Map.of(
                 "description", "Provider-neutral browser automation action. Use for web tasks that need a real or bridged browser session.",
                 "parameters", Map.of(
