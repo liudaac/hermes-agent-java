@@ -21,7 +21,18 @@ export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> 
     const text = await res.text().catch(() => res.statusText);
     throw new Error(`${res.status}: ${text}`);
   }
-  return res.json();
+  if (res.status === 204) {
+    return {} as T;
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    return {} as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch (err: any) {
+    throw new Error(`Invalid JSON from ${url}: ${err?.message || String(err)}`);
+  }
 }
 
 async function getSessionToken(): Promise<string> {
