@@ -194,6 +194,16 @@ export default function OrgControlCenterPage() {
   }, [runControl]);
 
 
+
+  const testBrowserDiagnosticAction = useCallback((tenantId: string, action: "list_tabs" | "snapshot") => {
+    const key = `${tenantId}:browser:action:${action}`;
+    return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: "dashboard", action, session_id: "org-control-diagnostic", reason: `Operator tested browser bridge ${action}` }),
+    }).then(load));
+  }, [runControl, load]);
+
   const runBrowserContract = useCallback((tenantId: string) => {
     const key = `${tenantId}:browser:contract`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/contract`, {
@@ -596,6 +606,7 @@ export default function OrgControlCenterPage() {
                     onHealth={checkBrowserHealth}
                     onCapabilities={checkBrowserCapabilities}
                     onContract={runBrowserContract}
+                    onTestAction={testBrowserDiagnosticAction}
                     onProbe={probeBrowserProvider}
                     onApplyProbe={applyBrowserProbe}
                     onReset={resetBrowserBridge}
@@ -1477,6 +1488,7 @@ function BrowserBridgeControlCard({
   onHealth,
   onCapabilities,
   onContract,
+  onTestAction,
   onProbe,
   onApplyProbe,
   onReset,
@@ -1489,6 +1501,7 @@ function BrowserBridgeControlCard({
   onHealth: (tenantId: string) => void;
   onCapabilities: (tenantId: string) => void;
   onContract: (tenantId: string) => void;
+  onTestAction: (tenantId: string, action: "list_tabs" | "snapshot") => void;
   onProbe: (bridge: any) => void;
   onApplyProbe: (tenantId: string) => void;
   onReset: (tenantId: string) => void;
@@ -1503,6 +1516,8 @@ function BrowserBridgeControlCard({
   const healthKey = `${tenantId}:browser:health`;
   const capabilitiesKey = `${tenantId}:browser:capabilities`;
   const contractKey = `${tenantId}:browser:contract`;
+  const listTabsKey = `${tenantId}:browser:action:list_tabs`;
+  const snapshotKey = `${tenantId}:browser:action:snapshot`;
   const probeKey = `${tenantId}:browser:probe`;
   const applyProbeKey = `${tenantId}:browser:probe:apply`;
   const resetKey = `${tenantId}:browser:reset`;
@@ -1536,6 +1551,14 @@ function BrowserBridgeControlCard({
           {busyAction === contractKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Contract test
         </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === listTabsKey} onClick={() => onTestAction(tenantId, "list_tabs")}>
+          {busyAction === listTabsKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Test list_tabs
+        </Button>
+        <Button variant="outline" size="sm" disabled={busyAction === snapshotKey} onClick={() => onTestAction(tenantId, "snapshot")}>
+          {busyAction === snapshotKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          Test snapshot
+        </Button>
         <Button variant="outline" size="sm" disabled={busyAction === probeKey} onClick={() => onProbe(bridge)}>
           {busyAction === probeKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           Probe
@@ -1561,6 +1584,24 @@ function BrowserBridgeControlCard({
           </Button>
         ))}
       </div>
+
+      {isKimiWebBridgeProvider(provider, capabilities) && (
+        <div className="mt-2 rounded-md border border-current/10 p-2 text-xs text-muted-foreground">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground">Kimi WebBridge</span>
+            <Badge variant={kimiUsable(capabilities, bridge) ? "default" : "secondary"}>{kimiUsable(capabilities, bridge) ? "usable" : "needs attention"}</Badge>
+          </div>
+          <div>{oc.labels.provider}: kimi-webbridge · skill-backed</div>
+          <div>{oc.labels.url}: {bridge.endpoint || capabilities.endpoint || "http://127.0.0.1:10086"}</div>
+          <div>daemon: {boolLabel(kimiDaemonRunning(capabilities, bridge))}</div>
+          <div>extension: {boolLabel(kimiExtensionConnected(capabilities, bridge))}</div>
+          <div>skill: {capabilities.skill_installed || bridge.skill_installed ? "installed" : "missing"}</div>
+          {(capabilities.skill_path || bridge.skill_path) && <div className="truncate">skill path: {capabilities.skill_path || bridge.skill_path}</div>}
+          {kimiVersion(capabilities, bridge) && <div>version: {kimiVersion(capabilities, bridge)}</div>}
+          {!kimiExtensionConnected(capabilities, bridge) && <div className="mt-1 text-amber-500">Open Chrome/Edge and connect the Kimi WebBridge extension before real browser actions.</div>}
+        </div>
+      )}
+
       {capabilities && Object.keys(capabilities).length > 0 && (
         <div className="mt-2 text-xs text-muted-foreground">
           {capabilities.protocol && <div>{oc.labels.protocol}: {capabilities.protocol}</div>}
@@ -1607,6 +1648,40 @@ function BrowserBridgeControlCard({
       )}
     </div>
   );
+}
+
+
+function isKimiWebBridgeProvider(provider: any, capabilities: any) {
+  const p = String(provider || capabilities?.provider || "").toLowerCase();
+  return p.includes("kimi-webbridge") || p === "webbridge" || capabilities?.mode === "skill-backed";
+}
+
+function kimiStatus(capabilities: any, bridge: any) {
+  return capabilities?.daemon || capabilities?.last_status || bridge?.last_status || bridge?.lastStatus || bridge?.provider?.last_status || {};
+}
+
+function kimiDaemonRunning(capabilities: any, bridge: any) {
+  const status = kimiStatus(capabilities, bridge);
+  return capabilities?.daemon_running ?? status?.running;
+}
+
+function kimiExtensionConnected(capabilities: any, bridge: any) {
+  const status = kimiStatus(capabilities, bridge);
+  return capabilities?.extension_connected ?? status?.extension_connected;
+}
+
+function kimiUsable(capabilities: any, bridge: any) {
+  const value = capabilities?.usable;
+  return typeof value === "boolean" ? value : Boolean(kimiDaemonRunning(capabilities, bridge) && kimiExtensionConnected(capabilities, bridge));
+}
+
+function kimiVersion(capabilities: any, bridge: any) {
+  const status = kimiStatus(capabilities, bridge);
+  return status?.version || capabilities?.version || "";
+}
+
+function boolLabel(value: any) {
+  return value === true ? "yes" : value === false ? "no" : "unknown";
 }
 
 function BrowserEntryCard({ entry }: { entry: any }) {

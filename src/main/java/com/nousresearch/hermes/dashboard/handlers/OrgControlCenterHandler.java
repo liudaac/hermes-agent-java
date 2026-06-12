@@ -2,6 +2,7 @@ package com.nousresearch.hermes.dashboard.handlers;
 
 import com.nousresearch.hermes.browser.BrowserBridgeConfig;
 import com.nousresearch.hermes.browser.BrowserBridgeFactory;
+import com.nousresearch.hermes.browser.BrowserAction;
 import com.nousresearch.hermes.browser.BrowserApprovalRequest;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeContractVerifier;
 import com.nousresearch.hermes.browser.contract.BrowserBridgeProviderProbe;
@@ -973,6 +974,61 @@ public class OrgControlCenterHandler {
         ));
         response.put("health", health.toMap());
         response.put("contract_report", contractMap);
+        ctx.json(response);
+    }
+
+
+    /** POST /api/org/control/browser/{tenantId}/action */
+    public void browserDiagnosticAction(Context ctx) {
+        TenantContext tenant = requireTenant(ctx.pathParam("tenantId"));
+        Map<String, Object> body = parseJsonBody(ctx);
+        String actor = operatorActor(ctx, body);
+        String reason = stringOrDefault(body.get("reason"), "Operator tested browser bridge action");
+        assertAllowed(tenant, actor, ControlActionPolicy.Action.CHECK_BROWSER_BRIDGE, reason, Map.of());
+
+        String requestedAction = stringOrDefault(body.get("action"), "list_tabs").toLowerCase(Locale.ROOT).trim();
+        Set<String> allowed = Set.of("list_tabs", "snapshot", "observe");
+        if (!allowed.contains(requestedAction)) {
+            throw new IllegalArgumentException("Unsupported diagnostic browser action: " + requestedAction + " (allowed: " + allowed + ")");
+        }
+        var action = BrowserAction.from(Map.of(
+            "action", requestedAction,
+            "session_id", stringOrDefault(body.get("session_id"), stringOrDefault(body.get("sessionId"), "org-control-diagnostic")),
+            "actor", actor,
+            "reason", reason
+        ));
+        var obs = tenant.getObservability();
+        var trace = obs.startTrace("browser-bridge", tenant.getTenantId(), "browser_bridge:diagnostic:" + action.action());
+        long started = System.currentTimeMillis();
+        trace.meta("browser_action", action.action())
+            .meta("actor", actor)
+            .meta("reason", reason)
+            .step(AgentTrace.Step.toolCall("browser_bridge", action.toString(), java.util.List.of("diagnostic browser action"), 0.88, 0, 0));
+
+        var result = tenant.getBrowserBridge().execute(action);
+        long durationMs = System.currentTimeMillis() - started;
+        trace.step(AgentTrace.Step.toolResult("browser_bridge", result.toMap().toString(), durationMs));
+        if (!result.ok()) trace.step(AgentTrace.Step.error(result.message()));
+        trace.end(result.ok() ? AgentTrace.Status.SUCCESS : AgentTrace.Status.FAILED);
+        obs.completeTrace(trace);
+
+        Map<String, Object> actionAudit = new LinkedHashMap<>();
+        actionAudit.put("tenantId", tenant.getTenantId());
+        actionAudit.put("actor", actor);
+        actionAudit.put("action", action.action());
+        actionAudit.put("sessionId", result.sessionId() != null ? result.sessionId() : action.sessionId());
+        actionAudit.put("url", result.url() != null ? result.url() : "");
+        actionAudit.put("ok", result.ok());
+        actionAudit.put("reason", reason);
+        actionAudit.put("traceId", trace.getTraceId());
+        actionAudit.put("durationMs", durationMs);
+        actionAudit.put("timestamp", System.currentTimeMillis());
+        tenant.getAuditLogger().log(AuditEvent.CONTROL_BROWSER_ACTION, actionAudit);
+
+        Map<String, Object> response = new LinkedHashMap<>(result.toMap());
+        response.put("tenant_id", tenant.getTenantId());
+        response.put("trace_id", trace.getTraceId());
+        response.put("duration_ms", durationMs);
         ctx.json(response);
     }
 

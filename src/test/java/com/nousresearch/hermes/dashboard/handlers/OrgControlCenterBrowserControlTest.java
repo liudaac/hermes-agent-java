@@ -38,6 +38,7 @@ class OrgControlCenterBrowserControlTest {
         app.post("/api/org/control/browser/{tenantId}/reset", handler::resetBrowserBridge);
         app.post("/api/org/control/browser/{tenantId}/clear-config", handler::clearBrowserBridgeConfig);
         app.post("/api/org/control/browser/{tenantId}/provider", handler::configureBrowserProvider);
+        app.post("/api/org/control/browser/{tenantId}/action", handler::browserDiagnosticAction);
         app.post("/api/org/control/browser/{tenantId}/contract", handler::browserContractTest);
         app.post("/api/org/control/browser/{tenantId}/probe", handler::browserProviderProbe);
         app.post("/api/org/control/browser/{tenantId}/probe/apply", handler::applyBrowserProbeRecommendation);
@@ -77,6 +78,20 @@ class OrgControlCenterBrowserControlTest {
             assertTrue(body.getBooleanValue("ok"));
             assertEquals("kimi-webbridge", body.getString("provider"));
             assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("kimi-webbridge"));
+
+
+            HttpResponse<String> diagnostic = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/action"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"dashboard\",\"action\":\"list_tabs\",\"reason\":\"test diagnostic\"}"))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, diagnostic.statusCode());
+            JSONObject diagnosticBody = JSON.parseObject(diagnostic.body());
+            assertFalse(diagnosticBody.getBooleanValue("ok"));
+            assertTrue(diagnosticBody.containsKey("trace_id"));
+            assertTrue(diagnosticBody.containsKey("error_code"));
 
             HttpResponse<String> contract = client.send(
                 HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/contract"))
