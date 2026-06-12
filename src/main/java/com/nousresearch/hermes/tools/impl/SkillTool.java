@@ -1,11 +1,18 @@
 package com.nousresearch.hermes.tools.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nousresearch.hermes.skills.SkillManager;
 import com.nousresearch.hermes.tools.ToolEntry;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -18,6 +25,11 @@ import java.util.stream.Collectors;
 public class SkillTool {
     private static final Logger logger = LoggerFactory.getLogger(SkillTool.class);
     private static final SkillManager skillManager = new SkillManager();
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final List<String> KIMI_WEBBRIDGE_ACTIONS = List.of(
+        "status", "navigate", "find_tab", "snapshot", "click", "fill", "evaluate", "screenshot",
+        "network", "upload", "save_as_pdf", "list_tabs", "close_tab", "close_session"
+    );
 
     /**
      * Register skill tools.
@@ -152,6 +164,31 @@ public class SkillTool {
             ))
             .handler(SkillTool::deleteSkill)
             .emoji("🗑️")
+            .build());
+
+
+        // skill_invoke
+        registry.register(new ToolEntry.Builder()
+            .name("skill_invoke")
+            .toolset("skills")
+            .schema(Map.of(
+                "description", "Invoke a skill-backed capability through an explicit adapter. Currently supports kimi-webbridge via its local daemon without duplicating the skill instructions in BrowserBridge core.",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "skill_name", Map.of("type", "string", "description", "Skill name, e.g. kimi-webbridge"),
+                        "action", Map.of("type", "string", "description", "Skill-backed action to invoke"),
+                        "args", Map.of("type", "object", "description", "Action arguments"),
+                        "session", Map.of("type", "string", "description", "Session id for stateful skills"),
+                        "endpoint", Map.of("type", "string", "description", "Optional local daemon endpoint override"),
+                        "timeout_ms", Map.of("type", "integer", "default", 10000)
+                    ),
+                    "required", List.of("skill_name", "action")
+                )
+            ))
+            .handler(SkillTool::invokeSkill)
+            .risk(com.nousresearch.hermes.approval.ToolRisk.MEDIUM)
+            .emoji("🎯")
             .build());
 
         // skill_list
@@ -358,6 +395,97 @@ public class SkillTool {
             logger.error("Failed to delete skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Delete failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Invoke a skill-backed capability. This is intentionally explicit: natural-language
+     * skills remain instructions, while selected skills can expose a narrow adapter.
+     */
+    private static String invokeSkill(Map<String, Object> args) {
+        String skillName = String.valueOf(args.getOrDefault("skill_name", "")).trim();
+        String action = String.valueOf(args.getOrDefault("action", "")).trim();
+        if (skillName.isEmpty()) return ToolRegistry.toolError("skill_name is required");
+        if (action.isEmpty()) return ToolRegistry.toolError("action is required");
+
+        SkillManager.Skill skill = skillManager.loadSkill(skillName);
+        if (skill == null) {
+            return ToolRegistry.toolError("Skill not found: " + skillName);
+        }
+        if ("kimi-webbridge".equalsIgnoreCase(skillName) || "webbridge".equalsIgnoreCase(skillName)) {
+            return invokeKimiWebBridge(skill, action, args);
+        }
+        return ToolRegistry.toolError("No skill-backed invocation adapter registered for skill: " + skillName);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String invokeKimiWebBridge(SkillManager.Skill skill, String action, Map<String, Object> input) {
+        String normalizedAction = action.trim();
+        if (!KIMI_WEBBRIDGE_ACTIONS.contains(normalizedAction)) {
+            return ToolRegistry.toolError("Unsupported kimi-webbridge action: " + action + ". Supported: " + KIMI_WEBBRIDGE_ACTIONS);
+        }
+        String endpoint = String.valueOf(input.getOrDefault("endpoint", "http://127.0.0.1:10086")).trim();
+        int timeoutMs = input.get("timeout_ms") instanceof Number n ? n.intValue() : 10000;
+        timeoutMs = Math.max(1000, timeoutMs);
+        try {
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build();
+            if ("status".equals(normalizedAction)) {
+                HttpRequest request = HttpRequest.newBuilder(resolve(endpoint, "/status"))
+                    .timeout(Duration.ofMillis(timeoutMs))
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                return kimiResult(skill, normalizedAction, endpoint, response.statusCode(), response.body());
+            }
+
+            Map<String, Object> actionArgs = input.get("args") instanceof Map<?, ?> raw
+                ? raw.entrySet().stream().collect(Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue, (a, b) -> b, LinkedHashMap::new))
+                : new LinkedHashMap<>();
+            String session = String.valueOf(input.getOrDefault("session", "hermes-java"));
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("action", normalizedAction);
+            body.put("args", actionArgs);
+            body.put("session", session);
+
+            HttpRequest request = HttpRequest.newBuilder(resolve(endpoint, "/command"))
+                .timeout(Duration.ofMillis(timeoutMs))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
+                .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            return kimiResult(skill, normalizedAction, endpoint, response.statusCode(), response.body());
+        } catch (Exception e) {
+            logger.warn("kimi-webbridge skill invocation failed: {}", e.getMessage());
+            return ToolRegistry.toolError("kimi-webbridge invocation failed: " + e.getMessage());
+        }
+    }
+
+    private static String kimiResult(SkillManager.Skill skill, String action, String endpoint, int statusCode, String body) throws Exception {
+        Object parsed = parseJsonOrText(body);
+        return ToolRegistry.toolResult(Map.of(
+            "skill", skill.name,
+            "skill_path", skill.path != null ? skill.path : "",
+            "source", skill.source != null ? skill.source : "",
+            "adapter", "kimi-webbridge",
+            "action", action,
+            "endpoint", endpoint,
+            "http_status", statusCode,
+            "response", parsed
+        ));
+    }
+
+    private static Object parseJsonOrText(String body) {
+        if (body == null || body.isBlank()) return Map.of();
+        try {
+            return mapper.readValue(body, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return body;
+        }
+    }
+
+    private static URI resolve(String endpoint, String path) {
+        String base = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+        return URI.create(base + path);
     }
 
     /**
