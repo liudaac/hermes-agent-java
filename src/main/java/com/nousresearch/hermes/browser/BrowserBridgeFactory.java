@@ -14,8 +14,9 @@ public final class BrowserBridgeFactory {
         String provider = config != null && config.provider() != null ? config.provider().trim().toLowerCase() : "mock";
         return switch (provider) {
             case "mock", "test", "memory", "" -> new MockBrowserBridge();
-            case "webbridge", "webbridge-plugin", "webbridge_plugin", "web-bridge", "plugin" -> new WebBridgePluginBrowserBridge(config);
-            case "kimi", "kimi-webbridge", "kimi_webbridge" -> new KimiWebBridgeAdapter(config);
+            case "webbridge", "kimi-webbridge", "kimi_webbridge", "kimi-official", "kimi_official" -> new KimiOfficialWebBridgeAdapter(config);
+            case "webbridge-contract", "webbridge_contract", "hermes-webbridge", "hermes_webbridge" -> new WebBridgePluginBrowserBridge(config);
+            case "kimi", "kimi-contract", "kimi_webbridge_contract" -> new KimiWebBridgeAdapter(config);
             case "openclaw", "openclaw-relay", "openclaw_relay", "relay" -> new OpenClawRelayBrowserBridge(config);
             default -> new UnavailableBrowserBridge(provider, "Unknown browser bridge provider: " + provider);
         };
@@ -25,7 +26,7 @@ public final class BrowserBridgeFactory {
         @Override
         public BrowserActionResult execute(BrowserAction action) {
             return BrowserActionResult.error(action != null ? action.sessionId() : null,
-                "provider_unknown", reason + ". Supported providers: mock, webbridge, kimi, openclaw");
+                "provider_unknown", reason + ". Supported providers: mock, webbridge, webbridge-contract, kimi, openclaw");
         }
 
         @Override

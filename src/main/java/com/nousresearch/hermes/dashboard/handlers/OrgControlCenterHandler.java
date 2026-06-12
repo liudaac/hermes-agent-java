@@ -551,6 +551,13 @@ public class OrgControlCenterHandler {
         return value == null ? null : String.valueOf(value);
     }
 
+
+    private static boolean isOfficialKimiWebBridgeProvider(String provider) {
+        if (provider == null) return false;
+        String p = provider.trim().toLowerCase(Locale.ROOT);
+        return p.equals("webbridge") || p.equals("kimi-webbridge") || p.equals("kimi_webbridge") || p.equals("kimi-official") || p.equals("kimi_official");
+    }
+
     private static String stringOrDefault(Object value, String fallback) {
         String s = stringValue(value);
         return s == null || s.isBlank() ? fallback : s;
@@ -845,9 +852,13 @@ public class OrgControlCenterHandler {
         String provider = stringOrDefault(body.get("provider"), "mock").toLowerCase(Locale.ROOT).trim();
         String endpoint = stringOrDefault(body.get("endpoint"), "");
         int timeoutMs = (int) parseLong(body.get("timeout_ms"), 10000L);
-        String actionPath = stringOrDefault(body.get("action_path"), stringOrDefault(body.get("actionPath"), "/actions"));
-        String healthPath = stringOrDefault(body.get("health_path"), stringOrDefault(body.get("healthPath"), "/health"));
-        String capabilitiesPath = stringOrDefault(body.get("capabilities_path"), stringOrDefault(body.get("capabilitiesPath"), "/capabilities"));
+        boolean officialKimiWebBridge = isOfficialKimiWebBridgeProvider(provider);
+        String defaultActionPath = officialKimiWebBridge ? "/command" : "/actions";
+        String defaultHealthPath = officialKimiWebBridge ? "/status" : "/health";
+        String defaultCapabilitiesPath = officialKimiWebBridge ? "/status" : "/capabilities";
+        String actionPath = stringOrDefault(body.get("action_path"), stringOrDefault(body.get("actionPath"), defaultActionPath));
+        String healthPath = stringOrDefault(body.get("health_path"), stringOrDefault(body.get("healthPath"), defaultHealthPath));
+        String capabilitiesPath = stringOrDefault(body.get("capabilities_path"), stringOrDefault(body.get("capabilitiesPath"), defaultCapabilitiesPath));
         var config = new BrowserBridgeConfig(provider, endpoint, timeoutMs, actionPath, healthPath, capabilitiesPath);
         tenant.configureBrowserBridge(config, true);
         var bridge = tenant.getBrowserBridge();

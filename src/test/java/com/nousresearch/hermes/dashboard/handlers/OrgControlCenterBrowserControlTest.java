@@ -75,8 +75,8 @@ class OrgControlCenterBrowserControlTest {
             assertEquals(200, configure.statusCode());
             JSONObject body = JSON.parseObject(configure.body());
             assertTrue(body.getBooleanValue("ok"));
-            assertEquals("webbridge-plugin", body.getString("provider"));
-            assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("webbridge"));
+            assertEquals("kimi-webbridge", body.getString("provider"));
+            assertTrue(tenant.getBrowserBridge().describe().get("provider").toString().contains("kimi-webbridge"));
 
             HttpResponse<String> contract = client.send(
                 HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/browser/" + tenantId + "/contract"))

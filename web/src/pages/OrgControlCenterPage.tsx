@@ -258,14 +258,23 @@ export default function OrgControlCenterPage() {
   const setBrowserProvider = useCallback((tenantId: string, provider: string) => {
     const reason = askReason(oc.reasons.setProvider.replace("{provider}", provider));
     if (reason === null) return;
-    const defaultEndpoint = provider === "webbridge" ? "http://127.0.0.1:17362" : provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511";
+    const defaultEndpoint = provider === "webbridge" ? "http://127.0.0.1:10086" : provider === "webbridge-contract" ? "http://127.0.0.1:17362" : provider === "kimi" ? "http://127.0.0.1:17361" : "http://127.0.0.1:14511";
     const endpoint = provider === "mock" ? "" : window.prompt(oc.endpointUrl, defaultEndpoint);
     if (endpoint === null) return;
     const key = `${tenantId}:browser:provider:${provider}`;
     return runControl(key, () => fetchJSON(`/api/org/control/browser/${encodeURIComponent(tenantId)}/provider`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ actor: "dashboard", provider, endpoint, timeout_ms: 10000, reason }),
+      body: JSON.stringify({
+        actor: "dashboard",
+        provider,
+        endpoint,
+        timeout_ms: 10000,
+        reason,
+        action_path: provider === "webbridge" ? "/command" : undefined,
+        health_path: provider === "webbridge" ? "/status" : undefined,
+        capabilities_path: provider === "webbridge" ? "/status" : undefined,
+      }),
     }));
   }, [askReason, runControl]);
 
@@ -1540,7 +1549,7 @@ function BrowserBridgeControlCard({
         <Button variant="ghost" size="sm" onClick={() => onExportConfig(bridge)}>
           Export config
         </Button>
-        {(["mock", "webbridge", "kimi", "openclaw"] as const).map((p) => (
+        {(["mock", "webbridge", "webbridge-contract", "kimi", "openclaw"] as const).map((p) => (
           <Button
             key={p}
             variant={String(provider).includes(p) ? "secondary" : "ghost"}

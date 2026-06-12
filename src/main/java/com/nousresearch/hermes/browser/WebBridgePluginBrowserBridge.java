@@ -1,15 +1,15 @@
 package com.nousresearch.hermes.browser;
 
 /**
- * HTTP adapter for the WebBridge plugin daemon.
+ * HTTP adapter for providers that implement Hermes' BrowserBridge HTTP contract.
  *
- * <p>The plugin is expected to expose the Hermes BrowserBridge HTTP contract:
- * {@code GET /health}, {@code GET /capabilities}, and {@code POST /actions} by default.
- * Alternative route layouts can be supplied through {@link BrowserBridgeConfig} and
- * discovered via {@code BrowserBridgeProviderProbe}.</p>
+ * <p>This is intentionally separate from the official Kimi WebBridge daemon. Kimi's
+ * official daemon is skill-backed and exposes {@code /status} plus {@code /command};
+ * this adapter is for Hermes-compatible daemons that expose {@code /health},
+ * {@code /capabilities}, and {@code /actions}.</p>
  */
 public class WebBridgePluginBrowserBridge extends HttpBrowserBridge {
     public WebBridgePluginBrowserBridge(BrowserBridgeConfig config) {
-        super("webbridge-plugin", config);
+        super("webbridge-contract", config);
     }
 }

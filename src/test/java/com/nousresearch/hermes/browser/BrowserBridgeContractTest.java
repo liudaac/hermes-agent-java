@@ -55,7 +55,7 @@ class BrowserBridgeContractTest {
         server.start();
         try {
             String endpoint = "http://127.0.0.1:" + server.getAddress().getPort();
-            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", endpoint, 3000, "/v1/action", "/v1/health", "/v1/capabilities"));
+            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge-contract", endpoint, 3000, "/v1/action", "/v1/health", "/v1/capabilities"));
 
             var health = bridge.healthCheck();
             assertTrue(health.ok());
@@ -101,7 +101,7 @@ class BrowserBridgeContractTest {
 
     @Test
     void httpBridgeClassifiesDaemonUnavailable() {
-        BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", "http://127.0.0.1:9", 2000));
+        BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge-contract", "http://127.0.0.1:9", 2000));
         var result = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "operator", "daemon down"));
         assertFalse(result.ok());
         assertTrue(List.of("daemon_unavailable", "bridge_unavailable").contains(result.errorCode()));

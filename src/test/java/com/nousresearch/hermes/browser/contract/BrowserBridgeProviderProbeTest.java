@@ -13,7 +13,7 @@ class BrowserBridgeProviderProbeTest {
             assertTrue(result.ok(), result.toMap().toString());
             assertEquals(100, result.score());
             assertNotNull(result.bestCandidate());
-            assertEquals("webbridge", result.bestCandidate().provider());
+            assertEquals("webbridge-contract", result.bestCandidate().provider());
             assertEquals("/actions", result.bestCandidate().actionPath());
             assertTrue(result.toMap().toString().contains("recommended_config"));
         }

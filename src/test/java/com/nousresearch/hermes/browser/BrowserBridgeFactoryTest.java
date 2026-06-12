@@ -30,10 +30,53 @@ class BrowserBridgeFactoryTest {
 
 
     @Test
-    void factoryCreatesWebBridgePluginHttpAdapter() {
+    void factoryCreatesOfficialKimiWebBridgeDiscoveryAdapter() {
         BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", "http://127.0.0.1:1", 1000));
+        assertInstanceOf(KimiOfficialWebBridgeAdapter.class, bridge);
+        assertEquals("kimi-webbridge", bridge.describe().get("provider"));
+        assertEquals("skill-backed", bridge.describe().get("mode"));
+    }
+
+    @Test
+    void factoryCreatesHermesWebBridgeContractHttpAdapter() {
+        BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge-contract", "http://127.0.0.1:1", 1000));
         assertInstanceOf(WebBridgePluginBrowserBridge.class, bridge);
-        assertEquals("webbridge-plugin", bridge.describe().get("provider"));
+        assertEquals("webbridge-contract", bridge.describe().get("provider"));
+    }
+
+
+    @Test
+    void officialKimiWebBridgeReadsStatusAndReportsSkillBackedMode() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/status", exchange -> {
+            byte[] response = MAPPER.writeValueAsBytes(Map.of(
+                "running", true,
+                "extension_connected", false,
+                "port", 10086,
+                "version", "v-test"
+            ));
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            String endpoint = "http://127.0.0.1:" + server.getAddress().getPort();
+            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", endpoint, 3000));
+            var health = bridge.healthCheck();
+            assertTrue(health.ok());
+            assertEquals("skill-backed", health.meta().get("mode"));
+            assertEquals(false, health.meta().get("extension_connected"));
+            var capabilities = bridge.capabilities();
+            assertEquals("skill-backed", capabilities.get("mode"));
+            assertEquals(false, capabilities.get("usable"));
+            var execute = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "test", "should route to skill"));
+            assertFalse(execute.ok());
+            assertEquals("skill_backed_provider", execute.errorCode());
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test
@@ -66,7 +109,7 @@ class BrowserBridgeFactoryTest {
         server.start();
         try {
             String endpoint = "http://127.0.0.1:" + server.getAddress().getPort();
-            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge", endpoint, 3000));
+            BrowserBridge bridge = BrowserBridgeFactory.create(new BrowserBridgeConfig("webbridge-contract", endpoint, 3000));
             var result = bridge.execute(new BrowserAction("open", null, "https://example.com", null, null, null, "operator", "integration test"));
             assertTrue(result.ok());
             assertEquals("daemon-session-1", result.sessionId());

@@ -1,6 +1,8 @@
 # Browser Bridge Contract v1
 
-Hermes uses a provider-neutral `BrowserBridge` abstraction for real-browser automation. HTTP-backed providers such as the WebBridge plugin daemon, Kimi WebBridge, or OpenClaw Browser Relay should expose this minimal daemon contract.
+Hermes uses a provider-neutral `BrowserBridge` abstraction for real-browser automation. HTTP-backed providers such as OpenClaw Browser Relay or other Hermes-compatible browser daemons should expose this minimal daemon contract.
+
+> Note: the official Kimi WebBridge daemon is **skill-backed** and uses `GET /status` plus `POST /command` on port `10086`. It does not implement this `/health` + `/capabilities` + `/actions` contract. In Hermes, provider `webbridge`/`kimi-webbridge` is reserved for official Kimi WebBridge discovery/status and real operations should route through the installed `kimi-webbridge` skill. Use provider `webbridge-contract` for daemons that implement the contract described below.
 
 ## Runtime configuration
 
@@ -17,8 +19,9 @@ System properties or env vars:
 
 Provider defaults:
 
-- `webbridge`: `http://127.0.0.1:17362` — preferred WebBridge plugin daemon
-- `kimi`: `http://127.0.0.1:17361`
+- `webbridge` / `kimi-webbridge`: `http://127.0.0.1:10086` — official Kimi WebBridge daemon, skill-backed (`/status`, `/command`)
+- `webbridge-contract`: `http://127.0.0.1:17362` — Hermes-compatible HTTP contract daemon (`/health`, `/capabilities`, `/actions`)
+- `kimi`: `http://127.0.0.1:17361` — legacy Kimi-compatible HTTP contract adapter
 - `openclaw`: `http://127.0.0.1:14511`
 
 ## POST `/actions`
@@ -138,7 +141,7 @@ Verifier checks:
 CLI usage from a built classpath:
 
 ```bash
-java com.nousresearch.hermes.browser.contract.BrowserBridgeContractCli http://127.0.0.1:17362 webbridge
+java com.nousresearch.hermes.browser.contract.BrowserBridgeContractCli http://127.0.0.1:17362 webbridge-contract
 ```
 
 Exit code:
@@ -153,10 +156,10 @@ Exit code:
 
 Built-in candidates currently include:
 
-- `webbridge-standard`: `/actions`, `/health`, `/capabilities` with provider `webbridge`
-- `webbridge-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`
-- `webbridge-v1-singular-action`: `/v1/action`, `/v1/health`, `/v1/capabilities`
-- `webbridge-api`: `/api/webbridge/actions`, `/api/webbridge/health`, `/api/webbridge/capabilities`
+- `webbridge-contract-standard`: `/actions`, `/health`, `/capabilities` with provider `webbridge-contract`
+- `webbridge-contract-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`
+- `webbridge-contract-v1-singular-action`: `/v1/action`, `/v1/health`, `/v1/capabilities`
+- `webbridge-contract-api`: `/api/webbridge/actions`, `/api/webbridge/health`, `/api/webbridge/capabilities`
 - `hermes-standard`: `/actions`, `/health`, `/capabilities`
 - `hermes-standard-openclaw`: same paths with provider `openclaw`
 - `versioned-v1`: `/v1/actions`, `/v1/health`, `/v1/capabilities`
