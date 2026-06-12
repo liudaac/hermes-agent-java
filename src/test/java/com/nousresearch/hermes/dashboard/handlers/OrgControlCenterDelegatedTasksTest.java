@@ -18,6 +18,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -126,7 +128,44 @@ class OrgControlCenterDelegatedTasksTest {
             assertEquals("ACCEPTED", mockBody.getJSONObject("task").getString("status"));
             assertEquals("ACCEPTED", mockBody.getJSONObject("execution").getJSONObject("verification_result").getString("status"));
 
-            String submitJson = """
+
+            var localPatchTask = tenant.getDelegatedTaskStore().createPending(envelope());
+            Path repo = dir.resolve("local-patch-repo");
+            Files.createDirectories(repo.resolve("src/main/java"));
+            Files.writeString(repo.resolve("src/main/java/App.java"), "hello\n", StandardCharsets.UTF_8);
+            String patch = "--- a/src/main/java/App.java\n" +
+                "+++ b/src/main/java/App.java\n" +
+                "@@ -1,1 +1,1 @@\n" +
+                "-hello\n" +
+                "+hello from handler sandbox\n";
+            JSONObject localPatchRequest = new JSONObject();
+            localPatchRequest.put("actor", "dashboard");
+            localPatchRequest.put("executor", "local_patch");
+            localPatchRequest.put("allow_file_changes", true);
+            localPatchRequest.put("repository_root", repo.toString());
+            localPatchRequest.put("patch", patch);
+            localPatchRequest.put("require_tests", true);
+            localPatchRequest.put("require_all_tests_passed", true);
+            localPatchRequest.put("allowed_changed_file_prefixes", List.of("src/main/java"));
+            localPatchRequest.put("requested_capabilities", List.of("FILE_READ", "PATCH_WRITE"));
+            localPatchRequest.put("tests_run", List.of(JSONObject.of("name", "reported", "passed", true)));
+            String localPatchJson = localPatchRequest.toJSONString();
+            HttpResponse<String> localPatch = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl + "/api/org/control/delegated-tasks/" + tenantId + "/" + localPatchTask.taskId() + "/execute"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(localPatchJson))
+                    .build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            assertEquals(200, localPatch.statusCode(), localPatch.body());
+            JSONObject localPatchBody = JSON.parseObject(localPatch.body());
+            assertEquals("ACCEPTED", localPatchBody.getJSONObject("execution").getString("status"));
+            assertTrue(localPatchBody.getJSONObject("execution").getBooleanValue("executed"));
+            assertTrue(localPatchBody.getJSONObject("execution").getBooleanValue("submitted"));
+            assertEquals("ACCEPTED", localPatchBody.getJSONObject("task").getString("status"));
+            assertEquals("hello\n", Files.readString(repo.resolve("src/main/java/App.java")), "local_patch must not mutate parent checkout");
+
+                        String submitJson = """
                 {"actor":"dashboard","summary":"simulated result","changed_files":["src/main/java/App.java"],"tests_run":[{"name":"mvn test","passed":true}],"risks":["none"]}
                 """;
             HttpResponse<String> submit = client.send(

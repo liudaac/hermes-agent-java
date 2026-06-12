@@ -331,6 +331,9 @@ export default function OrgControlCenterPage() {
         require_patch_sandbox: payload.require_patch_sandbox,
         require_parent_verification: payload.require_parent_verification,
         allow_auto_merge: payload.allow_auto_merge,
+        allow_file_changes: payload.allow_file_changes ?? false,
+        patch: payload.patch,
+        metadata: payload.metadata,
       }),
     }));
   }, [runControl]);
@@ -724,6 +727,7 @@ function DelegatedTaskCard({
   const verifyKey = `${task.tenant_id}:${task.task_id}:delegated:verify`;
   const noopExecuteKey = `${task.tenant_id}:${task.task_id}:delegated:execute:noop`;
   const mockExecuteKey = `${task.tenant_id}:${task.task_id}:delegated:execute:mock`;
+  const localPatchExecuteKey = `${task.tenant_id}:${task.task_id}:delegated:execute:local_patch`;
   const envelope = task.envelope || {};
   const result = task.result || {};
   const verification = task.latest_verification || task.verification || {};
@@ -787,8 +791,8 @@ function DelegatedTaskCard({
           {busyAction === submitKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {submitOpen ? oc.buttons.cancel : oc.buttons.submitResult}
         </Button>
-        <Button variant="outline" size="sm" disabled={busyAction === noopExecuteKey || busyAction === mockExecuteKey} onClick={() => setExecuteOpen((open) => !open)}>
-          {busyAction === noopExecuteKey || busyAction === mockExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+        <Button variant="outline" size="sm" disabled={busyAction === noopExecuteKey || busyAction === mockExecuteKey || busyAction === localPatchExecuteKey} onClick={() => setExecuteOpen((open) => !open)}>
+          {busyAction === noopExecuteKey || busyAction === mockExecuteKey || busyAction === localPatchExecuteKey ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {executeOpen ? oc.buttons.cancel : oc.buttons.execute}
         </Button>
         <Button variant="outline" size="sm" disabled={busyAction === verifyKey || !task.result} onClick={() => setVerifyOpen((open) => !open)}>
@@ -809,6 +813,7 @@ function DelegatedTaskCard({
           task={task}
           busyNoop={busyAction === noopExecuteKey}
           busyMock={busyAction === mockExecuteKey}
+          busyLocalPatch={busyAction === localPatchExecuteKey}
           onCancel={closeExecute}
           onSubmit={(payload) => { onExecute(task, payload); closeExecute(); }}
         />
@@ -827,7 +832,7 @@ function DelegatedTaskCard({
 
 
 type DelegatedExecutePayload = {
-  executor: "noop" | "mock";
+  executor: "noop" | "mock" | "local_patch";
   allowed_paths: string[];
   denied_paths: string[];
   capabilities: string[];
@@ -837,18 +842,23 @@ type DelegatedExecutePayload = {
   require_patch_sandbox: boolean;
   require_parent_verification: boolean;
   allow_auto_merge: boolean;
+  allow_file_changes?: boolean;
+  patch?: string;
+  metadata?: Record<string, any>;
 };
 
 function DelegatedExecuteForm({
   task,
   busyNoop,
   busyMock,
+  busyLocalPatch,
   onCancel,
   onSubmit,
 }: {
   task: any;
   busyNoop: boolean;
   busyMock: boolean;
+  busyLocalPatch: boolean;
   onCancel: () => void;
   onSubmit: (payload: DelegatedExecutePayload) => void;
 }) {
@@ -864,7 +874,8 @@ function DelegatedExecuteForm({
   const [requirePatchSandbox, setRequirePatchSandbox] = useState(true);
   const [requireParentVerification, setRequireParentVerification] = useState(true);
   const [allowAutoMerge, setAllowAutoMerge] = useState(false);
-  const payload = (executor: "noop" | "mock") => ({
+  const [patch, setPatch] = useState("");
+  const payload = (executor: "noop" | "mock" | "local_patch") => ({
     executor,
     allowed_paths: splitLinesOrComma(allowedPaths),
     denied_paths: splitLinesOrComma(deniedPaths),
@@ -875,6 +886,13 @@ function DelegatedExecuteForm({
     require_patch_sandbox: requirePatchSandbox,
     require_parent_verification: requireParentVerification,
     allow_auto_merge: allowAutoMerge,
+    allow_file_changes: executor === "local_patch",
+    patch: executor === "local_patch" ? patch : undefined,
+    metadata: executor === "local_patch" ? {
+      patch,
+      repository_root: ".",
+      local_patch_ui: true,
+    } : undefined,
   });
   const safety = {
     allowed_changed_path_prefixes: splitLinesOrComma(allowedPaths),
@@ -894,6 +912,8 @@ function DelegatedExecuteForm({
         <TextAreaField label={oc.delegated.allowedPathsLabel} value={allowedPaths} onChange={setAllowedPaths} rows={3} placeholder={oc.delegated.allowedPathsPlaceholder} />
         <TextAreaField label={oc.delegated.deniedPathsLabel} value={deniedPaths} onChange={setDeniedPaths} rows={3} placeholder={oc.delegated.deniedPathsPlaceholder} />
         <TextAreaField label={oc.delegated.capabilitiesLabel} value={capabilities} onChange={setCapabilities} rows={3} placeholder={oc.delegated.capabilitiesPlaceholder} />
+        <TextAreaField label={oc.delegated.patchLabel} value={patch} onChange={setPatch} rows={8} placeholder={oc.delegated.patchPlaceholder} />
+        <div className="text-xs text-muted-foreground">{oc.delegated.localPatchHint}</div>
         <div className="grid gap-2 sm:grid-cols-2">
           <SwitchField label={oc.delegated.allowCommandLabel} checked={allowCommand} onCheckedChange={setAllowCommand} />
           <SwitchField label={oc.delegated.allowNetworkLabel} checked={allowNetwork} onCheckedChange={setAllowNetwork} />
@@ -905,14 +925,18 @@ function DelegatedExecuteForm({
         <SafetySummary safety={safety} title={oc.delegated.safetySummary} />
       </div>
       <div className="mt-3 flex flex-wrap justify-end gap-2">
-        <Button variant="outline" size="sm" disabled={busyNoop || busyMock} onClick={onCancel}>{oc.buttons.cancel}</Button>
-        <Button variant="outline" size="sm" disabled={busyNoop || busyMock} onClick={() => onSubmit(payload("noop"))}>
+        <Button variant="outline" size="sm" disabled={busyNoop || busyMock || busyLocalPatch} onClick={onCancel}>{oc.buttons.cancel}</Button>
+        <Button variant="outline" size="sm" disabled={busyNoop || busyMock || busyLocalPatch} onClick={() => onSubmit(payload("noop"))}>
           {busyNoop ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {oc.buttons.executeNoop}
         </Button>
-        <Button variant="secondary" size="sm" disabled={busyNoop || busyMock} onClick={() => onSubmit(payload("mock"))}>
+        <Button variant="secondary" size="sm" disabled={busyNoop || busyMock || busyLocalPatch} onClick={() => onSubmit(payload("mock"))}>
           {busyMock ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
           {oc.buttons.executeMock}
+        </Button>
+        <Button variant="secondary" size="sm" disabled={busyNoop || busyMock || busyLocalPatch || !patch.trim()} onClick={() => onSubmit(payload("local_patch"))}>
+          {busyLocalPatch ? <RefreshCw className="mr-2 h-3 w-3 animate-spin" /> : null}
+          {oc.buttons.executeLocalPatch}
         </Button>
       </div>
     </div>

@@ -1105,6 +1105,12 @@ public class OrgControlCenterHandler {
         if (prefixes.isEmpty()) prefixes = parentPolicy.allowedChangedFilePrefixes();
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("source", "org-control");
+        Object topLevelPatch = firstNonNull(firstNonNull(body.get("patch"), body.get("diff")), firstNonNull(body.get("patch_text"), body.get("unified_diff")));
+        if (topLevelPatch != null && !String.valueOf(topLevelPatch).isBlank()) metadata.put("patch", topLevelPatch);
+        Object repositoryRoot = firstNonNull(firstNonNull(body.get("repository_root"), body.get("repo_root")), firstNonNull(body.get("workspace_root"), body.get("working_directory")));
+        if (repositoryRoot != null && !String.valueOf(repositoryRoot).isBlank()) metadata.put("repository_root", repositoryRoot);
+        Object testsRun = firstNonNull(body.get("tests_run"), body.get("testsRun"));
+        if (testsRun != null) metadata.put("tests_run", testsRun);
         if (safetyPolicy != null) metadata.put("safety_policy", safetyPolicy.toMap());
         if (body.get("metadata") instanceof Map<?, ?> rawMetadata) {
             for (var entry : rawMetadata.entrySet()) metadata.put(String.valueOf(entry.getKey()), entry.getValue());
