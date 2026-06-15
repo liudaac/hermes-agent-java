@@ -237,6 +237,11 @@ tools / skills / route / trace / eval / tenant policy
 | Skill / Tool | 可用能力 | 查询订单、打开网页、发消息、调用内部系统等能力 |
 | Approval | 人工审批 | 高风险动作必须经过人或规则确认 |
 | Canary | 灰度发布 | 新版本先小范围试用，稳定后再扩大 |
+| Standing Orders | 常驻任务指令 | 业务方提前授予的长期工作规则，例如每天巡检、每周复盘 |
+| Prompt Asset | 提示词资产 | 可版本化、可评估、可复用的角色说明、SOP、追问模板、风控提示 |
+| Task Flow | 任务流 | 多步骤任务的持久化编排，例如收集资料→生成建议→审批→发布 |
+| Active Memory | 主动记忆 | 在回复或执行前主动召回相关业务背景、历史决策和用户偏好 |
+| Execute-Verify-Report | 执行-验证-汇报 | 每个任务必须先执行、再验证、最后汇报结果和证据 |
 
 ---
 
@@ -319,6 +324,302 @@ tools / skills / route / trace / eval / tenant policy
 | 效果复盘 | 主动发现失败模式 | “生鲜退款场景人工纠正率偏高” |
 | 一键生成改进版 | 从问题到新版本草案 | “是否生成 v2：新增特殊类目判断？” |
 | 灰度和回滚 | 敢上线、能兜底 | “先给 5% 工单试运行，异常自动回 v1” |
+
+
+---
+
+## 3.5 吸收 OpenClaw 的成功经验：从“会调用模型”到“有组织地完成任务”
+
+OpenClaw 的成功不只来自模型能力，而来自一套把模型能力“组织起来”的产品机制：预设提示词、工作区上下文、技能触发、任务流、主动记忆、常驻任务指令、执行纪律和安全边界。
+
+Hermes 要成为业务智能体团队平台，应该重点吸收这些机制，并把它们产品化给业务人员使用。
+
+### 3.5.1 OpenClaw 值得吸收的核心机制
+
+| OpenClaw 机制 | 成功原因 | Hermes 应如何吸收 |
+|---|---|---|
+| 系统提示词分层 | 每次运行都有稳定的行为准则、工具规则、上下文和安全边界 | 建立业务团队级 Prompt Stack，而不是把所有说明塞进一个大 prompt |
+| Workspace 文件 | `AGENTS.md / SOUL.md / TOOLS.md / MEMORY.md` 等文件让智能体有稳定人格、规则和记忆 | 给每个业务空间生成“业务团队工作区文件” |
+| Skills 按需加载 | 不把所有工具说明塞满上下文，只在相关任务触发技能说明 | 建立业务技能市场和场景化 skill routing |
+| Standing Orders | 把长期授权、触发条件、审批边界写成常驻规则 | 支持业务方配置“长期任务指令”，例如每日巡检、每周复盘 |
+| Task Flow | 多步骤任务有持久状态、可恢复、可追踪 | 将业务流程变成可暂停、可审批、可恢复的任务流 |
+| Active Memory | 回复前主动召回相关历史，让回答更自然、更懂上下文 | 在业务运行前主动召回历史案例、规则变更、用户偏好 |
+| Agent Loop | intake → context → model → tool → persistence 的完整闭环 | Hermes Run 必须记录完整执行链路，而不是只保存结果 |
+| Execute-Verify-Report | 防止“答应了但没做”“做了但没验证” | 所有业务任务默认遵循执行-验证-汇报 |
+| Specialist Lanes | 不同 agent/lane 承担不同工作，避免混乱和阻塞 | 智能体团队内定义岗位边界、转交规则和后台任务策略 |
+| Hook / Guardrail | 工具调用、消息发送、安装技能等关键点可拦截 | 对外发、写数据库、真实账号操作等建立统一风控钩子 |
+
+### 3.5.2 Hermes 的 Prompt Stack：提示词不再是一段文本，而是一组资产
+
+现在很多 Agent 系统的问题是：提示词散落在代码、配置和临时对话里，业务人员无法理解，也无法版本化管理。
+
+Hermes 应该把提示词升级为可管理资产：
+
+```text
+业务空间 Prompt
+  ↓
+场景 Prompt
+  ↓
+团队 Prompt
+  ↓
+智能体岗位 Prompt
+  ↓
+技能使用 Prompt
+  ↓
+审批/安全 Prompt
+  ↓
+运行时动态上下文
+```
+
+业务方看到的是：
+
+```text
+团队目标
+岗位职责
+工作步骤
+回答口径
+禁区规则
+审批条件
+成功标准
+```
+
+工程侧落地为：
+
+```text
+WorkspacePromptProfile
+ScenarioPlaybook
+TeamOperatingManual
+AgentRolePrompt
+SkillUsageGuide
+ApprovalGuardPrompt
+RuntimeContextPack
+```
+
+这样做的价值：
+
+```text
+可读：业务人员能看懂每个智能体为什么这么做
+可改：业务方能调整职责、口径和审批边界
+可测：每次提示词变化都能跑历史案例评估
+可审：谁在什么时候改了什么提示词有记录
+可回滚：提示词和团队版本绑定，出问题能回退
+```
+
+### 3.5.3 业务团队工作区：把 OpenClaw Workspace 文件产品化
+
+OpenClaw 的工作区文件很关键，因为它让智能体有稳定“家底”。Hermes 可以把这个机制业务化。
+
+建议每个 Workspace 自动生成一组业务工作区资产：
+
+```text
+BUSINESS.md        业务目标、范围、关键指标
+TEAM.md            智能体团队岗位、职责、协作方式
+PLAYBOOK.md        业务 SOP、处理步骤、特殊情况
+VOICE.md           对客户/内部人员的沟通口径
+TOOLS.md           可用业务系统、工具、连接器说明
+RISK.md            禁止事项、审批规则、升级条件
+MEMORY.md          重要业务背景、长期规则、历史决策
+EVAL.md            评估案例、成功标准、失败样例
+STANDING_ORDERS.md 长期任务指令和周期性复盘规则
+```
+
+业务人员不需要看到文件名，可以在页面里看到对应模块：
+
+```text
+业务目标
+团队岗位
+工作手册
+沟通口径
+可用系统
+风险边界
+历史记忆
+测试案例
+长期任务
+```
+
+工程侧可以继续用文件持久化，和当前 Phase 1 的 file-backed blueprint 保持一致。
+
+### 3.5.4 常驻任务指令：让智能体团队不只是被动响应
+
+OpenClaw 的 Standing Orders 让 Agent 拥有明确的长期授权。Hermes 也应该支持业务级常驻任务。
+
+示例：客服空间的常驻任务指令：
+
+```text
+每天 09:00 汇总昨日工单处理情况
+每周一 10:00 复盘人工纠正最多的 5 类问题
+当人工纠正率连续 3 天超过 8% 时，生成优化建议
+当某类问题没有命中任何政策时，提醒业务负责人补充规则
+所有对客户外发内容，默认先进入审批队列，除非命中低风险白名单
+```
+
+一个常驻任务应该包含：
+
+```text
+任务范围：它负责什么
+触发条件：按时间、事件、阈值还是人工触发
+执行步骤：先做什么、后做什么
+审批边界：哪些动作必须等人确认
+升级规则：什么时候停止并找人
+汇报方式：完成后向谁汇报、汇报什么证据
+```
+
+这会明显提升“智感”：系统不是等人每次下命令，而是在边界内主动经营业务闭环。
+
+### 3.5.5 任务流编排：从一次回复升级为可恢复的业务流程
+
+OpenClaw 的 Task Flow 强调多步骤任务的持久状态。Hermes 也不能只追求一次模型回复，而要把业务任务设计为可追踪流程。
+
+例如“生成售后政策优化建议”不是一句 prompt，而是一条任务流：
+
+```text
+1. 收集最近 7 天运行记录
+2. 找出人工纠正样本
+3. 聚类错误原因
+4. 对照当前政策和智能体提示词
+5. 生成优化建议草案
+6. 用历史案例回放测试
+7. 生成新旧版本对比
+8. 提交业务方审批
+9. 灰度发布
+10. 监控指标并决定扩大或回滚
+```
+
+每一步都应该有状态：
+
+```text
+PENDING
+RUNNING
+WAITING_APPROVAL
+SUCCEEDED
+FAILED
+CANCELLED
+RETRYING
+```
+
+这样业务方能看到：不是“AI 神秘地想了一下”，而是“系统按流程完成了哪些步骤、卡在哪里、需要谁决策”。
+
+### 3.5.6 主动记忆：让系统显得真正懂业务
+
+很多“智感”来自系统能记住上下文，而不是每次像第一次见面。
+
+Hermes 的主动记忆应在三个时机运行：
+
+```text
+创建团队前：召回类似业务场景、历史模板、已有规则
+执行任务前：召回相关客户、订单、政策、历史处理案例
+复盘优化前：召回历史失败模式、旧版本变更、业务负责人偏好
+```
+
+主动记忆不应该把所有历史都塞进上下文，而应该形成短摘要：
+
+```text
+相关政策：生鲜类商品不支持 7 天无理由
+历史决策：退款超过 1000 元需主管审批
+近期异常：过去 7 天生鲜退款纠正率上升
+负责人偏好：回复客户时必须先安抚，再说明流程
+```
+
+这能直接提升业务方感知：系统不是“临时生成”，而是在“带着业务经验工作”。
+
+### 3.5.7 执行-验证-汇报：让智能体团队更可信
+
+OpenClaw 的一个关键经验是：Agent 不能只说“我会去做”，必须真的执行、验证、汇报。
+
+Hermes 应将所有业务任务默认套用：
+
+```text
+Execute：完成实际动作
+Verify：验证动作结果和业务规则
+Report：汇报结果、依据、风险和下一步
+```
+
+示例：售后回复生成。
+
+```text
+Execute：生成回复建议
+Verify：检查是否引用正确政策、是否触发审批、是否包含违规承诺
+Report：展示回复文本、政策依据、风险等级、是否可自动发送
+```
+
+示例：进化提案生成。
+
+```text
+Execute：生成 v2 团队草案
+Verify：用历史案例测试并对比 v1
+Report：说明提升点、风险点、建议灰度比例、回滚条件
+```
+
+这会让业务方敢用：每个结果都有证据链，而不是黑盒输出。
+
+### 3.5.8 技能路由和工具纪律：不是工具越多越好，而是按场景最小授权
+
+OpenClaw 的 Skills 机制强调按需加载和可见能力控制。Hermes 应继续这个方向：
+
+```text
+不同业务空间能启用不同技能
+不同智能体岗位只能看到自己需要的技能
+高风险技能默认需要审批
+技能说明按场景注入，避免上下文污染
+技能使用过程进入 trace 和 audit
+```
+
+业务方看到的是：
+
+```text
+这个团队能查订单
+这个团队能看知识库
+这个团队不能直接发短信
+这个团队不能写数据库
+退款超过 1000 元必须审批
+```
+
+工程侧则是：
+
+```text
+WorkspaceSkillPolicy
+AgentSkillAllowlist
+ToolRiskLevel
+BeforeToolCallGuard
+SkillUsageTrace
+```
+
+### 3.5.9 智感提升闭环：提示词、流程、技能、记忆一起进化
+
+Hermes 的自进化不应该只改某个 Agent instruction，而要能围绕四类资产生成优化建议：
+
+```text
+Prompt：岗位说明、沟通口径、追问策略、错误处理说明
+Flow：流程步骤、分支条件、审批节点、重试策略
+Skill：工具选择、技能说明、权限边界、诊断方式
+Memory：长期规则、历史决策、常见错误、优秀案例
+```
+
+完整闭环：
+
+```text
+业务运行
+  ↓
+记录 trace / tool / approval / feedback
+  ↓
+主动记忆沉淀重要经验
+  ↓
+评估发现失败模式
+  ↓
+生成 Evolution Proposal
+  ↓
+提案明确改的是 Prompt / Flow / Skill / Memory 哪类资产
+  ↓
+历史案例回放测试
+  ↓
+业务方审批
+  ↓
+生成新版本
+  ↓
+灰度发布和自动回滚
+```
+
+这才是“自进化链路和智感提升的闭环”：不是让 AI 随便改自己，而是让业务资产在数据、评估和审批约束下持续变好。
 
 ---
 
@@ -1311,6 +1612,8 @@ Redis / Queue
 5. 第一版用文件持久化，先不上数据库强依赖
 6. 第一版只做 API + 测试，不做复杂 UI
 7. 第一版不做 Scenario / Run / Evolution，只为它们预留字段和模型边界
+8. 第一版同步建立 Prompt Asset 的数据位置，避免后续提示词散落在代码里
+9. 第一版所有任务设计默认遵循 Execute-Verify-Report
 ```
 
 暂不做清单：
@@ -1654,6 +1957,8 @@ DRAFT -> CANDIDATE -> PENDING_EVAL -> APPROVED -> ACTIVE
 4. Run 调用 IntentOrchestrator
 5. Run 记录 trace_id、team_version、status、input、output
 6. 提供 run events 查询接口
+7. Run 默认输出 Execute-Verify-Report 结构
+8. 为后续 Task Flow 预留 step 状态和 approval wait 状态
 ```
 
 ---
@@ -1670,6 +1975,9 @@ DRAFT -> CANDIDATE -> PENDING_EVAL -> APPROVED -> ACTIVE
 3. Tool policy validation
 4. 高风险工具审批
 5. Skill-backed capability diagnostics
+6. Agent 级 skill usage guide 注入
+7. before_tool_call 风险守卫
+8. Skill 调用进入 trace / audit / eval 数据
 ```
 
 ---
@@ -1690,6 +1998,9 @@ DRAFT -> CANDIDATE -> PENDING_EVAL -> APPROVED -> ACTIVE
 7. Approve / Reject
 8. 生成 candidate version
 9. Activate / Rollback
+10. Proposal 明确 target_asset_type：Prompt / Flow / Skill / Memory / Team Blueprint
+11. 从失败 trace 自动生成 Prompt/Playbook 改进草案
+12. 支持历史案例回放对比 v1/v2
 ```
 
 ---
@@ -1742,10 +2053,12 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 8. FileTeamBlueprintRepository
 9. TeamBlueprintService
 10. TeamBlueprintRoutes
-11. DashboardServer 注册 BusinessPlatformRoutes
-12. API 测试：workspace 创建/查询
-13. API 测试：blueprint 创建/v2/激活
-14. 文档更新
+11. PromptAssetRecord / TeamOperatingManual 初始占位
+12. DashboardServer 注册 BusinessPlatformRoutes
+13. API 测试：workspace 创建/查询
+14. API 测试：blueprint 创建/v2/激活
+15. 测试：团队蓝图关联 Prompt Asset 版本
+16. 文档更新
 ```
 
 第一版无需做复杂 UI，可以先做 API 和测试。
@@ -1830,6 +2143,11 @@ IntentOrchestrator
 | Evolution Proposal | org/evolution + delegated task | 增加 proposal 状态机 |
 | Eval Set | org/eval | 增加 scenario eval set |
 | Approval | BrowserApprovalQueue / DelegatedTask verification | 统一审批中心 |
+| Prompt Asset | OpenClaw system prompt / workspace bootstrap | 增加提示词资产版本化 |
+| Standing Orders | AGENTS.md / HEARTBEAT.md / cron | 增加业务常驻任务指令 |
+| Task Flow | OpenClaw taskflow / delegated task | 增加可恢复多步骤流程 |
+| Active Memory | OpenClaw active-memory / MEMORY.md | 增加业务主动记忆召回 |
+| Execute-Verify-Report | OpenClaw standing-order execution discipline | 固化任务可信执行格式 |
 | Audit | TenantAuditLogger | 扩展业务事件审计 |
 
 ---
@@ -1919,6 +2237,45 @@ IntentOrchestrator
 6. 先给 5% 流量灰度
 7. 指标稳定后扩大到 100%
 8. 异常时自动回滚到旧版本
+```
+
+### 16.4 更像 OpenClaw 的高级体验
+
+成熟后的 Hermes 不应该只是“配置一个智能体团队”，而应该具备这些 OpenClaw 式体验：
+
+```text
+业务方说一个目标，系统自动生成团队、岗位、流程和追问清单
+业务方配置长期规则，系统按 standing orders 主动巡检和复盘
+系统在执行前主动召回相关历史规则和失败案例
+复杂任务不靠一次回复完成，而是进入可恢复的 task flow
+每个智能体只看到自己该用的技能和工具
+每次结果都按 Execute-Verify-Report 输出证据链
+系统发现问题后，不只是建议“改 prompt”，而是指出该改 Prompt / Flow / Skill / Memory 哪类资产
+所有改进都先生成候选版本，经评估、审批、灰度后再上线
+```
+
+这会形成一个真正有领先感的闭环：
+
+```text
+业务目标
+  ↓
+提示词资产化
+  ↓
+任务流编排
+  ↓
+技能最小授权
+  ↓
+主动记忆增强
+  ↓
+执行-验证-汇报
+  ↓
+运行数据沉淀
+  ↓
+自进化提案
+  ↓
+评估审批发布
+  ↓
+团队持续变聪明
 ```
 
 最终体验：
