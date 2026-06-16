@@ -3692,3 +3692,193 @@ Verify Team promptAssetRefs valid
 更多底层资产细节暴露
 没有主流程承载的 UI polish
 ```
+
+---
+
+## 19. 架构再校准：Business Portal 必须复用 Hermes 基座能力，不能重复造轮子
+
+本节是在第 18 节“Scenario-first Team Generation”之后的进一步校准。
+
+第 18 节确认了产品主线应该从“对象型 Business Portal”收束为：
+
+```text
+业务人员描述场景 → 自动生成智能体团队
+```
+
+但还需要补充一个更重要的架构约束：
+
+```text
+Business Portal 不能创建第二套智能体平台。
+```
+
+Business Portal 应该是 Hermes 现有智能体基座能力的业务化 façade，而不是新的平行内核。
+
+### 19.1 新核心原则
+
+后续所有设计必须遵守：
+
+```text
+LLM-first，但不能绕过 Hermes Foundation。
+```
+
+更准确地说：
+
+```text
+LLM proposes
+Schema validates
+Hermes Foundation constrains
+Business Portal presents
+Human approves high-risk changes
+```
+
+不能变成：
+
+```text
+LLM 生成一堆孤立 JSON
+Business Portal 自己存起来
+运行时无法真正执行
+```
+
+### 19.2 Business Portal 的正确定位
+
+Business Portal 是：
+
+```text
+业务化产品表面
+业务对象 façade
+业务流程编排入口
+```
+
+它不是：
+
+```text
+新的租户系统
+新的 Agent Runtime
+新的 Tool Dispatcher
+新的 Approval Engine
+新的 Trace Store
+新的 Evolution Engine
+```
+
+### 19.3 已新增对象必须逐步映射回 Hermes 基座
+
+当前已有业务对象：
+
+```text
+Workspace
+Scenario
+Prompt Asset
+Team Blueprint
+Business Run
+Approval Card
+Insight
+Evolution Proposal
+```
+
+它们后续必须逐步映射到已有 Hermes 基座能力：
+
+```text
+Workspace          → TenantManager / TenantContext
+Scenario           → Intent / Orchestration / Workflow metadata
+Prompt Asset       → Prompt / Memory / Skill asset conventions
+Team Blueprint     → Agent Runtime / Collaboration / Org model
+Business Run       → AgentTrace / IntentRun / Tool traces
+Approval Card      → ApprovalSystem / Delegated Task / Gateway
+Insight            → Trace analytics / Evaluation / Org evolution
+Evolution Proposal → Org Evolution / Delegated Task / Team Versioning
+```
+
+详细映射见：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_MAPPING.md
+```
+
+### 19.4 修正第 18 节里的实现顺序
+
+第 18 节提出：
+
+```text
+BusinessTeamGenerationService
+```
+
+这个方向仍然正确，但实现前必须先完成：
+
+```text
+Hermes Foundation 能力盘点
+```
+
+否则 BusinessTeamGenerationService 很容易变成新内核。
+
+因此下一阶段顺序调整为：
+
+```text
+P0: Foundation capability inventory
+P0: Foundation-aware generation design
+P1: BusinessTeamGenerationService MVP
+P1: /business main CTA
+P2: Runtime integration
+```
+
+### 19.5 Foundation-aware BusinessTeamGenerationService
+
+未来的 BusinessTeamGenerationService 应该依赖/复用：
+
+```text
+WorkspaceService / TenantManager
+IntentOrchestrator
+Tool registry / Skill registry
+PromptAssetService
+TeamBlueprintService
+BusinessApprovalService / ApprovalSystem
+BusinessRunService / Trace adapter
+EvolutionProposalService
+Gateway adapters
+```
+
+它不应该拥有：
+
+```text
+tenant isolation
+agent execution
+tool dispatch
+approval semantics
+trace persistence
+notification delivery
+```
+
+### 19.6 下一步从“写功能”改为“基座映射盘点”
+
+下一步不应立即实现 generation API。
+
+下一步应先完成：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_MAPPING.md
+```
+
+并据此盘点：
+
+```text
+现有工具/技能注册表在哪里？
+IntentOrchestrator 的可调用入口是什么？
+Agent runtime 如何创建或更新 agent？
+Team Blueprint 如何映射到真实 agent/collaboration topology？
+ApprovalSystem 如何与 BusinessApprovalRecord 对齐？
+AgentTrace / IntentRun 如何转 BusinessRunRecord？
+org/evolution/delegated task 如何与 EvolutionProposalRecord 对齐？
+```
+
+只有这些问题回答清楚，才能继续写 BusinessTeamGenerationService。
+
+### 19.7 后续判断标准
+
+后续任何需求进入开发前，都必须回答：
+
+```text
+它复用了哪个 Hermes 基座能力？
+它是否让“业务场景描述 → 智能体团队生成”更顺畅？
+它是否减少平行系统，而不是增加一套新系统？
+```
+
+如果不能回答，就暂缓。
