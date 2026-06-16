@@ -3,6 +3,8 @@ package com.nousresearch.hermes.workspace;
 import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.run.BusinessRunService;
+import com.nousresearch.hermes.business.insight.BusinessInsightService;
+import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -24,49 +26,73 @@ public final class BusinessPortalDashboardIntegration {
     private BusinessPortalDashboardIntegration() {
     }
 
-    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService, BusinessRunService runService) {
+    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService, BusinessRunService runService, BusinessInsightService insightService) {
         logger.info("Registering Business Portal shell routes");
-        app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService));
+        app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService, insightService));
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/runs", ctx -> runs(ctx, runService));
         app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
     }
 
-    static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
-        List<WorkspaceRecord> workspaces = workspaceService.listWorkspaces();
-        int teamCount = 0;
-        for (WorkspaceRecord workspace : workspaces) {
-            teamCount += teamBlueprintService.listTeamBlueprints(workspace.getWorkspaceId()).size();
-        }
+    static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessInsightService insightService) {
+        String workspaceId = ctx.queryParam("workspaceId");
+        BusinessInsightSummary insightSummary = insightService.summarize(workspaceId);
+        List<WorkspaceRecord> workspaces = workspaceId == null || workspaceId.isBlank()
+            ? workspaceService.listWorkspaces()
+            : workspaceService.getWorkspace(workspaceId).map(List::of).orElse(List.of());
 
         Map<String, Object> today = new LinkedHashMap<>();
-        today.put("processedTasks", 0);
-        today.put("autoCompletionRate", 0);
-        today.put("manualInterventions", 0);
-        today.put("riskBlocks", 0);
-        today.put("averageHandlingSeconds", 0);
+        today.put("processedTasks", insightSummary.getRunCount());
+        today.put("failedRuns", insightSummary.getFailedRunCount());
+        today.put("needsApprovalRuns", insightSummary.getNeedsApprovalRunCount());
+        today.put("pendingApprovals", insightSummary.getPendingApprovalCount());
+        today.put("highRiskApprovals", insightSummary.getHighRiskApprovalCount());
+        today.put("failureRate", insightSummary.getFailureRate());
+        today.put("autoCompletionRate", autoCompletionRate(insightSummary));
 
-        List<Map<String, Object>> nextActions = new ArrayList<>();
-        if (workspaces.isEmpty()) {
-            nextActions.add(action("create-workspace", "创建第一个业务空间", "从一个部门或项目开始搭建业务智能体团队"));
-        } else if (teamCount == 0) {
-            nextActions.add(action("create-team", "创建第一个智能体团队", "选择业务场景并确认岗位草案"));
-        } else {
-            nextActions.add(action("run-sample", "用样例任务试运行", "验证团队解释是否能被业务人员看懂"));
+        List<Map<String, Object>> needsAttention = new ArrayList<>();
+        if (insightSummary.getPendingApprovalCount() > 0) {
+            needsAttention.add(action("review-approvals", "处理待审批", "当前有 " + insightSummary.getPendingApprovalCount() + " 条待审批事项"));
         }
+        if (insightSummary.getHighRiskApprovalCount() > 0) {
+            needsAttention.add(action("review-high-risk-approvals", "优先处理高风险审批", "当前有 " + insightSummary.getHighRiskApprovalCount() + " 条高风险审批"));
+        }
+        if (insightSummary.getFailedRunCount() > 0) {
+            needsAttention.add(action("review-failed-runs", "复盘失败运行", "当前有 " + insightSummary.getFailedRunCount() + " 条失败运行"));
+        }
+
+        Map<String, Object> risk = new LinkedHashMap<>();
+        risk.put("level", riskLevel(insightSummary));
+        risk.put("pendingApprovals", insightSummary.getPendingApprovalCount());
+        risk.put("highRiskApprovals", insightSummary.getHighRiskApprovalCount());
+        risk.put("failedRuns", insightSummary.getFailedRunCount());
+        risk.put("failureRate", insightSummary.getFailureRate());
+
+        Map<String, Object> teamStatus = new LinkedHashMap<>();
+        teamStatus.put("total", insightSummary.getTeamCount());
+        teamStatus.put("normal", Math.max(0, insightSummary.getTeamCount() - insightSummary.getFailedRunCount() - insightSummary.getNeedsApprovalRunCount()));
+        teamStatus.put("needsAttention", Math.min(insightSummary.getTeamCount(), insightSummary.getFailedRunCount() + insightSummary.getNeedsApprovalRunCount() + insightSummary.getPendingApprovalCount()));
+        teamStatus.put("emptyState", insightSummary.getTeamCount() == 0 ? "还没有智能体团队，请先创建或导入团队蓝图。" : "");
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("ok", true);
         response.put("entry", "home");
+        response.put("workspaceId", workspaceId == null ? "" : workspaceId);
         response.put("summary", Map.of(
-            "workspaceCount", workspaces.size(),
-            "teamCount", teamCount,
-            "pendingApprovals", 0,
-            "openInsights", 0
+            "workspaceCount", insightSummary.getWorkspaceCount(),
+            "teamCount", insightSummary.getTeamCount(),
+            "runCount", insightSummary.getRunCount(),
+            "pendingApprovals", insightSummary.getPendingApprovalCount(),
+            "openInsights", insightSummary.getInsights().size()
         ));
         response.put("today", today);
-        response.put("nextActions", nextActions);
-        response.put("emptyState", workspaces.isEmpty() ? "还没有业务空间，请先创建一个业务空间。" : null);
+        response.put("needsAttention", needsAttention);
+        response.put("risk", risk);
+        response.put("teamStatus", teamStatus);
+        response.put("insights", insightSummary.getInsights());
+        response.put("nextActions", insightSummary.getNextActions());
+        response.put("workspaces", workspaces);
+        response.put("emptyState", insightSummary.getWorkspaceCount() == 0 ? "还没有业务空间，请先创建一个业务空间。" : "");
         ctx.status(200).json(response);
     }
 
@@ -131,6 +157,19 @@ public final class BusinessPortalDashboardIntegration {
             "total", approvals.size(),
             "emptyState", approvals.isEmpty() ? "当前没有待审批事项。高风险动作和版本发布会出现在这里。" : ""
         ));
+    }
+
+    private static double autoCompletionRate(BusinessInsightSummary summary) {
+        if (summary.getRunCount() == 0) return 0.0;
+        int blocked = summary.getFailedRunCount() + summary.getNeedsApprovalRunCount();
+        int completed = Math.max(0, summary.getRunCount() - blocked);
+        return Math.round(completed * 1000.0 / summary.getRunCount()) / 10.0;
+    }
+
+    private static String riskLevel(BusinessInsightSummary summary) {
+        if (summary.getHighRiskApprovalCount() > 0 || summary.getFailureRate() >= 20.0) return "HIGH";
+        if (summary.getPendingApprovalCount() > 0 || summary.getFailedRunCount() > 0 || summary.getFailureRate() >= 5.0) return "MEDIUM";
+        return "LOW";
     }
 
     private static int parseInt(String raw, int fallback) {

@@ -400,7 +400,7 @@ public class DashboardServer {
         BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
-        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService);
+        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService, businessInsightService);
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);

@@ -2759,6 +2759,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息
 [x] Business Run API 能创建、查询并展示业务故事化运行记录
 [x] Business Insights API 能基于 workspace/team/run/approval 生成最小真实洞察
+[x] Business Home API 能聚合 runs / approvals / insights，返回业务驾驶舱数据
 ```
 
 ---

@@ -206,6 +206,34 @@ tenantId 是底层隔离 ID
 支撑指标：metrics
 ```
 
+
+### Step 4.8：首页聚合升级 / 业务驾驶舱
+
+目标：让 `/api/v1/business/home` 不再只是 workspace/team 基础计数，而是聚合 runs、approvals、insights 的业务驾驶舱。
+
+交付：
+
+```text
+[x] BusinessPortalDashboardIntegration.home 注入 BusinessInsightService
+[x] 首页 summary 包含 workspaceCount / teamCount / runCount / pendingApprovals / openInsights
+[x] 首页 today 包含 processedTasks / failedRuns / needsApprovalRuns / pendingApprovals / highRiskApprovals / failureRate / autoCompletionRate
+[x] 首页 needsAttention 聚合待审批、高风险审批、失败运行
+[x] 首页 risk 返回 LOW / MEDIUM / HIGH
+[x] 首页 teamStatus 返回 total / normal / needsAttention / emptyState
+[x] 首页 insights 复用 BusinessInsightService 的真实洞察
+[x] 首页 nextActions 复用 BusinessInsightService 的建议动作
+```
+
+首页现在负责回答：
+
+```text
+今天整体是否正常？
+哪里需要我处理？
+风险高不高？
+团队状态如何？
+系统建议我下一步做什么？
+```
+
 ### Step 5：文档与验收
 
 交付：
