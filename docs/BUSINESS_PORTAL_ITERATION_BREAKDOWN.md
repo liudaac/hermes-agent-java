@@ -364,6 +364,31 @@ OK
 使用原生 <details>/<summary>，不增加额外状态管理；默认仍保持摘要卡片，用户需要时展开。
 ```
 
+
+### Step 4.14：Create Workspace 表单 MVP
+
+目标：让业务用户可以在 `/business` 页面直接创建第一个业务空间，而不是只能通过 smoke 脚本或 curl。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 createBusinessWorkspace
+[x] 新增 CreateBusinessWorkspacePayload / CreateBusinessWorkspaceResponse 类型
+[x] 新增 web/src/components/business/BusinessPortalForms.tsx
+[x] 新增 CreateWorkspaceForm
+[x] 表单字段：workspaceId / name / owner / description
+[x] 创建成功后自动切换到新 workspace，并触发页面刷新
+[x] 创建失败时在表单内展示错误
+[x] metadata 标记 source=business-portal-ui
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+只做 Workspace 创建；Team / Run / Approval 创建表单后续分步补齐。
+```
+
 ### Step 5：文档与验收
 
 交付：

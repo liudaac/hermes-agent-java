@@ -275,6 +275,13 @@ export const api = {
     return fetchJSON<BusinessInsightsResponse>(`/api/v1/business/insights${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
 
+  createBusinessWorkspace: (payload: CreateBusinessWorkspacePayload) =>
+    fetchJSON<CreateBusinessWorkspaceResponse>("/api/v1/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1195,4 +1202,20 @@ export interface BusinessInsightsResponse {
   total: number;
   nextActions: BusinessAction[];
   emptyState?: string;
+}
+
+export interface CreateBusinessWorkspacePayload {
+  workspaceId: string;
+  name: string;
+  description?: string;
+  owner?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessWorkspaceResponse {
+  ok: boolean;
+  workspaceId: string;
+  tenantId: string;
+  workspace: WorkspaceRecord;
+  message?: string;
 }
