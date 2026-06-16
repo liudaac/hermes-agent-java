@@ -2758,6 +2758,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] Business Portal 五个入口都有可返回真实数据或空状态的 API 支撑
 [x] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息
 [x] Business Run API 能创建、查询并展示业务故事化运行记录
+[x] Business Insights API 能基于 workspace/team/run/approval 生成最小真实洞察
 ```
 
 ---
@@ -2825,7 +2826,7 @@ IntentOrchestrator
 | Run | AgentTrace / IntentRun / BusinessRunService | 增加业务运行记录与业务故事化 Trace |
 | Skill Policy | SkillManager / TenantSkillManager | 增加 workspace/agent 级策略 |
 | Tool Policy | ToolRegistry / TenantAwareToolDispatcher | 增加 allowed_tools 校验 |
-| Evolution Proposal | org/evolution + delegated task | 增加 proposal 状态机 |
+| Evolution Proposal | org/evolution + delegated task / BusinessInsightService | 增加 proposal 状态机；当前先输出业务洞察和建议动作 |
 | Eval Set | org/eval | 增加 scenario eval set |
 | Approval | BrowserApprovalQueue / DelegatedTask verification / BusinessApprovalService | 统一审批中心，Business Portal 先接业务审批卡 |
 | Prompt Asset | OpenClaw system prompt / workspace bootstrap | 增加提示词资产版本化 |

@@ -173,6 +173,39 @@ tenantId 是底层隔离 ID
 技术追溯：technicalTraceRef（默认不在业务层展开）
 ```
 
+
+### Step 4.7：Business Insights API / 最小真实洞察
+
+目标：让 Business Portal 的“洞察”入口从空状态升级为基于 workspace、team blueprint、runs、approvals 的真实聚合洞察。
+
+交付：
+
+```text
+[x] BusinessInsightRecord
+[x] BusinessInsightSummary
+[x] BusinessInsightService
+[x] BusinessInsightDashboardIntegration
+[x] GET /api/v1/business/insights
+[x] GET /api/v1/workspaces/{workspaceId}/insights
+[x] 洞察指标：workspaceCount / teamCount / runCount / failedRunCount / pendingApprovalCount / highRiskApprovalCount / failureRate
+[x] 洞察建议：创建 workspace / 创建团队 / 试运行 / 处理审批 / 复盘失败运行 / 继续积累样本
+[x] 测试：空系统建议创建 workspace
+[x] 测试：有 workspace 无团队建议创建团队
+[x] 测试：失败运行和高风险审批生成对应洞察
+```
+
+最小洞察表达：
+
+```text
+发现：finding
+可能原因：possibleCause
+建议动作：recommendation
+预期收益：expectedBenefit
+下一步动作：suggestedAction
+严重程度：severity
+支撑指标：metrics
+```
+
 ### Step 5：文档与验收
 
 交付：

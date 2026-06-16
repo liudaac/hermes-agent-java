@@ -30,7 +30,6 @@ public final class BusinessPortalDashboardIntegration {
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/runs", ctx -> runs(ctx, runService));
         app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
-        app.get("/api/v1/business/insights", BusinessPortalDashboardIntegration::insights);
     }
 
     static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
@@ -131,16 +130,6 @@ public final class BusinessPortalDashboardIntegration {
             "approvals", approvals,
             "total", approvals.size(),
             "emptyState", approvals.isEmpty() ? "当前没有待审批事项。高风险动作和版本发布会出现在这里。" : ""
-        ));
-    }
-
-    static void insights(Context ctx) {
-        ctx.status(200).json(Map.of(
-            "ok", true,
-            "entry", "insights",
-            "insights", List.of(),
-            "total", 0,
-            "emptyState", "至少运行 20 条任务后，系统会生成趋势分析和优化建议。"
         ));
     }
 

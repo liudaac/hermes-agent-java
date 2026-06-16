@@ -27,6 +27,8 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalDashboardIntegr
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.run.BusinessRunDashboardIntegration;
 import com.nousresearch.hermes.business.run.BusinessRunService;
+import com.nousresearch.hermes.business.insight.BusinessInsightDashboardIntegration;
+import com.nousresearch.hermes.business.insight.BusinessInsightService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -110,6 +112,7 @@ public class DashboardServer {
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
     private final BusinessRunService businessRunService;
+    private final BusinessInsightService businessInsightService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -156,6 +159,7 @@ public class DashboardServer {
         this.teamBlueprintService = new TeamBlueprintService(workspaceService);
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
         this.businessRunService = new BusinessRunService(workspaceService);
+        this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -395,6 +399,7 @@ public class DashboardServer {
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
         BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
+        BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
         BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService);
 
         // ========== AI原生组织 API ==========
