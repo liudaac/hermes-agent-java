@@ -299,6 +299,13 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
+    fetchJSON<CreateBusinessApprovalResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1288,5 +1295,26 @@ export interface CreateBusinessRunResponse {
   workspaceId: string;
   runId: string;
   run: BusinessRunRecord;
+  message?: string;
+}
+
+export interface CreateBusinessApprovalPayload {
+  teamId?: string;
+  title: string;
+  summary: string;
+  reasonRequired?: string;
+  approveEffect?: string;
+  rejectEffect?: string;
+  recommendation?: string;
+  riskLevel?: string;
+  evidence?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessApprovalResponse {
+  ok: boolean;
+  workspaceId: string;
+  approvalId: string;
+  approval: BusinessApprovalRecord;
   message?: string;
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import type { BusinessTeamCard, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
+import type { BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -315,6 +315,138 @@ export function CreateRunStoryForm({
           <div className="space-y-1 md:col-span-3">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Conclusion reason</label>
             <Input value={conclusionReason} onChange={(event) => setConclusionReason(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+export function CreateApprovalCardForm({
+  workspaceId,
+  teams,
+  onCreate,
+}: {
+  workspaceId?: string;
+  teams: BusinessTeamCard[];
+  onCreate: (workspaceId: string, payload: CreateBusinessApprovalPayload) => Promise<void>;
+}) {
+  const [teamId, setTeamId] = useState("");
+  const [title, setTitle] = useState("High value refund approval");
+  const [summary, setSummary] = useState("Customer requested a 1200 CNY refund; manual approval is required.");
+  const [riskLevel, setRiskLevel] = useState("HIGH");
+  const [reasonRequired, setReasonRequired] = useState("Refund amount is above the automatic approval threshold.");
+  const [recommendation, setRecommendation] = useState("Approve after checking the product return condition.");
+  const [approveEffect, setApproveEffect] = useState("The system can continue the refund flow and draft the customer reply.");
+  const [rejectEffect, setRejectEffect] = useState("The case stays in manual handling and no automatic refund response is sent.");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedTeamId = teamId || teams[0]?.teamId || "";
+  const canSubmit = Boolean(workspaceId) && Boolean(selectedTeamId) && title.trim().length > 0 && summary.trim().length > 0 && !saving;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !canSubmit) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(workspaceId, {
+        teamId: selectedTeamId,
+        title: title.trim(),
+        summary: summary.trim(),
+        riskLevel,
+        reasonRequired: reasonRequired.trim() || undefined,
+        recommendation: recommendation.trim() || undefined,
+        approveEffect: approveEffect.trim() || undefined,
+        rejectEffect: rejectEffect.trim() || undefined,
+        evidence: {
+          source: "business-portal-ui",
+          teamId: selectedTeamId,
+          riskLevel,
+        },
+        metadata: { source: "business-portal-ui" },
+      });
+      setTitle("High value refund approval");
+      setSummary("Customer requested a 1200 CNY refund; manual approval is required.");
+      setRiskLevel("HIGH");
+      setReasonRequired("Refund amount is above the automatic approval threshold.");
+      setRecommendation("Approve after checking the product return condition.");
+      setApproveEffect("The system can continue the refund flow and draft the customer reply.");
+      setRejectEffect("The case stays in manual handling and no automatic refund response is sent.");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Approval Card</CardTitle>
+        <CardDescription>Create a mobile-first approval card for the selected workspace and team.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!workspaceId || teams.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-border/70 p-3 text-sm normal-case text-muted-foreground">
+            Select a workspace with at least one team before creating an approval card.
+          </div>
+        ) : null}
+        <form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team</label>
+            <select
+              value={selectedTeamId}
+              onChange={(event) => setTeamId(event.target.value)}
+              disabled={!workspaceId || teams.length === 0}
+              className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm"
+            >
+              {teams.length === 0 ? <option value="">No teams</option> : null}
+              {teams.map((team) => (
+                <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Risk level</label>
+            <select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto">
+              <Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}
+            </Button>
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Title</label>
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Summary</label>
+            <Input value={summary} onChange={(event) => setSummary(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Reason required</label>
+            <Input value={reasonRequired} onChange={(event) => setReasonRequired(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Recommendation</label>
+            <Input value={recommendation} onChange={(event) => setRecommendation(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Approve effect</label>
+            <Input value={approveEffect} onChange={(event) => setApproveEffect(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Reject effect</label>
+            <Input value={rejectEffect} onChange={(event) => setRejectEffect(event.target.value)} disabled={!workspaceId || teams.length === 0} />
           </div>
           {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
         </form>

@@ -441,6 +441,30 @@ OK
 只做最小运行故事创建；复杂步骤编辑、真实 Agent 执行绑定和技术 Trace 关联后续再补。
 ```
 
+
+### Step 4.17：Create Approval Card 表单 MVP
+
+目标：让业务用户可以在 `/business` 页面完成 `Create Workspace → Create Team → Create Run Story → Create Approval Card` 的完整基础闭环。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 createBusinessApproval
+[x] 新增 CreateBusinessApprovalPayload / CreateBusinessApprovalResponse 类型
+[x] CreateApprovalCardForm 接入 /business 页面
+[x] 表单字段：team / riskLevel / title / summary / reasonRequired / recommendation / approveEffect / rejectEffect
+[x] 未选择 workspace 或没有 team 时禁用 approval 创建，并提示先创建 team
+[x] evidence 和 metadata 标记 source=business-portal-ui
+[x] 创建成功后刷新页面数据
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+只创建审批卡；approve / reject / request-info 页面动作下一步再补。
+```
+
 ### Step 5：文档与验收
 
 交付：

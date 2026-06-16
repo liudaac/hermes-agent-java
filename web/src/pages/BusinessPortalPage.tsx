@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type {
   BusinessApprovalRecord,
   BusinessHomeResponse,
+  CreateBusinessApprovalPayload,
   CreateBusinessRunPayload,
   CreateBusinessTeamBlueprintPayload,
   CreateBusinessWorkspacePayload,
@@ -32,7 +33,7 @@ import {
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { CreateApprovalCardForm, CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
@@ -62,6 +63,12 @@ export default function BusinessPortalPage() {
   const createRunStory = async (targetWorkspaceId: string, payload: CreateBusinessRunPayload) => {
     const response = await api.createBusinessRun(targetWorkspaceId, payload);
     showToast(`Run story created: ${response.runId}`, "success");
+    await load();
+  };
+
+  const createApprovalCard = async (targetWorkspaceId: string, payload: CreateBusinessApprovalPayload) => {
+    const response = await api.createBusinessApproval(targetWorkspaceId, payload);
+    showToast(`Approval card created: ${response.approvalId}`, "success");
     await load();
   };
 
@@ -130,6 +137,7 @@ export default function BusinessPortalPage() {
       <CreateWorkspaceForm onCreate={createWorkspace} />
       <CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />
       <CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />
+      <CreateApprovalCardForm workspaceId={workspaceId} teams={teams} onCreate={createApprovalCard} />
 
       {home?.emptyState ? (
         <Card>
