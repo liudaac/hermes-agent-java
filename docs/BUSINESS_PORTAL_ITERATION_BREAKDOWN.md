@@ -267,6 +267,36 @@ tenantId 是底层隔离 ID
 - 系统建议下一步做什么
 ```
 
+
+### Step 4.10：真实 smoke 联调与截图检查准备
+
+目标：用真实 Dashboard 服务跑通 Business Portal 后端闭环，并记录 UI 截图检查状态。
+
+交付：
+
+```text
+[x] mvn -q -DskipTests package 成功生成 fat jar
+[x] Dashboard 使用 java -jar target/hermes-agent-java-0.1.0-SNAPSHOT.jar dashboard --port 9119 --host 127.0.0.1 启动成功
+[x] scripts/smoke-business-portal.sh 指向 http://127.0.0.1:9119 跑通
+[x] smoke 成功创建 workspace / team blueprint / run / approval
+[x] smoke 成功 approve approval card
+[x] smoke 成功读取 home / teams / runs / approvals / insights
+[x] 新增 docs/BUSINESS_PORTAL_SMOKE_RESULT.md 记录联调结果
+[ ] 浏览器截图检查（当前环境无可用浏览器，Kimi WebBridge extension_connected=false）
+```
+
+smoke 结果摘要：
+
+```text
+Workspace: customer-service-demo
+Team:      after-sales-team
+Run:       run-05dfe880-c
+Approval:  apv-cf8a7f43-d
+Home risk: LOW
+Insights:  1
+OK
+```
+
 ### Step 5：文档与验收
 
 交付：
