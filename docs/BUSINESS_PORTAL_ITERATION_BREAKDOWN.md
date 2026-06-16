@@ -322,6 +322,22 @@ OK
 浏览器截图检查仍暂停；用户暂时不连接浏览器。
 ```
 
+
+### Step 4.12：页面内 demo 数据引导入口
+
+目标：在不让浏览器直接执行本地脚本的前提下，让 `/business` 页面告诉用户如何快速填充 demo 数据。
+
+交付：
+
+```text
+[x] BusinessPortalSections.tsx 新增 DemoDataGuide
+[x] /business 页面展示 smoke 脚本命令
+[x] 命令根据当前 workspaceId 自动替换 WORKSPACE_ID，未选择时使用 customer-service-demo
+[x] 说明 smoke 会创建 workspace / team blueprint / run story / approval / insights
+[x] 明确说明为什么不是按钮：浏览器不直接执行本地脚本，避免安全边界混乱
+[x] cd web && npm run build 通过
+```
+
 ### Step 5：文档与验收
 
 交付：

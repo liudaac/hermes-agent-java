@@ -323,3 +323,34 @@ function InsightRow({ insight }: { insight: BusinessInsightRecord }) {
     </div>
   );
 }
+
+export function DemoDataGuide({ workspaceId }: { workspaceId?: string }) {
+  const resolvedWorkspaceId = workspaceId || "customer-service-demo";
+  const command = `HERMES_BASE_URL=http://127.0.0.1:9119 \\\nWORKSPACE_ID=${resolvedWorkspaceId} \\\nTEAM_ID=after-sales-team \\\nAPPROVAL_ACTION=approve \\\nscripts/smoke-business-portal.sh`;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>How to populate demo data</CardTitle>
+        <CardDescription>
+          Run the smoke script from a terminal to create a workspace, team, run story, approval card and insights.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <pre className="overflow-x-auto rounded-sm border border-border/70 bg-background/80 p-3 text-xs normal-case tracking-normal text-muted-foreground">
+          <code>{command}</code>
+        </pre>
+        <div className="grid gap-2 text-sm normal-case text-muted-foreground sm:grid-cols-2">
+          <div className="rounded-sm border border-border/70 p-3">
+            <div className="font-expanded text-xs uppercase tracking-[0.1em] text-foreground">What it creates</div>
+            <div className="mt-1">Workspace → Team Blueprint → Run Story → Approval → Insights</div>
+          </div>
+          <div className="rounded-sm border border-border/70 p-3">
+            <div className="font-expanded text-xs uppercase tracking-[0.1em] text-foreground">Why not a button?</div>
+            <div className="mt-1">The dashboard shows the command instead of executing local scripts from the browser.</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

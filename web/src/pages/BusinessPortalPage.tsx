@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import {
+  DemoDataGuide,
   InsightsAndActionsSection,
   MetricCard,
   RunsAndApprovalsSection,
@@ -114,6 +115,8 @@ export default function BusinessPortalPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <DemoDataGuide workspaceId={workspaceId} />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard title="Workspaces" value={summary?.workspaceCount} icon={BriefcaseBusiness} />
