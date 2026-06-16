@@ -624,6 +624,34 @@ OK
 高风险：要求输入确认短语或走多人审批
 ```
 
+
+### Step 4.25：Scenario 对象后端第一版
+
+目标：从 UI 表单小步快跑收敛回平台核心，把“业务场景”从散落字符串升级为正式业务对象。
+
+交付：
+
+```text
+[x] 新增 ScenarioRecord
+[x] 新增 FileScenarioRepository
+[x] 新增 ScenarioService
+[x] 新增 ScenarioDashboardIntegration
+[x] DashboardServer 注册 ScenarioDashboardIntegration
+[x] GET /api/v1/workspaces/{workspaceId}/scenarios
+[x] POST /api/v1/workspaces/{workspaceId}/scenarios
+[x] GET /api/v1/workspaces/{workspaceId}/scenarios/{scenarioId}
+[x] 文件持久化路径：$HERMES_HOME/business/workspaces/{workspaceId}/scenarios/{scenarioId}.json
+[x] 新增 ScenarioServiceTest
+[x] 测试：创建 / 列表 / 详情 / duplicate / missing workspace
+[x] mvn -q -Dtest=ScenarioServiceTest,WorkspaceServiceTest,TeamBlueprintServiceTest test 通过
+```
+
+当前范围：
+
+```text
+Scenario 先作为正式业务对象落地；Team Blueprint / Run / Insights 与 Scenario 的强绑定下一步再补。
+```
+
 ### Step 5：文档与验收
 
 交付：

@@ -99,7 +99,45 @@ POST /api/v1/workspaces auto-creates the underlying tenant.
 MVP keeps workspaceId == tenantId but returns both fields.
 ```
 
-### 3.2 Team Blueprint Versioning
+### 3.2 Scenario API
+
+Purpose:
+
+```text
+Represent reusable business scenarios and connect business goals to entry teams.
+```
+
+Key classes:
+
+```text
+ScenarioRecord
+FileScenarioRepository
+ScenarioService
+ScenarioDashboardIntegration
+```
+
+APIs:
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/scenarios
+POST /api/v1/workspaces/{workspaceId}/scenarios
+GET  /api/v1/workspaces/{workspaceId}/scenarios/{scenarioId}
+```
+
+Persistence:
+
+```text
+$HERMES_HOME/business/workspaces/{workspaceId}/scenarios/{scenarioId}.json
+```
+
+Current behavior:
+
+```text
+Scenario is now a first-class backend object.
+Strong binding from Team Blueprint / Run / Insights to Scenario is still next-step work.
+```
+
+### 3.3 Team Blueprint Versioning
 
 Purpose:
 
@@ -142,7 +180,7 @@ Create draft version → vN DRAFT
 Activate version → selected version ACTIVE, previous ACTIVE becomes INACTIVE
 ```
 
-### 3.3 Business Run Story API
+### 3.4 Business Run Story API
 
 Purpose:
 
@@ -189,7 +227,7 @@ steps
 technicalTraceRef
 ```
 
-### 3.4 Business Approval Center
+### 3.5 Business Approval Center
 
 Purpose:
 
@@ -240,7 +278,7 @@ Only PENDING approvals can be resolved.
 Resolved approvals cannot be processed again.
 ```
 
-### 3.5 Business Insights API
+### 3.6 Business Insights API
 
 Purpose:
 
@@ -288,7 +326,7 @@ review-failed-runs
 collect-more-runs
 ```
 
-### 3.6 Business Home API
+### 3.7 Business Home API
 
 Purpose:
 
@@ -637,6 +675,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
+Scenario binding across Team Blueprint / Run / Insights
 Real Agent execution
 Raw AgentTrace conversion
 Evolution proposal state machine
@@ -704,6 +743,7 @@ Backend:
 ```text
 src/main/java/com/nousresearch/hermes/workspace/*
 src/main/java/com/nousresearch/hermes/blueprint/*
+src/main/java/com/nousresearch/hermes/scenario/*
 src/main/java/com/nousresearch/hermes/business/approval/*
 src/main/java/com/nousresearch/hermes/business/run/*
 src/main/java/com/nousresearch/hermes/business/insight/*

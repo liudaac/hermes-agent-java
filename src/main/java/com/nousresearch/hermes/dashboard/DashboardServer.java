@@ -29,6 +29,8 @@ import com.nousresearch.hermes.business.run.BusinessRunDashboardIntegration;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.business.insight.BusinessInsightDashboardIntegration;
 import com.nousresearch.hermes.business.insight.BusinessInsightService;
+import com.nousresearch.hermes.scenario.ScenarioDashboardIntegration;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -113,6 +115,7 @@ public class DashboardServer {
     private final BusinessApprovalService businessApprovalService;
     private final BusinessRunService businessRunService;
     private final BusinessInsightService businessInsightService;
+    private final ScenarioService scenarioService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -160,6 +163,7 @@ public class DashboardServer {
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
         this.businessRunService = new BusinessRunService(workspaceService);
         this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
+        this.scenarioService = new ScenarioService(workspaceService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -397,6 +401,7 @@ public class DashboardServer {
 
         // ========== Business Portal APIs ==========
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
+        ScenarioDashboardIntegration.registerRoutes(app, scenarioService);
         BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
