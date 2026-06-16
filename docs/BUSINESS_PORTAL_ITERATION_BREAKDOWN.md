@@ -884,6 +884,41 @@ prompt://after-sales-base#v2   → 使用显式 v2
 如果 /prompt-assets/{assetId}/versions 返回 404，优先检查是否仍在访问旧 Dashboard 进程。
 ```
 
+
+### Step 4.35：Evolution Proposal Skeleton
+
+目标：把 Insight 的“建议动作”升级成可跟踪、可审批、可应用的 Evolution Proposal 对象，开始进入“洞察 → 提案 → 草案版本”的进化闭环。
+
+交付：
+
+```text
+[x] 新增 EvolutionProposalRecord
+[x] 新增 FileEvolutionProposalRepository
+[x] 新增 EvolutionProposalService
+[x] 新增 EvolutionProposalDashboardIntegration
+[x] DashboardServer 注入并注册 EvolutionProposalService / Integration
+[x] 状态机：DRAFT / EVALUATING / NEEDS_APPROVAL / APPROVED / REJECTED / APPLIED
+[x] GET/POST /api/v1/workspaces/{workspaceId}/evolution-proposals
+[x] GET /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}
+[x] POST /evaluate
+[x] POST /request-approval
+[x] POST /approve
+[x] POST /reject
+[x] POST /apply
+[x] approved proposal apply 后生成 Team Blueprint draft version
+[x] 新增 EvolutionProposalServiceTest
+[x] 测试：创建 / 列表 / 加载 / 状态流转 / apply 生成 draft / duplicate / missing workspace / invalid transition
+[x] mvn -q -DskipTests compile 通过
+[x] mvn -q -Dtest=EvolutionProposalServiceTest test 通过
+```
+
+当前范围：
+
+```text
+Evolution Proposal 已作为后端状态机和 Team Draft 生成骨架落地。
+下一步可以把 BusinessInsightService 的 nextActions 接到 Create Proposal，或在 /business 页面展示/处理 proposals。
+```
+
 ### Step 5：文档与验收
 
 交付：

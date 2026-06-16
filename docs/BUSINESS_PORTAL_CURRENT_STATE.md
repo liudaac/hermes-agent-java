@@ -412,6 +412,55 @@ MEDIUM
 HIGH
 ```
 
+### 3.9 Evolution Proposal API
+
+Purpose:
+
+```text
+Turn insights or human review findings into trackable, approvable and applicable evolution proposals.
+```
+
+Key classes:
+
+```text
+EvolutionProposalRecord
+FileEvolutionProposalRepository
+EvolutionProposalService
+EvolutionProposalDashboardIntegration
+```
+
+APIs:
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/evolution-proposals
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals
+GET  /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}/evaluate
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}/request-approval
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}/approve
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}/reject
+POST /api/v1/workspaces/{workspaceId}/evolution-proposals/{proposalId}/apply
+```
+
+Statuses:
+
+```text
+DRAFT
+EVALUATING
+NEEDS_APPROVAL
+APPROVED
+REJECTED
+APPLIED
+```
+
+Current behavior:
+
+```text
+Evolution Proposal is now a backend state machine.
+Approved proposals can be applied to create a Team Blueprint draft version.
+Insight → Proposal automation and /business proposal UI are next-step work.
+```
+
 ## 4. Frontend Capabilities
 
 ### 4.1 Dashboard route
@@ -762,7 +811,7 @@ Prompt Asset edit UI for versions
 Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion
-Evolution proposal state machine
+Insight → Proposal automation and proposal UI
 Prompt asset registry UI
 Knowledge source management UI
 Fine-grained permission model
@@ -832,6 +881,7 @@ src/main/java/com/nousresearch/hermes/prompt/*
 src/main/java/com/nousresearch/hermes/business/approval/*
 src/main/java/com/nousresearch/hermes/business/run/*
 src/main/java/com/nousresearch/hermes/business/insight/*
+src/main/java/com/nousresearch/hermes/evolution/*
 src/main/java/com/nousresearch/hermes/dashboard/DashboardServer.java
 ```
 
