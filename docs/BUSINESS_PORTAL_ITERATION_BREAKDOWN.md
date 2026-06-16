@@ -297,6 +297,31 @@ Insights:  1
 OK
 ```
 
+
+### Step 4.11：Business Portal 前端组件拆分与稳定性优化
+
+目标：在不依赖浏览器截图的情况下，提升 `/business` 页面代码可维护性和字段缺失防御能力。
+
+交付：
+
+```text
+[x] 新增 web/src/components/business/BusinessPortalSections.tsx
+[x] 抽出 MetricCard / MiniStat / ActionList / EmptyLine
+[x] 抽出 TodayAndAttentionSection
+[x] 抽出 TeamsSection
+[x] 抽出 RunsAndApprovalsSection
+[x] 抽出 InsightsAndActionsSection
+[x] 页面保留数据加载与 workspace 过滤逻辑，展示逻辑下沉到组件
+[x] 展示组件增加缺字段 fallback，避免空字符串/null 导致 UI 直接异常
+[x] cd web && npm run build 通过
+```
+
+当前限制：
+
+```text
+浏览器截图检查仍暂停；用户暂时不连接浏览器。
+```
+
 ### Step 5：文档与验收
 
 交付：
