@@ -301,8 +301,16 @@ function ApprovalRow({
   const [approveReason, setApproveReason] = useState("Approved from Business Portal UI.");
   const [rejectReason, setRejectReason] = useState("Rejected from Business Portal UI.");
   const [requestedInfo, setRequestedInfo] = useState("Please provide additional evidence for this approval.");
+  const [approveConfirm, setApproveConfirm] = useState("");
+  const [rejectConfirm, setRejectConfirm] = useState("");
   const [working, setWorking] = useState<string | null>(null);
   const isPending = (approval.status || "").toUpperCase() === "PENDING";
+  const riskLevelText = (approval.riskLevel || "").toUpperCase();
+  const requiresHighRiskConfirm = riskLevelText === "HIGH" || riskLevelText === "CRITICAL";
+  const approveConfirmPhrase = `APPROVE ${riskLevelText || "HIGH"}`;
+  const rejectConfirmPhrase = `REJECT ${riskLevelText || "HIGH"}`;
+  const approveAllowed = approveReason.trim().length > 0 && (!requiresHighRiskConfirm || approveConfirm.trim().toUpperCase() === approveConfirmPhrase);
+  const rejectAllowed = rejectReason.trim().length > 0 && (!requiresHighRiskConfirm || rejectConfirm.trim().toUpperCase() === rejectConfirmPhrase);
 
   const runAction = async (action: string, fn?: () => Promise<void>) => {
     if (!fn) return;
@@ -342,13 +350,26 @@ function ApprovalRow({
       </details>
       {isPending && (onApprove || onReject || onRequestInfo) ? (
         <div className="mt-3 space-y-2 rounded-sm border border-border/60 p-3">
+          {requiresHighRiskConfirm ? (
+            <div className="rounded-sm border border-destructive/50 p-2 text-sm normal-case text-destructive">
+              High-risk approval: type {approveConfirmPhrase} or {rejectConfirmPhrase} before acting.
+            </div>
+          ) : null}
           <div className="grid gap-2 lg:grid-cols-2">
             {onApprove ? (
               <div className="space-y-2">
                 <Input value={approveReason} onChange={(event) => setApproveReason(event.target.value)} disabled={Boolean(working)} />
+                {requiresHighRiskConfirm ? (
+                  <Input
+                    value={approveConfirm}
+                    onChange={(event) => setApproveConfirm(event.target.value)}
+                    placeholder={`Type ${approveConfirmPhrase}`}
+                    disabled={Boolean(working)}
+                  />
+                ) : null}
                 <Button
                   size="sm"
-                  disabled={Boolean(working) || approveReason.trim().length === 0}
+                  disabled={Boolean(working) || !approveAllowed}
                   onClick={() => runAction("approve", () => onApprove(approval, approveReason.trim()))}
                 >
                   {working === "approve" ? "Approving..." : "Approve"}
@@ -358,10 +379,18 @@ function ApprovalRow({
             {onReject ? (
               <div className="space-y-2">
                 <Input value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} disabled={Boolean(working)} />
+                {requiresHighRiskConfirm ? (
+                  <Input
+                    value={rejectConfirm}
+                    onChange={(event) => setRejectConfirm(event.target.value)}
+                    placeholder={`Type ${rejectConfirmPhrase}`}
+                    disabled={Boolean(working)}
+                  />
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={Boolean(working) || rejectReason.trim().length === 0}
+                  disabled={Boolean(working) || !rejectAllowed}
                   onClick={() => runAction("reject", () => onReject(approval, rejectReason.trim()))}
                 >
                   {working === "reject" ? "Rejecting..." : "Reject"}

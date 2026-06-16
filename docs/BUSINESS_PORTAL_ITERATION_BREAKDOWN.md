@@ -601,6 +601,29 @@ OK
 2-64 chars: letters, numbers, dot, underscore or dash. Start with a letter or number.
 ```
 
+
+### Step 4.24：HIGH / CRITICAL Approval 确认短语
+
+目标：补齐高风险审批防误触安全阀，让 HIGH / CRITICAL 审批在 Approve / Reject 前必须输入确认短语。
+
+交付：
+
+```text
+[x] ApprovalRow 检测 riskLevel=HIGH / CRITICAL
+[x] HIGH / CRITICAL Approve 前要求输入 APPROVE HIGH / APPROVE CRITICAL
+[x] HIGH / CRITICAL Reject 前要求输入 REJECT HIGH / REJECT CRITICAL
+[x] 未输入正确确认短语时禁用 Approve / Reject 按钮
+[x] LOW / MEDIUM 审批不受确认短语影响
+[x] 保留可编辑 approve/reject reason
+[x] cd web && npm run build 通过
+```
+
+这一步对应原方案中的安全要求：
+
+```text
+高风险：要求输入确认短语或走多人审批
+```
+
 ### Step 5：文档与验收
 
 交付：

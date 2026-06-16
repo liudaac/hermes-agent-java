@@ -492,6 +492,7 @@ Current MVP behavior:
 ```text
 Approve accepts an editable reason.
 Reject accepts an editable reason.
+HIGH / CRITICAL approvals require confirmation phrases before Approve / Reject.
 Request info accepts a short user-entered message.
 All actions refresh page data after success.
 ```
@@ -667,10 +668,10 @@ Capture screenshots
 Recommended next UI improvements:
 
 ```text
-Add high-risk confirmation for HIGH/CRITICAL approvals.
 Add textarea autosize or richer field layout if needed.
 Add inline examples/templates for common scenarios.
 Improve form grouping once browser screenshots are available.
+Add multi-person approval or policy-backed confirmation for truly critical workflows.
 ```
 
 ### P1: Team blueprint editor
