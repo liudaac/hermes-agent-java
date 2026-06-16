@@ -178,7 +178,8 @@ Current behavior:
 Prompt Asset is now a first-class backend object.
 Team Blueprint promptAssetRefs are validated when creating v1 or draft versions.
 Supported ref format: prompt://{assetId}.
-Prompt Asset UI is still next-step work.
+Prompt Asset UI is available in the /business page.
+Team creation can select existing Prompt Assets and submit prompt://assetId refs.
 ```
 
 ### 3.4 Team Blueprint Versioning
@@ -476,6 +477,7 @@ The page can create:
 ```text
 Workspace
 Scenario
+Prompt Asset
 Team Blueprint
 Run Story
 Approval Card
@@ -499,6 +501,15 @@ entryTeamId
 description
 successCriteria
 approvalRules
+```
+
+Create Prompt Asset fields:
+
+```text
+assetId
+name
+purpose
+content
 ```
 
 Create Team Blueprint fields:
@@ -733,7 +744,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
-Prompt Asset UI
+Prompt Asset version evolution and edit UI
 Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion

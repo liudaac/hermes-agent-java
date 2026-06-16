@@ -770,6 +770,34 @@ Team Blueprint promptAssetRefs 校验和 Prompt Asset UI 后续再补。
 prompt://after-sales-base → assetId = after-sales-base
 ```
 
+
+### Step 4.30：Prompt Asset UI 最小接入
+
+目标：让 Prompt Asset 从后端对象进入 `/business` 工作台，并能被 Team Blueprint 表单选择引用。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 getBusinessPromptAssets
+[x] web/src/lib/api.ts 新增 createBusinessPromptAsset
+[x] 新增 BusinessPromptAssetRecord / BusinessPromptAssetsResponse / CreateBusinessPromptAssetPayload / CreateBusinessPromptAssetResponse 类型
+[x] BusinessPortalPage 加载 promptAssets
+[x] BusinessPortalPage 展示 PromptAssetsSection
+[x] 新增 CreatePromptAssetForm
+[x] BusinessCreationPanel 增加 Prompt Asset 折叠项
+[x] CreateTeamBlueprintForm 接收 promptAssets prop
+[x] Team 创建表单可多选 Prompt Assets
+[x] 选中 Prompt Assets 后提交为 promptAssetRefs: prompt://{assetId}
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+Prompt Asset 可以创建、展示并绑定到新建 Team Blueprint。
+Prompt Asset 版本演进和编辑 UI 后续再补。
+```
+
 ### Step 5：文档与验收
 
 交付：

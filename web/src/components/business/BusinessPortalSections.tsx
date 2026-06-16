@@ -11,6 +11,7 @@ import type {
   BusinessScenarioRecord,
   BusinessHomeResponse,
   BusinessInsightRecord,
+  BusinessPromptAssetRecord,
   BusinessRunRecord,
   BusinessTeamCard,
 } from "@/lib/api";
@@ -556,4 +557,17 @@ export function ScenariosSection({ scenarios }: { scenarios: BusinessScenarioRec
       </CardContent>
     </Card>
   );
+}
+
+
+export function PromptAssetsSection({ promptAssets }: { promptAssets: BusinessPromptAssetRecord[] }) {
+  return <Card><CardHeader><CardTitle>Prompt Assets</CardTitle><CardDescription>Workspace-scoped prompt assets referenced by Team Blueprints.</CardDescription></CardHeader><CardContent className="space-y-3">
+    {promptAssets.length === 0 ? <EmptyLine text="No prompt assets yet." /> : promptAssets.slice(0, 6).map((asset) => (
+      <div key={asset.assetId} className="rounded-sm border border-border/70 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-expanded text-sm tracking-[0.08em]">{asset.name || asset.assetId}</div><Badge variant={statusVariant(asset.status)}>{asset.status || "UNKNOWN"}</Badge></div>
+        <p className="mt-2 text-sm normal-case text-muted-foreground">{asset.purpose || "No purpose."}</p>
+        <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">prompt://{asset.assetId} · v{asset.version}</div>
+      </div>
+    ))}
+  </CardContent></Card>;
 }

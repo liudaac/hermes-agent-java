@@ -278,9 +278,17 @@ export const api = {
   },
   getBusinessScenarios: (workspaceId: string) =>
     fetchJSON<BusinessScenariosResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios`),
+  getBusinessPromptAssets: (workspaceId: string) =>
+    fetchJSON<BusinessPromptAssetsResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/prompt-assets`),
 
   createBusinessScenario: (workspaceId: string, payload: CreateBusinessScenarioPayload) =>
     fetchJSON<CreateBusinessScenarioResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  createBusinessPromptAsset: (workspaceId: string, payload: CreateBusinessPromptAssetPayload) =>
+    fetchJSON<CreateBusinessPromptAssetResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/prompt-assets`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -1417,5 +1425,42 @@ export interface CreateBusinessScenarioResponse {
   workspaceId: string;
   scenarioId: string;
   scenario: BusinessScenarioRecord;
+  message?: string;
+}
+
+export interface BusinessPromptAssetRecord {
+  workspaceId: string;
+  assetId: string;
+  name: string;
+  purpose?: string;
+  content?: string;
+  version: number;
+  status: string;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BusinessPromptAssetsResponse {
+  ok: boolean;
+  workspaceId: string;
+  promptAssets: BusinessPromptAssetRecord[];
+  total: number;
+}
+
+export interface CreateBusinessPromptAssetPayload {
+  assetId: string;
+  name: string;
+  purpose?: string;
+  content?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessPromptAssetResponse {
+  ok: boolean;
+  workspaceId: string;
+  assetId: string;
+  promptAsset: BusinessPromptAssetRecord;
   message?: string;
 }

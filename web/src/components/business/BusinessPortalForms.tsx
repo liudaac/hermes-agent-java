@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import type { BusinessScenarioRecord, BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessScenarioPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
+import type { BusinessScenarioRecord, BusinessPromptAssetRecord, BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessPromptAssetPayload, CreateBusinessScenarioPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,13 @@ function isValidBusinessId(value: string): boolean {
   return BUSINESS_ID_PATTERN.test(value.trim());
 }
 
-function friendlyBusinessError(error: unknown, kind: "workspace" | "team" | "scenario"): string {
+function friendlyBusinessError(error: unknown, kind: "workspace" | "team" | "scenario" | "promptAsset"): string {
   const raw = String(error);
   const lower = raw.toLowerCase();
   if (lower.includes("already exists")) {
     if (kind === "workspace") return "A workspace with this ID already exists. Pick another ID or select the existing workspace.";
     if (kind === "scenario") return "A scenario with this ID already exists in the selected workspace. Pick another scenario ID.";
+    if (kind === "promptAsset") return "A prompt asset with this ID already exists in the selected workspace. Pick another asset ID.";
     return "A team blueprint with this ID already exists in the selected workspace. Pick another team ID.";
   }
   if (lower.includes("must be 2-64") || lower.includes("id is required") || lower.includes("invalid")) {
@@ -37,6 +38,7 @@ export function BusinessCreationPanel({
   teamCount,
   workspaceForm,
   scenarioForm,
+  promptAssetForm,
   teamForm,
   runForm,
   approvalForm,
@@ -45,6 +47,7 @@ export function BusinessCreationPanel({
   teamCount: number;
   workspaceForm: ReactNode;
   scenarioForm: ReactNode;
+  promptAssetForm: ReactNode;
   teamForm: ReactNode;
   runForm: ReactNode;
   approvalForm: ReactNode;
@@ -66,13 +69,16 @@ export function BusinessCreationPanel({
       <CreationStep title="2. Scenario" description="Create a reusable business scenario." defaultOpen={false}>
         {scenarioForm}
       </CreationStep>
-      <CreationStep title="3. Team Blueprint" description="Create the first digital employee team." defaultOpen={shouldOpenTeam}>
+      <CreationStep title="3. Prompt Asset" description="Create a reusable prompt asset." defaultOpen={false}>
+        {promptAssetForm}
+      </CreationStep>
+      <CreationStep title="4. Team Blueprint" description="Create the first digital employee team." defaultOpen={shouldOpenTeam}>
         {teamForm}
       </CreationStep>
-      <CreationStep title="4. Run Story" description="Record a business-readable run story." defaultOpen={false}>
+      <CreationStep title="5. Run Story" description="Record a business-readable run story." defaultOpen={false}>
         {runForm}
       </CreationStep>
-      <CreationStep title="5. Approval Card" description="Create a mobile-first approval card." defaultOpen={false}>
+      <CreationStep title="6. Approval Card" description="Create a mobile-first approval card." defaultOpen={false}>
         {approvalForm}
       </CreationStep>
     </section>
@@ -227,15 +233,18 @@ export function CreateWorkspaceForm({
 
 export function CreateTeamBlueprintForm({
   workspaceId,
+  promptAssets,
   onCreate,
 }: {
   workspaceId?: string;
+  promptAssets: BusinessPromptAssetRecord[];
   onCreate: (workspaceId: string, payload: CreateBusinessTeamBlueprintPayload) => Promise<void>;
 }) {
   const [teamId, setTeamId] = useState("");
   const [name, setName] = useState("");
   const [scenario, setScenario] = useState("after-sales ticket handling");
   const [scenarioId, setScenarioId] = useState("");
+  const [selectedPromptAssetIds, setSelectedPromptAssetIds] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [operatingManual, setOperatingManual] = useState("Classify the task, check policy, decide whether approval is needed, then explain the result.");
   const [saving, setSaving] = useState(false);
@@ -262,7 +271,7 @@ export function CreateTeamBlueprintForm({
         scenario: scenario.trim() || undefined,
         scenarioId: scenarioId.trim() || undefined,
         operatingManual: operatingManual.trim() || undefined,
-        promptAssetRefs: [],
+        promptAssetRefs: selectedPromptAssetIds.map((assetId) => `prompt://${assetId}`),
         agents: [
           {
             agentId: "business-analyst",
@@ -280,6 +289,7 @@ export function CreateTeamBlueprintForm({
       setName("");
       setScenario("after-sales ticket handling");
       setScenarioId("");
+      setSelectedPromptAssetIds([]);
       setDescription("");
       setOperatingManual("Classify the task, check policy, decide whether approval is needed, then explain the result.");
     } catch (err) {
@@ -731,4 +741,33 @@ export function CreateScenarioForm({
       </CardContent>
     </Card>
   );
+}
+
+
+export function CreatePromptAssetForm({ workspaceId, onCreate }: { workspaceId?: string; onCreate: (workspaceId: string, payload: CreateBusinessPromptAssetPayload) => Promise<BusinessPromptAssetRecord>; }) {
+  const [assetId, setAssetId] = useState("after-sales-base");
+  const [name, setName] = useState("After-sales Base Prompt");
+  const [purpose, setPurpose] = useState("Guide after-sales ticket handling with explainable policy checks.");
+  const [content, setContent] = useState("You are an after-sales policy specialist. First identify the customer request, then check policy constraints, then explain the recommended action.");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const normalizedAssetId = assetId.trim();
+  const canSubmit = Boolean(workspaceId) && isValidBusinessId(normalizedAssetId) && name.trim().length > 0 && !saving;
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId) return;
+    if (!canSubmit) { setError(BUSINESS_ID_HELP); return; }
+    setSaving(true); setError(null);
+    try { await onCreate(workspaceId, { assetId: normalizedAssetId, name: name.trim(), purpose: purpose.trim() || undefined, content: content.trim() || undefined, tags: ["business-portal"], metadata: { source: "business-portal-ui" } }); }
+    catch (err) { setError(friendlyBusinessError(err, "promptAsset")); }
+    finally { setSaving(false); }
+  };
+  return <Card><CardHeader><CardTitle>Create Prompt Asset</CardTitle><CardDescription>Create a reusable prompt asset that Team Blueprints can reference.</CardDescription></CardHeader><CardContent><form className="grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
+    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Asset ID</label><Input value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={!workspaceId} /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
+    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
+    <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
+    <TextAreaField label="Purpose" value={purpose} onChange={setPurpose} disabled={!workspaceId} className="md:col-span-3" />
+    <TextAreaField label="Content" value={content} onChange={setContent} disabled={!workspaceId} className="md:col-span-3" rows={5} />
+    {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
+  </form></CardContent></Card>;
 }

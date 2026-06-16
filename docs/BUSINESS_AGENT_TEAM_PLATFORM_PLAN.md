@@ -2781,6 +2781,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] /business 页面完成 Scenario UI 最小接入：创建、展示、选择和过滤
 [x] Prompt Asset 后端最小版落地，新增 prompt-assets API 和文件持久化
 [x] Team Blueprint promptAssetRefs 已校验真实 PromptAsset，支持 prompt://{assetId}
+[x] /business 页面完成 Prompt Asset UI 最小接入：创建、展示、选择并绑定到 Team Blueprint
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 

@@ -31,13 +31,14 @@ import { cn } from "@/lib/utils";
 import {
   DemoDataGuide,
   InsightsAndActionsSection,
+  PromptAssetsSection,
   ScenariosSection,
   MetricCard,
   RunsAndApprovalsSection,
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { BusinessCreationPanel, CreateApprovalCardForm, CreateRunStoryForm, CreateScenarioForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { BusinessCreationPanel, CreateApprovalCardForm, CreatePromptAssetForm, CreateRunStoryForm, CreateScenarioForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
@@ -45,6 +46,7 @@ export default function BusinessPortalPage() {
   const [home, setHome] = useState<BusinessHomeResponse | null>(null);
   const [teams, setTeams] = useState<BusinessTeamCard[]>([]);
   const [scenarios, setScenarios] = useState<BusinessScenarioRecord[]>([]);
+  const [promptAssets, setPromptAssets] = useState<BusinessPromptAssetRecord[]>([]);
   const [scenarioId, setScenarioId] = useState("");
   const [runs, setRuns] = useState<BusinessRunRecord[]>([]);
   const [approvals, setApprovals] = useState<BusinessApprovalRecord[]>([]);
@@ -66,6 +68,13 @@ export default function BusinessPortalPage() {
     showToast(`Scenario created: ${response.scenarioId}`, "success");
     await load();
     return response.scenario;
+  };
+
+  const createPromptAsset = async (targetWorkspaceId: string, payload: CreateBusinessPromptAssetPayload) => {
+    const response = await api.createBusinessPromptAsset(targetWorkspaceId, payload);
+    showToast(`Prompt asset created: ${response.assetId}`, "success");
+    await load();
+    return response.promptAsset;
   };
 
   const createTeamBlueprint = async (targetWorkspaceId: string, payload: CreateBusinessTeamBlueprintPayload) => {
@@ -126,10 +135,15 @@ export default function BusinessPortalPage() {
       setHome(homeRes);
       setTeams(teamsRes.teams ?? []);
       if (selectedWorkspace) {
-        const scenariosRes = await api.getBusinessScenarios(selectedWorkspace);
+        const [scenariosRes, promptAssetsRes] = await Promise.all([
+          api.getBusinessScenarios(selectedWorkspace),
+          api.getBusinessPromptAssets(selectedWorkspace),
+        ]);
         setScenarios(scenariosRes.scenarios ?? []);
+        setPromptAssets(promptAssetsRes.promptAssets ?? []);
       } else {
         setScenarios([]);
+        setPromptAssets([]);
         setScenarioId("");
       }
       setRuns(runsRes.runs ?? []);
@@ -203,7 +217,8 @@ export default function BusinessPortalPage() {
         teamCount={summary?.teamCount ?? 0}
         workspaceForm={<CreateWorkspaceForm onCreate={createWorkspace} />}
         scenarioForm={<CreateScenarioForm workspaceId={workspaceId} teams={teams} onCreate={createScenario} />}
-        teamForm={<CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />}
+        promptAssetForm={<CreatePromptAssetForm workspaceId={workspaceId} onCreate={createPromptAsset} />}
+        teamForm={<CreateTeamBlueprintForm workspaceId={workspaceId} promptAssets={promptAssets} onCreate={createTeamBlueprint} />}
         runForm={<CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />}
         approvalForm={<CreateApprovalCardForm workspaceId={workspaceId} teams={teams} onCreate={createApprovalCard} />}
       />
@@ -231,7 +246,10 @@ export default function BusinessPortalPage() {
       </section>
 
       <TodayAndAttentionSection home={home} />
-      <ScenariosSection scenarios={scenarios} />
+      <section className="grid gap-4 xl:grid-cols-2">
+        <ScenariosSection scenarios={scenarios} />
+        <PromptAssetsSection promptAssets={promptAssets} />
+      </section>
       <TeamsSection teams={teams} home={home} />
       <RunsAndApprovalsSection
         runs={runs}
