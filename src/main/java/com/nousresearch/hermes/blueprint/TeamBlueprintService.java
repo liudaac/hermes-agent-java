@@ -28,7 +28,7 @@ public class TeamBlueprintService {
     }
 
     public TeamBlueprintRecord createTeamBlueprint(String workspaceId, String teamId, String name, String description,
-                                                   String scenario, List<AgentBlueprintRecord> agents,
+                                                   String scenario, String scenarioId, List<AgentBlueprintRecord> agents,
                                                    List<String> promptAssetRefs, String operatingManual,
                                                    Map<String, Object> metadata) {
         workspaceService.requireWorkspace(workspaceId);
@@ -54,6 +54,7 @@ public class TeamBlueprintService {
             .setName(name != null && !name.isBlank() ? name : teamId)
             .setDescription(description)
             .setScenario(scenario)
+            .setScenarioId(scenarioId)
             .setActiveVersion(1)
             .setVersions(List.of(v1))
             .setMetadata(metadata)

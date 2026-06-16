@@ -30,6 +30,7 @@ class TeamBlueprintServiceTest {
             "售后工单团队",
             "处理售后工单",
             "售后工单处理",
+            "after-sales-ticket",
             List.of(agent("classifier", "工单分类员")),
             List.of("prompt://after-sales/base"),
             "先分类，再判断政策，最后生成回复。",
@@ -69,7 +70,7 @@ class TeamBlueprintServiceTest {
         TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
 
         assertThrows(WorkspaceService.WorkspaceNotFoundException.class,
-            () -> service.createTeamBlueprint("missing", "team-a", "Team A", null, null, List.of(), List.of(), null, Map.of()));
+            () -> service.createTeamBlueprint("missing", "team-a", "Team A", null, null, null, List.of(), List.of(), null, Map.of()));
     }
 
     private AgentBlueprintRecord agent(String id, String name) {

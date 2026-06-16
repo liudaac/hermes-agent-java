@@ -32,6 +32,10 @@ public class BusinessInsightService {
     }
 
     public BusinessInsightSummary summarize(String workspaceId) {
+        return summarize(workspaceId, null);
+    }
+
+    public BusinessInsightSummary summarize(String workspaceId, String scenarioId) {
         Instant now = Instant.now();
         List<WorkspaceRecord> workspaces = workspaceId == null || workspaceId.isBlank()
             ? workspaceService.listWorkspaces()
@@ -42,7 +46,7 @@ public class BusinessInsightService {
         List<BusinessApprovalRecord> pendingApprovals = new ArrayList<>();
         for (WorkspaceRecord workspace : workspaces) {
             teamCount += teamBlueprintService.listTeamBlueprints(workspace.getWorkspaceId()).size();
-            runs.addAll(runService.listRuns(workspace.getWorkspaceId(), null, null, 0));
+            runs.addAll(runService.listRuns(workspace.getWorkspaceId(), null, scenarioId, null, 0));
             pendingApprovals.addAll(approvalService.listApprovals(workspace.getWorkspaceId(), BusinessApprovalService.PENDING));
         }
 

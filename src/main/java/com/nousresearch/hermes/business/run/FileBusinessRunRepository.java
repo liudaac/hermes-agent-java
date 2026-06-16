@@ -48,7 +48,7 @@ public class FileBusinessRunRepository {
         }
     }
 
-    public List<BusinessRunRecord> list(String workspaceId, String teamId, String status, int limit) {
+    public List<BusinessRunRecord> list(String workspaceId, String teamId, String scenarioId, String status, int limit) {
         Path dir = runsDir(workspaceId);
         if (!Files.exists(dir)) {
             return List.of();
@@ -59,7 +59,7 @@ public class FileBusinessRunRepository {
                 .forEach(file -> {
                     try {
                         BusinessRunRecord record = mapper.readValue(file.toFile(), BusinessRunRecord.class);
-                        if (matches(record, teamId, status)) {
+                        if (matches(record, teamId, scenarioId, status)) {
                             records.add(record);
                         }
                     } catch (IOException e) {
@@ -74,20 +74,21 @@ public class FileBusinessRunRepository {
         }
     }
 
-    public List<BusinessRunRecord> listAll(List<String> workspaceIds, String teamId, String status, int limit) {
+    public List<BusinessRunRecord> listAll(List<String> workspaceIds, String teamId, String scenarioId, String status, int limit) {
         List<BusinessRunRecord> all = new ArrayList<>();
         for (String workspaceId : workspaceIds) {
-            all.addAll(list(workspaceId, teamId, status, 0));
+            all.addAll(list(workspaceId, teamId, scenarioId, status, 0));
         }
         all.sort(Comparator.comparing(BusinessRunRecord::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
         int safeLimit = limit <= 0 ? all.size() : Math.min(limit, all.size());
         return all.subList(0, safeLimit);
     }
 
-    private boolean matches(BusinessRunRecord record, String teamId, String status) {
+    private boolean matches(BusinessRunRecord record, String teamId, String scenarioId, String status) {
         boolean teamOk = teamId == null || teamId.isBlank() || teamId.equals(record.getTeamId());
+        boolean scenarioOk = scenarioId == null || scenarioId.isBlank() || scenarioId.equals(record.getScenarioId());
         boolean statusOk = status == null || status.isBlank() || status.equalsIgnoreCase(record.getStatus());
-        return teamOk && statusOk;
+        return teamOk && scenarioOk && statusOk;
     }
 
     private Path runsDir(String workspaceId) {

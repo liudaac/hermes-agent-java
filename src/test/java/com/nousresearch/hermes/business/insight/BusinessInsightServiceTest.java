@@ -51,13 +51,14 @@ class BusinessInsightServiceTest {
             "售后工单团队",
             "处理售后工单",
             "售后",
+            "after-sales-ticket",
             List.of(new AgentBlueprintRecord().setAgentId("policy").setDisplayName("政策专家")),
             List.of(),
             "处理售后问题",
             Map.of()
         );
-        fixture.runService.createRun("customer-service", "after-sales", "售后", "成功任务", null, "完成", null, null, null, null, "COMPLETED", null, List.of(), Map.of(), Map.of());
-        fixture.runService.createRun("customer-service", "after-sales", "售后", "失败任务", null, "失败", "工具失败", null, null, null, "FAILED", null, List.of(), Map.of(), Map.of());
+        fixture.runService.createRun("customer-service", "after-sales", "售后", "after-sales-ticket", "成功任务", null, "完成", null, null, null, null, "COMPLETED", null, List.of(), Map.of(), Map.of());
+        fixture.runService.createRun("customer-service", "after-sales", "售后", "after-sales-ticket", "失败任务", null, "失败", "工具失败", null, null, null, "FAILED", null, List.of(), Map.of(), Map.of());
         fixture.approvalService.createApproval("customer-service", "after-sales", "高风险退款", "需要审批", null, null, null, null, "HIGH", Map.of(), Map.of());
 
         BusinessInsightSummary summary = fixture.insightService.summarize("customer-service");

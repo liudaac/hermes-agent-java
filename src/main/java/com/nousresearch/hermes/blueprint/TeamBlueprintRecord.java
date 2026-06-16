@@ -13,6 +13,7 @@ public class TeamBlueprintRecord {
     private String name;
     private String description;
     private String scenario;
+    private String scenarioId;
     private int activeVersion;
     private List<TeamBlueprintVersion> versions = new ArrayList<>();
     private Map<String, Object> metadata = new LinkedHashMap<>();
@@ -32,6 +33,8 @@ public class TeamBlueprintRecord {
     public TeamBlueprintRecord setDescription(String description) { this.description = description; return this; }
     public String getScenario() { return scenario; }
     public TeamBlueprintRecord setScenario(String scenario) { this.scenario = scenario; return this; }
+    public String getScenarioId() { return scenarioId; }
+    public TeamBlueprintRecord setScenarioId(String scenarioId) { this.scenarioId = scenarioId; return this; }
     public int getActiveVersion() { return activeVersion; }
     public TeamBlueprintRecord setActiveVersion(int activeVersion) { this.activeVersion = activeVersion; return this; }
     public List<TeamBlueprintVersion> getVersions() { return versions; }

@@ -652,6 +652,36 @@ OK
 Scenario 先作为正式业务对象落地；Team Blueprint / Run / Insights 与 Scenario 的强绑定下一步再补。
 ```
 
+
+### Step 4.26：Scenario 绑定 Team / Run / Insights 第一版
+
+目标：让 Scenario 从独立对象开始进入业务闭环，成为 Team Blueprint、Run Story 和 Insight 聚合的业务骨架。
+
+交付：
+
+```text
+[x] TeamBlueprintRecord 新增 scenarioId
+[x] TeamBlueprintService / TeamBlueprintDashboardIntegration 创建 team 时接收 scenarioId
+[x] BusinessRunRecord 新增 scenarioId
+[x] BusinessRunService / BusinessRunDashboardIntegration 创建 run 时接收 scenarioId
+[x] BusinessRunService 支持按 scenarioId 过滤 run
+[x] FileBusinessRunRepository 支持 scenarioId 过滤
+[x] BusinessInsightService 支持 summarize(workspaceId, scenarioId)
+[x] BusinessInsightDashboardIntegration 支持 queryParam scenarioId
+[x] 前端 BusinessTeamCard / CreateBusinessTeamBlueprintPayload / BusinessRunRecord / CreateBusinessRunPayload 补 scenarioId 类型
+[x] CreateTeamBlueprintForm 可输入 Scenario ID
+[x] CreateRunStoryForm 自动从 selected team 透传 scenarioId
+[x] targeted backend tests 通过
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+Scenario 已能绑定 Team 和 Run，并用于 Insights 运行记录过滤。
+下一步可以继续做 Scenario UI 列表/创建，或把现有 Team/Run UI 增加 Scenario 过滤器。
+```
+
 ### Step 5：文档与验收
 
 交付：

@@ -230,6 +230,7 @@ export function CreateTeamBlueprintForm({
   const [teamId, setTeamId] = useState("");
   const [name, setName] = useState("");
   const [scenario, setScenario] = useState("after-sales ticket handling");
+  const [scenarioId, setScenarioId] = useState("");
   const [description, setDescription] = useState("");
   const [operatingManual, setOperatingManual] = useState("Classify the task, check policy, decide whether approval is needed, then explain the result.");
   const [saving, setSaving] = useState(false);
@@ -254,6 +255,7 @@ export function CreateTeamBlueprintForm({
         name: name.trim() || normalizedTeamId,
         description: description.trim() || undefined,
         scenario: scenario.trim() || undefined,
+        scenarioId: scenarioId.trim() || undefined,
         operatingManual: operatingManual.trim() || undefined,
         promptAssetRefs: ["prompt://business-portal/default-team"],
         agents: [
@@ -272,6 +274,7 @@ export function CreateTeamBlueprintForm({
       setTeamId("");
       setName("");
       setScenario("after-sales ticket handling");
+      setScenarioId("");
       setDescription("");
       setOperatingManual("Classify the task, check policy, decide whether approval is needed, then explain the result.");
     } catch (err) {
@@ -308,6 +311,11 @@ export function CreateTeamBlueprintForm({
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario</label>
             <Input value={scenario} onChange={(event) => setScenario(event.target.value)} placeholder="after-sales ticket handling" disabled={!workspaceId} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario ID</label>
+            <Input value={scenarioId} onChange={(event) => setScenarioId(event.target.value)} placeholder="after-sales-ticket" disabled={!workspaceId} />
+            <div className="text-[0.65rem] normal-case text-muted-foreground">Optional: bind this team to a Scenario object.</div>
           </div>
           <div className="flex items-end">
             <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto">
@@ -367,6 +375,7 @@ export function CreateRunStoryForm({
       await onCreate(workspaceId, {
         teamId: selectedTeamId,
         scenario: teams.find((team) => team.teamId === selectedTeamId)?.scenario || "business task",
+        scenarioId: teams.find((team) => team.teamId === selectedTeamId)?.scenarioId,
         taskTitle: taskTitle.trim(),
         taskInput: taskInput.trim() || undefined,
         resultSummary: resultSummary.trim(),

@@ -23,7 +23,7 @@ public final class BusinessInsightDashboardIntegration {
 
     static void insights(Context ctx, BusinessInsightService service) {
         try {
-            BusinessInsightSummary summary = service.summarize(ctx.queryParam("workspaceId"));
+            BusinessInsightSummary summary = service.summarize(ctx.queryParam("workspaceId"), ctx.queryParam("scenarioId"));
             ctx.status(200).json(Map.of(
                 "ok", true,
                 "entry", "insights",
@@ -42,7 +42,7 @@ public final class BusinessInsightDashboardIntegration {
     static void workspaceInsights(Context ctx, BusinessInsightService service) {
         String workspaceId = ctx.pathParam("workspaceId");
         try {
-            BusinessInsightSummary summary = service.summarize(workspaceId);
+            BusinessInsightSummary summary = service.summarize(workspaceId, ctx.queryParam("scenarioId"));
             ctx.status(200).json(Map.of(
                 "ok", true,
                 "workspaceId", workspaceId,

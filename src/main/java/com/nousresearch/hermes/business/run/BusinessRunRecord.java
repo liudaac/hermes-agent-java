@@ -12,6 +12,7 @@ public class BusinessRunRecord {
     private String workspaceId;
     private String teamId;
     private String scenario;
+    private String scenarioId;
     private String taskTitle;
     private String taskInput;
     private String resultSummary;
@@ -38,6 +39,8 @@ public class BusinessRunRecord {
     public BusinessRunRecord setTeamId(String teamId) { this.teamId = teamId; return this; }
     public String getScenario() { return scenario; }
     public BusinessRunRecord setScenario(String scenario) { this.scenario = scenario; return this; }
+    public String getScenarioId() { return scenarioId; }
+    public BusinessRunRecord setScenarioId(String scenarioId) { this.scenarioId = scenarioId; return this; }
     public String getTaskTitle() { return taskTitle; }
     public BusinessRunRecord setTaskTitle(String taskTitle) { this.taskTitle = taskTitle; return this; }
     public String getTaskInput() { return taskInput; }

@@ -1160,6 +1160,7 @@ export interface BusinessTeamCard {
   teamId: string;
   name: string;
   scenario?: string;
+  scenarioId?: string;
   activeVersion: number;
   versionCount: number;
   status: string;
@@ -1190,6 +1191,7 @@ export interface BusinessRunRecord {
   workspaceId: string;
   teamId?: string;
   scenario?: string;
+  scenarioId?: string;
   taskTitle: string;
   taskInput?: string;
   resultSummary: string;
@@ -1287,6 +1289,7 @@ export interface CreateBusinessTeamBlueprintPayload {
   name: string;
   description?: string;
   scenario?: string;
+  scenarioId?: string;
   operatingManual?: string;
   promptAssetRefs?: string[];
   agents?: AgentBlueprintPayload[];
@@ -1304,6 +1307,7 @@ export interface CreateBusinessTeamBlueprintResponse {
 export interface CreateBusinessRunPayload {
   teamId?: string;
   scenario?: string;
+  scenarioId?: string;
   taskTitle: string;
   taskInput?: string;
   resultSummary: string;

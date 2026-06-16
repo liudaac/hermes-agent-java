@@ -134,7 +134,10 @@ Current behavior:
 
 ```text
 Scenario is now a first-class backend object.
-Strong binding from Team Blueprint / Run / Insights to Scenario is still next-step work.
+Team Blueprint can store scenarioId.
+Business Run can store scenarioId and can be filtered by scenarioId.
+Business Insights can summarize runs for a scenarioId.
+Scenario list/create UI is still next-step work.
 ```
 
 ### 3.3 Team Blueprint Versioning
@@ -675,7 +678,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
-Scenario binding across Team Blueprint / Run / Insights
+Scenario list/create UI and scenario filters in the Business Portal page
 Real Agent execution
 Raw AgentTrace conversion
 Evolution proposal state machine

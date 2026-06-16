@@ -33,7 +33,7 @@ public class BusinessRunService {
         this.workspaceService = workspaceService;
     }
 
-    public BusinessRunRecord createRun(String workspaceId, String teamId, String scenario, String taskTitle,
+    public BusinessRunRecord createRun(String workspaceId, String teamId, String scenario, String scenarioId, String taskTitle,
                                        String taskInput, String resultSummary, String conclusionReason,
                                        String systemAction, String riskJudgement, String nextSuggestion,
                                        String status, String technicalTraceRef, List<BusinessRunStep> steps,
@@ -45,6 +45,7 @@ public class BusinessRunService {
             .setWorkspaceId(workspaceId)
             .setTeamId(teamId)
             .setScenario(scenario)
+            .setScenarioId(scenarioId)
             .setTaskTitle(defaultText(taskTitle, "业务任务"))
             .setTaskInput(taskInput)
             .setResultSummary(defaultText(resultSummary, "任务已记录，等待进一步处理。"))
@@ -64,12 +65,16 @@ public class BusinessRunService {
     }
 
     public List<BusinessRunRecord> listRuns(String workspaceId, String teamId, String status, int limit) {
+        return listRuns(workspaceId, teamId, null, status, limit);
+    }
+
+    public List<BusinessRunRecord> listRuns(String workspaceId, String teamId, String scenarioId, String status, int limit) {
         if (workspaceId != null && !workspaceId.isBlank()) {
             workspaceService.requireWorkspace(workspaceId);
-            return repository.list(workspaceId, teamId, normalizeStatusFilter(status), limit);
+            return repository.list(workspaceId, teamId, scenarioId, normalizeStatusFilter(status), limit);
         }
         List<String> workspaceIds = workspaceService.listWorkspaces().stream().map(WorkspaceRecord::getWorkspaceId).toList();
-        return repository.listAll(workspaceIds, teamId, normalizeStatusFilter(status), limit);
+        return repository.listAll(workspaceIds, teamId, scenarioId, normalizeStatusFilter(status), limit);
     }
 
     public BusinessRunRecord requireRun(String workspaceId, String runId) {

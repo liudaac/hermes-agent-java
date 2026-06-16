@@ -25,6 +25,7 @@ class BusinessRunServiceTest {
             "customer-service",
             "after-sales",
             "售后工单处理",
+            "after-sales-ticket",
             "用户申请退款",
             "用户表示签收 3 天后想退货",
             "建议同意用户发起退货申请",
@@ -61,7 +62,7 @@ class BusinessRunServiceTest {
         BusinessRunService service = new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService);
 
         assertThrows(WorkspaceService.WorkspaceNotFoundException.class,
-            () -> service.createRun("missing", "team", null, "任务", null, null, null, null, null, null, null, null, List.of(), Map.of(), Map.of()));
+            () -> service.createRun("missing", "team", null, null, "任务", null, null, null, null, null, null, null, null, List.of(), Map.of(), Map.of()));
     }
 
     private BusinessRunService serviceWithWorkspace() {

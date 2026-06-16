@@ -32,7 +32,7 @@ public final class BusinessRunDashboardIntegration {
     static void listRuns(Context ctx, BusinessRunService service) {
         String workspaceId = ctx.pathParam("workspaceId");
         try {
-            var runs = service.listRuns(workspaceId, ctx.queryParam("teamId"), ctx.queryParam("status"), parseInt(ctx.queryParam("limit"), 50));
+            var runs = service.listRuns(workspaceId, ctx.queryParam("teamId"), ctx.queryParam("scenarioId"), ctx.queryParam("status"), parseInt(ctx.queryParam("limit"), 50));
             ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "runs", runs, "total", runs.size()));
         } catch (WorkspaceService.WorkspaceNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId));
@@ -47,6 +47,7 @@ public final class BusinessRunDashboardIntegration {
                 workspaceId,
                 body.getString("teamId"),
                 body.getString("scenario"),
+                body.getString("scenarioId"),
                 body.getString("taskTitle"),
                 body.getString("taskInput"),
                 body.getString("resultSummary"),

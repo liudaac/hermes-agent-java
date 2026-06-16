@@ -55,6 +55,7 @@ public final class TeamBlueprintDashboardIntegration {
                 body.getString("name"),
                 body.getString("description"),
                 body.getString("scenario"),
+                body.getString("scenarioId"),
                 parseAgents(body.getJSONArray("agents")),
                 parseStringList(body.getJSONArray("promptAssetRefs")),
                 body.getString("operatingManual"),
