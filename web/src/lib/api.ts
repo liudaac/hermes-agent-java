@@ -306,6 +306,34 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  approveBusinessApproval: (workspaceId: string, approvalId: string, payload: ResolveBusinessApprovalPayload) =>
+    fetchJSON<ResolveBusinessApprovalResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals/${encodeURIComponent(approvalId)}/approve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  rejectBusinessApproval: (workspaceId: string, approvalId: string, payload: ResolveBusinessApprovalPayload) =>
+    fetchJSON<ResolveBusinessApprovalResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals/${encodeURIComponent(approvalId)}/reject`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  requestBusinessApprovalInfo: (workspaceId: string, approvalId: string, payload: RequestBusinessApprovalInfoPayload) =>
+    fetchJSON<ResolveBusinessApprovalResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals/${encodeURIComponent(approvalId)}/request-info`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1315,6 +1343,25 @@ export interface CreateBusinessApprovalResponse {
   ok: boolean;
   workspaceId: string;
   approvalId: string;
+  approval: BusinessApprovalRecord;
+  message?: string;
+}
+
+export interface ResolveBusinessApprovalPayload {
+  actor?: string;
+  reason?: string;
+}
+
+export interface RequestBusinessApprovalInfoPayload {
+  actor?: string;
+  requestedInfo?: string;
+}
+
+export interface ResolveBusinessApprovalResponse {
+  ok: boolean;
+  workspaceId: string;
+  approvalId: string;
+  status: string;
   approval: BusinessApprovalRecord;
   message?: string;
 }

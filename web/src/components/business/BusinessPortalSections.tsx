@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -13,6 +14,8 @@ import type {
   BusinessTeamCard,
 } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -205,9 +208,15 @@ function TeamRow({ team }: { team: BusinessTeamCard }) {
 export function RunsAndApprovalsSection({
   runs,
   approvals,
+  onApproveApproval,
+  onRejectApproval,
+  onRequestApprovalInfo,
 }: {
   runs: BusinessRunRecord[];
   approvals: BusinessApprovalRecord[];
+  onApproveApproval?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onRejectApproval?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onRequestApprovalInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-2">
@@ -234,7 +243,15 @@ export function RunsAndApprovalsSection({
           {approvals.length === 0 ? (
             <EmptyLine text="No approvals yet." />
           ) : (
-            approvals.slice(0, 5).map((approval) => <ApprovalRow key={approval.approvalId} approval={approval} />)
+            approvals.slice(0, 5).map((approval) => (
+              <ApprovalRow
+                key={approval.approvalId}
+                approval={approval}
+                onApprove={onApproveApproval}
+                onReject={onRejectApproval}
+                onRequestInfo={onRequestApprovalInfo}
+              />
+            ))
           )}
         </CardContent>
       </Card>
@@ -270,7 +287,31 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
   );
 }
 
-function ApprovalRow({ approval }: { approval: BusinessApprovalRecord }) {
+function ApprovalRow({
+  approval,
+  onApprove,
+  onReject,
+  onRequestInfo,
+}: {
+  approval: BusinessApprovalRecord;
+  onApprove?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onReject?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onRequestInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
+}) {
+  const [requestedInfo, setRequestedInfo] = useState("Please provide additional evidence for this approval.");
+  const [working, setWorking] = useState<string | null>(null);
+  const isPending = (approval.status || "").toUpperCase() === "PENDING";
+
+  const runAction = async (action: string, fn?: () => Promise<void>) => {
+    if (!fn) return;
+    setWorking(action);
+    try {
+      await fn();
+    } finally {
+      setWorking(null);
+    }
+  };
+
   return (
     <div className="rounded-sm border border-border/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -297,6 +338,35 @@ function ApprovalRow({ approval }: { approval: BusinessApprovalRecord }) {
           {approval.evidence ? <JsonPreview label="Evidence" value={approval.evidence} /> : null}
         </div>
       </details>
+      {isPending && (onApprove || onReject || onRequestInfo) ? (
+        <div className="mt-3 space-y-2 rounded-sm border border-border/60 p-3">
+          <div className="flex flex-wrap gap-2">
+            {onApprove ? (
+              <Button size="sm" disabled={Boolean(working)} onClick={() => runAction("approve", () => onApprove(approval))}>
+                {working === "approve" ? "Approving..." : "Approve"}
+              </Button>
+            ) : null}
+            {onReject ? (
+              <Button size="sm" variant="outline" disabled={Boolean(working)} onClick={() => runAction("reject", () => onReject(approval))}>
+                {working === "reject" ? "Rejecting..." : "Reject"}
+              </Button>
+            ) : null}
+          </div>
+          {onRequestInfo ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input value={requestedInfo} onChange={(event) => setRequestedInfo(event.target.value)} disabled={Boolean(working)} />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={Boolean(working) || requestedInfo.trim().length === 0}
+                onClick={() => runAction("request-info", () => onRequestInfo(approval, requestedInfo.trim()))}
+              >
+                {working === "request-info" ? "Requesting..." : "Request info"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

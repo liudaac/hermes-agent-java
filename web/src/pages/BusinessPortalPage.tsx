@@ -18,6 +18,7 @@ import type {
   CreateBusinessWorkspacePayload,
   BusinessInsightRecord,
   BusinessRunRecord,
+  BusinessApprovalRecord as BusinessApprovalRecordType,
   BusinessTeamCard,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,33 @@ export default function BusinessPortalPage() {
   const createApprovalCard = async (targetWorkspaceId: string, payload: CreateBusinessApprovalPayload) => {
     const response = await api.createBusinessApproval(targetWorkspaceId, payload);
     showToast(`Approval card created: ${response.approvalId}`, "success");
+    await load();
+  };
+
+  const approveApproval = async (approval: BusinessApprovalRecordType) => {
+    await api.approveBusinessApproval(approval.workspaceId, approval.approvalId, {
+      actor: "business-portal-ui",
+      reason: "Approved from Business Portal UI.",
+    });
+    showToast(`Approval approved: ${approval.approvalId}`, "success");
+    await load();
+  };
+
+  const rejectApproval = async (approval: BusinessApprovalRecordType) => {
+    await api.rejectBusinessApproval(approval.workspaceId, approval.approvalId, {
+      actor: "business-portal-ui",
+      reason: "Rejected from Business Portal UI.",
+    });
+    showToast(`Approval rejected: ${approval.approvalId}`, "success");
+    await load();
+  };
+
+  const requestApprovalInfo = async (approval: BusinessApprovalRecordType, requestedInfo: string) => {
+    await api.requestBusinessApprovalInfo(approval.workspaceId, approval.approvalId, {
+      actor: "business-portal-ui",
+      requestedInfo,
+    });
+    showToast(`Requested more info: ${approval.approvalId}`, "success");
     await load();
   };
 
@@ -163,7 +191,13 @@ export default function BusinessPortalPage() {
 
       <TodayAndAttentionSection home={home} />
       <TeamsSection teams={teams} home={home} />
-      <RunsAndApprovalsSection runs={runs} approvals={approvals} />
+      <RunsAndApprovalsSection
+        runs={runs}
+        approvals={approvals}
+        onApproveApproval={approveApproval}
+        onRejectApproval={rejectApproval}
+        onRequestApprovalInfo={requestApprovalInfo}
+      />
       <InsightsAndActionsSection insights={insights} actions={home?.nextActions ?? []} />
     </div>
   );

@@ -465,6 +465,33 @@ OK
 只创建审批卡；approve / reject / request-info 页面动作下一步再补。
 ```
 
+
+### Step 4.18：Approval 操作按钮 MVP
+
+目标：让业务用户可以在 `/business` 页面完成 `创建审批卡 → 处理审批卡 → 首页/洞察联动刷新`。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 approveBusinessApproval
+[x] web/src/lib/api.ts 新增 rejectBusinessApproval
+[x] web/src/lib/api.ts 新增 requestBusinessApprovalInfo
+[x] 新增 ResolveBusinessApprovalPayload / RequestBusinessApprovalInfoPayload / ResolveBusinessApprovalResponse 类型
+[x] ApprovalRow 对 PENDING 审批显示 Approve / Reject / Request info 操作
+[x] Request info 支持简短输入框
+[x] 操作中按钮禁用并显示 working 状态
+[x] 操作成功后刷新页面数据
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+Approve/Reject 使用固定 reason：from Business Portal UI。
+Request info 支持用户输入 requestedInfo。
+更复杂的审批理由、二次确认和高风险确认短语后续再补。
+```
+
 ### Step 5：文档与验收
 
 交付：
