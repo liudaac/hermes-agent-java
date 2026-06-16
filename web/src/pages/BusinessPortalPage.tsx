@@ -73,19 +73,19 @@ export default function BusinessPortalPage() {
     await load();
   };
 
-  const approveApproval = async (approval: BusinessApprovalRecordType) => {
+  const approveApproval = async (approval: BusinessApprovalRecordType, reason: string) => {
     await api.approveBusinessApproval(approval.workspaceId, approval.approvalId, {
       actor: "business-portal-ui",
-      reason: "Approved from Business Portal UI.",
+      reason,
     });
     showToast(`Approval approved: ${approval.approvalId}`, "success");
     await load();
   };
 
-  const rejectApproval = async (approval: BusinessApprovalRecordType) => {
+  const rejectApproval = async (approval: BusinessApprovalRecordType, reason: string) => {
     await api.rejectBusinessApproval(approval.workspaceId, approval.approvalId, {
       actor: "business-portal-ui",
-      reason: "Rejected from Business Portal UI.",
+      reason,
     });
     showToast(`Approval rejected: ${approval.approvalId}`, "success");
     await load();

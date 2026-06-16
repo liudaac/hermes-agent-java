@@ -49,6 +49,39 @@ export function BusinessCreationPanel({
   );
 }
 
+
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  rows = 3,
+  className = "md:col-span-4",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-1 ${className}`}>
+      <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">{label}</label>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        rows={rows}
+        className="min-h-20 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm normal-case tracking-normal outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      />
+    </div>
+  );
+}
+
 function CreationStep({
   title,
   description,
@@ -128,6 +161,7 @@ export function CreateWorkspaceForm({
               placeholder="customer-service-demo"
               required
             />
+            <div className="text-[0.65rem] normal-case text-muted-foreground">2-64 chars: letters, numbers, dot, underscore or dash.</div>
           </div>
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label>
@@ -142,14 +176,13 @@ export function CreateWorkspaceForm({
               <Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}
             </Button>
           </div>
-          <div className="space-y-1 md:col-span-4">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Description</label>
-            <Input
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Business workspace for after-sales scenarios"
-            />
-          </div>
+          <TextAreaField
+            label="Description"
+            value={description}
+            onChange={setDescription}
+            placeholder="Business workspace for after-sales scenarios"
+            rows={2}
+          />
           {error ? <div className="text-sm normal-case text-destructive md:col-span-4">{error}</div> : null}
         </form>
       </CardContent>
@@ -232,6 +265,7 @@ export function CreateTeamBlueprintForm({
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team ID</label>
             <Input value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="after-sales-team" disabled={!workspaceId} required />
+            <div className="text-[0.65rem] normal-case text-muted-foreground">2-64 chars: letters, numbers, dot, underscore or dash.</div>
           </div>
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label>
@@ -246,14 +280,21 @@ export function CreateTeamBlueprintForm({
               <Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}
             </Button>
           </div>
-          <div className="space-y-1 md:col-span-4">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Description</label>
-            <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Handles refund and after-sales cases" disabled={!workspaceId} />
-          </div>
-          <div className="space-y-1 md:col-span-4">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Operating Manual</label>
-            <Input value={operatingManual} onChange={(event) => setOperatingManual(event.target.value)} disabled={!workspaceId} />
-          </div>
+          <TextAreaField
+            label="Description"
+            value={description}
+            onChange={setDescription}
+            placeholder="Handles refund and after-sales cases"
+            disabled={!workspaceId}
+            rows={2}
+          />
+          <TextAreaField
+            label="Operating Manual"
+            value={operatingManual}
+            onChange={setOperatingManual}
+            disabled={!workspaceId}
+            rows={3}
+          />
           {error ? <div className="text-sm normal-case text-destructive md:col-span-4">{error}</div> : null}
         </form>
       </CardContent>
@@ -372,18 +413,27 @@ export function CreateRunStoryForm({
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Task title</label>
             <Input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} disabled={!workspaceId || teams.length === 0} />
           </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Task input</label>
-            <Input value={taskInput} onChange={(event) => setTaskInput(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Result summary</label>
-            <Input value={resultSummary} onChange={(event) => setResultSummary(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Conclusion reason</label>
-            <Input value={conclusionReason} onChange={(event) => setConclusionReason(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
+          <TextAreaField
+            label="Task input"
+            value={taskInput}
+            onChange={setTaskInput}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Result summary"
+            value={resultSummary}
+            onChange={setResultSummary}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Conclusion reason"
+            value={conclusionReason}
+            onChange={setConclusionReason}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
           {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
         </form>
       </CardContent>
@@ -496,26 +546,41 @@ export function CreateApprovalCardForm({
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Title</label>
             <Input value={title} onChange={(event) => setTitle(event.target.value)} disabled={!workspaceId || teams.length === 0} />
           </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Summary</label>
-            <Input value={summary} onChange={(event) => setSummary(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Reason required</label>
-            <Input value={reasonRequired} onChange={(event) => setReasonRequired(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Recommendation</label>
-            <Input value={recommendation} onChange={(event) => setRecommendation(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Approve effect</label>
-            <Input value={approveEffect} onChange={(event) => setApproveEffect(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Reject effect</label>
-            <Input value={rejectEffect} onChange={(event) => setRejectEffect(event.target.value)} disabled={!workspaceId || teams.length === 0} />
-          </div>
+          <TextAreaField
+            label="Summary"
+            value={summary}
+            onChange={setSummary}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Reason required"
+            value={reasonRequired}
+            onChange={setReasonRequired}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Recommendation"
+            value={recommendation}
+            onChange={setRecommendation}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Approve effect"
+            value={approveEffect}
+            onChange={setApproveEffect}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
+          <TextAreaField
+            label="Reject effect"
+            value={rejectEffect}
+            onChange={setRejectEffect}
+            disabled={!workspaceId || teams.length === 0}
+            className="md:col-span-3"
+          />
           {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
         </form>
       </CardContent>

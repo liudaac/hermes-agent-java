@@ -2773,6 +2773,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] /business 页面创建区已折叠分组，减少表单堆叠感
 [x] smoke 脚本支持 APPROVAL_ACTION=all 并真实验证 approve / reject / request-info
 [x] 新增 BUSINESS_PORTAL_CURRENT_STATE.md 汇总当前实现状态、限制和路线图
+[x] /business 表单长文本改 textarea，审批 approve/reject 支持可编辑 reason
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 

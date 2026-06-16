@@ -557,6 +557,26 @@ OK
 [x] 列出关键文件和当前提交链
 ```
 
+
+### Step 4.22：P1 表单质量优化第一轮
+
+目标：改善 `/business` 页面表单的可用性，减少长文本被单行输入框挤压，并让审批处理理由可编辑。
+
+交付：
+
+```text
+[x] 新增 TextAreaField 复用组件
+[x] Workspace description 改为 textarea
+[x] Team description / operatingManual 改为 textarea
+[x] Run taskInput / resultSummary / conclusionReason 改为 textarea
+[x] Approval summary / reasonRequired / recommendation / approveEffect / rejectEffect 改为 textarea
+[x] Workspace ID 增加格式提示
+[x] Team ID 增加格式提示
+[x] Approval approve/reject 操作增加 reason 输入框
+[x] approve/reject 不再只能使用固定 reason
+[x] cd web && npm run build 通过
+```
+
 ### Step 5：文档与验收
 
 交付：

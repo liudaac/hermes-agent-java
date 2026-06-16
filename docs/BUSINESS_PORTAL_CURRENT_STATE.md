@@ -490,8 +490,8 @@ Request info
 Current MVP behavior:
 
 ```text
-Approve uses a fixed reason from Business Portal UI.
-Reject uses a fixed reason from Business Portal UI.
+Approve accepts an editable reason.
+Reject accepts an editable reason.
 Request info accepts a short user-entered message.
 All actions refresh page data after success.
 ```
@@ -667,11 +667,10 @@ Capture screenshots
 Recommended next UI improvements:
 
 ```text
-Replace long Input fields with textarea controls.
-Add explicit approve/reject reason inputs.
 Add high-risk confirmation for HIGH/CRITICAL approvals.
-Add better validation for workspaceId/teamId.
+Add stronger client-side validation for workspaceId/teamId.
 Show duplicate workspace/team errors in a friendlier format.
+Add textarea autosize or richer field layout if needed.
 ```
 
 ### P1: Team blueprint editor

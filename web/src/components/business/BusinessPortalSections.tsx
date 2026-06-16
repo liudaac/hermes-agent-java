@@ -214,8 +214,8 @@ export function RunsAndApprovalsSection({
 }: {
   runs: BusinessRunRecord[];
   approvals: BusinessApprovalRecord[];
-  onApproveApproval?: (approval: BusinessApprovalRecord) => Promise<void>;
-  onRejectApproval?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onApproveApproval?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
+  onRejectApproval?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onRequestApprovalInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
 }) {
   return (
@@ -294,10 +294,12 @@ function ApprovalRow({
   onRequestInfo,
 }: {
   approval: BusinessApprovalRecord;
-  onApprove?: (approval: BusinessApprovalRecord) => Promise<void>;
-  onReject?: (approval: BusinessApprovalRecord) => Promise<void>;
+  onApprove?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
+  onReject?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onRequestInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
 }) {
+  const [approveReason, setApproveReason] = useState("Approved from Business Portal UI.");
+  const [rejectReason, setRejectReason] = useState("Rejected from Business Portal UI.");
   const [requestedInfo, setRequestedInfo] = useState("Please provide additional evidence for this approval.");
   const [working, setWorking] = useState<string | null>(null);
   const isPending = (approval.status || "").toUpperCase() === "PENDING";
@@ -340,16 +342,31 @@ function ApprovalRow({
       </details>
       {isPending && (onApprove || onReject || onRequestInfo) ? (
         <div className="mt-3 space-y-2 rounded-sm border border-border/60 p-3">
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 lg:grid-cols-2">
             {onApprove ? (
-              <Button size="sm" disabled={Boolean(working)} onClick={() => runAction("approve", () => onApprove(approval))}>
-                {working === "approve" ? "Approving..." : "Approve"}
-              </Button>
+              <div className="space-y-2">
+                <Input value={approveReason} onChange={(event) => setApproveReason(event.target.value)} disabled={Boolean(working)} />
+                <Button
+                  size="sm"
+                  disabled={Boolean(working) || approveReason.trim().length === 0}
+                  onClick={() => runAction("approve", () => onApprove(approval, approveReason.trim()))}
+                >
+                  {working === "approve" ? "Approving..." : "Approve"}
+                </Button>
+              </div>
             ) : null}
             {onReject ? (
-              <Button size="sm" variant="outline" disabled={Boolean(working)} onClick={() => runAction("reject", () => onReject(approval))}>
-                {working === "reject" ? "Rejecting..." : "Reject"}
-              </Button>
+              <div className="space-y-2">
+                <Input value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} disabled={Boolean(working)} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={Boolean(working) || rejectReason.trim().length === 0}
+                  onClick={() => runAction("reject", () => onReject(approval, rejectReason.trim()))}
+                >
+                  {working === "reject" ? "Rejecting..." : "Reject"}
+                </Button>
+              </div>
             ) : null}
           </div>
           {onRequestInfo ? (
