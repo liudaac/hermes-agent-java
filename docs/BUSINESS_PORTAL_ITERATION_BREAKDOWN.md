@@ -538,6 +538,25 @@ Insights: 1
 OK
 ```
 
+
+### Step 4.21：Business Portal 当前状态总结文档
+
+目标：把已经完成的后端、前端、smoke、限制和下一阶段路线图收拢成一份可读总览，方便后续验收和接手。
+
+交付：
+
+```text
+[x] 新增 docs/BUSINESS_PORTAL_CURRENT_STATE.md
+[x] 总结 Backend API 能力
+[x] 总结 Frontend /business 页面能力
+[x] 总结 create forms 和 approval actions
+[x] 总结 smoke 脚本与最新真实 smoke 结果
+[x] 记录浏览器截图检查暂停原因
+[x] 记录当前 MVP 限制
+[x] 给出下一阶段路线图
+[x] 列出关键文件和当前提交链
+```
+
 ### Step 5：文档与验收
 
 交付：
