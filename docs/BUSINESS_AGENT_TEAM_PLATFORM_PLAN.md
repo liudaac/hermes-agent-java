@@ -3882,3 +3882,53 @@ org/evolution/delegated task 如何与 EvolutionProposalRecord 对齐？
 ```
 
 如果不能回答，就暂缓。
+
+
+---
+
+## 20. Foundation Audit：识别重复实现和 Source of Truth
+
+在 `docs/BUSINESS_PORTAL_FOUNDATION_MAPPING.md` 之后，已新增更细的审计文档：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_AUDIT.md
+```
+
+该文档不只是目录级映射，而是按模块审计：
+
+```text
+Tenant / Workspace
+Scenario / Intent / Workflow
+Team Blueprint / Agent Runtime / Collaboration
+Prompt Asset / Memory / Skill / Prompt Stack
+Tool / Skill Registry
+Business Run / AgentTrace / IntentRun
+Approval / ApprovalSystem / Delegated Task
+Insights / Analytics / Evaluation
+Evolution Proposal / Org Evolution / Delegated Task
+Gateway / Notifications
+```
+
+每个模块都明确：
+
+```text
+Existing Foundation
+Business Portal Additions
+Overlap Risk
+Source of Truth
+Business Portal Role
+Recommended Action
+```
+
+当前最高风险重复区域：
+
+```text
+Approval semantics
+Evolution proposal / org evolution
+Run records vs execution traces
+Team Blueprint vs Agent Runtime / Collaboration
+Prompt Asset vs Prompt / Memory / Skill assets
+Scenario vs Intent / Workflow
+```
+
+后续进入 `BusinessTeamGenerationService` 前，必须先基于该 audit 完成 foundation capability inventory 和 adapter design。
