@@ -3254,3 +3254,441 @@ Evolution Proposal smoke 覆盖
 BusinessInsight → EvolutionProposal 入口
 /business Evolution Proposal UI
 ```
+
+---
+
+## 18. 方向校准：从“对象型 Business Portal”收束为“场景驱动的智能体团队生成平台”
+
+本节是一次重要方向修正。当前项目已经具备很多底层对象和页面能力，但如果继续沿着“新增对象、新增 Tab、新增表单”的方式迭代，会逐渐偏离项目初心。
+
+### 18.1 项目初心重新确认
+
+本项目最初的核心目标不是做一个 Agent Dashboard，也不是做一个业务对象 CRUD 后台。
+
+真正初心是：
+
+```text
+在后端通过租户模式完成资源隔离，
+参考业内成熟智能体技术实现高智感，
+并以此为基座构建业务底座，
+让业务人员通过场景介绍，
+自动、快速地建设智能体团队服务于业务。
+```
+
+可以进一步压缩成一句产品主线：
+
+```text
+基于多租户隔离和高智感智能体编排能力，让业务人员通过自然语言描述业务场景，自动生成、试运行、审批并持续进化一支智能体团队。
+```
+
+这句话才应该是后续所有模块和页面的主线。
+
+关键词：
+
+```text
+多租户隔离
+资源隔离
+高智感智能体编排
+业务人员自然语言描述
+自动生成智能体团队
+试运行
+审批
+持续进化
+```
+
+### 18.2 当前偏差风险
+
+当前我们已经实现了很多必要对象：
+
+```text
+Workspace
+Scenario
+Prompt Asset
+Team Blueprint
+Business Run
+Approval
+Insight
+Evolution Proposal
+```
+
+这些对象本身没有错，甚至都是后续平台能力所必需的。
+
+但当前风险是：
+
+```text
+对象越来越多
+Tab 越来越多
+表单越来越多
+业务人员的主路径却不够清晰
+```
+
+如果继续这样迭代，系统会变成：
+
+```text
+一个功能很全但主线松散的业务 CRUD Dashboard
+```
+
+而不是：
+
+```text
+一个能根据业务场景自动建设智能体团队的高智感平台
+```
+
+### 18.3 核心问题：缺少“场景描述 → 团队生成”的主引擎
+
+当前 Business Portal 已经能手动创建：
+
+```text
+Workspace
+Scenario
+Prompt Asset
+Team Blueprint
+Run Story
+Approval Card
+Evolution Proposal
+```
+
+但业务人员真正想要的不是手动填这些对象。
+
+业务人员真正想表达的是：
+
+```text
+我有一个业务场景，你帮我搭一支能跑的智能体团队。
+```
+
+因此当前最大缺口是：
+
+```text
+Scenario Understanding / Team Generation Engine
+```
+
+也就是一个从业务语言到智能体团队资产的生成中枢。
+
+### 18.4 新主路径：Scenario-first Team Generation
+
+后续 Business Portal 的主流程应调整为：
+
+```text
+业务人员描述业务场景
+  ↓
+系统理解场景目标、输入、输出、风险、知识需求
+  ↓
+自动生成 Scenario
+  ↓
+自动生成 Prompt Assets
+  ↓
+自动生成 Team Blueprint
+  ↓
+自动生成 Agent role cards
+  ↓
+自动生成 Operating Manual
+  ↓
+自动生成 Approval Rules
+  ↓
+自动生成 Sample Run 建议
+  ↓
+业务人员确认 / 编辑
+  ↓
+试运行
+  ↓
+审批发布
+  ↓
+运行后产生 Insights
+  ↓
+Insights 生成 Evolution Proposal
+  ↓
+Proposal 生成 Team 新版本草案
+```
+
+也就是：
+
+```text
+Describe Scenario → Generate Team → Trial Run → Approve → Operate → Improve
+```
+
+这是后续 `/business` 页面和后端服务都应该围绕的主路径。
+
+### 18.5 各对象在新主线中的角色
+
+当前对象应重新定位，不应平铺成同等重要的 Tab。
+
+| 对象 | 新定位 | 是否应作为主入口 |
+|---|---|---|
+| Workspace | 租户隔离下的业务空间 | 是，但低频 |
+| Scenario | 业务人员的主入口 | 是，最高优先级 |
+| Prompt Asset | 由生成器产生和维护的提示词资产 | 否，偏专家/管理员 |
+| Team Blueprint | 由 Scenario 生成的团队结构和版本 | 是，但从属于 Scenario |
+| Business Run | 场景试运行和真实运行记录 | 是，从属于 Scenario/Team |
+| Approval | 风险动作和版本发布的责任链 | 是，横切入口 |
+| Insight | 运行后的复盘和优化建议 | 是，但服务于进化 |
+| Evolution Proposal | Insight 到 Team 新版本的桥 | 是，但不应孤立 |
+
+### 18.6 /business 页面应该重构为主流程页面
+
+当前 `/business` 页面顶部有多个创建表单。后续应逐步改为一个主 CTA：
+
+```text
+Describe a business scenario
+```
+
+用户输入：
+
+```text
+我们有大量售后工单，希望系统能自动判断退款条件、识别高风险退款、生成客服回复草稿，金额较高时需要人工审批。
+```
+
+系统输出：
+
+```text
+Scenario 草案
+Prompt Asset 草案
+Team Blueprint 草案
+Agent role cards
+Operating Manual
+Approval Rules
+Sample Run 建议
+Next Actions
+```
+
+页面结构应从：
+
+```text
+创建 Workspace
+创建 Scenario
+创建 Prompt Asset
+创建 Team
+创建 Run
+创建 Approval
+```
+
+逐步调整为：
+
+```text
+描述业务场景
+  ↓
+生成团队草案
+  ↓
+确认岗位分工 / 提示词 / 审批规则
+  ↓
+试运行
+  ↓
+发布试运行版本
+```
+
+已有的 CRUD 表单可以保留，但应降级为：
+
+```text
+Advanced / Manual editing
+```
+
+### 18.7 下一阶段核心模块：BusinessTeamGenerationService
+
+下一阶段应新增核心服务：
+
+```text
+BusinessTeamGenerationService
+```
+
+或命名为：
+
+```text
+ScenarioTeamBuilder
+ScenarioGenerationService
+```
+
+推荐职责：
+
+```text
+输入业务场景描述
+生成 ScenarioRecord
+生成 PromptAssetRecord[]
+生成 TeamBlueprintRecord
+生成 AgentBlueprintRecord[]
+生成 Operating Manual
+生成 Approval Rules
+生成 Sample Run suggestions
+```
+
+第一版可以不接真实 LLM，先用模板/规则生成。
+
+原因：
+
+```text
+先把产品主流程立起来，比一开始追求生成质量更重要。
+```
+
+### 18.8 建议新增 API
+
+第一版 API：
+
+```text
+POST /api/v1/workspaces/{workspaceId}/team-generation
+```
+
+请求示例：
+
+```json
+{
+  "description": "我们有大量售后工单，希望系统能自动判断退款条件、识别高风险退款、生成客服回复草稿，金额较高时需要人工审批。",
+  "goal": "提高售后工单处理效率，同时保证高风险退款可控。",
+  "riskPolicy": "金额超过 1000 元、特殊类目、用户争议较大时必须人工审批。"
+}
+```
+
+响应示例：
+
+```json
+{
+  "scenario": {
+    "scenarioId": "after-sales-ticket",
+    "name": "售后工单处理"
+  },
+  "promptAssets": [
+    {
+      "assetId": "after-sales-policy-base",
+      "name": "售后政策基础提示词"
+    }
+  ],
+  "teamBlueprint": {
+    "teamId": "after-sales-team",
+    "activeVersion": 1
+  },
+  "agentRoles": [
+    {
+      "agentId": "ticket-classifier",
+      "displayName": "工单分类员"
+    },
+    {
+      "agentId": "policy-specialist",
+      "displayName": "售后政策专家"
+    },
+    {
+      "agentId": "reply-drafter",
+      "displayName": "客服回复草稿员"
+    }
+  ],
+  "approvalRules": [
+    "金额超过 1000 元必须人工审批",
+    "特殊类目必须人工确认"
+  ],
+  "nextActions": [
+    "review_generated_team",
+    "run_sample_task",
+    "publish_trial_version"
+  ]
+}
+```
+
+### 18.9 第一版生成策略
+
+第一版不必追求复杂智能生成，可以使用模板规则：
+
+```text
+如果描述包含：售后 / 退款 / 工单
+  → 生成售后工单场景模板
+  → 生成 ticket-classifier / policy-specialist / reply-drafter
+  → 生成退款审批规则
+  → 生成售后政策 prompt asset
+
+如果描述包含：销售 / 线索 / 客户跟进
+  → 生成销售线索跟进场景模板
+
+如果描述包含：财务 / 报销 / 审核
+  → 生成财务审核场景模板
+
+否则：
+  → 生成 generic business assistant team
+```
+
+这可以先证明：
+
+```text
+业务描述 → 平台资产自动生成
+```
+
+后续再接 LLM / Prompt Stack / Skill templates。
+
+### 18.10 新优先级调整
+
+原本下一步倾向于：
+
+```text
+Evolution Proposal smoke 覆盖
+Prompt Asset version UI
+更多 proposal UI
+```
+
+现在调整为：
+
+#### P0：BusinessTeamGenerationService 后端 MVP
+
+```text
+[x] 输入业务场景描述
+[x] 生成 Scenario
+[x] 生成 Prompt Asset
+[x] 生成 Team Blueprint
+[x] 生成默认 Agent roles
+[x] 返回 nextActions
+[x] 测试售后场景模板
+```
+
+#### P0：/business 主 CTA 调整
+
+```text
+Describe a business scenario
+Generate intelligent team
+```
+
+先可以只调用后端生成 API。
+
+#### P1：Generation smoke 覆盖
+
+```text
+POST /team-generation
+Verify Scenario created
+Verify Prompt Asset created
+Verify Team Blueprint created
+Verify Team promptAssetRefs valid
+```
+
+#### P1：再继续 Evolution Proposal smoke
+
+等主生成链路跑通后，再把 Proposal smoke 接回来。
+
+#### P2：接入真实 LLM 生成
+
+```text
+业务描述
+  → LLM 结构化提取 scenario / roles / risks / knowledge / tools
+  → 生成团队资产
+```
+
+### 18.11 后续判断标准
+
+后续所有迭代都应问一个问题：
+
+```text
+这一步是否让“业务人员描述场景 → 自动生成智能体团队”更顺畅？
+```
+
+如果答案是否，那么它可能是次优先级。
+
+优先做：
+
+```text
+场景理解
+团队生成
+试运行
+审批发布
+运行复盘
+自动进化
+```
+
+暂缓做：
+
+```text
+更多孤立对象 Tab
+更多手动 CRUD 表单
+更多底层资产细节暴露
+没有主流程承载的 UI polish
+```
