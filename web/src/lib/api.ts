@@ -257,9 +257,10 @@ export const api = {
     if (workspaceId) qs.set("workspaceId", workspaceId);
     return fetchJSON<BusinessTeamsResponse>(`/api/v1/business/teams${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
-  getBusinessRuns: (workspaceId?: string, limit = 20) => {
+  getBusinessRuns: (workspaceId?: string, limit = 20, scenarioId?: string) => {
     const qs = new URLSearchParams();
     if (workspaceId) qs.set("workspaceId", workspaceId);
+    if (scenarioId) qs.set("scenarioId", scenarioId);
     qs.set("limit", String(limit));
     return fetchJSON<BusinessRunsResponse>(`/api/v1/business/runs?${qs.toString()}`);
   },
@@ -269,11 +270,21 @@ export const api = {
     qs.set("status", status);
     return fetchJSON<BusinessApprovalsResponse>(`/api/v1/business/approvals?${qs.toString()}`);
   },
-  getBusinessInsights: (workspaceId?: string) => {
+  getBusinessInsights: (workspaceId?: string, scenarioId?: string) => {
     const qs = new URLSearchParams();
     if (workspaceId) qs.set("workspaceId", workspaceId);
+    if (scenarioId) qs.set("scenarioId", scenarioId);
     return fetchJSON<BusinessInsightsResponse>(`/api/v1/business/insights${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
+  getBusinessScenarios: (workspaceId: string) =>
+    fetchJSON<BusinessScenariosResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios`),
+
+  createBusinessScenario: (workspaceId: string, payload: CreateBusinessScenarioPayload) =>
+    fetchJSON<CreateBusinessScenarioResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
 
   createBusinessWorkspace: (payload: CreateBusinessWorkspacePayload) =>
     fetchJSON<CreateBusinessWorkspaceResponse>("/api/v1/workspaces", {
@@ -1367,5 +1378,44 @@ export interface ResolveBusinessApprovalResponse {
   approvalId: string;
   status: string;
   approval: BusinessApprovalRecord;
+  message?: string;
+}
+
+export interface BusinessScenarioRecord {
+  workspaceId: string;
+  scenarioId: string;
+  name: string;
+  description?: string;
+  entryTeamId?: string;
+  status?: string;
+  successCriteria?: string[];
+  approvalRules?: string[];
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BusinessScenariosResponse {
+  ok: boolean;
+  workspaceId: string;
+  scenarios: BusinessScenarioRecord[];
+  total: number;
+}
+
+export interface CreateBusinessScenarioPayload {
+  scenarioId: string;
+  name: string;
+  description?: string;
+  entryTeamId?: string;
+  successCriteria?: string[];
+  approvalRules?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessScenarioResponse {
+  ok: boolean;
+  workspaceId: string;
+  scenarioId: string;
+  scenario: BusinessScenarioRecord;
   message?: string;
 }

@@ -137,7 +137,8 @@ Scenario is now a first-class backend object.
 Team Blueprint can store scenarioId.
 Business Run can store scenarioId and can be filtered by scenarioId.
 Business Insights can summarize runs for a scenarioId.
-Scenario list/create UI is still next-step work.
+Scenario list/create UI is available in the /business page.
+Scenario filter is available for runs and insights.
 ```
 
 ### 3.3 Team Blueprint Versioning
@@ -414,9 +415,10 @@ The create forms are grouped in a single panel:
 ```text
 Create business objects
   1. Workspace
-  2. Team Blueprint
-  3. Run Story
-  4. Approval Card
+  2. Scenario
+  3. Team Blueprint
+  4. Run Story
+  5. Approval Card
 ```
 
 Default open behavior:
@@ -433,6 +435,7 @@ The page can create:
 
 ```text
 Workspace
+Scenario
 Team Blueprint
 Run Story
 Approval Card
@@ -445,6 +448,17 @@ workspaceId
 name
 owner
 description
+```
+
+Create Scenario fields:
+
+```text
+scenarioId
+name
+entryTeamId
+description
+successCriteria
+approvalRules
 ```
 
 Create Team Blueprint fields:
@@ -662,6 +676,7 @@ Capture desktop and mobile screenshots.
 Current forms are intentionally minimal:
 
 ```text
+Scenario form creates reusable business scenario records.
 Team form creates one default business-analyst role card.
 Run form creates one default step.
 Approval form creates structured evidence but not arbitrary evidence editing.
@@ -678,7 +693,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
-Scenario list/create UI and scenario filters in the Business Portal page
+Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion
 Evolution proposal state machine

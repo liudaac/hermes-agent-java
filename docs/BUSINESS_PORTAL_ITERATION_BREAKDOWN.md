@@ -682,6 +682,37 @@ Scenario 已能绑定 Team 和 Run，并用于 Insights 运行记录过滤。
 下一步可以继续做 Scenario UI 列表/创建，或把现有 Team/Run UI 增加 Scenario 过滤器。
 ```
 
+
+### Step 4.27：Scenario UI 最小接入
+
+目标：让业务用户能在 `/business` 页面看到、创建并选择 Scenario，让 Scenario 从后端对象进入业务工作台。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 getBusinessScenarios
+[x] web/src/lib/api.ts 新增 createBusinessScenario
+[x] 新增 BusinessScenarioRecord / BusinessScenariosResponse / CreateBusinessScenarioPayload / CreateBusinessScenarioResponse 类型
+[x] BusinessPortalPage 新增 scenarios state
+[x] BusinessPortalPage 新增 scenarioId 过滤 state
+[x] workspace 切换时清空 scenarioId
+[x] 顶部新增 Scenario 下拉过滤器
+[x] getBusinessRuns / getBusinessInsights 透传 scenarioId
+[x] 新增 CreateScenarioForm
+[x] BusinessCreationPanel 增加 Scenario 折叠项
+[x] 新增 ScenariosSection 展示 scenarios
+[x] Team 卡片展示 scenarioId
+[x] BusinessPortalDashboardIntegration /api/v1/business/runs 支持 queryParam scenarioId
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+Scenario 已可在 UI 中创建、查看、选择，并用于 Runs / Insights 过滤。
+Home 聚合仍保持 workspace 级口径，后续如有需要再增加 scenario-aware home。
+```
+
 ### Step 5：文档与验收
 
 交付：

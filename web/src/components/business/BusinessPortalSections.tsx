@@ -8,6 +8,7 @@ import {
 import type {
   BusinessAction,
   BusinessApprovalRecord,
+  BusinessScenarioRecord,
   BusinessHomeResponse,
   BusinessInsightRecord,
   BusinessRunRecord,
@@ -199,7 +200,7 @@ function TeamRow({ team }: { team: BusinessTeamCard }) {
         <Badge variant={statusVariant(team.status)}>{team.status || "UNKNOWN"}</Badge>
       </div>
       <div className="mt-2 text-xs normal-case text-muted-foreground">
-        {team.scenario || "No scenario"} · v{fmt(team.activeVersion)} · {team.workspaceId}
+        {team.scenario || "No scenario"} · scenarioId {team.scenarioId || "-"} · v{fmt(team.activeVersion)} · {team.workspaceId}
       </div>
     </div>
   );
@@ -523,6 +524,35 @@ export function DemoDataGuide({ workspaceId }: { workspaceId?: string }) {
             <div className="mt-1">The dashboard shows the command instead of executing local scripts from the browser.</div>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ScenariosSection({ scenarios }: { scenarios: BusinessScenarioRecord[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scenarios</CardTitle>
+        <CardDescription>Reusable business scenarios that bind teams, runs and insights.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {scenarios.length === 0 ? (
+          <EmptyLine text="No scenarios yet." />
+        ) : (
+          scenarios.slice(0, 6).map((scenario) => (
+            <div key={scenario.scenarioId} className="rounded-sm border border-border/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-expanded text-sm tracking-[0.08em]">{scenario.name || scenario.scenarioId}</div>
+                <Badge variant={statusVariant(scenario.status)}>{scenario.status || "UNKNOWN"}</Badge>
+              </div>
+              <p className="mt-2 text-sm normal-case text-muted-foreground">{scenario.description || "No description."}</p>
+              <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
+                {scenario.scenarioId} · entry team {scenario.entryTeamId || "-"}
+              </div>
+            </div>
+          ))
+        )}
       </CardContent>
     </Card>
   );

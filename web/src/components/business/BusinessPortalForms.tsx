@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import type { BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
+import type { BusinessScenarioRecord, BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessScenarioPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,13 +15,13 @@ function isValidBusinessId(value: string): boolean {
   return BUSINESS_ID_PATTERN.test(value.trim());
 }
 
-function friendlyBusinessError(error: unknown, kind: "workspace" | "team"): string {
+function friendlyBusinessError(error: unknown, kind: "workspace" | "team" | "scenario"): string {
   const raw = String(error);
   const lower = raw.toLowerCase();
   if (lower.includes("already exists")) {
-    return kind === "workspace"
-      ? "A workspace with this ID already exists. Pick another ID or select the existing workspace."
-      : "A team blueprint with this ID already exists in the selected workspace. Pick another team ID.";
+    if (kind === "workspace") return "A workspace with this ID already exists. Pick another ID or select the existing workspace.";
+    if (kind === "scenario") return "A scenario with this ID already exists in the selected workspace. Pick another scenario ID.";
+    return "A team blueprint with this ID already exists in the selected workspace. Pick another team ID.";
   }
   if (lower.includes("must be 2-64") || lower.includes("id is required") || lower.includes("invalid")) {
     return BUSINESS_ID_HELP;
@@ -36,6 +36,7 @@ export function BusinessCreationPanel({
   workspaceCount,
   teamCount,
   workspaceForm,
+  scenarioForm,
   teamForm,
   runForm,
   approvalForm,
@@ -43,6 +44,7 @@ export function BusinessCreationPanel({
   workspaceCount: number;
   teamCount: number;
   workspaceForm: ReactNode;
+  scenarioForm: ReactNode;
   teamForm: ReactNode;
   runForm: ReactNode;
   approvalForm: ReactNode;
@@ -61,13 +63,16 @@ export function BusinessCreationPanel({
       <CreationStep title="1. Workspace" description="Create the business space." defaultOpen={shouldOpenWorkspace}>
         {workspaceForm}
       </CreationStep>
-      <CreationStep title="2. Team Blueprint" description="Create the first digital employee team." defaultOpen={shouldOpenTeam}>
+      <CreationStep title="2. Scenario" description="Create a reusable business scenario." defaultOpen={false}>
+        {scenarioForm}
+      </CreationStep>
+      <CreationStep title="3. Team Blueprint" description="Create the first digital employee team." defaultOpen={shouldOpenTeam}>
         {teamForm}
       </CreationStep>
-      <CreationStep title="3. Run Story" description="Record a business-readable run story." defaultOpen={false}>
+      <CreationStep title="4. Run Story" description="Record a business-readable run story." defaultOpen={false}>
         {runForm}
       </CreationStep>
-      <CreationStep title="4. Approval Card" description="Create a mobile-first approval card." defaultOpen={false}>
+      <CreationStep title="5. Approval Card" description="Create a mobile-first approval card." defaultOpen={false}>
         {approvalForm}
       </CreationStep>
     </section>
@@ -624,6 +629,103 @@ export function CreateApprovalCardForm({
             disabled={!workspaceId || teams.length === 0}
             className="md:col-span-3"
           />
+          {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+export function CreateScenarioForm({
+  workspaceId,
+  teams,
+  onCreate,
+}: {
+  workspaceId?: string;
+  teams: BusinessTeamCard[];
+  onCreate: (workspaceId: string, payload: CreateBusinessScenarioPayload) => Promise<BusinessScenarioRecord>;
+}) {
+  const [scenarioId, setScenarioId] = useState("after-sales-ticket");
+  const [name, setName] = useState("After-sales Ticket Handling");
+  const [description, setDescription] = useState("Handle refund and after-sales tickets with explainable business steps.");
+  const [entryTeamId, setEntryTeamId] = useState("");
+  const [successCriteria, setSuccessCriteria] = useState("Correctly classify the ticket\nGenerate an actionable recommendation");
+  const [approvalRules, setApprovalRules] = useState("High-risk or high-value actions require human approval");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const normalizedScenarioId = scenarioId.trim();
+  const scenarioIdValid = isValidBusinessId(normalizedScenarioId);
+  const canSubmit = Boolean(workspaceId) && scenarioIdValid && name.trim().length > 0 && !saving;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId) return;
+    if (!canSubmit) {
+      setError(BUSINESS_ID_HELP);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(workspaceId, {
+        scenarioId: normalizedScenarioId,
+        name: name.trim(),
+        description: description.trim() || undefined,
+        entryTeamId: entryTeamId || undefined,
+        successCriteria: successCriteria.split("\n").map((item) => item.trim()).filter(Boolean),
+        approvalRules: approvalRules.split("\n").map((item) => item.trim()).filter(Boolean),
+        metadata: { source: "business-portal-ui" },
+      });
+      setScenarioId("after-sales-ticket");
+      setName("After-sales Ticket Handling");
+      setDescription("Handle refund and after-sales tickets with explainable business steps.");
+      setEntryTeamId("");
+    } catch (err) {
+      setError(friendlyBusinessError(err, "scenario"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Scenario</CardTitle>
+        <CardDescription>Create a reusable business scenario that teams and runs can bind to.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!workspaceId ? (
+          <div className="rounded-sm border border-dashed border-border/70 p-3 text-sm normal-case text-muted-foreground">
+            Select or create a workspace before creating a scenario.
+          </div>
+        ) : null}
+        <form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario ID</label>
+            <Input value={scenarioId} onChange={(event) => setScenarioId(event.target.value)} disabled={!workspaceId} required />
+            <div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label>
+            <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!workspaceId} />
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto">
+              <Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}
+            </Button>
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Entry Team</label>
+            <select value={entryTeamId} onChange={(event) => setEntryTeamId(event.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">
+              <option value="">No entry team yet</option>
+              {teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}
+            </select>
+          </div>
+          <TextAreaField label="Description" value={description} onChange={setDescription} disabled={!workspaceId} className="md:col-span-3" />
+          <TextAreaField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} disabled={!workspaceId} className="md:col-span-3" />
+          <TextAreaField label="Approval rules" value={approvalRules} onChange={setApprovalRules} disabled={!workspaceId} className="md:col-span-3" />
           {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
         </form>
       </CardContent>

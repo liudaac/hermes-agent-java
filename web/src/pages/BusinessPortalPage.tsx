@@ -12,7 +12,9 @@ import { api } from "@/lib/api";
 import type {
   BusinessApprovalRecord,
   BusinessHomeResponse,
+  BusinessScenarioRecord,
   CreateBusinessApprovalPayload,
+  CreateBusinessScenarioPayload,
   CreateBusinessRunPayload,
   CreateBusinessTeamBlueprintPayload,
   CreateBusinessWorkspacePayload,
@@ -29,18 +31,21 @@ import { cn } from "@/lib/utils";
 import {
   DemoDataGuide,
   InsightsAndActionsSection,
+  ScenariosSection,
   MetricCard,
   RunsAndApprovalsSection,
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { BusinessCreationPanel, CreateApprovalCardForm, CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { BusinessCreationPanel, CreateApprovalCardForm, CreateRunStoryForm, CreateScenarioForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
   const [workspaceId, setWorkspaceId] = useState("");
   const [home, setHome] = useState<BusinessHomeResponse | null>(null);
   const [teams, setTeams] = useState<BusinessTeamCard[]>([]);
+  const [scenarios, setScenarios] = useState<BusinessScenarioRecord[]>([]);
+  const [scenarioId, setScenarioId] = useState("");
   const [runs, setRuns] = useState<BusinessRunRecord[]>([]);
   const [approvals, setApprovals] = useState<BusinessApprovalRecord[]>([]);
   const [insights, setInsights] = useState<BusinessInsightRecord[]>([]);
@@ -53,6 +58,14 @@ export default function BusinessPortalPage() {
     setWorkspaceId(response.workspaceId);
     showToast(`Workspace created: ${response.workspaceId}`, "success");
     return response.workspace;
+  };
+
+  const createScenario = async (targetWorkspaceId: string, payload: CreateBusinessScenarioPayload) => {
+    const response = await api.createBusinessScenario(targetWorkspaceId, payload);
+    setScenarioId(response.scenarioId);
+    showToast(`Scenario created: ${response.scenarioId}`, "success");
+    await load();
+    return response.scenario;
   };
 
   const createTeamBlueprint = async (targetWorkspaceId: string, payload: CreateBusinessTeamBlueprintPayload) => {
@@ -106,12 +119,19 @@ export default function BusinessPortalPage() {
       const [homeRes, teamsRes, runsRes, approvalsRes, insightsRes] = await Promise.all([
         api.getBusinessHome(selectedWorkspace),
         api.getBusinessTeams(selectedWorkspace),
-        api.getBusinessRuns(selectedWorkspace, 10),
+        api.getBusinessRuns(selectedWorkspace, 10, scenarioId || undefined),
         api.getBusinessApprovals(selectedWorkspace, "ALL"),
-        api.getBusinessInsights(selectedWorkspace),
+        api.getBusinessInsights(selectedWorkspace, scenarioId || undefined),
       ]);
       setHome(homeRes);
       setTeams(teamsRes.teams ?? []);
+      if (selectedWorkspace) {
+        const scenariosRes = await api.getBusinessScenarios(selectedWorkspace);
+        setScenarios(scenariosRes.scenarios ?? []);
+      } else {
+        setScenarios([]);
+        setScenarioId("");
+      }
       setRuns(runsRes.runs ?? []);
       setApprovals(approvalsRes.approvals ?? []);
       setInsights(insightsRes.insights ?? []);
@@ -125,7 +145,7 @@ export default function BusinessPortalPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [workspaceId, scenarioId]);
 
   const workspaceOptions = useMemo(() => home?.workspaces ?? [], [home]);
   const summary = home?.summary;
@@ -146,13 +166,29 @@ export default function BusinessPortalPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
             value={workspaceId}
-            onChange={(event) => setWorkspaceId(event.target.value)}
+            onChange={(event) => {
+              setWorkspaceId(event.target.value);
+              setScenarioId("");
+            }}
             className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-[0.12em]"
           >
             <option value="">All workspaces</option>
             {workspaceOptions.map((workspace) => (
               <option key={workspace.workspaceId} value={workspace.workspaceId}>
                 {workspace.name || workspace.workspaceId}
+              </option>
+            ))}
+          </select>
+          <select
+            value={scenarioId}
+            onChange={(event) => setScenarioId(event.target.value)}
+            disabled={!workspaceId || scenarios.length === 0}
+            className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-[0.12em]"
+          >
+            <option value="">All scenarios</option>
+            {scenarios.map((scenario) => (
+              <option key={scenario.scenarioId} value={scenario.scenarioId}>
+                {scenario.name || scenario.scenarioId}
               </option>
             ))}
           </select>
@@ -166,6 +202,7 @@ export default function BusinessPortalPage() {
         workspaceCount={summary?.workspaceCount ?? 0}
         teamCount={summary?.teamCount ?? 0}
         workspaceForm={<CreateWorkspaceForm onCreate={createWorkspace} />}
+        scenarioForm={<CreateScenarioForm workspaceId={workspaceId} teams={teams} onCreate={createScenario} />}
         teamForm={<CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />}
         runForm={<CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />}
         approvalForm={<CreateApprovalCardForm workspaceId={workspaceId} teams={teams} onCreate={createApprovalCard} />}
@@ -194,6 +231,7 @@ export default function BusinessPortalPage() {
       </section>
 
       <TodayAndAttentionSection home={home} />
+      <ScenariosSection scenarios={scenarios} />
       <TeamsSection teams={teams} home={home} />
       <RunsAndApprovalsSection
         runs={runs}

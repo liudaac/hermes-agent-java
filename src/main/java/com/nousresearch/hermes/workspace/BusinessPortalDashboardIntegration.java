@@ -131,13 +131,15 @@ public final class BusinessPortalDashboardIntegration {
         String workspaceId = ctx.queryParam("workspaceId");
         String teamId = ctx.queryParam("teamId");
         String status = ctx.queryParam("status");
+        String scenarioId = ctx.queryParam("scenarioId");
         int limit = parseInt(ctx.queryParam("limit"), 50);
-        var runs = runService.listRuns(workspaceId, teamId, status, limit);
+        var runs = runService.listRuns(workspaceId, teamId, scenarioId, status, limit);
         ctx.status(200).json(Map.of(
             "ok", true,
             "entry", "runs",
             "workspaceId", workspaceId == null ? "" : workspaceId,
             "teamId", teamId == null ? "" : teamId,
+            "scenarioId", scenarioId == null ? "" : scenarioId,
             "runs", runs,
             "total", runs.size(),
             "emptyState", runs.isEmpty() ? "还没有运行记录。创建团队后，可以用样例任务试运行。" : "",

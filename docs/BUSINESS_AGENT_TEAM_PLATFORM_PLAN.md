@@ -2778,6 +2778,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] /business HIGH / CRITICAL Approval 操作增加确认短语防误触
 [x] Scenario 对象后端第一版落地，新增 scenarios API 和文件持久化
 [x] Scenario 已绑定 Team Blueprint / Business Run / Insights 第一版
+[x] /business 页面完成 Scenario UI 最小接入：创建、展示、选择和过滤
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 
