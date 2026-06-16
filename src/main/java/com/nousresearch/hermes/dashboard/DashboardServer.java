@@ -31,6 +31,8 @@ import com.nousresearch.hermes.business.insight.BusinessInsightDashboardIntegrat
 import com.nousresearch.hermes.business.insight.BusinessInsightService;
 import com.nousresearch.hermes.scenario.ScenarioDashboardIntegration;
 import com.nousresearch.hermes.scenario.ScenarioService;
+import com.nousresearch.hermes.prompt.PromptAssetDashboardIntegration;
+import com.nousresearch.hermes.prompt.PromptAssetService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -116,6 +118,7 @@ public class DashboardServer {
     private final BusinessRunService businessRunService;
     private final BusinessInsightService businessInsightService;
     private final ScenarioService scenarioService;
+    private final PromptAssetService promptAssetService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -164,6 +167,7 @@ public class DashboardServer {
         this.businessRunService = new BusinessRunService(workspaceService);
         this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
         this.scenarioService = new ScenarioService(workspaceService);
+        this.promptAssetService = new PromptAssetService(workspaceService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -402,6 +406,7 @@ public class DashboardServer {
         // ========== Business Portal APIs ==========
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
         ScenarioDashboardIntegration.registerRoutes(app, scenarioService);
+        PromptAssetDashboardIntegration.registerRoutes(app, promptAssetService);
         BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);

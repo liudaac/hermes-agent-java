@@ -141,7 +141,45 @@ Scenario list/create UI is available in the /business page.
 Scenario filter is available for runs and insights.
 ```
 
-### 3.3 Team Blueprint Versioning
+### 3.3 Prompt Asset API
+
+Purpose:
+
+```text
+Represent workspace-scoped prompt assets that Team Blueprint versions can reference.
+```
+
+Key classes:
+
+```text
+PromptAssetRecord
+FilePromptAssetRepository
+PromptAssetService
+PromptAssetDashboardIntegration
+```
+
+APIs:
+
+```text
+GET  /api/v1/workspaces/{workspaceId}/prompt-assets
+POST /api/v1/workspaces/{workspaceId}/prompt-assets
+GET  /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}
+```
+
+Persistence:
+
+```text
+$HERMES_HOME/business/workspaces/{workspaceId}/prompt-assets/{assetId}.json
+```
+
+Current behavior:
+
+```text
+Prompt Asset is now a first-class backend object.
+Team Blueprint promptAssetRefs validation and Prompt Asset UI are still next-step work.
+```
+
+### 3.4 Team Blueprint Versioning
 
 Purpose:
 
@@ -184,7 +222,7 @@ Create draft version → vN DRAFT
 Activate version → selected version ACTIVE, previous ACTIVE becomes INACTIVE
 ```
 
-### 3.4 Business Run Story API
+### 3.5 Business Run Story API
 
 Purpose:
 
@@ -231,7 +269,7 @@ steps
 technicalTraceRef
 ```
 
-### 3.5 Business Approval Center
+### 3.6 Business Approval Center
 
 Purpose:
 
@@ -282,7 +320,7 @@ Only PENDING approvals can be resolved.
 Resolved approvals cannot be processed again.
 ```
 
-### 3.6 Business Insights API
+### 3.7 Business Insights API
 
 Purpose:
 
@@ -330,7 +368,7 @@ review-failed-runs
 collect-more-runs
 ```
 
-### 3.7 Business Home API
+### 3.8 Business Home API
 
 Purpose:
 
@@ -693,6 +731,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
+Team Blueprint promptAssetRefs validation and Prompt Asset UI
 Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion
@@ -762,6 +801,7 @@ Backend:
 src/main/java/com/nousresearch/hermes/workspace/*
 src/main/java/com/nousresearch/hermes/blueprint/*
 src/main/java/com/nousresearch/hermes/scenario/*
+src/main/java/com/nousresearch/hermes/prompt/*
 src/main/java/com/nousresearch/hermes/business/approval/*
 src/main/java/com/nousresearch/hermes/business/run/*
 src/main/java/com/nousresearch/hermes/business/insight/*
