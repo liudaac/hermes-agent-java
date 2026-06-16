@@ -2756,7 +2756,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [ ] ACTIVE version 不允许被原地修改（当前没有原地修改接口；下一步增加 update API 时补强）
 [x] 所有错误响应包含明确 workspaceId / teamId / version
 [x] Business Portal 五个入口都有可返回真实数据或空状态的 API 支撑
-[ ] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息（下一步接 Approval Center）
+[x] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息
 ```
 
 ---
@@ -2826,7 +2826,7 @@ IntentOrchestrator
 | Tool Policy | ToolRegistry / TenantAwareToolDispatcher | 增加 allowed_tools 校验 |
 | Evolution Proposal | org/evolution + delegated task | 增加 proposal 状态机 |
 | Eval Set | org/eval | 增加 scenario eval set |
-| Approval | BrowserApprovalQueue / DelegatedTask verification | 统一审批中心 |
+| Approval | BrowserApprovalQueue / DelegatedTask verification / BusinessApprovalService | 统一审批中心，Business Portal 先接业务审批卡 |
 | Prompt Asset | OpenClaw system prompt / workspace bootstrap | 增加提示词资产版本化 |
 | Standing Orders | AGENTS.md / HEARTBEAT.md / cron | 增加业务常驻任务指令 |
 | Task Flow | OpenClaw taskflow / delegated task | 增加可恢复多步骤流程 |

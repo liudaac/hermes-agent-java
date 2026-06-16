@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.workspace;
 
 import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
+import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -22,12 +23,12 @@ public final class BusinessPortalDashboardIntegration {
     private BusinessPortalDashboardIntegration() {
     }
 
-    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
+    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService) {
         logger.info("Registering Business Portal shell routes");
         app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/runs", BusinessPortalDashboardIntegration::runs);
-        app.get("/api/v1/business/approvals", BusinessPortalDashboardIntegration::approvals);
+        app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
         app.get("/api/v1/business/insights", BusinessPortalDashboardIntegration::insights);
     }
 
@@ -111,13 +112,17 @@ public final class BusinessPortalDashboardIntegration {
         ));
     }
 
-    static void approvals(Context ctx) {
+    static void approvals(Context ctx, BusinessApprovalService approvalService) {
+        String workspaceId = ctx.queryParam("workspaceId");
+        String status = ctx.queryParam("status");
+        var approvals = approvalService.listApprovals(workspaceId, status == null || status.isBlank() ? BusinessApprovalService.PENDING : status);
         ctx.status(200).json(Map.of(
             "ok", true,
             "entry", "approvals",
-            "approvals", List.of(),
-            "total", 0,
-            "emptyState", "当前没有待审批事项。高风险动作和版本发布会出现在这里。"
+            "workspaceId", workspaceId == null ? "" : workspaceId,
+            "approvals", approvals,
+            "total", approvals.size(),
+            "emptyState", approvals.isEmpty() ? "当前没有待审批事项。高风险动作和版本发布会出现在这里。" : ""
         ));
     }
 

@@ -101,6 +101,43 @@ tenantId 是底层隔离 ID
 [x] GET /api/v1/business/teams 复用 blueprint 数据
 ```
 
+
+### Step 4.5：Approval Center / 移动端审批卡
+
+目标：让 Business Portal 的“审批”入口从空状态升级为可真实创建、查询、处理的业务审批卡。
+
+交付：
+
+```text
+[x] BusinessApprovalRecord
+[x] FileBusinessApprovalRepository
+[x] BusinessApprovalService
+[x] BusinessApprovalDashboardIntegration
+[x] GET /api/v1/workspaces/{workspaceId}/approvals
+[x] POST /api/v1/workspaces/{workspaceId}/approvals
+[x] GET /api/v1/workspaces/{workspaceId}/approvals/{approvalId}
+[x] POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/approve
+[x] POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/reject
+[x] POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/request-info
+[x] GET /api/v1/business/approvals 读取真实审批卡，不再只是空状态
+[x] 测试：创建审批卡
+[x] 测试：同意 / 拒绝 / 要求补充信息
+[x] 测试：已处理审批不能重复处理
+```
+
+移动端审批卡字段：
+
+```text
+这是什么事：title / summary
+为什么需要审批：reasonRequired
+如果同意会发生什么：approveEffect
+如果拒绝会发生什么：rejectEffect
+系统推荐怎么做：recommendation
+风险等级：riskLevel
+相关依据：evidence
+操作按钮：approve / reject / request-info
+```
+
 ### Step 5：文档与验收
 
 交付：

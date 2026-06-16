@@ -23,6 +23,8 @@ import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.BusinessPortalDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
+import com.nousresearch.hermes.business.approval.BusinessApprovalDashboardIntegration;
+import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -104,6 +106,7 @@ public class DashboardServer {
     private final TenantManager tenantManager;
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
+    private final BusinessApprovalService businessApprovalService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -148,6 +151,7 @@ public class DashboardServer {
         this.analyticsHandler = new AnalyticsHandler();
         this.workspaceService = new WorkspaceService(tenantManager);
         this.teamBlueprintService = new TeamBlueprintService(workspaceService);
+        this.businessApprovalService = new BusinessApprovalService(workspaceService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -385,7 +389,8 @@ public class DashboardServer {
 
         // ========== Business Portal APIs ==========
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
-        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
+        BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
+        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService);
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);
