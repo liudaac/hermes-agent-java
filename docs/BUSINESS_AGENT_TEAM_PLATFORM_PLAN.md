@@ -2764,6 +2764,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] Business Portal 后端真实 smoke 已通过，并记录联调结果
 [x] /business 页面完成组件拆分和缺字段防御优化
 [x] /business 页面新增 demo 数据填充引导，展示 smoke 脚本命令
+[x] /business 页面 Run / Approval / Insight 卡片支持详情展开
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 

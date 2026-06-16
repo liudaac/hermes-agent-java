@@ -338,6 +338,32 @@ OK
 [x] cd web && npm run build 通过
 ```
 
+
+### Step 4.13：Run / Approval / Insight 详情展开
+
+目标：让 `/business` 页面不只是展示摘要，也能在卡片内展开业务依据、动作影响和指标细节。
+
+交付：
+
+```text
+[x] Run Story 卡片新增 details 展开区
+[x] Run 展示 taskInput / conclusionReason / systemAction / riskJudgement / nextSuggestion / technicalTraceRef
+[x] Run 展示 steps 和 metrics JSON preview
+[x] Approval 卡片新增 details 展开区
+[x] Approval 展示 reasonRequired / approveEffect / rejectEffect / recommendation / resolvedBy / resolutionReason / requestedInfo
+[x] Approval 展示 evidence JSON preview
+[x] Insight 卡片新增 details 展开区
+[x] Insight 展示 possibleCause / expectedBenefit / suggestedAction / metrics
+[x] web/src/lib/api.ts 补充详情字段类型
+[x] cd web && npm run build 通过
+```
+
+实现方式：
+
+```text
+使用原生 <details>/<summary>，不增加额外状态管理；默认仍保持摘要卡片，用户需要时展开。
+```
+
 ### Step 5：文档与验收
 
 交付：

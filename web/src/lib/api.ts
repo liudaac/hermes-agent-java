@@ -1115,17 +1115,33 @@ export interface BusinessTeamsResponse {
   emptyState?: string;
 }
 
+export interface BusinessRunStep {
+  stepId?: string;
+  title?: string;
+  summary?: string;
+  actor?: string;
+  evidence?: string;
+  status?: string;
+  timestamp?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface BusinessRunRecord {
   runId: string;
   workspaceId: string;
   teamId?: string;
   scenario?: string;
   taskTitle: string;
+  taskInput?: string;
   resultSummary: string;
   conclusionReason?: string;
   systemAction?: string;
   riskJudgement?: string;
   nextSuggestion?: string;
+  technicalTraceRef?: string;
+  steps?: BusinessRunStep[];
+  metrics?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   status: string;
   createdAt?: string;
 }
@@ -1147,11 +1163,19 @@ export interface BusinessApprovalRecord {
   teamId?: string;
   title: string;
   summary: string;
+  reasonRequired?: string;
+  approveEffect?: string;
+  rejectEffect?: string;
   recommendation?: string;
   riskLevel: string;
   status: string;
+  evidence?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   createdAt?: string;
   resolvedAt?: string;
+  resolvedBy?: string;
+  resolutionReason?: string;
+  requestedInfo?: string;
 }
 
 export interface BusinessApprovalsResponse {

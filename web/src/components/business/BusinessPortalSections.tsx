@@ -253,6 +253,19 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
       <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
         {run.teamId ?? "-"} · {timeLabel(run.createdAt)}
       </div>
+      <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Run details</summary>
+        <div className="mt-3 space-y-2 text-muted-foreground">
+          <DetailField label="Input" value={run.taskInput} />
+          <DetailField label="Conclusion reason" value={run.conclusionReason} />
+          <DetailField label="System action" value={run.systemAction} />
+          <DetailField label="Risk judgement" value={run.riskJudgement} />
+          <DetailField label="Next suggestion" value={run.nextSuggestion} />
+          <DetailField label="Technical trace" value={run.technicalTraceRef} />
+          {run.steps?.length ? <JsonPreview label="Steps" value={run.steps} /> : null}
+          {run.metrics ? <JsonPreview label="Metrics" value={run.metrics} /> : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -271,6 +284,19 @@ function ApprovalRow({ approval }: { approval: BusinessApprovalRecord }) {
       <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
         {approval.teamId ?? "-"} · {timeLabel(approval.createdAt)}
       </div>
+      <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Approval details</summary>
+        <div className="mt-3 space-y-2 text-muted-foreground">
+          <DetailField label="Why approval is required" value={approval.reasonRequired} />
+          <DetailField label="If approved" value={approval.approveEffect} />
+          <DetailField label="If rejected" value={approval.rejectEffect} />
+          <DetailField label="Recommendation" value={approval.recommendation} />
+          <DetailField label="Resolved by" value={approval.resolvedBy} />
+          <DetailField label="Resolution reason" value={approval.resolutionReason} />
+          <DetailField label="Requested info" value={approval.requestedInfo} />
+          {approval.evidence ? <JsonPreview label="Evidence" value={approval.evidence} /> : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -320,6 +346,37 @@ function InsightRow({ insight }: { insight: BusinessInsightRecord }) {
       </div>
       <p className="mt-2 text-sm normal-case text-muted-foreground">{insight.finding || "No finding."}</p>
       {insight.recommendation ? <p className="mt-2 text-sm normal-case">{insight.recommendation}</p> : null}
+      <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Insight details</summary>
+        <div className="mt-3 space-y-2 text-muted-foreground">
+          <DetailField label="Possible cause" value={insight.possibleCause} />
+          <DetailField label="Expected benefit" value={insight.expectedBenefit} />
+          <DetailField label="Suggested action" value={insight.suggestedAction} />
+          {insight.metrics ? <JsonPreview label="Metrics" value={insight.metrics} /> : null}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+
+function DetailField({ label, value }: { label: string; value?: unknown }) {
+  if (value === undefined || value === null || value === "") return null;
+  return (
+    <div>
+      <div className="font-expanded text-[0.65rem] uppercase tracking-[0.1em] text-foreground">{label}</div>
+      <div className="mt-0.5">{String(value)}</div>
+    </div>
+  );
+}
+
+function JsonPreview({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div>
+      <div className="font-expanded text-[0.65rem] uppercase tracking-[0.1em] text-foreground">{label}</div>
+      <pre className="mt-1 max-h-48 overflow-auto rounded-sm border border-border/60 bg-background/70 p-2 text-xs">
+        {JSON.stringify(value, null, 2)}
+      </pre>
     </div>
   );
 }
