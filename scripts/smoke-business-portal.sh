@@ -101,6 +101,23 @@ JSON
 request POST "/api/v1/workspaces" "$workspace_payload" "$TMP_DIR/workspace.json"
 assert_ok_or_conflict "$TMP_DIR/workspace.json"
 
+log "Create prompt asset"
+prompt_asset_payload="$(cat <<JSON
+{
+  "assetId": "after-sales-base",
+  "name": "After-sales Base Prompt",
+  "purpose": "Guide after-sales ticket handling with explainable policy checks.",
+  "content": "You are an after-sales policy specialist. First identify the customer request, then check policy constraints, then explain the recommended action.",
+  "tags": ["after-sales", "policy"],
+  "metadata": {"source": "smoke-business-portal"}
+}
+JSON
+)"
+request POST "/api/v1/workspaces/$WORKSPACE_ID/prompt-assets" "$prompt_asset_payload" "$TMP_DIR/prompt-asset.json"
+assert_ok_or_conflict "$TMP_DIR/prompt-asset.json"
+PROMPT_ASSET_ID="after-sales-base"
+echo "PROMPT_ASSET_ID=$PROMPT_ASSET_ID"
+
 log "Create team blueprint"
 team_payload="$(cat <<JSON
 {
@@ -109,7 +126,7 @@ team_payload="$(cat <<JSON
   "description": "Handles refund and after-sales cases",
   "scenario": "after-sales ticket handling",
   "operatingManual": "Classify the ticket, check policy, decide whether approval is needed, then draft a response.",
-  "promptAssetRefs": ["prompt://after-sales/base", "prompt://after-sales/refund-policy"],
+  "promptAssetRefs": ["prompt://after-sales-base"],
   "agents": [
     {
       "agentId": "ticket-classifier",
@@ -277,6 +294,7 @@ assert_ok "$TMP_DIR/insights.json"
 log "Smoke summary"
 echo "Workspace: $WORKSPACE_ID"
 echo "Team:      $TEAM_ID"
+echo "Prompt:    prompt://$PROMPT_ASSET_ID"
 echo "Run:       $RUN_ID"
 echo "Approval:  $APPROVAL_ID"
 echo "Approvals: $APPROVAL_IDS"

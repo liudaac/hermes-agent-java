@@ -65,7 +65,29 @@ tenantId is the isolation ID used by the underlying tenant system.
 The first MVP keeps workspaceId == tenantId, but both fields are returned deliberately.
 ```
 
-## 2. Create a Team Blueprint
+## 2. Create a Prompt Asset
+
+Prompt assets are workspace-scoped prompt instructions that Team Blueprints can reference.
+
+```bash
+curl -sS -X POST "$HERMES_BASE_URL/api/v1/workspaces/customer-service-demo/prompt-assets" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "assetId": "after-sales-base",
+    "name": "After-sales Base Prompt",
+    "purpose": "Guide after-sales ticket handling with explainable policy checks.",
+    "content": "You are an after-sales policy specialist. First identify the customer request, then check policy constraints, then explain the recommended action.",
+    "tags": ["after-sales", "policy"]
+  }'
+```
+
+Expected reference format for Team Blueprints:
+
+```text
+prompt://after-sales-base
+```
+
+## 3. Create a Team Blueprint
 
 A team blueprint describes a digital employee team and its versioned role cards.
 
@@ -79,8 +101,7 @@ curl -sS -X POST "$HERMES_BASE_URL/api/v1/workspaces/customer-service-demo/team-
     "scenario": "after-sales ticket handling",
     "operatingManual": "Classify the ticket, check policy, decide whether approval is needed, then draft a response.",
     "promptAssetRefs": [
-      "prompt://after-sales/base",
-      "prompt://after-sales/refund-policy"
+      "prompt://after-sales-base"
     ],
     "agents": [
       {
@@ -110,7 +131,7 @@ The returned team has activeVersion = 1.
 Version 1 has status = ACTIVE.
 ```
 
-## 3. Create a Business Run Story
+## 4. Create a Business Run Story
 
 A run record is a business-readable trace. It should explain what happened without forcing business users to read raw technical logs.
 
@@ -157,7 +178,7 @@ The returned run has a runId like run-xxxxxxxxxx.
 GET /api/v1/business/runs?workspaceId=customer-service-demo should include this record.
 ```
 
-## 4. Create a Business Approval Card
+## 5. Create a Business Approval Card
 
 Approval cards are optimized for mobile review: users should understand the decision and act quickly.
 
@@ -221,7 +242,7 @@ curl -sS -X POST "$HERMES_BASE_URL/api/v1/workspaces/customer-service-demo/appro
   }'
 ```
 
-## 5. View Business Portal Entries
+## 6. View Business Portal Entries
 
 ### Home
 
@@ -281,7 +302,7 @@ failureRate
 nextActions
 ```
 
-## 6. Run the Smoke Script
+## 7. Run the Smoke Script
 
 ```bash
 chmod +x scripts/smoke-business-portal.sh
@@ -306,7 +327,7 @@ APPROVAL_ACTION="approve" \
 scripts/smoke-business-portal.sh
 ```
 
-## 7. Expected End State
+## 8. Expected End State
 
 After the flow completes:
 

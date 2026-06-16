@@ -152,3 +152,34 @@ POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/approve
 POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/reject
 POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/request-info
 ```
+
+
+## Prompt Asset → Team Blueprint Smoke
+
+Date: 2026-06-16
+
+Command:
+
+```bash
+HERMES_BASE_URL=http://127.0.0.1:9119 \
+WORKSPACE_ID=customer-service-demo \
+TEAM_ID=after-sales-team \
+APPROVAL_ACTION=all \
+scripts/smoke-business-portal.sh
+```
+
+Result:
+
+```text
+Smoke completed successfully with exit code 0.
+```
+
+This validates the prompt asset chain:
+
+```text
+POST /api/v1/workspaces/{workspaceId}/prompt-assets
+  → creates after-sales-base
+POST /api/v1/workspaces/{workspaceId}/team-blueprints
+  → uses promptAssetRefs: ["prompt://after-sales-base"]
+  → backend validates the referenced PromptAsset
+```

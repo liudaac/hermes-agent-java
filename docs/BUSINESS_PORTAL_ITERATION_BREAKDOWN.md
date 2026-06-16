@@ -798,6 +798,22 @@ Prompt Asset 可以创建、展示并绑定到新建 Team Blueprint。
 Prompt Asset 版本演进和编辑 UI 后续再补。
 ```
 
+
+### Step 4.31：Prompt Asset → Team Blueprint smoke 覆盖
+
+目标：用真实 smoke 固化 PromptAssetRecord → prompt://assetId → TeamBlueprintVersion.promptAssetRefs → 后端校验的链路。
+
+交付：
+
+```text
+[x] scripts/smoke-business-portal.sh 创建 prompt asset: after-sales-base
+[x] Team Blueprint payload 使用 promptAssetRefs: ["prompt://after-sales-base"]
+[x] smoke 真实验证 Team Blueprint 创建时通过 PromptAsset 校验
+[x] docs/BUSINESS_PORTAL_API_EXAMPLES.md 补充 Prompt Asset 示例
+[x] docs/BUSINESS_PORTAL_SMOKE_RESULT.md 记录 Prompt Asset smoke 结果
+[x] 真实运行 smoke，退出码 0
+```
+
 ### Step 5：文档与验收
 
 交付：
