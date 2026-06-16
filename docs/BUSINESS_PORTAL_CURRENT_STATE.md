@@ -512,6 +512,15 @@ purpose
 content
 ```
 
+Create Prompt Asset fields:
+
+```text
+assetId
+name
+purpose
+content
+```
+
 Create Team Blueprint fields:
 
 ```text
