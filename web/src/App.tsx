@@ -27,6 +27,7 @@ import {
   Bot,
   Layout,
   ArrowLeftRight,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const OrgPage = lazy(() => import("@/pages/OrgPage"));
 const OrgManagePage = lazy(() => import("@/pages/OrgManagePage"));
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
+const BusinessPortalPage = lazy(() => import("@/pages/BusinessPortalPage"));
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 const PlaygroundPage = lazy(() => import("@/pages/PlaygroundPage"));
@@ -83,6 +85,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
   { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
+  { path: "/business", label: "Business", icon: BriefcaseBusiness },
   { path: "/org", labelKey: "orgOverview", label: "Org Overview", icon: Layout },
   { path: "/org-manage", labelKey: "orgManage", label: "Org Manage", icon: Network },
   { path: "/org-control", labelKey: "orgControl", label: "Org Control", icon: Monitor },
@@ -116,6 +119,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Users,
   Bot,
   ArrowLeftRight,
+  BriefcaseBusiness,
 };
 
 function resolveIcon(
@@ -271,6 +275,7 @@ export default function App() {
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
+          <Route path="/business" element={<BusinessPortalPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 

@@ -2760,6 +2760,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] Business Run API 能创建、查询并展示业务故事化运行记录
 [x] Business Insights API 能基于 workspace/team/run/approval 生成最小真实洞察
 [x] Business Home API 能聚合 runs / approvals / insights，返回业务驾驶舱数据
+[x] Dashboard UI 已新增 /business 页面壳并接入 Business Portal 五入口 API
 ```
 
 ---

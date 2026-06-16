@@ -234,6 +234,39 @@ tenantId 是底层隔离 ID
 系统建议我下一步做什么？
 ```
 
+
+### Step 4.9：Business Portal 前端页面壳联调
+
+目标：把已闭环的 Business Portal 后端五入口接入现有 React/Vite Dashboard UI，形成一个业务驾驶舱页面。
+
+交付：
+
+```text
+[x] 新增 web/src/pages/BusinessPortalPage.tsx
+[x] App.tsx 新增 /business 路由和 Business 导航入口
+[x] web/src/lib/api.ts 新增 Business Portal API client 方法
+[x] 前端页面接入 /api/v1/business/home
+[x] 前端页面接入 /api/v1/business/teams
+[x] 前端页面接入 /api/v1/business/runs
+[x] 前端页面接入 /api/v1/business/approvals
+[x] 前端页面接入 /api/v1/business/insights
+[x] 页面展示 summary / today / needsAttention / risk / teamStatus / teams / runs / approvals / insights / nextActions
+[x] 支持 workspace 下拉过滤和手动刷新
+[x] npm run build 通过
+```
+
+页面定位：
+
+```text
+不是技术 Dashboard，而是业务驾驶舱：
+- 今天整体是否正常
+- 哪些地方需要处理
+- 哪些团队在运行
+- 最近运行为什么得出结论
+- 哪些审批需要看
+- 系统建议下一步做什么
+```
+
 ### Step 5：文档与验收
 
 交付：

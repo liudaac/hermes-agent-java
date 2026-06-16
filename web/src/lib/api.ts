@@ -245,6 +245,36 @@ export const api = {
     );
   },
 
+
+  // Business Portal
+  getBusinessHome: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<BusinessHomeResponse>(`/api/v1/business/home${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  getBusinessTeams: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<BusinessTeamsResponse>(`/api/v1/business/teams${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  getBusinessRuns: (workspaceId?: string, limit = 20) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    qs.set("limit", String(limit));
+    return fetchJSON<BusinessRunsResponse>(`/api/v1/business/runs?${qs.toString()}`);
+  },
+  getBusinessApprovals: (workspaceId?: string, status = "ALL") => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    qs.set("status", status);
+    return fetchJSON<BusinessApprovalsResponse>(`/api/v1/business/approvals?${qs.toString()}`);
+  },
+  getBusinessInsights: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<BusinessInsightsResponse>(`/api/v1/business/insights${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1009,4 +1039,136 @@ export interface PluginManifestResponse {
   css?: string | null;
   has_api: boolean;
   source: string;
+}
+
+// ── Business Portal types ──────────────────────────────────────────────
+
+export interface BusinessAction {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export interface BusinessInsightRecord {
+  insightId: string;
+  workspaceId?: string;
+  title: string;
+  finding: string;
+  possibleCause?: string;
+  recommendation?: string;
+  expectedBenefit?: string;
+  suggestedAction?: string;
+  severity?: string;
+  metrics?: Record<string, unknown>;
+  generatedAt?: string;
+}
+
+export interface BusinessHomeResponse {
+  ok: boolean;
+  entry: string;
+  workspaceId?: string;
+  summary: {
+    workspaceCount: number;
+    teamCount: number;
+    runCount: number;
+    pendingApprovals: number;
+    openInsights: number;
+  };
+  today: Record<string, number>;
+  needsAttention: BusinessAction[];
+  risk: { level: string; [key: string]: unknown };
+  teamStatus: { total: number; normal: number; needsAttention: number; emptyState?: string };
+  insights: BusinessInsightRecord[];
+  nextActions: BusinessAction[];
+  workspaces: WorkspaceRecord[];
+  emptyState?: string;
+}
+
+export interface WorkspaceRecord {
+  workspaceId: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  owner?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BusinessTeamCard {
+  workspaceId: string;
+  teamId: string;
+  name: string;
+  scenario?: string;
+  activeVersion: number;
+  versionCount: number;
+  status: string;
+}
+
+export interface BusinessTeamsResponse {
+  ok: boolean;
+  entry: string;
+  workspaceId?: string;
+  teams: BusinessTeamCard[];
+  total: number;
+  emptyState?: string;
+}
+
+export interface BusinessRunRecord {
+  runId: string;
+  workspaceId: string;
+  teamId?: string;
+  scenario?: string;
+  taskTitle: string;
+  resultSummary: string;
+  conclusionReason?: string;
+  systemAction?: string;
+  riskJudgement?: string;
+  nextSuggestion?: string;
+  status: string;
+  createdAt?: string;
+}
+
+export interface BusinessRunsResponse {
+  ok: boolean;
+  entry: string;
+  workspaceId?: string;
+  teamId?: string;
+  runs: BusinessRunRecord[];
+  total: number;
+  emptyState?: string;
+  nextActions?: BusinessAction[];
+}
+
+export interface BusinessApprovalRecord {
+  approvalId: string;
+  workspaceId: string;
+  teamId?: string;
+  title: string;
+  summary: string;
+  recommendation?: string;
+  riskLevel: string;
+  status: string;
+  createdAt?: string;
+  resolvedAt?: string;
+}
+
+export interface BusinessApprovalsResponse {
+  ok: boolean;
+  entry: string;
+  workspaceId?: string;
+  approvals: BusinessApprovalRecord[];
+  total: number;
+  emptyState?: string;
+}
+
+export interface BusinessInsightsResponse {
+  ok: boolean;
+  entry: string;
+  metrics: Record<string, number>;
+  insights: BusinessInsightRecord[];
+  total: number;
+  nextActions: BusinessAction[];
+  emptyState?: string;
 }
