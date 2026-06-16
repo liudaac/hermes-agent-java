@@ -830,6 +830,38 @@ Prompt Asset 版本演进和编辑 UI 后续再补。
 [x] 明确下一推荐里程碑：Prompt Asset version evolution skeleton
 ```
 
+
+### Step 4.33：Prompt Asset 版本演进骨架
+
+目标：让 Prompt Asset 从单一内容资产升级为可创建 draft、激活版本、被 Team Blueprint 显式引用版本的 Prompt Stack 基础。
+
+交付：
+
+```text
+[x] 新增 PromptAssetVersion
+[x] PromptAssetRecord 新增 activeVersion
+[x] PromptAssetRecord 新增 versions
+[x] 创建 PromptAsset 时自动创建 v1 ACTIVE
+[x] PromptAssetService 新增 createDraftVersion
+[x] PromptAssetService 新增 activateVersion
+[x] PromptAssetService 新增 requireVersion
+[x] PromptAssetDashboardIntegration 新增 POST /prompt-assets/{assetId}/versions
+[x] PromptAssetDashboardIntegration 新增 POST /prompt-assets/{assetId}/versions/{version}/activate
+[x] TeamBlueprintService prompt ref 校验支持 prompt://assetId
+[x] TeamBlueprintService prompt ref 校验支持 prompt://assetId#vN
+[x] PromptAssetServiceTest 覆盖 draft / activate / explicit version
+[x] TeamBlueprintServiceTest 覆盖 prompt://assetId#vN
+[x] mvn -q -Dtest=PromptAssetServiceTest,TeamBlueprintServiceTest test 通过
+[x] mvn -q -DskipTests compile 通过
+```
+
+当前规则：
+
+```text
+prompt://after-sales-base      → 使用 active version
+prompt://after-sales-base#v2   → 使用显式 v2
+```
+
 ### Step 5：文档与验收
 
 交付：

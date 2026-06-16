@@ -67,6 +67,23 @@ class TeamBlueprintServiceTest {
         assertEquals(2, service.requireTeamBlueprint("customer-service", "after-sales").getActiveVersion());
     }
 
+
+    @Test
+    void acceptsExplicitPromptAssetVersionRef() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
+        TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        PromptAssetService promptAssetService = new PromptAssetService(tempDir.resolve("business/workspaces"), workspaceService);
+        workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
+        promptAssetService.createPromptAsset("customer-service", "base", "Base", null, "v1", List.of(), Map.of());
+        promptAssetService.createDraftVersion("customer-service", "base", "v2", "draft", Map.of());
+
+        TeamBlueprintRecord record = service.createTeamBlueprint("customer-service", "after-sales-versioned", "售后团队", null, null, null,
+            List.of(agent("classifier", "工单分类员")), List.of("prompt://base#v2"), null, Map.of());
+
+        assertEquals(List.of("prompt://base#v2"), record.getVersions().getFirst().getPromptAssetRefs());
+    }
+
     @Test
     void rejectsMissingPromptAssetRef() {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());

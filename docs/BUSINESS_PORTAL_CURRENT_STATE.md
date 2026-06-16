@@ -153,6 +153,7 @@ Key classes:
 
 ```text
 PromptAssetRecord
+PromptAssetVersion
 FilePromptAssetRepository
 PromptAssetService
 PromptAssetDashboardIntegration
@@ -164,6 +165,8 @@ APIs:
 GET  /api/v1/workspaces/{workspaceId}/prompt-assets
 POST /api/v1/workspaces/{workspaceId}/prompt-assets
 GET  /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}
+POST /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions
+POST /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions/{version}/activate
 ```
 
 Persistence:
@@ -180,6 +183,8 @@ Team Blueprint promptAssetRefs are validated when creating v1 or draft versions.
 Supported ref format: prompt://{assetId}.
 Prompt Asset UI is available in the /business page.
 Team creation can select existing Prompt Assets and submit prompt://assetId refs.
+Prompt Asset supports draft version creation and activation.
+Team Blueprint validation supports prompt://assetId and prompt://assetId#vN refs.
 ```
 
 ### 3.4 Team Blueprint Versioning
@@ -753,7 +758,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
-Prompt Asset version evolution and edit UI
+Prompt Asset edit UI for versions
 Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion

@@ -14,8 +14,10 @@ public class PromptAssetRecord {
     private String purpose;
     private String content;
     private int version = 1;
+    private int activeVersion = 1;
     private String status = "ACTIVE";
     private List<String> tags = new ArrayList<>();
+    private List<PromptAssetVersion> versions = new ArrayList<>();
     private Map<String, Object> metadata = new LinkedHashMap<>();
     private Instant createdAt;
     private Instant updatedAt;
@@ -32,10 +34,14 @@ public class PromptAssetRecord {
     public PromptAssetRecord setContent(String content) { this.content = content; return this; }
     public int getVersion() { return version; }
     public PromptAssetRecord setVersion(int version) { this.version = version; return this; }
+    public int getActiveVersion() { return activeVersion; }
+    public PromptAssetRecord setActiveVersion(int activeVersion) { this.activeVersion = activeVersion; return this; }
     public String getStatus() { return status; }
     public PromptAssetRecord setStatus(String status) { this.status = status; return this; }
     public List<String> getTags() { return tags; }
     public PromptAssetRecord setTags(List<String> tags) { this.tags = tags != null ? tags : new ArrayList<>(); return this; }
+    public List<PromptAssetVersion> getVersions() { return versions; }
+    public PromptAssetRecord setVersions(List<PromptAssetVersion> versions) { this.versions = versions != null ? versions : new ArrayList<>(); return this; }
     public Map<String, Object> getMetadata() { return metadata; }
     public PromptAssetRecord setMetadata(Map<String, Object> metadata) { this.metadata = metadata != null ? metadata : new LinkedHashMap<>(); return this; }
     public Instant getCreatedAt() { return createdAt; }

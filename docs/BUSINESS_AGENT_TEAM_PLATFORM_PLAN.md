@@ -2784,6 +2784,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] /business 页面完成 Prompt Asset UI 最小接入：创建、展示、选择并绑定到 Team Blueprint
 [x] smoke 脚本真实验证 Prompt Asset → Team Blueprint promptAssetRefs 校验链路
 [x] BUSINESS_PORTAL_CURRENT_STATE.md 新增阶段验收快照，明确下一里程碑为 Prompt Asset 版本演进骨架
+[x] Prompt Asset 版本演进骨架落地，支持 draft/activate 和 prompt://assetId#vN 校验
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 

@@ -142,25 +142,51 @@ public class TeamBlueprintService {
             if (ref == null || ref.isBlank()) {
                 continue;
             }
-            String assetId = parsePromptAssetId(ref);
-            if (assetId == null) {
-                throw new IllegalArgumentException("Unsupported prompt asset ref: " + ref + ". Expected format: prompt://{assetId}");
+            PromptAssetRef promptRef = parsePromptAssetRef(ref);
+            if (promptRef == null) {
+                throw new IllegalArgumentException("Unsupported prompt asset ref: " + ref + ". Expected format: prompt://{assetId} or prompt://{assetId}#v{version}");
             }
-            promptAssetService.requirePromptAsset(workspaceId, assetId);
+            if (promptRef.version() != null) {
+                promptAssetService.requireVersion(workspaceId, promptRef.assetId(), promptRef.version());
+            } else {
+                promptAssetService.requirePromptAsset(workspaceId, promptRef.assetId());
+            }
         }
     }
 
-    private static String parsePromptAssetId(String ref) {
+    private static PromptAssetRef parsePromptAssetRef(String ref) {
         String prefix = "prompt://";
         if (!ref.startsWith(prefix)) {
             return null;
         }
-        String assetId = ref.substring(prefix.length()).trim();
-        if (assetId.isBlank() || assetId.contains("/")) {
+        String value = ref.substring(prefix.length()).trim();
+        if (value.isBlank() || value.contains("/")) {
             return null;
         }
-        return assetId;
+        String assetId = value;
+        Integer version = null;
+        int versionSeparator = value.indexOf("#v");
+        if (versionSeparator >= 0) {
+            assetId = value.substring(0, versionSeparator);
+            String versionText = value.substring(versionSeparator + 2);
+            if (assetId.isBlank() || versionText.isBlank() || versionText.contains("#")) {
+                return null;
+            }
+            try {
+                version = Integer.parseInt(versionText);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            if (version <= 0) {
+                return null;
+            }
+        } else if (value.contains("#")) {
+            return null;
+        }
+        return new PromptAssetRef(assetId, version);
     }
+
+    private record PromptAssetRef(String assetId, Integer version) {}
 
     private static void validateId(String value, String field) {
         if (value == null || value.isBlank()) {
