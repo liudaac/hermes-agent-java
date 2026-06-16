@@ -138,6 +138,41 @@ tenantId 是底层隔离 ID
 操作按钮：approve / reject / request-info
 ```
 
+
+### Step 4.6：Business Run API / 业务故事化 Trace
+
+目标：让 Business Portal 的“运行”入口从空状态升级为真实业务运行记录，并默认展示业务能看懂的故事化 Trace。
+
+交付：
+
+```text
+[x] BusinessRunRecord
+[x] BusinessRunStep
+[x] FileBusinessRunRepository
+[x] BusinessRunService
+[x] BusinessRunDashboardIntegration
+[x] GET /api/v1/workspaces/{workspaceId}/runs
+[x] POST /api/v1/workspaces/{workspaceId}/runs
+[x] GET /api/v1/workspaces/{workspaceId}/runs/{runId}
+[x] GET /api/v1/business/runs 读取真实运行记录，不再只是空状态
+[x] 测试：创建业务运行记录
+[x] 测试：按 workspace/team/status 查询运行记录
+[x] 测试：读取运行详情
+```
+
+业务故事化 Trace 字段：
+
+```text
+任务是什么：taskTitle / taskInput
+结果是什么：resultSummary
+为什么得出这个结论：conclusionReason
+系统做了什么：systemAction
+风险判断是什么：riskJudgement
+后续建议是什么：nextSuggestion
+业务步骤：steps[].title / summary / actor / evidence / status
+技术追溯：technicalTraceRef（默认不在业务层展开）
+```
+
 ### Step 5：文档与验收
 
 交付：

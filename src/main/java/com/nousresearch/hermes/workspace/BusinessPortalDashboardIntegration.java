@@ -2,6 +2,7 @@ package com.nousresearch.hermes.workspace;
 
 import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -23,11 +24,11 @@ public final class BusinessPortalDashboardIntegration {
     private BusinessPortalDashboardIntegration() {
     }
 
-    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService) {
+    public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService, BusinessRunService runService) {
         logger.info("Registering Business Portal shell routes");
         app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
-        app.get("/api/v1/business/runs", BusinessPortalDashboardIntegration::runs);
+        app.get("/api/v1/business/runs", ctx -> runs(ctx, runService));
         app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
         app.get("/api/v1/business/insights", BusinessPortalDashboardIntegration::insights);
     }
@@ -101,14 +102,21 @@ public final class BusinessPortalDashboardIntegration {
         ));
     }
 
-    static void runs(Context ctx) {
+    static void runs(Context ctx, BusinessRunService runService) {
+        String workspaceId = ctx.queryParam("workspaceId");
+        String teamId = ctx.queryParam("teamId");
+        String status = ctx.queryParam("status");
+        int limit = parseInt(ctx.queryParam("limit"), 50);
+        var runs = runService.listRuns(workspaceId, teamId, status, limit);
         ctx.status(200).json(Map.of(
             "ok", true,
             "entry", "runs",
-            "runs", List.of(),
-            "total", 0,
-            "emptyState", "还没有运行记录。创建团队后，可以用样例任务试运行。",
-            "nextActions", List.of(action("run-sample", "用样例任务试运行", "生成第一条业务故事化运行记录"))
+            "workspaceId", workspaceId == null ? "" : workspaceId,
+            "teamId", teamId == null ? "" : teamId,
+            "runs", runs,
+            "total", runs.size(),
+            "emptyState", runs.isEmpty() ? "还没有运行记录。创建团队后，可以用样例任务试运行。" : "",
+            "nextActions", runs.isEmpty() ? List.of(action("run-sample", "用样例任务试运行", "生成第一条业务故事化运行记录")) : List.of()
         ));
     }
 
@@ -136,6 +144,11 @@ public final class BusinessPortalDashboardIntegration {
         ));
     }
 
+    private static int parseInt(String raw, int fallback) {
+        if (raw == null || raw.isBlank()) return fallback;
+        try { return Integer.parseInt(raw); } catch (Exception ignored) { return fallback; }
+    }
+
     private static Map<String, Object> action(String id, String title, String description) {
         Map<String, Object> action = new LinkedHashMap<>();
         action.put("id", id);
@@ -144,3 +157,4 @@ public final class BusinessPortalDashboardIntegration {
         return action;
     }
 }
+

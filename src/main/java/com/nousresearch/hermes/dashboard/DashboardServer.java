@@ -25,6 +25,8 @@ import com.nousresearch.hermes.workspace.WorkspaceService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.approval.BusinessApprovalDashboardIntegration;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.run.BusinessRunDashboardIntegration;
+import com.nousresearch.hermes.business.run.BusinessRunService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -107,6 +109,7 @@ public class DashboardServer {
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
+    private final BusinessRunService businessRunService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -152,6 +155,7 @@ public class DashboardServer {
         this.workspaceService = new WorkspaceService(tenantManager);
         this.teamBlueprintService = new TeamBlueprintService(workspaceService);
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
+        this.businessRunService = new BusinessRunService(workspaceService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -390,7 +394,8 @@ public class DashboardServer {
         // ========== Business Portal APIs ==========
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
         BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
-        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService);
+        BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
+        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService);
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);
