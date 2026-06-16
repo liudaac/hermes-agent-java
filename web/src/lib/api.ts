@@ -282,6 +282,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  createBusinessTeamBlueprint: (workspaceId: string, payload: CreateBusinessTeamBlueprintPayload) =>
+    fetchJSON<CreateBusinessTeamBlueprintResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/team-blueprints`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1217,5 +1227,34 @@ export interface CreateBusinessWorkspaceResponse {
   workspaceId: string;
   tenantId: string;
   workspace: WorkspaceRecord;
+  message?: string;
+}
+
+export interface AgentBlueprintPayload {
+  agentId: string;
+  displayName: string;
+  responsibility?: string;
+  knowledgeRefs?: string[];
+  allowedTools?: string[];
+  approvalRules?: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessTeamBlueprintPayload {
+  teamId: string;
+  name: string;
+  description?: string;
+  scenario?: string;
+  operatingManual?: string;
+  promptAssetRefs?: string[];
+  agents?: AgentBlueprintPayload[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessTeamBlueprintResponse {
+  ok: boolean;
+  workspaceId: string;
+  teamId: string;
+  team: unknown;
   message?: string;
 }

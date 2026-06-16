@@ -389,6 +389,32 @@ OK
 只做 Workspace 创建；Team / Run / Approval 创建表单后续分步补齐。
 ```
 
+
+### Step 4.15：Create Team Blueprint 表单 MVP
+
+目标：让业务用户可以在 `/business` 页面完成 `Create Workspace → Create Team` 的第二步。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 createBusinessTeamBlueprint
+[x] 新增 CreateBusinessTeamBlueprintPayload / CreateBusinessTeamBlueprintResponse / AgentBlueprintPayload 类型
+[x] CreateTeamBlueprintForm 接入 /business 页面
+[x] 表单字段：teamId / name / scenario / description / operatingManual
+[x] 未选择 workspace 时禁用团队创建，并提示先选择或创建 workspace
+[x] 默认生成一个基础 Agent role card：business-analyst
+[x] 默认 promptAssetRefs: prompt://business-portal/default-team
+[x] metadata 标记 source=business-portal-ui
+[x] 创建成功后刷新页面数据
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+只做最小团队蓝图创建；复杂岗位编辑器、版本草稿编辑和激活切换后续再补。
+```
+
 ### Step 5：文档与验收
 
 交付：

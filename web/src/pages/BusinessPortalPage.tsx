@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type {
   BusinessApprovalRecord,
   BusinessHomeResponse,
+  CreateBusinessTeamBlueprintPayload,
   CreateBusinessWorkspacePayload,
   BusinessInsightRecord,
   BusinessRunRecord,
@@ -30,7 +31,7 @@ import {
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
@@ -49,6 +50,12 @@ export default function BusinessPortalPage() {
     setWorkspaceId(response.workspaceId);
     showToast(`Workspace created: ${response.workspaceId}`, "success");
     return response.workspace;
+  };
+
+  const createTeamBlueprint = async (targetWorkspaceId: string, payload: CreateBusinessTeamBlueprintPayload) => {
+    const response = await api.createBusinessTeamBlueprint(targetWorkspaceId, payload);
+    showToast(`Team created: ${response.teamId}`, "success");
+    await load();
   };
 
   const load = async () => {
@@ -114,6 +121,7 @@ export default function BusinessPortalPage() {
       </div>
 
       <CreateWorkspaceForm onCreate={createWorkspace} />
+      <CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />
 
       {home?.emptyState ? (
         <Card>
