@@ -814,6 +814,22 @@ Prompt Asset 版本演进和编辑 UI 后续再补。
 [x] 真实运行 smoke，退出码 0
 ```
 
+
+### Step 4.32：阶段验收快照
+
+目标：在进入 Prompt Asset 版本演进前，收拢当前阶段成果，明确哪些闭环已完成、哪些方向不应继续扩 UI 小修。
+
+交付：
+
+```text
+[x] BUSINESS_PORTAL_CURRENT_STATE.md 新增 Stage Acceptance Snapshot
+[x] 汇总 Workspace / Scenario / Prompt Asset / Team / Run / Approval / Insights / Smoke loops
+[x] 记录最新成功 smoke 命令和摘要
+[x] 标记当前可安全继续建设的基础能力
+[x] 标记不应继续扩展的 UI polish 方向
+[x] 明确下一推荐里程碑：Prompt Asset version evolution skeleton
+```
+
 ### Step 5：文档与验收
 
 交付：

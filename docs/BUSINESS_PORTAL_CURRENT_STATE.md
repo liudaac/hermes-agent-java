@@ -872,3 +872,114 @@ d23c4e8 docs: add business portal api smoke flow
 59e3d30 feat: aggregate business portal home metrics
 f5ebc75 feat: add business insights APIs
 ```
+
+## 10. Stage Acceptance Snapshot
+
+Date: 2026-06-16
+Latest verified smoke commit: `6f0ee7c test: cover prompt assets in business portal smoke`
+
+### 10.1 Completed business platform loops
+
+The current Business Portal implementation has moved beyond a UI shell. The following loops are implemented and verified at MVP level:
+
+```text
+Workspace loop:
+  Workspace façade → underlying Tenant auto-create → workspace APIs → /business workspace selector
+
+Scenario loop:
+  ScenarioRecord → scenario APIs → /business create/list/select → Team/Run/Insights scenarioId binding
+
+Prompt Asset loop:
+  PromptAssetRecord → prompt-assets APIs → /business create/list/select → Team promptAssetRefs → backend validation
+
+Team loop:
+  TeamBlueprintRecord → versioned v1 ACTIVE / draft / activate APIs → /business create/list cards
+
+Run loop:
+  BusinessRunRecord → story-style trace APIs → /business create/list/detail cards → scenarioId filtering
+
+Approval loop:
+  BusinessApprovalRecord → create/approve/reject/request-info APIs → /business action buttons → high-risk confirmation phrase
+
+Insights loop:
+  BusinessInsightService → workspace/scenario metrics → /business insights and next actions
+
+Smoke loop:
+  scripts/smoke-business-portal.sh → creates workspace/prompt/team/run/approvals → verifies approval actions and business entries
+```
+
+### 10.2 Latest verified smoke command
+
+```bash
+HERMES_BASE_URL=http://127.0.0.1:9119 \
+WORKSPACE_ID=customer-service-demo \
+TEAM_ID=after-sales-team \
+APPROVAL_ACTION=all \
+scripts/smoke-business-portal.sh
+```
+
+Latest known successful summary:
+
+```text
+Workspace: customer-service-demo
+Team: after-sales-team
+Prompt: prompt://after-sales-base
+Run: run-7af85de6-8
+Approval: apv-cc0c234e-b
+Home risk: LOW
+Insights: 1
+OK
+```
+
+### 10.3 What is now safe to build on
+
+The following are stable enough for the next development stage:
+
+```text
+Workspace-scoped file persistence convention
+Business ID validation convention
+Scenario object and scenarioId binding
+Prompt Asset object and prompt://assetId refs
+Team Blueprint versioning foundation
+Business Run story model
+Business Approval Center
+Business Insights summary model
+/business Dashboard page as a business workbench
+Smoke script as an integration safety net
+```
+
+### 10.4 What should not be expanded further right now
+
+Avoid spending more time on minor Business Portal form polish unless browser visual verification reveals a concrete problem.
+
+Do not keep adding CRUD fields before advancing the platform core:
+
+```text
+Prompt Asset versioning
+Team Blueprint draft evolution
+Insight → Evolution Proposal
+AgentTrace → BusinessRun adapter
+Policy-backed approval rules
+```
+
+### 10.5 Recommended next milestone
+
+Recommended next milestone:
+
+```text
+Prompt Asset version evolution skeleton
+```
+
+Suggested minimum scope:
+
+```text
+PromptAssetVersion or version history inside PromptAssetRecord
+POST /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions
+POST /api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions/{version}/activate
+prompt://assetId resolves to active version
+prompt://assetId#v1 resolves to explicit version
+Team Blueprint promptAssetRefs validation supports both forms
+Tests for active version and explicit version refs
+```
+
+This milestone directly advances the original Prompt Stack direction and prepares Team Blueprint evolution.
