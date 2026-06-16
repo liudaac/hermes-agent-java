@@ -19,6 +19,10 @@ import java.util.Map;
 import com.nousresearch.hermes.config.HermesConfig;
 import java.nio.file.Path;
 import com.nousresearch.hermes.tenant.core.TenantManager;
+import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
+import com.nousresearch.hermes.workspace.BusinessPortalDashboardIntegration;
+import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -98,6 +102,8 @@ public class DashboardServer {
     
     // Tenant Manager
     private final TenantManager tenantManager;
+    private final WorkspaceService workspaceService;
+    private final TeamBlueprintService teamBlueprintService;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -140,6 +146,8 @@ public class DashboardServer {
         );
         this.oauthProvidersHandler = new OAuthProvidersHandler();
         this.analyticsHandler = new AnalyticsHandler();
+        this.workspaceService = new WorkspaceService(tenantManager);
+        this.teamBlueprintService = new TeamBlueprintService(workspaceService);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -374,6 +382,10 @@ public class DashboardServer {
 
         // ========== Tenant Management APIs ==========
         TenantDashboardIntegration.registerRoutes(app, tenantManager);
+
+        // ========== Business Portal APIs ==========
+        WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
+        BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);

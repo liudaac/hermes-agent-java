@@ -2747,16 +2747,16 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 验收标准：
 
 ```text
-[ ] mvn test 能通过新增测试
-[ ] POST /api/v1/workspaces 能创建底层 tenant
-[ ] GET /api/v1/workspaces 能返回业务化 workspace 列表
-[ ] POST /api/v1/workspaces/{workspaceId}/team-blueprints 能创建 v1 ACTIVE
-[ ] POST /versions 能创建 v2 DRAFT
-[ ] POST /activate 能切换 activeVersion
-[ ] ACTIVE version 不允许被原地修改
-[ ] 所有错误响应包含明确 workspaceId / teamId / version
-[ ] Business Portal 五个入口都有可返回真实数据或空状态的 API 支撑
-[ ] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息
+[x] mvn test 能通过新增测试
+[x] POST /api/v1/workspaces 能创建底层 tenant
+[x] GET /api/v1/workspaces 能返回业务化 workspace 列表
+[x] POST /api/v1/workspaces/{workspaceId}/team-blueprints 能创建 v1 ACTIVE
+[x] POST /versions 能创建 v2 DRAFT
+[x] POST /activate 能切换 activeVersion
+[ ] ACTIVE version 不允许被原地修改（当前没有原地修改接口；下一步增加 update API 时补强）
+[x] 所有错误响应包含明确 workspaceId / teamId / version
+[x] Business Portal 五个入口都有可返回真实数据或空状态的 API 支撑
+[ ] 移动端审批卡能用同一套审批 API 完成同意 / 拒绝 / 要求补充信息（下一步接 Approval Center）
 ```
 
 ---
@@ -2841,20 +2841,20 @@ IntentOrchestrator
 建议明天从下面开始：
 
 ```text
-[ ] 新建 docs/WORKSPACE_API.md 或直接在本方案基础上展开 API
-[ ] 新增 package: com.nousresearch.hermes.workspace
-[ ] 新增 WorkspaceRecord
-[ ] 新增 WorkspaceService
-[ ] 新增 WorkspaceHandler
-[ ] DashboardServer 注册 /api/v1/workspaces
-[ ] POST /api/v1/workspaces 自动调用 TenantManager.createTenant
-[ ] GET /api/v1/workspaces 返回 workspace 列表
-[ ] 新增 package: com.nousresearch.hermes.blueprint
-[ ] 新增 TeamBlueprintRecord / AgentBlueprintRecord
-[ ] 新增 TeamBlueprintService
-[ ] API: 创建 team blueprint / 新版本 / 激活版本
-[ ] 测试：创建 workspace 自动创建 tenant
-[ ] 测试：创建 blueprint v1 并激活
+[x] 新建 docs/BUSINESS_PORTAL_ITERATION_BREAKDOWN.md 并拆解 API 迭代步骤
+[x] 新增 package: com.nousresearch.hermes.workspace
+[x] 新增 WorkspaceRecord
+[x] 新增 WorkspaceService
+[x] 新增 WorkspaceDashboardIntegration
+[x] DashboardServer 注册 /api/v1/workspaces
+[x] POST /api/v1/workspaces 自动调用 TenantManager.createTenant
+[x] GET /api/v1/workspaces 返回 workspace 列表
+[x] 新增 package: com.nousresearch.hermes.blueprint
+[x] 新增 TeamBlueprintRecord / AgentBlueprintRecord
+[x] 新增 TeamBlueprintService
+[x] API: 创建 team blueprint / 新版本 / 激活版本
+[x] 测试：创建 workspace 自动创建 tenant
+[x] 测试：创建 blueprint v1 并激活
 ```
 
 ---
