@@ -1,9 +1,77 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import type { BusinessTeamCard, CreateBusinessApprovalPayload, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+
+
+export function BusinessCreationPanel({
+  workspaceCount,
+  teamCount,
+  workspaceForm,
+  teamForm,
+  runForm,
+  approvalForm,
+}: {
+  workspaceCount: number;
+  teamCount: number;
+  workspaceForm: ReactNode;
+  teamForm: ReactNode;
+  runForm: ReactNode;
+  approvalForm: ReactNode;
+}) {
+  const shouldOpenWorkspace = workspaceCount === 0;
+  const shouldOpenTeam = workspaceCount > 0 && teamCount === 0;
+
+  return (
+    <section className="space-y-3 rounded-sm border border-border/70 p-3">
+      <div>
+        <div className="font-expanded text-sm tracking-[0.1em]">Create business objects</div>
+        <p className="mt-1 text-sm normal-case text-muted-foreground">
+          Use these focused forms to build the Business Portal loop step by step.
+        </p>
+      </div>
+      <CreationStep title="1. Workspace" description="Create the business space." defaultOpen={shouldOpenWorkspace}>
+        {workspaceForm}
+      </CreationStep>
+      <CreationStep title="2. Team Blueprint" description="Create the first digital employee team." defaultOpen={shouldOpenTeam}>
+        {teamForm}
+      </CreationStep>
+      <CreationStep title="3. Run Story" description="Record a business-readable run story." defaultOpen={false}>
+        {runForm}
+      </CreationStep>
+      <CreationStep title="4. Approval Card" description="Create a mobile-first approval card." defaultOpen={false}>
+        {approvalForm}
+      </CreationStep>
+    </section>
+  );
+}
+
+function CreationStep({
+  title,
+  description,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  description: string;
+  defaultOpen: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="rounded-sm border border-border/60 p-3" open={defaultOpen}>
+      <summary className="cursor-pointer">
+        <div className="inline-flex flex-col gap-1 align-middle">
+          <span className="font-expanded text-xs uppercase tracking-[0.1em]">{title}</span>
+          <span className="text-sm normal-case text-muted-foreground">{description}</span>
+        </div>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
 
 export function CreateWorkspaceForm({
   onCreate,

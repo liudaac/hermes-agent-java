@@ -492,6 +492,23 @@ Request info 支持用户输入 requestedInfo。
 更复杂的审批理由、二次确认和高风险确认短语后续再补。
 ```
 
+
+### Step 4.19：创建区折叠/分组优化
+
+目标：避免 `/business` 页面顶部被多个创建表单淹没，把创建能力组织成一个业务对象创建区。
+
+交付：
+
+```text
+[x] 新增 BusinessCreationPanel
+[x] 将 Create Workspace / Team Blueprint / Run Story / Approval Card 放入四个 details 折叠面板
+[x] 默认展开逻辑：无 workspace 时展开 Workspace；有 workspace 但无 team 时展开 Team
+[x] Run / Approval 创建区默认收起
+[x] 页面主文件只渲染一个 BusinessCreationPanel，降低表单堆叠感
+[x] 修复 ReactNode type-only import
+[x] cd web && npm run build 通过
+```
+
 ### Step 5：文档与验收
 
 交付：

@@ -34,7 +34,7 @@ import {
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { CreateApprovalCardForm, CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { BusinessCreationPanel, CreateApprovalCardForm, CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
@@ -162,10 +162,14 @@ export default function BusinessPortalPage() {
         </div>
       </div>
 
-      <CreateWorkspaceForm onCreate={createWorkspace} />
-      <CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />
-      <CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />
-      <CreateApprovalCardForm workspaceId={workspaceId} teams={teams} onCreate={createApprovalCard} />
+      <BusinessCreationPanel
+        workspaceCount={summary?.workspaceCount ?? 0}
+        teamCount={summary?.teamCount ?? 0}
+        workspaceForm={<CreateWorkspaceForm onCreate={createWorkspace} />}
+        teamForm={<CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />}
+        runForm={<CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />}
+        approvalForm={<CreateApprovalCardForm workspaceId={workspaceId} teams={teams} onCreate={createApprovalCard} />}
+      />
 
       {home?.emptyState ? (
         <Card>
