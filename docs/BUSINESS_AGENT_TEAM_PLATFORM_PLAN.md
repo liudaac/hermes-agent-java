@@ -3932,3 +3932,111 @@ Scenario vs Intent / Workflow
 ```
 
 后续进入 `BusinessTeamGenerationService` 前，必须先基于该 audit 完成 foundation capability inventory 和 adapter design。
+
+---
+
+## 21. Foundation Capability Inventory：基座能力盘点结果
+
+已基于 `docs/BUSINESS_PORTAL_FOUNDATION_AUDIT.md` 完成代码级盘点，新增文档：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_CAPABILITY_INVENTORY.md
+```
+
+该文档把第 20 节的审计进一步落到现有 Java 类和可调用入口，明确：
+
+```text
+Business Portal 对象应该复用哪些 Hermes 基座类
+哪些 Business Portal 服务目前只是 façade / projection / card store
+哪些区域存在重复造轮子的风险
+每个对象的 source of truth 是谁
+进入 BusinessTeamGenerationService 前必须先设计哪些 adapter / validator
+```
+
+### 21.1 当前结论：Business Portal 不是第二套平台
+
+后续所有 Business Portal 对象继续按以下定位收敛：
+
+| Business Portal 对象 | 正确角色 | Source of Truth |
+|---|---|---|
+| Workspace | 业务空间 façade | `TenantManager` / `TenantContext` |
+| Scenario | 业务场景 framing | `IntentOrchestrator` / `WorkflowEngine` / `TaskOrchestrator` |
+| Prompt Asset | 业务提示词/SOP façade | Prompt / Memory / Skill / Org Knowledge resolver |
+| Team Blueprint | 设计时团队蓝图 | `TeamManager` / `Team` / `AgentRole` / `TenantBus` / Agent runtime |
+| Agent Blueprint | 设计时岗位卡 | `AgentRole` + tool/skill registry |
+| Business Run | 业务可读运行投影 | `IntentRun` / `AgentTrace` / `AgentObservability` |
+| Approval Card | 业务审批卡片 | `ApprovalSystem` / `ApprovalRequest` / `ApprovalResult` |
+| Insight | 业务复盘摘要 | Trace / Eval / Observability / Evolution foundation |
+| Evolution Proposal | 业务优化提案面 | `SelfEvolutionEngine` / `FailureCase` / `DelegatedTaskStore` / team versioning |
+| Notification | 业务消息载荷 | Gateway `PlatformAdapter` |
+
+### 21.2 重复造轮子清单
+
+当前最需要压住的重复风险：
+
+```text
+ScenarioService 不应变成 workflow engine
+TeamBlueprintService 不应变成 agent runtime / message bus
+AgentBlueprintRecord.allowedTools 不应绕过 ToolRegistry / TenantToolRegistry
+PromptAssetService 不应变成第二套 memory / skill / knowledge base
+BusinessRunService 不应变成 trace store
+BusinessApprovalService 不应变成第二套 approval engine
+BusinessInsightService 不应只以 file-backed BusinessRun / Approval 为分析事实源
+EvolutionProposalService 不应变成第二套 org evolution engine
+Business Portal 不应直接实现 Feishu / Telegram / Discord delivery
+```
+
+### 21.3 下一步顺序再次收敛
+
+因此下一步仍然不要写 generation API，不扩 `/business` UI。
+
+新的工程顺序：
+
+```text
+P0: FoundationCapabilityValidator 设计
+P0: TeamBlueprintCompiler 设计
+P0: ScenarioIntentAdapter 设计
+P0: BusinessRunProjectionAdapter 设计
+P0: BusinessApprovalAdapter 设计
+P0: EvolutionProposalAdapter 设计
+P1: BusinessInsightProjectionAdapter / BusinessNotificationAdapter 设计
+P1: adapter skeleton / tests
+P2: Foundation-aware BusinessTeamGenerationService MVP
+```
+
+### 21.4 BusinessTeamGenerationService 的进入条件
+
+只有当以下问题有明确答案后，才能继续实现 BusinessTeamGenerationService：
+
+```text
+生成出的工具如何通过 ToolRegistry / TenantToolRegistry 校验？
+生成出的 AgentBlueprint 如何编译成 AgentRole？
+生成出的 TeamBlueprint 如何映射到 TeamManager / Team / TenantBus？
+生成出的审批规则如何进入 ApprovalSystem / GovernancePolicy？
+生成出的运行记录如何从 IntentRun / AgentTrace 投影，而不是手写假记录？
+生成出的优化建议如何进入 SelfEvolutionEngine / DelegatedTaskStore / versioning？
+通知如何走 Gateway PlatformAdapter，而不是业务模块直连渠道？
+```
+
+### 21.5 当前明确非目标
+
+在 adapter boundary 未完成前，继续暂停：
+
+```text
+POST /team-generation
+新的业务对象
+新的 Business Portal 页面/Tab
+新的 approval/evolution 状态语义
+新的 notification delivery 实现
+任何绕过 Hermes Foundation 的 LLM-generated executable JSON
+```
+
+架构标准保持不变：
+
+```text
+LLM proposes
+Schema validates
+Hermes Foundation constrains
+Business Portal presents
+Human approves high-risk changes
+```

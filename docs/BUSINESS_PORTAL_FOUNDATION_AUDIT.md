@@ -813,3 +813,52 @@ Which Hermes foundation capability does this business object project, constrain 
 ```
 
 Only after that answer is clear should new product features be added.
+
+---
+
+## 9. Follow-up Inventory Completed
+
+Date: 2026-06-17
+
+The P0 Foundation Capability Inventory requested in section 6 has been completed as a separate code-level document:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_CAPABILITY_INVENTORY.md
+```
+
+That document records concrete classes and entry points for:
+
+```text
+TenantManager / TenantContext
+IntentOrchestrator / TaskOrchestrator / WorkflowEngine
+TeamManager / Team / AgentRole / TenantBus / Agent runtime
+ToolRegistry / TenantToolRegistry / TenantAwareToolDispatcher
+SkillManager / TenantSkillManager
+PromptAssetService / Memory / Org Knowledge
+IntentRun / AgentTrace / AgentObservability
+ApprovalSystem / ApprovalRequest / ApprovalResult
+SelfEvolutionEngine / FailureCase / AgentEvaluation
+DelegatedTaskStore
+Gateway PlatformAdapter implementations
+```
+
+The inventory confirms the audit conclusion:
+
+```text
+Business Portal objects should be façade/projection/design-time artifacts.
+Hermes foundation classes own execution, approval, trace, tenant, tool and evolution truth.
+```
+
+Updated next step:
+
+```text
+Do not implement generation API yet.
+Design adapter contracts first:
+- FoundationCapabilityValidator
+- ScenarioIntentAdapter
+- TeamBlueprintCompiler
+- PromptAssetResolver
+- BusinessRunProjectionAdapter
+- BusinessApprovalAdapter
+- EvolutionProposalAdapter
+```
