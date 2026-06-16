@@ -293,7 +293,7 @@ Optional variables:
 ```bash
 WORKSPACE_ID="customer-service-demo"
 TEAM_ID="after-sales-team"
-APPROVAL_ACTION="approve" # approve | reject | request-info | none
+APPROVAL_ACTION="approve" # approve | reject | request-info | none | all
 ```
 
 Example:

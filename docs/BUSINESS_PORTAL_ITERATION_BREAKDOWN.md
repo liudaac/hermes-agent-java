@@ -509,6 +509,35 @@ Request info 支持用户输入 requestedInfo。
 [x] cd web && npm run build 通过
 ```
 
+
+### Step 4.20：增强 smoke 覆盖三类审批动作
+
+目标：让 smoke 脚本覆盖当前页面支持的审批处理能力，而不是只验证单一 approval action。
+
+交付：
+
+```text
+[x] scripts/smoke-business-portal.sh 支持 APPROVAL_ACTION=all
+[x] all 模式创建三张审批卡
+[x] all 模式分别执行 approve / reject / request-info
+[x] 保留旧模式：approve / reject / request-info / none
+[x] docs/BUSINESS_PORTAL_API_EXAMPLES.md 记录 all 模式
+[x] docs/BUSINESS_PORTAL_SMOKE_RESULT.md 记录真实 all 模式 smoke 结果
+[x] 真实启动 Dashboard 并执行 APPROVAL_ACTION=all 成功
+```
+
+真实 smoke 结果摘要：
+
+```text
+Workspace: customer-service-demo
+Team:      after-sales-team
+Run:       run-86b3a85c-a
+Approvals: apv-8e2d5cf1-3 apv-dcfc9b72-e apv-15d53506-4
+Home risk: LOW
+Insights: 1
+OK
+```
+
 ### Step 5：文档与验收
 
 交付：

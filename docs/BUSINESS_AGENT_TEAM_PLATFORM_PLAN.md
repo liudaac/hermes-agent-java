@@ -2771,6 +2771,7 @@ Versioning 是 Scenario / Run / Evolution 的共同前置条件
 [x] /business 页面新增 Create Approval Card 表单 MVP
 [x] /business 页面 Approval 卡片支持 Approve / Reject / Request info 操作 MVP
 [x] /business 页面创建区已折叠分组，减少表单堆叠感
+[x] smoke 脚本支持 APPROVAL_ACTION=all 并真实验证 approve / reject / request-info
 [ ] /business 页面浏览器截图检查（当前环境缺少可用浏览器/扩展连接；用户暂时不连接浏览器）
 ```
 

@@ -116,3 +116,39 @@ When a browser is available:
    - Home risk LOW after approval
 5. Capture desktop and mobile-width screenshots.
 ```
+
+
+## Enhanced Approval Action Smoke
+
+Date: 2026-06-16
+
+Command:
+
+```bash
+HERMES_BASE_URL=http://127.0.0.1:9119 \
+WORKSPACE_ID=customer-service-demo \
+TEAM_ID=after-sales-team \
+APPROVAL_ACTION=all \
+scripts/smoke-business-portal.sh
+```
+
+Result:
+
+```text
+Workspace: customer-service-demo
+Team:      after-sales-team
+Run:       run-86b3a85c-a
+Approval:  apv-8e2d5cf1-3
+Approvals:  apv-8e2d5cf1-3 apv-dcfc9b72-e apv-15d53506-4
+Home risk: LOW
+Insights:  1
+OK
+```
+
+This validates that the script can exercise all approval action endpoints in one run:
+
+```text
+POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/approve
+POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/reject
+POST /api/v1/workspaces/{workspaceId}/approvals/{approvalId}/request-info
+```

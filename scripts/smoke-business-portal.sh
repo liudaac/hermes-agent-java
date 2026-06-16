@@ -4,7 +4,7 @@ set -euo pipefail
 BASE_URL="${HERMES_BASE_URL:-http://127.0.0.1:8080}"
 WORKSPACE_ID="${WORKSPACE_ID:-customer-service-demo}"
 TEAM_ID="${TEAM_ID:-after-sales-team}"
-APPROVAL_ACTION="${APPROVAL_ACTION:-approve}" # approve | reject | request-info | none
+APPROVAL_ACTION="${APPROVAL_ACTION:-approve}" # approve | reject | request-info | none | all
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -161,47 +161,95 @@ assert_ok "$TMP_DIR/run.json"
 RUN_ID="$(json_get "$TMP_DIR/run.json" 'runId')"
 echo "RUN_ID=$RUN_ID"
 
-log "Create business approval card"
-approval_payload="$(cat <<JSON
+create_approval_card() {
+  local suffix="$1"
+  local output="$2"
+  local title="High value refund approval"
+  if [[ -n "$suffix" ]]; then
+    title="High value refund approval ($suffix)"
+  fi
+  local approval_payload
+  approval_payload="$(cat <<JSON
 {
   "teamId": "$TEAM_ID",
-  "title": "High value refund approval",
+  "title": "$title",
   "summary": "Customer requested a 1200 CNY refund; manual approval is required.",
   "reasonRequired": "Refund amount is above the automatic approval threshold.",
   "approveEffect": "The system will continue the refund flow and draft the customer reply.",
   "rejectEffect": "The case will stay in manual handling and the customer will not receive an automatic refund response.",
   "recommendation": "Approve after checking the product return condition.",
   "riskLevel": "HIGH",
-  "evidence": {"orderId": "O-1001", "amount": 1200, "policy": "Refunds above 1000 CNY require human approval"}
+  "evidence": {"orderId": "O-1001", "amount": 1200, "policy": "Refunds above 1000 CNY require human approval", "variant": "$suffix"}
 }
 JSON
 )"
-request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals" "$approval_payload" "$TMP_DIR/approval.json"
-assert_ok "$TMP_DIR/approval.json"
-APPROVAL_ID="$(json_get "$TMP_DIR/approval.json" 'approvalId')"
-echo "APPROVAL_ID=$APPROVAL_ID"
+  request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals" "$approval_payload" "$output"
+  assert_ok "$output"
+  LAST_APPROVAL_ID="$(json_get "$output" 'approvalId')"
+  echo "APPROVAL_ID=$LAST_APPROVAL_ID"
+}
+
+perform_approval_action() {
+  local action="$1"
+  local approval_id="$2"
+  local output="$3"
+  case "$action" in
+    approve)
+      log "Approve business approval card: $approval_id"
+      request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$approval_id/approve" '{"actor":"ops-user","reason":"Product condition checked; policy allows refund."}' "$output"
+      assert_ok "$output"
+      ;;
+    reject)
+      log "Reject business approval card: $approval_id"
+      request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$approval_id/reject" '{"actor":"ops-user","reason":"Evidence is insufficient."}' "$output"
+      assert_ok "$output"
+      ;;
+    request-info)
+      log "Request more information for business approval card: $approval_id"
+      request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$approval_id/request-info" '{"actor":"ops-user","requestedInfo":"Please upload product return photos."}' "$output"
+      assert_ok "$output"
+      ;;
+    none)
+      echo "Leaving approval as PENDING: $approval_id"
+      ;;
+    *)
+      echo "Unsupported approval action: $action" >&2
+      exit 1
+      ;;
+  esac
+}
+
+APPROVAL_IDS=""
 
 case "$APPROVAL_ACTION" in
-  approve)
-    log "Approve business approval card"
-    request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$APPROVAL_ID/approve" '{"actor":"ops-user","reason":"Product condition checked; policy allows refund."}' "$TMP_DIR/approval-action.json"
-    assert_ok "$TMP_DIR/approval-action.json"
+  all)
+    log "Create and process approval cards for all actions"
+    create_approval_card "approve" "$TMP_DIR/approval-approve.json"
+    APPROVAL_APPROVE_ID="$LAST_APPROVAL_ID"
+    APPROVAL_IDS="$APPROVAL_IDS $APPROVAL_APPROVE_ID"
+    perform_approval_action approve "$APPROVAL_APPROVE_ID" "$TMP_DIR/approval-action-approve.json"
+
+    create_approval_card "reject" "$TMP_DIR/approval-reject.json"
+    APPROVAL_REJECT_ID="$LAST_APPROVAL_ID"
+    APPROVAL_IDS="$APPROVAL_IDS $APPROVAL_REJECT_ID"
+    perform_approval_action reject "$APPROVAL_REJECT_ID" "$TMP_DIR/approval-action-reject.json"
+
+    create_approval_card "request-info" "$TMP_DIR/approval-request-info.json"
+    APPROVAL_REQUEST_INFO_ID="$LAST_APPROVAL_ID"
+    APPROVAL_IDS="$APPROVAL_IDS $APPROVAL_REQUEST_INFO_ID"
+    perform_approval_action request-info "$APPROVAL_REQUEST_INFO_ID" "$TMP_DIR/approval-action-request-info.json"
+    APPROVAL_ID="$APPROVAL_APPROVE_ID"
     ;;
-  reject)
-    log "Reject business approval card"
-    request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$APPROVAL_ID/reject" '{"actor":"ops-user","reason":"Evidence is insufficient."}' "$TMP_DIR/approval-action.json"
-    assert_ok "$TMP_DIR/approval-action.json"
-    ;;
-  request-info)
-    log "Request more information for business approval card"
-    request POST "/api/v1/workspaces/$WORKSPACE_ID/approvals/$APPROVAL_ID/request-info" '{"actor":"ops-user","requestedInfo":"Please upload product return photos."}' "$TMP_DIR/approval-action.json"
-    assert_ok "$TMP_DIR/approval-action.json"
-    ;;
-  none)
-    echo "Leaving approval as PENDING."
+  approve|reject|request-info|none)
+    log "Create business approval card"
+    create_approval_card "$APPROVAL_ACTION" "$TMP_DIR/approval.json"
+    APPROVAL_ID="$LAST_APPROVAL_ID"
+    APPROVAL_IDS="$APPROVAL_ID"
+    perform_approval_action "$APPROVAL_ACTION" "$APPROVAL_ID" "$TMP_DIR/approval-action.json"
     ;;
   *)
     echo "Unsupported APPROVAL_ACTION=$APPROVAL_ACTION" >&2
+    echo "Supported values: approve | reject | request-info | none | all" >&2
     exit 1
     ;;
 esac
@@ -231,6 +279,7 @@ echo "Workspace: $WORKSPACE_ID"
 echo "Team:      $TEAM_ID"
 echo "Run:       $RUN_ID"
 echo "Approval:  $APPROVAL_ID"
+echo "Approvals: $APPROVAL_IDS"
 echo "Home risk: $(json_get "$TMP_DIR/home.json" 'risk.level')"
 echo "Insights:  $(json_get "$TMP_DIR/insights.json" 'total')"
 echo "OK"
