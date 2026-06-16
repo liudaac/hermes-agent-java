@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type {
   BusinessApprovalRecord,
   BusinessHomeResponse,
+  CreateBusinessRunPayload,
   CreateBusinessTeamBlueprintPayload,
   CreateBusinessWorkspacePayload,
   BusinessInsightRecord,
@@ -31,7 +32,7 @@ import {
   TeamsSection,
   TodayAndAttentionSection,
 } from "@/components/business/BusinessPortalSections";
-import { CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
+import { CreateRunStoryForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
   const { showToast } = useToast();
@@ -55,6 +56,12 @@ export default function BusinessPortalPage() {
   const createTeamBlueprint = async (targetWorkspaceId: string, payload: CreateBusinessTeamBlueprintPayload) => {
     const response = await api.createBusinessTeamBlueprint(targetWorkspaceId, payload);
     showToast(`Team created: ${response.teamId}`, "success");
+    await load();
+  };
+
+  const createRunStory = async (targetWorkspaceId: string, payload: CreateBusinessRunPayload) => {
+    const response = await api.createBusinessRun(targetWorkspaceId, payload);
+    showToast(`Run story created: ${response.runId}`, "success");
     await load();
   };
 
@@ -122,6 +129,7 @@ export default function BusinessPortalPage() {
 
       <CreateWorkspaceForm onCreate={createWorkspace} />
       <CreateTeamBlueprintForm workspaceId={workspaceId} onCreate={createTeamBlueprint} />
+      <CreateRunStoryForm workspaceId={workspaceId} teams={teams} onCreate={createRunStory} />
 
       {home?.emptyState ? (
         <Card>

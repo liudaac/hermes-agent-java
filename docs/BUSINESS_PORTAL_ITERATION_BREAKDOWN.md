@@ -415,6 +415,32 @@ OK
 只做最小团队蓝图创建；复杂岗位编辑器、版本草稿编辑和激活切换后续再补。
 ```
 
+
+### Step 4.16：Create Run Story 表单 MVP
+
+目标：让业务用户可以在 `/business` 页面完成 `Create Workspace → Create Team → Create Run Story`。
+
+交付：
+
+```text
+[x] web/src/lib/api.ts 新增 createBusinessRun
+[x] 新增 CreateBusinessRunPayload / CreateBusinessRunResponse 类型
+[x] CreateRunStoryForm 接入 /business 页面
+[x] 表单字段：team / status / taskTitle / taskInput / resultSummary / conclusionReason
+[x] 未选择 workspace 或没有 team 时禁用 run 创建，并提示先创建 team
+[x] 默认生成一条 BusinessRunStep
+[x] 默认 systemAction / riskJudgement / nextSuggestion / technicalTraceRef
+[x] metadata 和 metrics 标记 source=business-portal-ui
+[x] 创建成功后刷新页面数据
+[x] cd web && npm run build 通过
+```
+
+当前范围：
+
+```text
+只做最小运行故事创建；复杂步骤编辑、真实 Agent 执行绑定和技术 Trace 关联后续再补。
+```
+
 ### Step 5：文档与验收
 
 交付：

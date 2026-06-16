@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import type { CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
+import type { BusinessTeamCard, CreateBusinessRunPayload, CreateBusinessTeamBlueprintPayload, CreateBusinessWorkspacePayload, WorkspaceRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -187,6 +187,136 @@ export function CreateTeamBlueprintForm({
             <Input value={operatingManual} onChange={(event) => setOperatingManual(event.target.value)} disabled={!workspaceId} />
           </div>
           {error ? <div className="text-sm normal-case text-destructive md:col-span-4">{error}</div> : null}
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+
+export function CreateRunStoryForm({
+  workspaceId,
+  teams,
+  onCreate,
+}: {
+  workspaceId?: string;
+  teams: BusinessTeamCard[];
+  onCreate: (workspaceId: string, payload: CreateBusinessRunPayload) => Promise<void>;
+}) {
+  const [teamId, setTeamId] = useState("");
+  const [taskTitle, setTaskTitle] = useState("Customer requested a refund");
+  const [taskInput, setTaskInput] = useState("The customer signed for the order 3 days ago and wants to return it.");
+  const [resultSummary, setResultSummary] = useState("Suggest allowing the customer to initiate a return request.");
+  const [conclusionReason, setConclusionReason] = useState("The order is within the return window and does not match a special restricted category.");
+  const [status, setStatus] = useState("COMPLETED");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedTeamId = teamId || teams[0]?.teamId || "";
+  const canSubmit = Boolean(workspaceId) && Boolean(selectedTeamId) && taskTitle.trim().length > 0 && resultSummary.trim().length > 0 && !saving;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!workspaceId || !canSubmit) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(workspaceId, {
+        teamId: selectedTeamId,
+        scenario: teams.find((team) => team.teamId === selectedTeamId)?.scenario || "business task",
+        taskTitle: taskTitle.trim(),
+        taskInput: taskInput.trim() || undefined,
+        resultSummary: resultSummary.trim(),
+        conclusionReason: conclusionReason.trim() || undefined,
+        systemAction: "Recorded the business run story from the Business Portal UI.",
+        riskJudgement: status === "NEEDS_APPROVAL" ? "Manual approval may be required." : "No immediate manual approval required.",
+        nextSuggestion: "Review the run story details and use failed or approval-needed runs to improve the team blueprint.",
+        status,
+        technicalTraceRef: "trace://business-portal-ui/manual-run",
+        steps: [
+          {
+            stepId: "step-1",
+            title: "Business review",
+            summary: conclusionReason.trim() || resultSummary.trim(),
+            actor: "business-portal-ui",
+            evidence: taskInput.trim() || "Manual run story input",
+            status: "COMPLETED",
+            metadata: { source: "business-portal-ui" },
+          },
+        ],
+        metrics: { source: "business-portal-ui" },
+        metadata: { source: "business-portal-ui" },
+      });
+      setTaskTitle("Customer requested a refund");
+      setTaskInput("The customer signed for the order 3 days ago and wants to return it.");
+      setResultSummary("Suggest allowing the customer to initiate a return request.");
+      setConclusionReason("The order is within the return window and does not match a special restricted category.");
+      setStatus("COMPLETED");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Run Story</CardTitle>
+        <CardDescription>Create a business-readable run record for the selected workspace and team.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!workspaceId || teams.length === 0 ? (
+          <div className="rounded-sm border border-dashed border-border/70 p-3 text-sm normal-case text-muted-foreground">
+            Select a workspace with at least one team before creating a run story.
+          </div>
+        ) : null}
+        <form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team</label>
+            <select
+              value={selectedTeamId}
+              onChange={(event) => setTeamId(event.target.value)}
+              disabled={!workspaceId || teams.length === 0}
+              className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm"
+            >
+              {teams.length === 0 ? <option value="">No teams</option> : null}
+              {teams.map((team) => (
+                <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Status</label>
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="NEEDS_APPROVAL">NEEDS_APPROVAL</option>
+              <option value="FAILED">FAILED</option>
+              <option value="RUNNING">RUNNING</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto">
+              <Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}
+            </Button>
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Task title</label>
+            <Input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Task input</label>
+            <Input value={taskInput} onChange={(event) => setTaskInput(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Result summary</label>
+            <Input value={resultSummary} onChange={(event) => setResultSummary(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          <div className="space-y-1 md:col-span-3">
+            <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Conclusion reason</label>
+            <Input value={conclusionReason} onChange={(event) => setConclusionReason(event.target.value)} disabled={!workspaceId || teams.length === 0} />
+          </div>
+          {error ? <div className="text-sm normal-case text-destructive md:col-span-3">{error}</div> : null}
         </form>
       </CardContent>
     </Card>

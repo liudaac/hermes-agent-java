@@ -292,6 +292,13 @@ export const api = {
       },
     ),
 
+  createBusinessRun: (workspaceId: string, payload: CreateBusinessRunPayload) =>
+    fetchJSON<CreateBusinessRunResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/runs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+
   // Tenants
   getTenants: () => fetchJSON<TenantsResponse>("/api/tenants"),
   createTenant: (tenantId: string) =>
@@ -1256,5 +1263,30 @@ export interface CreateBusinessTeamBlueprintResponse {
   workspaceId: string;
   teamId: string;
   team: unknown;
+  message?: string;
+}
+
+export interface CreateBusinessRunPayload {
+  teamId?: string;
+  scenario?: string;
+  taskTitle: string;
+  taskInput?: string;
+  resultSummary: string;
+  conclusionReason?: string;
+  systemAction?: string;
+  riskJudgement?: string;
+  nextSuggestion?: string;
+  status?: string;
+  technicalTraceRef?: string;
+  steps?: BusinessRunStep[];
+  metrics?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateBusinessRunResponse {
+  ok: boolean;
+  workspaceId: string;
+  runId: string;
+  run: BusinessRunRecord;
   message?: string;
 }
