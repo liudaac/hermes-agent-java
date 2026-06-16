@@ -668,9 +668,9 @@ Recommended next UI improvements:
 
 ```text
 Add high-risk confirmation for HIGH/CRITICAL approvals.
-Add stronger client-side validation for workspaceId/teamId.
-Show duplicate workspace/team errors in a friendlier format.
 Add textarea autosize or richer field layout if needed.
+Add inline examples/templates for common scenarios.
+Improve form grouping once browser screenshots are available.
 ```
 
 ### P1: Team blueprint editor

@@ -577,6 +577,30 @@ OK
 [x] cd web && npm run build 通过
 ```
 
+
+### Step 4.23：P1 表单质量优化第二轮
+
+目标：增强 `/business` 页面表单的客户端校验和错误友好度，减少无效请求和难懂错误。
+
+交付：
+
+```text
+[x] 新增 BUSINESS_ID_PATTERN / BUSINESS_ID_HELP
+[x] 新增 isValidBusinessId
+[x] 新增 friendlyBusinessError
+[x] Workspace ID 提交前做客户端格式校验
+[x] Team ID 提交前做客户端格式校验
+[x] Workspace duplicate / invalid / not found 错误转为友好提示
+[x] Team duplicate / invalid / not found 错误转为友好提示
+[x] cd web && npm run build 通过
+```
+
+校验规则：
+
+```text
+2-64 chars: letters, numbers, dot, underscore or dash. Start with a letter or number.
+```
+
 ### Step 5：文档与验收
 
 交付：

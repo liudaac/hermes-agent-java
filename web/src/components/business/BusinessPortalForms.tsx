@@ -7,6 +7,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 
 
+
+const BUSINESS_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{1,63}$/;
+const BUSINESS_ID_HELP = "Use 2-64 chars: letters, numbers, dot, underscore or dash. Start with a letter or number.";
+
+function isValidBusinessId(value: string): boolean {
+  return BUSINESS_ID_PATTERN.test(value.trim());
+}
+
+function friendlyBusinessError(error: unknown, kind: "workspace" | "team"): string {
+  const raw = String(error);
+  const lower = raw.toLowerCase();
+  if (lower.includes("already exists")) {
+    return kind === "workspace"
+      ? "A workspace with this ID already exists. Pick another ID or select the existing workspace."
+      : "A team blueprint with this ID already exists in the selected workspace. Pick another team ID.";
+  }
+  if (lower.includes("must be 2-64") || lower.includes("id is required") || lower.includes("invalid")) {
+    return BUSINESS_ID_HELP;
+  }
+  if (lower.includes("workspace not found")) {
+    return "The selected workspace no longer exists. Refresh the page and choose another workspace.";
+  }
+  return raw;
+}
+
 export function BusinessCreationPanel({
   workspaceCount,
   teamCount,
@@ -119,11 +144,15 @@ export function CreateWorkspaceForm({
   const [error, setError] = useState<string | null>(null);
 
   const normalizedWorkspaceId = workspaceId.trim();
-  const canSubmit = normalizedWorkspaceId.length >= 2 && !saving;
+  const workspaceIdValid = isValidBusinessId(normalizedWorkspaceId);
+  const canSubmit = workspaceIdValid && !saving;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      setError(BUSINESS_ID_HELP);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -139,7 +168,7 @@ export function CreateWorkspaceForm({
       setDescription("");
       setOwner("ops");
     } catch (err) {
-      setError(String(err));
+      setError(friendlyBusinessError(err, "workspace"));
     } finally {
       setSaving(false);
     }
@@ -161,7 +190,7 @@ export function CreateWorkspaceForm({
               placeholder="customer-service-demo"
               required
             />
-            <div className="text-[0.65rem] normal-case text-muted-foreground">2-64 chars: letters, numbers, dot, underscore or dash.</div>
+            <div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div>
           </div>
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label>
@@ -207,11 +236,16 @@ export function CreateTeamBlueprintForm({
   const [error, setError] = useState<string | null>(null);
 
   const normalizedTeamId = teamId.trim();
-  const canSubmit = Boolean(workspaceId) && normalizedTeamId.length >= 2 && !saving;
+  const teamIdValid = isValidBusinessId(normalizedTeamId);
+  const canSubmit = Boolean(workspaceId) && teamIdValid && !saving;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!workspaceId || !canSubmit) return;
+    if (!workspaceId) return;
+    if (!canSubmit) {
+      setError(BUSINESS_ID_HELP);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -241,7 +275,7 @@ export function CreateTeamBlueprintForm({
       setDescription("");
       setOperatingManual("Classify the task, check policy, decide whether approval is needed, then explain the result.");
     } catch (err) {
-      setError(String(err));
+      setError(friendlyBusinessError(err, "team"));
     } finally {
       setSaving(false);
     }
@@ -265,7 +299,7 @@ export function CreateTeamBlueprintForm({
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team ID</label>
             <Input value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="after-sales-team" disabled={!workspaceId} required />
-            <div className="text-[0.65rem] normal-case text-muted-foreground">2-64 chars: letters, numbers, dot, underscore or dash.</div>
+            <div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div>
           </div>
           <div className="space-y-1">
             <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label>
