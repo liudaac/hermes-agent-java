@@ -862,6 +862,28 @@ prompt://after-sales-base      → 使用 active version
 prompt://after-sales-base#v2   → 使用显式 v2
 ```
 
+
+### Step 4.34：Prompt Asset version smoke 覆盖
+
+目标：用真实 smoke 固化 Prompt Asset version evolution skeleton 的 API 链路。
+
+交付：
+
+```text
+[x] scripts/smoke-business-portal.sh 创建 Prompt Asset v1
+[x] scripts/smoke-business-portal.sh 创建 Prompt Asset v2 draft
+[x] scripts/smoke-business-portal.sh 激活 Prompt Asset v2
+[x] Team Blueprint payload 使用 promptAssetRefs: ["prompt://after-sales-base#v2"]
+[x] 真实启动最新源码 Dashboard 后运行 smoke，退出码 0
+[x] docs/BUSINESS_PORTAL_SMOKE_RESULT.md 记录 Prompt Asset Version Smoke
+```
+
+注意：
+
+```text
+如果 /prompt-assets/{assetId}/versions 返回 404，优先检查是否仍在访问旧 Dashboard 进程。
+```
+
 ### Step 5：文档与验收
 
 交付：

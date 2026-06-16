@@ -26,6 +26,8 @@ public final class PromptAssetDashboardIntegration {
         app.get("/api/v1/workspaces/{workspaceId}/prompt-assets", ctx -> listPromptAssets(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/prompt-assets", ctx -> createPromptAsset(ctx, service));
         app.get("/api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}", ctx -> getPromptAsset(ctx, service));
+        app.post("/api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions", ctx -> createDraftVersion(ctx, service));
+        app.post("/api/v1/workspaces/{workspaceId}/prompt-assets/{assetId}/versions/{version}/activate", ctx -> activateVersion(ctx, service));
     }
 
     static void listPromptAssets(Context ctx, PromptAssetService service) {
@@ -79,6 +81,37 @@ public final class PromptAssetDashboardIntegration {
                 );
         } catch (Exception e) {
             ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "assetId", assetId));
+        }
+    }
+
+
+    static void createDraftVersion(Context ctx, PromptAssetService service) {
+        String workspaceId = ctx.pathParam("workspaceId");
+        String assetId = ctx.pathParam("assetId");
+        JSONObject body = parseBody(ctx);
+        try {
+            PromptAssetVersion version = service.createDraftVersion(
+                workspaceId,
+                assetId,
+                body.getString("content"),
+                body.getString("changeSummary"),
+                WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
+            );
+            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "assetId", assetId, "version", version, "message", "Prompt asset draft version created"));
+        } catch (WorkspaceService.WorkspaceNotFoundException | PromptAssetService.PromptAssetNotFoundException e) {
+            ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "assetId", assetId));
+        }
+    }
+
+    static void activateVersion(Context ctx, PromptAssetService service) {
+        String workspaceId = ctx.pathParam("workspaceId");
+        String assetId = ctx.pathParam("assetId");
+        int version = Integer.parseInt(ctx.pathParam("version"));
+        try {
+            PromptAssetRecord record = service.activateVersion(workspaceId, assetId, version);
+            ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "assetId", assetId, "activeVersion", record.getActiveVersion(), "promptAsset", record, "message", "Prompt asset version activated"));
+        } catch (WorkspaceService.WorkspaceNotFoundException | PromptAssetService.PromptAssetNotFoundException | PromptAssetService.PromptAssetVersionNotFoundException e) {
+            ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "assetId", assetId, "version", version));
         }
     }
 

@@ -183,3 +183,34 @@ POST /api/v1/workspaces/{workspaceId}/team-blueprints
   → uses promptAssetRefs: ["prompt://after-sales-base"]
   → backend validates the referenced PromptAsset
 ```
+
+
+## Prompt Asset Version Smoke
+
+Date: 2026-06-16
+
+Command:
+
+```bash
+HERMES_BASE_URL=http://127.0.0.1:9119 \
+WORKSPACE_ID=customer-service-demo \
+TEAM_ID=after-sales-team \
+APPROVAL_ACTION=all \
+scripts/smoke-business-portal.sh
+```
+
+Result:
+
+```text
+Smoke completed successfully with exit code 0.
+```
+
+This validates the versioned Prompt Asset chain:
+
+```text
+Create Prompt Asset v1
+Create Prompt Asset draft version
+Activate prompt asset v2
+Create Team Blueprint with promptAssetRefs: ["prompt://after-sales-base#v2"]
+Validate explicit prompt version reference in TeamBlueprintService
+```

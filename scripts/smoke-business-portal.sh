@@ -118,6 +118,25 @@ assert_ok_or_conflict "$TMP_DIR/prompt-asset.json"
 PROMPT_ASSET_ID="after-sales-base"
 echo "PROMPT_ASSET_ID=$PROMPT_ASSET_ID"
 
+PROMPT_ASSET_REF="prompt://$PROMPT_ASSET_ID#v2"
+
+log "Create prompt asset v2 draft"
+prompt_asset_v2_payload="$(cat <<JSON
+{
+  "content": "You are an after-sales policy specialist. Use the latest policy context, explain uncertainty, and always surface high-risk refund cases for approval.",
+  "changeSummary": "Tighten high-risk refund handling instructions",
+  "metadata": {"source": "smoke-business-portal", "version": 2}
+}
+JSON
+)"
+request POST "/api/v1/workspaces/$WORKSPACE_ID/prompt-assets/$PROMPT_ASSET_ID/versions" "$prompt_asset_v2_payload" "$TMP_DIR/prompt-asset-v2.json"
+assert_ok_or_conflict "$TMP_DIR/prompt-asset-v2.json"
+
+log "Activate prompt asset v2"
+request POST "/api/v1/workspaces/$WORKSPACE_ID/prompt-assets/$PROMPT_ASSET_ID/versions/2/activate" '{}' "$TMP_DIR/prompt-asset-v2-activate.json"
+assert_ok "$TMP_DIR/prompt-asset-v2-activate.json"
+echo "PROMPT_ASSET_REF=$PROMPT_ASSET_REF"
+
 log "Create team blueprint"
 team_payload="$(cat <<JSON
 {
@@ -126,7 +145,7 @@ team_payload="$(cat <<JSON
   "description": "Handles refund and after-sales cases",
   "scenario": "after-sales ticket handling",
   "operatingManual": "Classify the ticket, check policy, decide whether approval is needed, then draft a response.",
-  "promptAssetRefs": ["prompt://after-sales-base"],
+  "promptAssetRefs": ["$PROMPT_ASSET_REF"],
   "agents": [
     {
       "agentId": "ticket-classifier",
@@ -294,7 +313,7 @@ assert_ok "$TMP_DIR/insights.json"
 log "Smoke summary"
 echo "Workspace: $WORKSPACE_ID"
 echo "Team:      $TEAM_ID"
-echo "Prompt:    prompt://$PROMPT_ASSET_ID"
+echo "Prompt:    $PROMPT_ASSET_REF"
 echo "Run:       $RUN_ID"
 echo "Approval:  $APPROVAL_ID"
 echo "Approvals: $APPROVAL_IDS"
