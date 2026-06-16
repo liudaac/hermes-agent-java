@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.nousresearch.hermes.prompt.PromptAssetService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import org.slf4j.Logger;
@@ -62,7 +63,7 @@ public final class TeamBlueprintDashboardIntegration {
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
             );
             ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "teamId", record.getTeamId(), "team", record, "message", "Team blueprint created"));
-        } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException e) {
+        } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException | PromptAssetService.PromptAssetNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "teamId", teamId == null ? "" : teamId));
         } catch (TeamBlueprintService.TeamBlueprintAlreadyExistsException e) {
             ctx.status(409).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "teamId", teamId == null ? "" : teamId));
@@ -103,7 +104,7 @@ public final class TeamBlueprintDashboardIntegration {
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
             );
             ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "teamId", teamId, "version", version, "message", "Draft version created"));
-        } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException e) {
+        } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException | PromptAssetService.PromptAssetNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "teamId", teamId));
         } catch (Exception e) {
             ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "teamId", teamId));

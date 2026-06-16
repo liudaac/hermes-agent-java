@@ -262,7 +262,7 @@ export function CreateTeamBlueprintForm({
         scenario: scenario.trim() || undefined,
         scenarioId: scenarioId.trim() || undefined,
         operatingManual: operatingManual.trim() || undefined,
-        promptAssetRefs: ["prompt://business-portal/default-team"],
+        promptAssetRefs: [],
         agents: [
           {
             agentId: "business-analyst",

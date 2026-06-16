@@ -2,6 +2,7 @@ package com.nousresearch.hermes.blueprint;
 
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.nousresearch.hermes.prompt.PromptAssetService;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -13,18 +14,26 @@ import java.util.Optional;
 public class TeamBlueprintService {
     private final FileTeamBlueprintRepository repository;
     private final WorkspaceService workspaceService;
+    private final PromptAssetService promptAssetService;
 
     public TeamBlueprintService(WorkspaceService workspaceService) {
-        this(new FileTeamBlueprintRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService);
+        this(new FileTeamBlueprintRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService,
+            new PromptAssetService(workspaceService));
     }
 
     public TeamBlueprintService(Path workspacesRoot, WorkspaceService workspaceService) {
-        this(new FileTeamBlueprintRepository(workspacesRoot), workspaceService);
+        this(new FileTeamBlueprintRepository(workspacesRoot), workspaceService,
+            new PromptAssetService(workspacesRoot, workspaceService));
     }
 
     public TeamBlueprintService(FileTeamBlueprintRepository repository, WorkspaceService workspaceService) {
+        this(repository, workspaceService, new PromptAssetService(workspaceService));
+    }
+
+    public TeamBlueprintService(FileTeamBlueprintRepository repository, WorkspaceService workspaceService, PromptAssetService promptAssetService) {
         this.repository = repository;
         this.workspaceService = workspaceService;
+        this.promptAssetService = promptAssetService;
     }
 
     public TeamBlueprintRecord createTeamBlueprint(String workspaceId, String teamId, String name, String description,
@@ -32,6 +41,7 @@ public class TeamBlueprintService {
                                                    List<String> promptAssetRefs, String operatingManual,
                                                    Map<String, Object> metadata) {
         workspaceService.requireWorkspace(workspaceId);
+        validatePromptAssetRefs(workspaceId, promptAssetRefs);
         validateId(teamId, "teamId");
         if (repository.exists(workspaceId, teamId)) {
             throw new TeamBlueprintAlreadyExistsException(workspaceId, teamId);
@@ -70,6 +80,7 @@ public class TeamBlueprintService {
                                                    String operatingManual,
                                                    Map<String, Object> metadata) {
         TeamBlueprintRecord record = requireTeamBlueprint(workspaceId, teamId);
+        validatePromptAssetRefs(workspaceId, promptAssetRefs);
         int nextVersion = record.getVersions().stream().mapToInt(TeamBlueprintVersion::getVersion).max().orElse(0) + 1;
         TeamBlueprintVersion version = new TeamBlueprintVersion()
             .setVersion(nextVersion)
@@ -121,6 +132,34 @@ public class TeamBlueprintService {
         workspaceService.requireWorkspace(workspaceId);
         return getTeamBlueprint(workspaceId, teamId)
             .orElseThrow(() -> new TeamBlueprintNotFoundException(workspaceId, teamId));
+    }
+
+    private void validatePromptAssetRefs(String workspaceId, List<String> promptAssetRefs) {
+        if (promptAssetRefs == null || promptAssetRefs.isEmpty()) {
+            return;
+        }
+        for (String ref : promptAssetRefs) {
+            if (ref == null || ref.isBlank()) {
+                continue;
+            }
+            String assetId = parsePromptAssetId(ref);
+            if (assetId == null) {
+                throw new IllegalArgumentException("Unsupported prompt asset ref: " + ref + ". Expected format: prompt://{assetId}");
+            }
+            promptAssetService.requirePromptAsset(workspaceId, assetId);
+        }
+    }
+
+    private static String parsePromptAssetId(String ref) {
+        String prefix = "prompt://";
+        if (!ref.startsWith(prefix)) {
+            return null;
+        }
+        String assetId = ref.substring(prefix.length()).trim();
+        if (assetId.isBlank() || assetId.contains("/")) {
+            return null;
+        }
+        return assetId;
     }
 
     private static void validateId(String value, String field) {

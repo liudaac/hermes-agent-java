@@ -176,7 +176,9 @@ Current behavior:
 
 ```text
 Prompt Asset is now a first-class backend object.
-Team Blueprint promptAssetRefs validation and Prompt Asset UI are still next-step work.
+Team Blueprint promptAssetRefs are validated when creating v1 or draft versions.
+Supported ref format: prompt://{assetId}.
+Prompt Asset UI is still next-step work.
 ```
 
 ### 3.4 Team Blueprint Versioning
@@ -731,7 +733,7 @@ Current Business Portal data is stored as file-backed business records.
 Still not fully connected to:
 
 ```text
-Team Blueprint promptAssetRefs validation and Prompt Asset UI
+Prompt Asset UI
 Scenario-aware home aggregation, if needed
 Real Agent execution
 Raw AgentTrace conversion

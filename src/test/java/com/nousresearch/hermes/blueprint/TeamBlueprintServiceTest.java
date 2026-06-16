@@ -3,6 +3,7 @@ package com.nousresearch.hermes.blueprint;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.nousresearch.hermes.prompt.PromptAssetService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -22,7 +23,10 @@ class TeamBlueprintServiceTest {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        PromptAssetService promptAssetService = new PromptAssetService(tempDir.resolve("business/workspaces"), workspaceService);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
+        promptAssetService.createPromptAsset("customer-service", "after-sales-base", "售后基础提示词", "基础", "base prompt", List.of(), Map.of());
+        promptAssetService.createPromptAsset("customer-service", "after-sales-special-policy", "特殊类目提示词", "特殊类目", "special prompt", List.of(), Map.of());
 
         TeamBlueprintRecord team = service.createTeamBlueprint(
             "customer-service",
@@ -32,7 +36,7 @@ class TeamBlueprintServiceTest {
             "售后工单处理",
             "after-sales-ticket",
             List.of(agent("classifier", "工单分类员")),
-            List.of("prompt://after-sales/base"),
+            List.of("prompt://after-sales-base"),
             "先分类，再判断政策，最后生成回复。",
             Map.of("portal", "business")
         );
@@ -40,7 +44,7 @@ class TeamBlueprintServiceTest {
         assertEquals(1, team.getActiveVersion());
         assertEquals(1, team.getVersions().size());
         assertEquals("ACTIVE", team.getVersions().getFirst().getStatus());
-        assertEquals(List.of("prompt://after-sales/base"), team.getVersions().getFirst().getPromptAssetRefs());
+        assertEquals(List.of("prompt://after-sales-base"), team.getVersions().getFirst().getPromptAssetRefs());
         assertTrue(Files.exists(tempDir.resolve("business/workspaces/customer-service/team-blueprints/after-sales.json")));
 
         TeamBlueprintVersion draft = service.createDraftVersion(
@@ -48,7 +52,7 @@ class TeamBlueprintServiceTest {
             "after-sales",
             "新增特殊类目政策判断",
             List.of(agent("classifier", "工单分类员"), agent("special-policy", "特殊类目政策专家")),
-            List.of("prompt://after-sales/base", "prompt://after-sales/special-policy"),
+            List.of("prompt://after-sales-base", "prompt://after-sales-special-policy"),
             "遇到生鲜和定制商品必须先走特殊类目判断。",
             Map.of("reason", "人工纠正率上升")
         );
@@ -61,6 +65,18 @@ class TeamBlueprintServiceTest {
         assertEquals("INACTIVE", activated.getVersions().get(0).getStatus());
         assertEquals("ACTIVE", activated.getVersions().get(1).getStatus());
         assertEquals(2, service.requireTeamBlueprint("customer-service", "after-sales").getActiveVersion());
+    }
+
+    @Test
+    void rejectsMissingPromptAssetRef() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
+        TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
+
+        assertThrows(PromptAssetService.PromptAssetNotFoundException.class,
+            () -> service.createTeamBlueprint("customer-service", "after-sales", "售后团队", null, null, null,
+                List.of(agent("classifier", "工单分类员")), List.of("prompt://missing-asset"), null, Map.of()));
     }
 
     @Test

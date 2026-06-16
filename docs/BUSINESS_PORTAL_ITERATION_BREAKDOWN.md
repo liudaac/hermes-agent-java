@@ -742,6 +742,34 @@ Prompt Asset 已作为 workspace 级资产落地。
 Team Blueprint promptAssetRefs 校验和 Prompt Asset UI 后续再补。
 ```
 
+
+### Step 4.29：Team Blueprint promptAssetRefs 校验
+
+目标：让 Prompt Asset 不再是孤立对象，Team Blueprint 引用 promptAssetRefs 时必须能解析并找到真实 PromptAsset。
+
+交付：
+
+```text
+[x] TeamBlueprintService 注入 PromptAssetService
+[x] 创建 Team Blueprint v1 时校验 promptAssetRefs
+[x] 创建 draft version 时校验 promptAssetRefs
+[x] 支持 ref 格式：prompt://{assetId}
+[x] 不支持的 ref 格式返回 IllegalArgumentException
+[x] 缺失 PromptAsset 返回 PromptAssetNotFoundException
+[x] TeamBlueprintDashboardIntegration 捕获 PromptAssetNotFoundException 并返回 404
+[x] 前端 Team 创建表单去掉默认假的 prompt://business-portal/default-team
+[x] TeamBlueprintServiceTest 创建真实 PromptAsset 后再引用
+[x] 新增测试：missing prompt asset ref 被拒绝
+[x] mvn -q -Dtest=PromptAssetServiceTest,TeamBlueprintServiceTest test 通过
+[x] cd web && npm run build 通过
+```
+
+当前规则：
+
+```text
+prompt://after-sales-base → assetId = after-sales-base
+```
+
 ### Step 5：文档与验收
 
 交付：
