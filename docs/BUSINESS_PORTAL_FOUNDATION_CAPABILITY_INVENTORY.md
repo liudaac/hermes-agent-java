@@ -1096,3 +1096,81 @@ The compiler should consume a valid or warning-only validation report before map
 ```text
 TeamBlueprintVersion -> TeamManager / Team / AgentRole
 ```
+
+---
+
+## 10. Iteration 2 Status: TeamBlueprintCompiler Skeleton
+
+Date: 2026-06-17
+
+Second adapter-first implementation:
+
+```text
+com.nousresearch.hermes.blueprint.TeamBlueprintCompiler
+com.nousresearch.hermes.blueprint.TeamBlueprintCompileResult
+```
+
+This is the first explicit design-time-to-foundation compile adapter.
+
+Boundary:
+
+```text
+It does not create new Business Portal objects.
+It does not add UI.
+It does not add generation API.
+It does not create a new runtime.
+It only maps an existing TeamBlueprintVersion into existing collaboration foundation objects.
+```
+
+Compile flow:
+
+```text
+1. Run FoundationCapabilityValidator.
+2. If validation has ERROR findings, refuse to apply.
+3. Resolve WorkspaceRecord -> TenantContext.
+4. Initialize tenant collaboration subsystem.
+5. Create/reuse Team through TenantContext.getTeamManager().createTeam(...).
+6. Convert each AgentBlueprintRecord into AgentRole.
+7. Register roles through TenantContext.registerAgentRole(...).
+8. Add each agent to Team.
+9. Use first valid agent as initial team lead.
+10. Store business blueprint metadata in Team shared state.
+11. Save tenant state.
+```
+
+Current mapping:
+
+| Business blueprint field | Foundation target |
+|---|---|
+| `TeamBlueprintRecord.teamId` | `Team.teamId` |
+| `TeamBlueprintRecord.name` | `Team.name` |
+| `description` + `operatingManual` | `Team.mission` |
+| `scenarioId` | `Team.sharedState.business_scenario_id` |
+| `promptAssetRefs` | `Team.sharedState.business_prompt_asset_refs` |
+| `AgentBlueprintRecord.agentId` | Agent id in `TenantContext.registerAgentRole` and `Team.addMember` |
+| `displayName` | `AgentRole.roleName` |
+| `responsibility` | `AgentRole.description` + responsibilities |
+| `knowledgeRefs` | `AgentRole.skills` for now |
+| `allowedTools` | `AgentRole.allowedTools` |
+| `approvalRules` | `AgentRole.maxAutoRisk(LOW)` + role metric |
+
+Important limitation:
+
+```text
+TeamBlueprintCompiler does not instantiate TenantAwareAIAgent sessions yet.
+It compiles topology and role metadata only.
+```
+
+This keeps runtime creation under existing agent/session foundation and avoids inventing a second agent runtime.
+
+Next likely iteration:
+
+```text
+ScenarioIntentAdapter skeleton
+```
+
+or, if focusing on runtime observability first:
+
+```text
+BusinessRunProjectionAdapter skeleton
+```

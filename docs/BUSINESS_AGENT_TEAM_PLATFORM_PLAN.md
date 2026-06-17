@@ -4088,3 +4088,65 @@ TenantContext.registerAgentRole(...)
 Team.addMember(...)
 Team.setLead(...)
 ```
+
+### 21.7 Iteration 2：TeamBlueprintCompiler skeleton 已落地
+
+第二刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.blueprint.TeamBlueprintCompiler
+com.nousresearch.hermes.blueprint.TeamBlueprintCompileResult
+```
+
+它是第一条明确的 design-time → foundation compile 路径。
+
+当前行为：
+
+```text
+先运行 FoundationCapabilityValidator
+如果 validation 有 ERROR，则拒绝 apply
+通过后解析 Workspace -> TenantContext
+初始化 tenant collaboration
+通过 TeamManager 创建/复用 Team
+将 AgentBlueprintRecord 映射为 AgentRole
+通过 TenantContext.registerAgentRole 注册角色
+通过 Team.addMember 加入团队
+将第一个有效 agent 设为初始 lead
+将 business blueprint metadata 写入 Team shared state
+保存 tenant 状态
+```
+
+明确边界：
+
+```text
+不创建新的业务对象
+不扩 UI
+不增加 generation API
+不创建第二套 agent runtime
+不创建 TenantAwareAIAgent session
+```
+
+当前只编译组织拓扑与角色元数据：
+
+```text
+TeamBlueprintVersion -> Team / AgentRole / Team membership
+```
+
+后续如果要让团队真正执行任务，仍应走现有：
+
+```text
+TenantContext.getOrCreateAgent(...)
+IntentOrchestrator
+TenantBus
+TenantAwareToolDispatcher
+ApprovalSystem
+AgentTrace / AgentObservability
+```
+
+下一刀候选：
+
+```text
+ScenarioIntentAdapter skeleton
+```
+
+用于把业务 Scenario framing 收敛到 `IntentOrchestrator.plan/execute` 的输入，而不是让 ScenarioService 变成 workflow engine。
