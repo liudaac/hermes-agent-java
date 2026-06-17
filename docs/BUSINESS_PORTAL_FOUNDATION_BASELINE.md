@@ -698,3 +698,55 @@ Does not change UI.
 ```
 
 This endpoint is a projection preview only. It does not replace BusinessInsightService and does not persist insight artifacts.
+
+---
+
+## 18. Read-only Evolution Proposal Governance Preview
+
+Date: 2026-06-17
+
+A read-only evolution proposal governance preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/evolution-proposals/preview
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "proposalId": "evp-1"
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "proposalId": "...",
+  "failureCase": FailureCase.toMap(),
+  "approvalCard": BusinessApprovalRecord projection,
+  "delegatedTaskEnvelope": DelegatedTaskEnvelope.toMap()
+}
+```
+
+Boundary:
+
+```text
+Reads an existing EvolutionProposalRecord by workspaceId/proposalId.
+Projects FailureCase through BusinessPortalFoundationFacade.projectProposalFailureCase(...).
+Projects approval card through BusinessPortalFoundationFacade.projectProposalApproval(...).
+Projects delegated task envelope through BusinessPortalFoundationFacade.projectProposalDelegatedTaskEnvelope(...).
+Does not call SelfEvolutionEngine.recordFailure(...).
+Does not create DelegatedTask.
+Does not approve/reject.
+Does not apply proposal.
+Does not mutate foundation or business stores.
+Does not generate content.
+Does not change UI.
+```
+
+This endpoint is a governance preview only. It shows what would be sent to foundation learning, approval and delegation boundaries before any mutation happens.

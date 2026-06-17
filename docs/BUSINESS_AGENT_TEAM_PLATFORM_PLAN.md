@@ -5107,3 +5107,43 @@ POST /api/v1/business/foundation/insights/project
 ```
 
 测试中采用 artifact-based 副作用检查：验证不会创建 BusinessRun/EvolutionProposal，而不假设 BusinessInsightService 的即时 summary 为空。
+
+### 21.28 Read-only evolution proposal governance preview endpoint
+
+新增只读 evolution proposal governance preview endpoint：
+
+```text
+POST /api/v1/business/foundation/evolution-proposals/preview
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "proposalId": "evp-1"
+}
+```
+
+行为：
+
+```text
+读取已有 EvolutionProposalRecord
+通过 BusinessPortalFoundationFacade.projectProposalFailureCase(...) 生成 FailureCase projection
+通过 BusinessPortalFoundationFacade.projectProposalApproval(...) 生成 approval card projection
+通过 BusinessPortalFoundationFacade.projectProposalDelegatedTaskEnvelope(...) 生成 delegated envelope projection
+```
+
+边界：
+
+```text
+不 recordFailure
+不 create DelegatedTask
+不 approve/reject
+不 apply proposal
+不修改 foundation 或 business store
+不 generation
+不新增 UI
+```
+
+这是 governance preview，不是 proposal apply 或 delegated execution。

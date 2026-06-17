@@ -13,6 +13,7 @@ import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter
 import com.nousresearch.hermes.business.insight.BusinessInsightRecord;
 import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
 import com.nousresearch.hermes.collaboration.DelegatedTask;
+import com.nousresearch.hermes.collaboration.DelegatedTaskEnvelope;
 import com.nousresearch.hermes.collaboration.IntentOrchestrator;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalRecord;
@@ -116,6 +117,14 @@ public class BusinessPortalFoundationFacade {
 
     public List<BusinessInsightRecord> projectEvolutionInsights(String workspaceId, java.util.Map<String, Object> evolutionSummary) {
         return insightProjectionAdapter.fromEvolutionSummary(workspaceId, evolutionSummary);
+    }
+
+    public FailureCase projectProposalFailureCase(EvolutionProposalRecord proposal) {
+        return evolutionProposalAdapter.toFailureCase(proposal);
+    }
+
+    public DelegatedTaskEnvelope projectProposalDelegatedTaskEnvelope(EvolutionProposalRecord proposal) {
+        return evolutionProposalAdapter.toDelegatedTaskEnvelope(proposal);
     }
 
     public FailureCase recordProposalLearning(EvolutionProposalRecord proposal) {

@@ -665,6 +665,46 @@ public class DashboardServer {
                 ));
             }
         });
+        app.post("/api/v1/business/foundation/evolution-proposals/preview", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            String proposalId = body.getString("proposalId");
+            if (workspaceId == null || workspaceId.isBlank() || proposalId == null || proposalId.isBlank()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId and proposalId are required"
+                ));
+                return;
+            }
+            try {
+                var proposal = evolutionProposalService.requireProposal(workspaceId, proposalId);
+                var failureCase = businessPortalFoundationFacade.projectProposalFailureCase(proposal);
+                var approvalCard = businessPortalFoundationFacade.projectProposalApproval(proposal);
+                var delegatedEnvelope = businessPortalFoundationFacade.projectProposalDelegatedTaskEnvelope(proposal);
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "proposalId", proposalId,
+                    "failureCase", failureCase.toMap(),
+                    "approvalCard", approvalCard,
+                    "delegatedTaskEnvelope", delegatedEnvelope.toMap()
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException | com.nousresearch.hermes.evolution.EvolutionProposalService.EvolutionProposalNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "proposalId", proposalId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "proposalId", proposalId
+                ));
+            }
+        });
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);
