@@ -4949,3 +4949,42 @@ POST /api/v1/business/foundation/team-blueprints/validate
 ```
 
 这是 by-reference validation preview，不接受任意 generated blueprint payload。后续如果要校验 draft payload，也应先明确 schema 和 non-mutating 行为。
+
+### 21.24 Read-only prompt context preview endpoint
+
+新增只读 prompt context preview endpoint：
+
+```text
+POST /api/v1/business/foundation/prompt-context/preview
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "promptAssetRefs": ["prompt://base"],
+  "taskContext": "refund ticket",
+  "includeFoundationContext": false
+}
+```
+
+行为：
+
+```text
+通过 BusinessPortalFoundationFacade.resolvePromptContext(...) 解析 prompt refs
+返回 PromptContext.toMap()
+返回 PromptContext.render() 作为 rendered preview
+```
+
+边界：
+
+```text
+不写 PromptAsset
+不修改 Memory / Skill / Org Knowledge
+不 generation
+不创建业务对象
+不新增 UI
+```
+
+`includeFoundationContext=true` 时，只会读取 foundation context segments，不会写回任何 foundation store。

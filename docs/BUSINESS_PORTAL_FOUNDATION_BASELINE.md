@@ -505,3 +505,50 @@ Does not change UI.
 ```
 
 Validation preview is intentionally by reference in this first read-only step. It validates stored team blueprints instead of accepting arbitrary generated payloads.
+
+---
+
+## 14. Read-only Prompt Context Preview
+
+Date: 2026-06-17
+
+A read-only prompt context preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/prompt-context/preview
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "promptAssetRefs": ["prompt://base", "prompt://policy#v2"],
+  "taskContext": "refund ticket",
+  "includeFoundationContext": false
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "promptContext": PromptContext.toMap(),
+  "rendered": PromptContext.render()
+}
+```
+
+Boundary:
+
+```text
+Resolves prompt refs through BusinessPortalFoundationFacade.resolvePromptContext(...).
+Does not write PromptAsset.
+Does not mutate Memory / Skill / Org Knowledge.
+Does not generate content.
+Does not create business objects.
+Does not change UI.
+```
+
+`includeFoundationContext=true` may include read-only foundation context segments from memory, skills and organizational knowledge.

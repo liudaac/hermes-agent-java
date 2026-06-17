@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.dashboard;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
 import com.nousresearch.hermes.org.auth.PermissionPolicy;
@@ -33,6 +34,7 @@ import com.nousresearch.hermes.scenario.ScenarioDashboardIntegration;
 import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.prompt.PromptAssetDashboardIntegration;
 import com.nousresearch.hermes.prompt.PromptAssetService;
+import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.evolution.EvolutionProposalDashboardIntegration;
 import com.nousresearch.hermes.evolution.EvolutionProposalService;
 import com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry;
@@ -463,6 +465,52 @@ public class DashboardServer {
                     "error", e.getMessage(),
                     "workspaceId", workspaceId,
                     "teamId", teamId
+                ));
+            }
+        });
+        app.post("/api/v1/business/foundation/prompt-context/preview", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            JSONArray refsArray = body.getJSONArray("promptAssetRefs");
+            if (workspaceId == null || workspaceId.isBlank() || refsArray == null || refsArray.isEmpty()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId and promptAssetRefs are required"
+                ));
+                return;
+            }
+            java.util.List<String> refs = new java.util.ArrayList<>();
+            for (Object item : refsArray) {
+                if (item != null) refs.add(String.valueOf(item));
+            }
+            boolean includeFoundationContext = body.getBooleanValue("includeFoundationContext");
+            PromptAssetResolver.ResolveOptions options = includeFoundationContext
+                ? PromptAssetResolver.ResolveOptions.withFoundationContext()
+                : PromptAssetResolver.ResolveOptions.promptOnly();
+            try {
+                var promptContext = businessPortalFoundationFacade.resolvePromptContext(
+                    workspaceId,
+                    refs,
+                    body.getString("taskContext"),
+                    options
+                );
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "promptContext", promptContext.toMap(),
+                    "rendered", promptContext.render()
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId
                 ));
             }
         });
