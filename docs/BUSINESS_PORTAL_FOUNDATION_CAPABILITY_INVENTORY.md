@@ -1710,3 +1710,42 @@ BusinessPortalFoundationFacadeTest
 ```
 
 The test verifies facade-level composition for prompt resolution, capability validation, team compilation, scenario planning and intent-run projection.
+
+---
+
+## 18. Iteration 10 Status: Foundation Adapter Development Contract
+
+Date: 2026-06-17
+
+Tenth adapter-first iteration adds a development contract document:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_ADAPTERS.md
+```
+
+Purpose:
+
+```text
+Make BusinessPortalFoundationFacade the default future boundary for API/UI/generation integration.
+Document what each adapter owns and refuses to own.
+Prevent future Business Portal work from bypassing validation, compiler, projection and governance adapters.
+```
+
+The contract defines:
+
+```text
+Core source-of-truth rule
+Adapter ownership map
+Mandatory flows for team generation/editing, scenario execution, run display, approval cards and evolution proposals
+Generation guardrails
+Review checklist for future PRs
+Current non-goals
+Recommended next engineering steps
+```
+
+Key rule:
+
+```text
+Future product code should call BusinessPortalFoundationFacade when touching foundation behavior.
+Route handlers and dashboard integrations should not manually stitch together low-level foundation services if a facade method exists.
+```

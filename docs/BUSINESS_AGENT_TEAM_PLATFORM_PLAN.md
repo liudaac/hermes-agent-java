@@ -4597,3 +4597,52 @@ IntentRun -> BusinessRun projection
 ```
 
 到这里，Business Portal foundation convergence 的 adapter-first 基座已经可以作为后续功能入口保护层。
+
+### 21.15 Iteration 10：Foundation Adapter 开发规范已固化
+
+第十刀完成文档规范：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_ADAPTERS.md
+```
+
+这份文档把 adapter-first 结果变成后续开发合同，明确：
+
+```text
+BusinessPortalFoundationFacade 是未来 API/UI/generation 接 foundation 的默认边界
+各 adapter 分别 owns 什么、不 owns 什么
+Business Portal 各对象的 source of truth
+team generation/editing 的强制流程
+scenario execution 的强制流程
+run display / audit 的强制 trace ref 规则
+approval card 的 foundation 映射规则
+evolution proposal 的 governance 边界
+generation guardrails
+future PR review checklist
+```
+
+核心规则：
+
+```text
+未来产品代码碰 foundation 行为时，优先调用 BusinessPortalFoundationFacade。
+route handler / dashboard integration 不应在已有 facade 方法时手工拼低层 service。
+```
+
+当前仍保持非目标：
+
+```text
+不新增 generation API
+不新增 Business Portal UI tab
+不新增业务对象
+不直连渠道通知
+不自动 apply evolution proposal
+不从 blueprint compile 自动执行 runtime team
+```
+
+下一步如果继续不扩产品面，建议做：
+
+```text
+轻量 architecture tests / static checks
+```
+
+防止 Business Portal 模块绕过 facade 直接 wiring low-level foundation services。
