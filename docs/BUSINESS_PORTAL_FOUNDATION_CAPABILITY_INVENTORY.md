@@ -1253,3 +1253,81 @@ BusinessRunProjectionAdapter skeleton
 ```
 
 That should project `IntentRun` / `AgentTrace` into business-readable run records without making BusinessRunService the trace store.
+
+---
+
+## 12. Iteration 4 Status: BusinessRunProjectionAdapter Skeleton
+
+Date: 2026-06-17
+
+Fourth adapter-first implementation:
+
+```text
+com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter
+```
+
+Purpose:
+
+```text
+Project foundation execution truth into a Business Portal run story.
+Keep IntentRun / AgentTrace as source of truth.
+Avoid turning BusinessRunService into a second trace store.
+```
+
+Boundary:
+
+```text
+It does not execute work.
+It does not add UI.
+It does not add generation API.
+It does not replace IntentRun / AgentTrace persistence.
+It does not make BusinessRunService the primary runtime trace store.
+```
+
+Adapter behavior:
+
+```text
+IntentRun -> BusinessRunRecord
+IntentRun.assignments -> assignment BusinessRunStep rows
+IntentRun.attempts -> attempt BusinessRunStep rows
+AgentTrace list -> trace summary BusinessRunStep rows
+IntentRun status -> BusinessRunService status vocabulary
+IntentRun runId -> technicalTraceRef intent://<runId>
+projection metadata -> source=foundation:intent-run
+```
+
+Current methods:
+
+```text
+BusinessRunProjectionAdapter.fromIntentRun(workspaceId, scenarioId, scenarioName, run)
+BusinessRunProjectionAdapter.fromIntentRun(workspaceId, scenarioId, scenarioName, run, traces)
+BusinessRunProjectionAdapter.persistProjection(service, projection)
+```
+
+Persistence note:
+
+```text
+persistProjection(...) intentionally uses existing BusinessRunService.createRun(...).
+The persisted business run gets its own business id, while metadata keeps projectionRunId and technicalTraceRef keeps the foundation intent:// id.
+```
+
+Current mapping:
+
+| Foundation field | Business projection |
+|---|---|
+| `IntentRun.runId` | `technicalTraceRef=intent://runId`, metadata.intentRunId |
+| `IntentRun.intent` | taskInput / taskTitle |
+| `IntentRun.preferredTeamId` | teamId |
+| `IntentRun.status` | BusinessRunRecord.status |
+| `IntentRun.assignments` | assignment steps |
+| `IntentRun.attempts` | attempt steps |
+| `IntentRun.successes/failures` | metrics + conclusionReason |
+| `AgentTrace` | trace summary steps + trace metrics |
+
+Next likely iteration:
+
+```text
+BusinessApprovalAdapter skeleton
+```
+
+That should project ApprovalRequest / ApprovalResult into business approval cards without making BusinessApprovalService a second approval engine.

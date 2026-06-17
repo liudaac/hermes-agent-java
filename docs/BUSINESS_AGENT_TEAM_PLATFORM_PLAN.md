@@ -4211,3 +4211,67 @@ BusinessRunRecord / BusinessRunStep
 ```
 
 而不是让 `BusinessRunService` 成为第二套 trace store。
+
+### 21.9 Iteration 4：BusinessRunProjectionAdapter skeleton 已落地
+
+第四刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter
+```
+
+它把 foundation truth 投影成 Business Portal 可读 run story：
+
+```text
+IntentRun -> BusinessRunRecord
+IntentRun.assignments -> BusinessRunStep
+IntentRun.attempts -> BusinessRunStep
+AgentTrace -> trace summary BusinessRunStep
+```
+
+明确边界：
+
+```text
+不执行任务
+不新增 UI
+不新增 generation API
+不替代 IntentRun / AgentTrace persistence
+不让 BusinessRunService 成为第二套 trace store
+```
+
+当前投影规则：
+
+```text
+technicalTraceRef = intent://<runId>
+metadata.source = foundation:intent-run
+assignments / attempts / traces 分别变成不同 source 的步骤
+status 从 IntentRun.RunStatus 映射到 BusinessRunService 的状态词汇
+metrics 保留 succeeded / failed / attempts / durationMs / trace stats
+```
+
+也提供可选持久化入口：
+
+```text
+persistProjection(BusinessRunService, BusinessRunRecord)
+```
+
+它仍然调用现有 `BusinessRunService.createRun(...)`，因此：
+
+```text
+BusinessRunService 只是业务投影仓库
+IntentRun / AgentTrace 仍是运行事实源
+```
+
+下一刀建议：
+
+```text
+BusinessApprovalAdapter skeleton
+```
+
+用于把 foundation approval：
+
+```text
+ApprovalRequest / ApprovalResult / ApprovalSystem
+```
+
+投影成业务审批卡，而不是让 `BusinessApprovalService` 成为第二套 approval engine。
