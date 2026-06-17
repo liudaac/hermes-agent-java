@@ -1406,3 +1406,87 @@ EvolutionProposalAdapter skeleton
 ```
 
 That should connect business evolution proposals to SelfEvolutionEngine / DelegatedTaskStore / ApprovalSystem boundaries without creating a second evolution engine.
+
+---
+
+## 14. Iteration 6 Status: EvolutionProposalAdapter Skeleton
+
+Date: 2026-06-17
+
+Sixth adapter-first implementation:
+
+```text
+com.nousresearch.hermes.evolution.EvolutionProposalAdapter
+```
+
+Purpose:
+
+```text
+Connect Business Portal evolution proposals to Hermes foundation evolution, approval and delegated-task boundaries.
+Keep SelfEvolutionEngine / DelegatedTaskStore / ApprovalSystem as the foundation sources of truth.
+Avoid turning EvolutionProposalService into a second evolution engine.
+```
+
+Boundary:
+
+```text
+It does not apply runtime mutations.
+It does not create or publish team blueprint versions by itself.
+It does not approve ApprovalRequest directly.
+It does not execute delegated tasks.
+It does not add UI.
+It does not add generation API.
+```
+
+Adapter behavior:
+
+```text
+EvolutionProposalRecord -> FailureCase
+EvolutionProposalRecord -> SelfEvolutionEngine.recordFailure(...)
+EvolutionProposalRecord -> ApprovalRequest
+EvolutionProposalRecord -> BusinessApprovalRecord projection
+EvolutionProposalRecord -> DelegatedTaskEnvelope
+EvolutionProposalRecord -> DelegatedTaskStore.createPending(...)
+```
+
+Current methods:
+
+```text
+EvolutionProposalAdapter.toFailureCase(proposal)
+EvolutionProposalAdapter.recordFailureLearning(proposal)
+EvolutionProposalAdapter.toApprovalRequest(proposal)
+EvolutionProposalAdapter.toBusinessApprovalCard(proposal)
+EvolutionProposalAdapter.toDelegatedTaskEnvelope(proposal)
+EvolutionProposalAdapter.createDelegatedReviewTask(proposal)
+```
+
+Current mapping:
+
+| Business proposal field | Foundation target |
+|---|---|
+| `proposalId` | `FailureCase.id`, approval operation, delegated envelope runId |
+| `teamId` / `targetTeamId` | `FailureCase.agentId`, delegated suggestedTeamId, business approval teamId |
+| `finding` | `FailureCase.taskDescription/actualOutcome/diagnosis` |
+| `proposedChange` | `FailureCase.lesson/correctiveAction`, approval details, delegated intent |
+| `expectedBenefit` | `FailureCase.expectedOutcome`, approval evidence |
+| evidence / metadata root cause | `FailureCase.RootCause` |
+| evidence / metadata severity/risk | `FailureCase.Severity` and approval dangerous flag |
+
+Important note:
+
+```text
+EvolutionProposalService.apply(...) remains the existing business draft/versioning skeleton.
+EvolutionProposalAdapter only prepares foundation-backed learning/review/delegation artifacts.
+```
+
+Next likely iteration:
+
+```text
+PromptAssetResolver / PromptContextAdapter skeleton
+```
+
+or a cross-adapter smoke test wiring:
+
+```text
+ScenarioIntentAdapter -> BusinessRunProjectionAdapter -> BusinessInsight/Evolution path
+```

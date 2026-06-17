@@ -4344,3 +4344,67 @@ TeamBlueprint versioning
 ```
 
 边界上，避免 `EvolutionProposalService` 变成第二套 evolution engine。
+
+### 21.11 Iteration 6：EvolutionProposalAdapter skeleton 已落地
+
+第六刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.evolution.EvolutionProposalAdapter
+```
+
+它把业务优化提案接到 Hermes foundation 的三类边界：
+
+```text
+SelfEvolutionEngine / FailureCase
+ApprovalSystem / ApprovalRequest / BusinessApprovalAdapter projection
+DelegatedTaskStore / DelegatedTaskEnvelope
+```
+
+当前能力：
+
+```text
+EvolutionProposalRecord -> FailureCase
+EvolutionProposalRecord -> SelfEvolutionEngine.recordFailure(...)
+EvolutionProposalRecord -> ApprovalRequest
+EvolutionProposalRecord -> BusinessApprovalRecord projection
+EvolutionProposalRecord -> DelegatedTaskEnvelope
+EvolutionProposalRecord -> DelegatedTaskStore.createPending(...)
+```
+
+明确边界：
+
+```text
+不直接 apply runtime mutation
+不自行创建/发布 Team Blueprint 版本
+不直接 approve/deny ApprovalRequest
+不执行 delegated task
+不新增 UI
+不新增 generation API
+```
+
+语义保持：
+
+```text
+EvolutionProposalService 是业务提案仓库/状态机 skeleton
+SelfEvolutionEngine 是学习事实源
+DelegatedTaskStore 是受治理任务边界
+ApprovalSystem 是审批事实源
+TeamBlueprintService 是版本草稿边界
+```
+
+下一刀候选：
+
+```text
+PromptAssetResolver / PromptContextAdapter skeleton
+```
+
+用于把 `prompt://assetId[#vN]`、Memory、Skill、Org Knowledge 的边界厘清，避免 PromptAssetService 变成第二套 knowledge system。
+
+另一个候选是做一条 cross-adapter smoke test：
+
+```text
+ScenarioIntentAdapter -> IntentRun -> BusinessRunProjectionAdapter -> EvolutionProposalAdapter
+```
+
+验证 adapter-first 链路能串起来，但仍不新增产品 API/UI。
