@@ -5321,3 +5321,56 @@ read-only / by-reference 约束。
 ```
 
 这次是显式拒绝写代码的“下一刀”，确保 read-only 集成不会因为产品压力被破坏。
+
+### 21.35 BusinessSafetyValveAdapter skeleton 已落地
+
+按 `docs/BUSINESS_PORTAL_FOUNDATION_SAFETY_VALVES_DESIGN.md` 实现：
+
+```text
+com.nousresearch.hermes.business.safetyvalve.BusinessSafetyValveAdapter
+```
+
+三个 read-only 投影方法：
+
+```text
+toReplayRequest(BusinessRunRecord, requestedBy)
+toCanaryProposal(TeamBlueprintRecord, TeamBlueprintVersion, requestedBy)
+toRollbackProposal(TeamBlueprintRecord, fromVersion, toVersion, requestedBy)
+```
+
+每个都返回：
+
+```text
+ApprovalRequest projection
+BusinessApprovalRecord projection
+DelegatedTaskEnvelope projection
+foundation references map
+metadata.source = foundation:safety-valve
+```
+
+明确边界：
+
+```text
+不执行 replay / canary / rollback
+不创建 traffic split
+不自主 rollback
+Canary 和 Rollback 标记 dangerous=true（需审批）
+Replay 标记 dangerous=false（但仍产生 approval + delegated artifact）
+```
+
+Registry / Diagnostics / Architecture test 已同步（10 adapters）。
+
+测试：
+
+```text
+BusinessSafetyValveAdapterTest
+BusinessPortalFoundationDiagnosticsTest
+BusinessPortalFoundationArchitectureTest
+```
+
+验证：
+
+```text
+mvn -q -DskipTests compile
+mvn -q -Dtest=BusinessSafetyValveAdapterTest,BusinessPortalFoundationDiagnosticsTest,BusinessPortalFoundationArchitectureTest test
+```

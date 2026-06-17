@@ -862,3 +862,41 @@ No automatic evolution proposal creation.
 No new business object beyond the projection record.
 No new dashboard endpoint (deferred per the design doc).
 ```
+
+---
+
+## 23. BusinessSafetyValveAdapter Skeleton Implemented
+
+Date: 2026-06-17
+
+Second design contract implemented:
+
+```text
+com.nousresearch.hermes.business.safetyvalve.BusinessSafetyValveAdapter
+com.nousresearch.hermes.business.safetyvalve.BusinessSafetyValveAdapter.SafetyValveProjection
+```
+
+Wired into:
+
+```text
+BusinessPortalFoundationFacade (projectReplayRequest, projectCanaryProposal, projectRollbackProposal)
+BusinessPortalAdapterRegistry composes BusinessSafetyValveAdapter
+BusinessPortalFoundationDiagnostics now reports 10 adapters including safetyValveAdapter
+BusinessPortalFoundationArchitectureTest allowlists the new adapter class
+```
+
+Boundary preserved:
+
+```text
+Does not execute replay, canary traffic split, or rollback.
+Emits ApprovalRequest projection + DelegatedTaskEnvelope for each valve type.
+metadata.source = foundation:safety-valve
+Canary and rollback marked dangerous (approval required).
+Replay marked non-dangerous but still produces approval + delegated artifacts.
+```
+
+Tests:
+
+```text
+BusinessSafetyValveAdapterTest (4 cases: replay, canary, rollback validation, toMap)
+```
