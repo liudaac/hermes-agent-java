@@ -5199,3 +5199,38 @@ DelegatedTaskStore 没有产生 proposal 衍生 task
 ```
 
 这是 read-only product integration 的第一条 acceptance-style 测试。
+
+### 21.31 Alignment review：方向是否偏离计划
+
+新增方向校准文档：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_ALIGNMENT_REVIEW.md
+```
+
+结论：
+
+```text
+adapter-first 收敛 + read-only product integration 阶段都在 18/19/20/21 节约束内
+没有新增业务对象
+没有打开 generation / mutation surface
+没有偷偷扩 Business Portal UI
+```
+
+仍未启动的部分（已显式记录，非偏离）：
+
+```text
+EvalSet / EvalRun 业务投影
+Replay / Canary / Auto rollback 安全阀
+BusinessNotificationAdapter 通道集成
+BusinessTeamGenerationService（按计划延后到 mutation phase）
+```
+
+下一刀候选（仍 read-only / 文档驱动）：
+
+```text
+1. 给 BusinessRunRecord 增加显式 metadata.source 标记（foundation vs manual/demo），避免双轨混淆
+2. EvalRun read-only projection 设计文档
+3. Replay / Canary / Auto rollback 最小边界设计文档
+4. BusinessNotificationAdapter 契约设计文档
+```
