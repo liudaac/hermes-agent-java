@@ -259,6 +259,7 @@ public class DashboardServer {
             if (!isAcceptedHost(hostHeader)) {
                 ctx.status(400).result(JSON.toJSONString(new JSONObject()
                     .fluentPut("detail", "Invalid Host header. Dashboard requests must use the hostname the server was bound to.")));
+                ctx.skipRemainingHandlers();
                 return;
             }
 
@@ -281,6 +282,7 @@ public class DashboardServer {
                 if (auth == null || !hmacCompare(auth, expected)) {
                     ctx.status(401).result(JSON.toJSONString(new JSONObject()
                         .fluentPut("detail", "Unauthorized")));
+                    ctx.skipRemainingHandlers();
                     return;
                 }
             }

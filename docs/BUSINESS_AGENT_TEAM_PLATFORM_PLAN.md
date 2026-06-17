@@ -4882,3 +4882,33 @@ DashboardBusinessFoundationDiagnosticsRouteTest
 ```
 
 备注：测试中观察到现有 Dashboard auth middleware 在 loopback 场景下设置 401 后不会中止后续 handler，导致 handler 可能覆盖响应。本轮没有顺手改全局 auth 行为，避免把安全中间件修复混进 diagnostics endpoint 集成。
+
+### 21.22 Dashboard auth middleware 安全收口
+
+在 diagnostics endpoint 接入后，修复了 Dashboard auth middleware 的响应覆盖问题：
+
+```text
+DashboardServer.registerMiddleware()
+```
+
+现在：
+
+```text
+Invalid Host header -> 400 + ctx.skipRemainingHandlers()
+Unauthorized API request -> 401 + ctx.skipRemainingHandlers()
+```
+
+原因：
+
+```text
+之前 middleware 设置 400/401 后没有中止后续 handler，handler 可能继续执行并覆盖响应。
+```
+
+测试已补：
+
+```text
+DashboardBusinessFoundationDiagnosticsRouteTest.diagnosticsRouteRequiresDashboardAuth
+DashboardTenantRoutesTest
+```
+
+这是安全收口，不是 Business Portal 功能扩张。

@@ -59,6 +59,36 @@ class DashboardBusinessFoundationDiagnosticsRouteTest {
     }
 
 
+    @Test
+    void diagnosticsRouteRequiresDashboardAuth() throws Exception {
+        int port = freePort();
+        TenantManager tenantManager = new TenantManager();
+        DashboardServer server = new DashboardServer(
+            port,
+            "127.0.0.1",
+            new HermesConfig(),
+            tenantManager,
+            GatewayRuntimeStatus::disconnected
+        );
+
+        try {
+            server.start();
+            HttpClient client = HttpClient.newHttpClient();
+            String baseUrl = "http://127.0.0.1:" + port;
+            HttpResponse<String> response = client.send(HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/v1/business/foundation/diagnostics"))
+                .GET()
+                .build(), HttpResponse.BodyHandlers.ofString());
+
+            assertEquals(401, response.statusCode());
+            JSONObject body = JSON.parseObject(response.body());
+            assertEquals("Unauthorized", body.getString("detail"));
+        } finally {
+            server.stop();
+            tenantManager.shutdown();
+        }
+    }
+
     private static HttpResponse<String> send(HttpClient client, String token, HttpRequest.Builder builder)
         throws IOException, InterruptedException {
         return client.send(

@@ -425,3 +425,37 @@ DashboardBusinessFoundationDiagnosticsRouteTest verifies the route returns the f
 ```
 
 During testing, the existing Dashboard auth middleware behavior was observed: in loopback tests, a 401 response set in middleware can be overwritten by downstream handlers because middleware does not abort handler execution after setting 401. This was not changed in this iteration to keep the scope limited to read-only diagnostics integration.
+
+---
+
+## 12. Dashboard Auth Middleware Safety Fix
+
+Date: 2026-06-17
+
+After adding the read-only diagnostics endpoint, the Dashboard auth middleware was tightened:
+
+```text
+DashboardServer.registerMiddleware()
+```
+
+Fix:
+
+```text
+Invalid Host header -> set 400 and ctx.skipRemainingHandlers()
+Unauthorized API request -> set 401 and ctx.skipRemainingHandlers()
+```
+
+Reason:
+
+```text
+Previously, middleware could set 400/401 but downstream handlers could still run and overwrite the response.
+```
+
+Validation:
+
+```text
+DashboardBusinessFoundationDiagnosticsRouteTest now verifies unauthenticated diagnostics requests return 401.
+DashboardTenantRoutesTest continues to pass for authorized tenant APIs.
+```
+
+This is a safety fix, not a Business Portal feature expansion.
