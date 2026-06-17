@@ -459,3 +459,49 @@ DashboardTenantRoutesTest continues to pass for authorized tenant APIs.
 ```
 
 This is a safety fix, not a Business Portal feature expansion.
+
+---
+
+## 13. Read-only Team Blueprint Validation Preview
+
+Date: 2026-06-17
+
+A read-only validation preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/team-blueprints/validate
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "teamId": "after-sales"
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "teamId": "...",
+  "validation": FoundationCapabilityValidationReport.toMap()
+}
+```
+
+Boundary:
+
+```text
+Reads an existing TeamBlueprintRecord by workspaceId/teamId.
+Validates through BusinessPortalFoundationFacade.validateTeamBlueprint(...).
+Does not compile.
+Does not mutate.
+Does not generate.
+Does not create business objects.
+Does not change UI.
+```
+
+Validation preview is intentionally by reference in this first read-only step. It validates stored team blueprints instead of accepting arbitrary generated payloads.

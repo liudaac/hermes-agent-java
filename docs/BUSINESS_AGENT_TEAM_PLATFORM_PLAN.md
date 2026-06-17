@@ -4912,3 +4912,40 @@ DashboardTenantRoutesTest
 ```
 
 这是安全收口，不是 Business Portal 功能扩张。
+
+### 21.23 Read-only team blueprint validation preview endpoint
+
+新增只读 validation preview endpoint：
+
+```text
+POST /api/v1/business/foundation/team-blueprints/validate
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "teamId": "after-sales"
+}
+```
+
+行为：
+
+```text
+读取已有 TeamBlueprintRecord
+通过 BusinessPortalFoundationFacade.validateTeamBlueprint(...) 校验
+返回 FoundationCapabilityValidationReport.toMap()
+```
+
+边界：
+
+```text
+不 compile
+不 mutation
+不 generation
+不创建业务对象
+不新增 UI
+```
+
+这是 by-reference validation preview，不接受任意 generated blueprint payload。后续如果要校验 draft payload，也应先明确 schema 和 non-mutating 行为。

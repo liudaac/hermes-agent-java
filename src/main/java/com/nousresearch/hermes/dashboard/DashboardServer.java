@@ -430,6 +430,42 @@ public class DashboardServer {
             "ok", true,
             "diagnostics", businessPortalFoundationFacade.diagnostics().toMap()
         )));
+        app.post("/api/v1/business/foundation/team-blueprints/validate", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            String teamId = body.getString("teamId");
+            if (workspaceId == null || workspaceId.isBlank() || teamId == null || teamId.isBlank()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId and teamId are required"
+                ));
+                return;
+            }
+            try {
+                var team = teamBlueprintService.requireTeamBlueprint(workspaceId, teamId);
+                var report = businessPortalFoundationFacade.validateTeamBlueprint(workspaceId, team);
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "teamId", teamId,
+                    "validation", report.toMap()
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException | com.nousresearch.hermes.blueprint.TeamBlueprintService.TeamBlueprintNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "teamId", teamId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "teamId", teamId
+                ));
+            }
+        });
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);
