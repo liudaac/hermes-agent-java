@@ -1581,3 +1581,59 @@ PromptAssetResolver + FoundationCapabilityValidator + TeamBlueprintCompiler + Sc
 ```
 
 This would validate the adapter-first architecture without adding product API/UI.
+
+---
+
+## 16. Iteration 8 Status: Cross-adapter Smoke Test
+
+Date: 2026-06-17
+
+Eighth adapter-first iteration adds a test-only architecture smoke chain:
+
+```text
+src/test/java/com/nousresearch/hermes/business/BusinessPortalAdapterChainSmokeTest.java
+```
+
+Purpose:
+
+```text
+Verify that the adapter-first Business Portal foundation chain can close without adding product API/UI.
+Confirm Business Portal records remain façade/projection artifacts while foundation components own truth.
+```
+
+Smoke chain covered:
+
+```text
+WorkspaceService -> TenantManager / TenantContext
+PromptAssetService -> PromptAssetResolver -> PromptContext
+FoundationCapabilityValidator -> ToolRegistry + prompt bridge
+TeamBlueprintService -> TeamBlueprintCompiler -> TeamManager / Team / AgentRole
+ScenarioRecord -> ScenarioIntentAdapter -> IntentOrchestrator.IntentPlan
+IntentRun -> BusinessRunProjectionAdapter -> BusinessRunRecord
+EvolutionProposalRecord -> EvolutionProposalAdapter -> FailureCase / Approval card / DelegatedTask
+```
+
+Important test design note:
+
+```text
+Assertions are artifact-based, not global-count-based.
+```
+
+Reason:
+
+```text
+Tenant foundation can load persisted test-home state such as prior intent runs, memories or delegated tasks.
+The smoke test verifies the current artifact exists and has the expected foundation references instead of assuming stores are empty.
+```
+
+This smoke test still does not:
+
+```text
+add product routes
+add UI
+call generation API
+execute real agents through TenantBus
+apply runtime mutations from evolution proposals
+```
+
+The current adapter-first baseline is now validated as a chain, not only as isolated adapters.

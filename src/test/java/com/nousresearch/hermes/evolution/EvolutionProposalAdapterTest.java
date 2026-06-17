@@ -65,7 +65,8 @@ class EvolutionProposalAdapterTest {
 
         var task = fixture.adapter.createDelegatedReviewTask(proposal);
         assertNotNull(task.taskId());
-        assertEquals(1, fixture.tenant.getDelegatedTaskStore().list().size());
+        assertTrue(fixture.tenant.getDelegatedTaskStore().list().stream()
+            .anyMatch(stored -> "evolution-proposal:evp-1".equals(stored.envelope().runId())));
         assertEquals("evolution-proposal:evp-1", task.envelope().runId());
     }
 

@@ -4472,3 +4472,56 @@ EvolutionProposalAdapter
 ```
 
 目标是验证 adapter-first 链路已经能闭环，但仍不新增产品 API/UI。
+
+### 21.13 Iteration 8：Cross-adapter smoke test 已落地
+
+第八刀完成一条 test-only 的 adapter-first 闭环：
+
+```text
+src/test/java/com/nousresearch/hermes/business/BusinessPortalAdapterChainSmokeTest.java
+```
+
+串起了：
+
+```text
+WorkspaceService -> TenantManager / TenantContext
+PromptAssetService -> PromptAssetResolver -> PromptContext
+FoundationCapabilityValidator -> ToolRegistry + prompt bridge
+TeamBlueprintService -> TeamBlueprintCompiler -> TeamManager / Team / AgentRole
+ScenarioRecord -> ScenarioIntentAdapter -> IntentOrchestrator.IntentPlan
+IntentRun -> BusinessRunProjectionAdapter -> BusinessRunRecord
+EvolutionProposalRecord -> EvolutionProposalAdapter -> FailureCase / Approval card / DelegatedTask
+```
+
+验证重点：
+
+```text
+Business Portal 对象仍是 façade / projection / design-time artifact
+Hermes foundation 仍拥有 tenant / tool / prompt context / team runtime / intent / run / approval / evolution / delegation truth
+```
+
+这条 smoke test 不做：
+
+```text
+不新增产品 API
+不新增 UI
+不调用 generation API
+不通过 TenantBus 执行真实 agent
+不从 evolution proposal 直接 apply runtime mutation
+```
+
+测试实现注意：
+
+```text
+断言采用 artifact-based，而不是 global-count-based
+```
+
+原因是 tenant foundation 会加载 test-home 中已存在的 persisted 状态，例如 memory、intent runs、delegated tasks；测试应该验证本次链路产生的 artifact，而不是假设底层 store 为空。
+
+到这里 adapter-first 基线已经具备链路级验证。下一步如果继续，建议开始做更薄的 integration boundary，而不是产品功能：
+
+```text
+BusinessPortalFoundationFacade / BusinessPortalAdapterRegistry skeleton
+```
+
+用于统一组合这些 adapters，但仍不暴露 generation API/UI。
