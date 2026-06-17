@@ -35,6 +35,8 @@ import com.nousresearch.hermes.prompt.PromptAssetDashboardIntegration;
 import com.nousresearch.hermes.prompt.PromptAssetService;
 import com.nousresearch.hermes.evolution.EvolutionProposalDashboardIntegration;
 import com.nousresearch.hermes.evolution.EvolutionProposalService;
+import com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry;
+import com.nousresearch.hermes.business.foundation.BusinessPortalFoundationFacade;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -122,6 +124,7 @@ public class DashboardServer {
     private final ScenarioService scenarioService;
     private final PromptAssetService promptAssetService;
     private final EvolutionProposalService evolutionProposalService;
+    private final BusinessPortalFoundationFacade businessPortalFoundationFacade;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -172,6 +175,11 @@ public class DashboardServer {
         this.scenarioService = new ScenarioService(workspaceService);
         this.promptAssetService = new PromptAssetService(workspaceService);
         this.evolutionProposalService = new EvolutionProposalService(workspaceService, teamBlueprintService);
+        this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
+            workspaceService,
+            tenantManager,
+            promptAssetService
+        ).createFacade();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -416,6 +424,10 @@ public class DashboardServer {
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
         BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService, businessInsightService);
+        app.get("/api/v1/business/foundation/diagnostics", ctx -> ctx.status(200).json(Map.of(
+            "ok", true,
+            "diagnostics", businessPortalFoundationFacade.diagnostics().toMap()
+        )));
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);

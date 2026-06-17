@@ -378,3 +378,50 @@ The architecture rule remains:
 Business Portal presents and governs.
 Hermes foundation owns truth and execution.
 ```
+
+---
+
+## 11. Next Phase Read-only Integration Started
+
+Date: 2026-06-17
+
+The next phase starts with a read-only diagnostics endpoint:
+
+```text
+GET /api/v1/business/foundation/diagnostics
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "diagnostics": BusinessPortalFoundationFacade.diagnostics().toMap()
+}
+```
+
+Boundary:
+
+```text
+No request body
+No mutation
+No generation
+No runtime execution
+No UI tab
+No business object creation
+```
+
+Implementation note:
+
+```text
+DashboardServer wires BusinessPortalFoundationFacade through BusinessPortalAdapterRegistry.
+The endpoint only returns the read-only diagnostics projection.
+```
+
+Testing note:
+
+```text
+DashboardBusinessFoundationDiagnosticsRouteTest verifies the route returns the facade diagnostics payload.
+```
+
+During testing, the existing Dashboard auth middleware behavior was observed: in loopback tests, a 401 response set in middleware can be overwritten by downstream handlers because middleware does not abort handler execution after setting 401. This was not changed in this iteration to keep the scope limited to read-only diagnostics integration.

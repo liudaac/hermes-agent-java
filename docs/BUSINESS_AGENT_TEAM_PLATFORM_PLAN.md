@@ -4842,3 +4842,43 @@ business objects
 ```
 
 后续如果进入产品集成，应该先从 read-only diagnostics / validation preview 开始，而不是直接上 generation 或 mutation endpoint。
+
+### 21.21 Next phase：read-only diagnostics endpoint 已开始
+
+进入下一阶段后的第一刀是只读产品集成：
+
+```text
+GET /api/v1/business/foundation/diagnostics
+```
+
+它返回：
+
+```text
+BusinessPortalFoundationFacade.diagnostics().toMap()
+```
+
+边界保持：
+
+```text
+不接收 body
+不 mutation
+不 generation
+不执行 runtime
+不新增 UI tab
+不创建业务对象
+```
+
+实现方式：
+
+```text
+DashboardServer 通过 BusinessPortalAdapterRegistry 组合 BusinessPortalFoundationFacade
+endpoint 只返回 facade diagnostics 的只读 projection
+```
+
+测试：
+
+```text
+DashboardBusinessFoundationDiagnosticsRouteTest
+```
+
+备注：测试中观察到现有 Dashboard auth middleware 在 loopback 场景下设置 401 后不会中止后续 handler，导致 handler 可能覆盖响应。本轮没有顺手改全局 auth 行为，避免把安全中间件修复混进 diagnostics endpoint 集成。
