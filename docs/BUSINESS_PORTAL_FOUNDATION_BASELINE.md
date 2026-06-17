@@ -766,3 +766,43 @@ docs/BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md
 It lists every `/api/v1/business/foundation/*` read-only endpoint, the facade method each calls, the test that covers it, and the entry conditions required before a mutation/generation phase can start.
 
 This document does not add code or routes. It freezes the current read-only product integration surface so future work has a clear baseline.
+
+---
+
+## 20. Cross-endpoint Read-only Smoke Test
+
+Date: 2026-06-17
+
+A cross-endpoint smoke test now covers all read-only foundation endpoints with a shared fixture:
+
+```text
+src/test/java/com/nousresearch/hermes/dashboard/DashboardBusinessFoundationReadOnlyEndpointsSmokeTest.java
+```
+
+Coverage:
+
+```text
+GET  /api/v1/business/foundation/diagnostics
+POST /api/v1/business/foundation/team-blueprints/validate
+POST /api/v1/business/foundation/prompt-context/preview
+POST /api/v1/business/foundation/scenarios/plan
+POST /api/v1/business/foundation/runs/project
+POST /api/v1/business/foundation/insights/project
+POST /api/v1/business/foundation/evolution-proposals/preview
+```
+
+Invariants verified:
+
+```text
+ok=true responses
+foundation references preserved (intent://, foundation:* metadata sources)
+team blueprint count unchanged
+scenario count unchanged
+prompt asset count unchanged
+evolution proposal count unchanged
+business run count unchanged
+SelfEvolutionEngine total failures unchanged
+DelegatedTaskStore has no proposal-derived task created during preview
+```
+
+This is the first acceptance-style test for the read-only product integration boundary.

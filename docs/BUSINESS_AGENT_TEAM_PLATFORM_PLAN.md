@@ -5180,3 +5180,22 @@ POST /api/v1/business/foundation/evolution-proposals/preview
 ```
 
 不新增 endpoint，不改运行时行为。
+
+### 21.30 Cross-endpoint read-only smoke test
+
+新增：
+
+```text
+src/test/java/com/nousresearch/hermes/dashboard/DashboardBusinessFoundationReadOnlyEndpointsSmokeTest.java
+```
+
+它在同一个 workspace fixture 上依次跑 7 个 read-only foundation endpoint，验证：
+
+```text
+ok=true 且 foundation reference 保留
+没有创建/修改 TeamBlueprint / Scenario / PromptAsset / EvolutionProposal / BusinessRun
+SelfEvolutionEngine total failures 不变
+DelegatedTaskStore 没有产生 proposal 衍生 task
+```
+
+这是 read-only product integration 的第一条 acceptance-style 测试。
