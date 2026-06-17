@@ -261,3 +261,49 @@ Expose a read-only foundation diagnostics view/report through the facade.
 ```
 
 Do not start with generation or mutation endpoints.
+
+---
+
+## 9. Architecture Test Guard
+
+Date: 2026-06-17
+
+A lightweight architecture test now protects the Business Portal foundation boundary:
+
+```text
+src/test/java/com/nousresearch/hermes/business/foundation/BusinessPortalFoundationArchitectureTest.java
+```
+
+Current scope:
+
+```text
+com.nousresearch.hermes.business.*
+```
+
+It intentionally does not police legacy dashboard/org handlers yet.
+
+The test checks:
+
+```text
+Ordinary Business Portal classes do not import low-level foundation packages directly.
+Only business.foundation and explicit adapter classes may bridge to foundation packages.
+business.foundation remains a thin package containing only BusinessPortalFoundationFacade and BusinessPortalAdapterRegistry.
+```
+
+Explicitly allowed adapter classes today:
+
+```text
+BusinessApprovalAdapter
+BusinessRunProjectionAdapter
+BusinessPortalFoundationFacade
+BusinessPortalAdapterRegistry
+```
+
+Rationale:
+
+```text
+The architecture contract is now executable.
+Future Business Portal product code should go through BusinessPortalFoundationFacade or an explicit adapter, not directly to low-level foundation APIs.
+```
+
+If a future feature needs a new adapter exception, add it deliberately and update this document with the reason.

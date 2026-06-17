@@ -1749,3 +1749,41 @@ Key rule:
 Future product code should call BusinessPortalFoundationFacade when touching foundation behavior.
 Route handlers and dashboard integrations should not manually stitch together low-level foundation services if a facade method exists.
 ```
+
+---
+
+## 19. Iteration 11 Status: Business Portal Foundation Architecture Test
+
+Date: 2026-06-17
+
+Eleventh adapter-first iteration adds a lightweight JUnit architecture guard:
+
+```text
+src/test/java/com/nousresearch/hermes/business/foundation/BusinessPortalFoundationArchitectureTest.java
+```
+
+Purpose:
+
+```text
+Make the adapter/facade contract executable.
+Prevent ordinary com.nousresearch.hermes.business classes from directly importing low-level foundation packages.
+Keep business.foundation a thin wiring boundary.
+```
+
+Current scope is intentionally narrow:
+
+```text
+Only com.nousresearch.hermes.business.* production classes are checked.
+Legacy dashboard/org handlers are not policed yet.
+```
+
+Allowed bridge classes:
+
+```text
+BusinessPortalFoundationFacade
+BusinessPortalAdapterRegistry
+BusinessApprovalAdapter
+BusinessRunProjectionAdapter
+```
+
+This preserves existing adapter implementations while preventing future Business Portal service/dashboard/projection classes from bypassing the facade boundary.
