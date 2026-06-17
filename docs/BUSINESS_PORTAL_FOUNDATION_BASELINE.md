@@ -750,3 +750,19 @@ Does not change UI.
 ```
 
 This endpoint is a governance preview only. It shows what would be sent to foundation learning, approval and delegation boundaries before any mutation happens.
+
+---
+
+## 19. Read-only Endpoints Consolidated
+
+Date: 2026-06-17
+
+A canonical reference document is now available:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md
+```
+
+It lists every `/api/v1/business/foundation/*` read-only endpoint, the facade method each calls, the test that covers it, and the entry conditions required before a mutation/generation phase can start.
+
+This document does not add code or routes. It freezes the current read-only product integration surface so future work has a clear baseline.

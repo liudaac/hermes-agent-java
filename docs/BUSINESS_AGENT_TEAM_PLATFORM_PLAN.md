@@ -5147,3 +5147,36 @@ POST /api/v1/business/foundation/evolution-proposals/preview
 ```
 
 这是 governance preview，不是 proposal apply 或 delegated execution。
+
+### 21.29 Read-only endpoints consolidation 文档
+
+新增：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md
+```
+
+它把当前所有 read-only `/api/v1/business/foundation/*` endpoint 汇总：
+
+```text
+GET  /api/v1/business/foundation/diagnostics
+POST /api/v1/business/foundation/team-blueprints/validate
+POST /api/v1/business/foundation/prompt-context/preview
+POST /api/v1/business/foundation/scenarios/plan
+POST /api/v1/business/foundation/runs/project
+POST /api/v1/business/foundation/insights/project
+POST /api/v1/business/foundation/evolution-proposals/preview
+```
+
+并明确：
+
+```text
+共同非目标
+共同错误响应
+对应 facade 方法
+对应测试
+进入下一阶段（mutation/generation）前的条件
+建议的下一步仍为 read-only
+```
+
+不新增 endpoint，不改运行时行为。
