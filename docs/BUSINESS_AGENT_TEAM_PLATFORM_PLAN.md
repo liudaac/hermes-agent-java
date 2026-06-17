@@ -4988,3 +4988,43 @@ POST /api/v1/business/foundation/prompt-context/preview
 ```
 
 `includeFoundationContext=true` 时，只会读取 foundation context segments，不会写回任何 foundation store。
+
+### 21.25 Read-only scenario intent plan preview endpoint
+
+新增只读 scenario intent plan preview endpoint：
+
+```text
+POST /api/v1/business/foundation/scenarios/plan
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "scenarioId": "after-sales-ticket",
+  "userInput": "refund order"
+}
+```
+
+行为：
+
+```text
+读取已有 ScenarioRecord
+通过 BusinessPortalFoundationFacade.buildScenarioIntentRequest(...) 生成 intent request preview
+通过 BusinessPortalFoundationFacade.planScenarioIntent(...) 生成 IntentPlan preview
+返回 request.toMap() 和 plan.toMap()
+```
+
+边界：
+
+```text
+不 execute
+不创建 IntentRun
+不创建 BusinessRunRecord
+不修改 ScenarioRecord
+不 generation
+不新增 UI
+```
+
+这是 by-reference plan preview，不接受任意 scenario payload，不启动运行。

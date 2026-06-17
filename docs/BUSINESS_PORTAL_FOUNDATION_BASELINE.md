@@ -552,3 +552,52 @@ Does not change UI.
 ```
 
 `includeFoundationContext=true` may include read-only foundation context segments from memory, skills and organizational knowledge.
+
+---
+
+## 15. Read-only Scenario Intent Plan Preview
+
+Date: 2026-06-17
+
+A read-only scenario intent plan preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/scenarios/plan
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "scenarioId": "after-sales-ticket",
+  "userInput": "refund order"
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "scenarioId": "...",
+  "intentRequest": ScenarioIntentRequest.toMap(),
+  "plan": IntentPlan.toMap()
+}
+```
+
+Boundary:
+
+```text
+Reads an existing ScenarioRecord by workspaceId/scenarioId.
+Plans through BusinessPortalFoundationFacade.planScenarioIntent(...).
+Does not execute.
+Does not create IntentRun.
+Does not create BusinessRunRecord.
+Does not mutate ScenarioRecord.
+Does not generate content.
+Does not change UI.
+```
+
+This endpoint is intentionally by-reference. It previews how an existing scenario would map into IntentOrchestrator planning without starting execution.

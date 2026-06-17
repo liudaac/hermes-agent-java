@@ -514,6 +514,44 @@ public class DashboardServer {
                 ));
             }
         });
+        app.post("/api/v1/business/foundation/scenarios/plan", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            String scenarioId = body.getString("scenarioId");
+            if (workspaceId == null || workspaceId.isBlank() || scenarioId == null || scenarioId.isBlank()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId and scenarioId are required"
+                ));
+                return;
+            }
+            try {
+                var scenario = scenarioService.requireScenario(workspaceId, scenarioId);
+                var request = businessPortalFoundationFacade.buildScenarioIntentRequest(scenario, body.getString("userInput"));
+                var plan = businessPortalFoundationFacade.planScenarioIntent(scenario, body.getString("userInput"));
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "scenarioId", scenarioId,
+                    "intentRequest", request.toMap(),
+                    "plan", plan.toMap()
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException | ScenarioService.ScenarioNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "scenarioId", scenarioId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "scenarioId", scenarioId
+                ));
+            }
+        });
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);
