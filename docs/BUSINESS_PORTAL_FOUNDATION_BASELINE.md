@@ -806,3 +806,25 @@ DelegatedTaskStore has no proposal-derived task created during preview
 ```
 
 This is the first acceptance-style test for the read-only product integration boundary.
+
+---
+
+## 21. Alignment Follow-ups Started
+
+Date: 2026-06-17
+
+Following the alignment review in `docs/BUSINESS_PORTAL_FOUNDATION_ALIGNMENT_REVIEW.md`, the following changes were made:
+
+```text
+1. Code: BusinessRunService now tags every BusinessRunRecord with explicit metadata.source.
+   - foundation:intent-run for intent://... refs
+   - foundation:agent-trace for trace://... refs
+   - manual otherwise
+   - unknown caller-provided source values are preserved as metadata.originalSource
+2. Design docs added (no code yet):
+   - docs/BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md
+   - docs/BUSINESS_PORTAL_FOUNDATION_SAFETY_VALVES_DESIGN.md
+   - docs/BUSINESS_PORTAL_FOUNDATION_NOTIFICATION_ADAPTER_DESIGN.md
+```
+
+This closes one of the deviations (BusinessRunRecord dual-track) at the code level and converts the remaining deviations into explicit design contracts.

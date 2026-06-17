@@ -6,8 +6,10 @@ import com.nousresearch.hermes.workspace.WorkspaceService;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** Business-facing run story service. */
@@ -16,6 +18,20 @@ public class BusinessRunService {
     public static final String FAILED = "FAILED";
     public static final String NEEDS_APPROVAL = "NEEDS_APPROVAL";
     public static final String RUNNING = "RUNNING";
+
+    /** Allowed metadata.source values for BusinessRunRecord. */
+    public static final String SOURCE_MANUAL = "manual";
+    public static final String SOURCE_DEMO = "demo";
+    public static final String SOURCE_SMOKE = "smoke";
+    public static final String SOURCE_FOUNDATION_INTENT_RUN = "foundation:intent-run";
+    public static final String SOURCE_FOUNDATION_AGENT_TRACE = "foundation:agent-trace";
+    private static final Set<String> KNOWN_SOURCES = Set.of(
+        SOURCE_MANUAL,
+        SOURCE_DEMO,
+        SOURCE_SMOKE,
+        SOURCE_FOUNDATION_INTENT_RUN,
+        SOURCE_FOUNDATION_AGENT_TRACE
+    );
 
     private final FileBusinessRunRepository repository;
     private final WorkspaceService workspaceService;
@@ -57,7 +73,7 @@ public class BusinessRunService {
             .setTechnicalTraceRef(technicalTraceRef)
             .setSteps(normalizeSteps(steps))
             .setMetrics(metrics)
-            .setMetadata(metadata)
+            .setMetadata(normalizeMetadataSource(metadata, technicalTraceRef))
             .setCreatedAt(now)
             .setUpdatedAt(now);
         repository.save(record);
@@ -123,6 +139,50 @@ public class BusinessRunService {
 
     private static String defaultText(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    /**
+     * Tag every BusinessRunRecord with an explicit metadata.source so that downstream
+     * consumers (UI, audit) never confuse foundation projections with manual/demo entries.
+     *
+     * <p>Rules:</p>
+     * <ul>
+     *   <li>If the caller provided a known source value, keep it.</li>
+     *   <li>Otherwise, infer foundation-* sources from the technicalTraceRef shape.</li>
+     *   <li>Otherwise default to "manual" so manually created entries are never silently
+     *       presented as foundation truth.</li>
+     * </ul>
+     */
+    static Map<String, Object> normalizeMetadataSource(Map<String, Object> metadata, String technicalTraceRef) {
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        if (metadata != null) {
+            normalized.putAll(metadata);
+        }
+        Object existing = normalized.get("source");
+        String existingSource = existing != null ? existing.toString() : null;
+        if (existingSource != null && KNOWN_SOURCES.contains(existingSource)) {
+            return normalized;
+        }
+        String inferred = inferSource(technicalTraceRef);
+        if (existingSource != null && !KNOWN_SOURCES.contains(existingSource)) {
+            normalized.put("originalSource", existingSource);
+        }
+        normalized.put("source", inferred);
+        return normalized;
+    }
+
+    private static String inferSource(String technicalTraceRef) {
+        if (technicalTraceRef == null || technicalTraceRef.isBlank()) {
+            return SOURCE_MANUAL;
+        }
+        String ref = technicalTraceRef.toLowerCase();
+        if (ref.startsWith("intent://")) {
+            return SOURCE_FOUNDATION_INTENT_RUN;
+        }
+        if (ref.startsWith("trace://")) {
+            return SOURCE_FOUNDATION_AGENT_TRACE;
+        }
+        return SOURCE_MANUAL;
     }
 
     public static class BusinessRunNotFoundException extends RuntimeException {

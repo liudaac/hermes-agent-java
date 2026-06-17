@@ -5234,3 +5234,39 @@ BusinessTeamGenerationService（按计划延后到 mutation phase）
 3. Replay / Canary / Auto rollback 最小边界设计文档
 4. BusinessNotificationAdapter 契约设计文档
 ```
+
+### 21.32 Alignment follow-up：BusinessRunRecord metadata.source + 三份设计文档
+
+代码：
+
+```text
+BusinessRunService.normalizeMetadataSource(metadata, technicalTraceRef)
+- intent://*  -> source=foundation:intent-run
+- trace://*   -> source=foundation:agent-trace
+- 其它 / 缺失 -> source=manual
+- 未知 source -> 保留为 metadata.originalSource，并覆盖为 manual
+```
+
+测试：
+
+```text
+BusinessRunMetadataSourceTest
+BusinessRunServiceTest
+BusinessRunProjectionAdapterTest
+```
+
+新增设计文档（仅文档，不动运行时）：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md
+docs/BUSINESS_PORTAL_FOUNDATION_SAFETY_VALVES_DESIGN.md
+docs/BUSINESS_PORTAL_FOUNDATION_NOTIFICATION_ADAPTER_DESIGN.md
+```
+
+意义：
+
+```text
+对齐 alignment review 列出的留白
+EvalRun / 安全阀 / 通知通道 三块在实现前先有 contract
+继续保持 read-only / no generation / no UI 的边界
+```
