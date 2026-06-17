@@ -4150,3 +4150,64 @@ ScenarioIntentAdapter skeleton
 ```
 
 用于把业务 Scenario framing 收敛到 `IntentOrchestrator.plan/execute` 的输入，而不是让 ScenarioService 变成 workflow engine。
+
+### 21.8 Iteration 3：ScenarioIntentAdapter skeleton 已落地
+
+第三刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.scenario.ScenarioIntentAdapter
+com.nousresearch.hermes.scenario.ScenarioIntentRequest
+```
+
+它把 Business Portal 的 `ScenarioRecord` 收敛为 `IntentOrchestrator` 输入。
+
+当前行为：
+
+```text
+ScenarioRecord + optional user input -> ScenarioIntentRequest
+ScenarioIntentRequest.intent -> IntentOrchestrator.plan/execute
+ScenarioRecord.entryTeamId -> preferredTeamId
+Scenario successCriteria / approvalRules / metadata -> contextSignals
+WorkspaceRecord -> TenantContext
+```
+
+明确边界：
+
+```text
+ScenarioService 仍只负责 CRUD / business framing
+ScenarioIntentAdapter 不做 task decomposition
+ScenarioIntentAdapter 不做 teammate selection
+ScenarioIntentAdapter 不做 workflow step execution
+ScenarioIntentAdapter 不生成 BusinessRunRecord
+```
+
+也就是说，真正的计划与执行仍由：
+
+```text
+TenantContext.getIntentOrchestrator()
+IntentOrchestrator.plan(...)
+IntentOrchestrator.execute(...)
+```
+
+负责。
+
+下一刀建议：
+
+```text
+BusinessRunProjectionAdapter skeleton
+```
+
+用于把 foundation truth：
+
+```text
+IntentRun / AgentTrace / AgentObservability
+```
+
+投影成 Business Portal 可读的：
+
+```text
+BusinessRunRecord / BusinessRunStep
+```
+
+而不是让 `BusinessRunService` 成为第二套 trace store。

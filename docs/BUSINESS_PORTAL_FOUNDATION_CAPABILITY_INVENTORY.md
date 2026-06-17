@@ -1174,3 +1174,82 @@ or, if focusing on runtime observability first:
 ```text
 BusinessRunProjectionAdapter skeleton
 ```
+
+---
+
+## 11. Iteration 3 Status: ScenarioIntentAdapter Skeleton
+
+Date: 2026-06-17
+
+Third adapter-first implementation:
+
+```text
+com.nousresearch.hermes.scenario.ScenarioIntentAdapter
+com.nousresearch.hermes.scenario.ScenarioIntentRequest
+```
+
+Purpose:
+
+```text
+Keep ScenarioRecord as business framing.
+Route planning/execution through IntentOrchestrator.
+Avoid turning ScenarioService into a workflow engine.
+```
+
+Boundary:
+
+```text
+It does not add UI.
+It does not add generation API.
+It does not add new Business Portal objects.
+It does not decompose tasks itself.
+It does not select teammates itself.
+It does not execute workflow steps itself.
+```
+
+Adapter behavior:
+
+```text
+ScenarioRecord + optional user input -> ScenarioIntentRequest
+ScenarioIntentRequest.intent -> IntentOrchestrator.plan/execute
+ScenarioRecord.entryTeamId -> preferredTeamId
+Scenario successCriteria / approvalRules / metadata -> contextSignals
+WorkspaceRecord -> TenantContext through WorkspaceService + TenantManager
+```
+
+Current mapping:
+
+| Scenario field | Foundation target |
+|---|---|
+| `workspaceId` | `WorkspaceService.requireWorkspace` -> tenant |
+| `scenarioId` | request metadata / scenario provenance |
+| `name` | intent header |
+| `description` | intent context |
+| `entryTeamId` | `IntentOrchestrator.preferredTeamId` |
+| `successCriteria` | intent text + contextSignals hints |
+| `approvalRules` | intent text + `approval_required` / `high_stakes` hints |
+| metadata `allowDelegation` / `allow_delegation` | `IntentOrchestrator.plan(... allowDelegation ...)` |
+| metadata `contextSignals` / `context_signals` | `IntentOrchestrator` contextSignals |
+
+Current methods:
+
+```text
+ScenarioIntentAdapter.toIntentRequest(...)
+ScenarioIntentAdapter.plan(...)
+ScenarioIntentAdapter.execute(...)
+```
+
+Important note:
+
+```text
+ScenarioIntentAdapter.execute returns the foundation IntentRun.
+BusinessRunRecord projection is still a separate adapter, not handled here.
+```
+
+Next likely iteration:
+
+```text
+BusinessRunProjectionAdapter skeleton
+```
+
+That should project `IntentRun` / `AgentTrace` into business-readable run records without making BusinessRunService the trace store.
