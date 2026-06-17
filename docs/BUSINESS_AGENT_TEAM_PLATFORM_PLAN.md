@@ -4040,3 +4040,51 @@ Hermes Foundation constrains
 Business Portal presents
 Human approves high-risk changes
 ```
+
+### 21.6 Iteration 1：FoundationCapabilityValidator 已开始落地
+
+第一刀 adapter-first 迭代已从 `FoundationCapabilityValidator` 开始：
+
+```text
+com.nousresearch.hermes.blueprint.FoundationCapabilityValidator
+com.nousresearch.hermes.blueprint.FoundationCapabilityValidationReport
+```
+
+当前它只做报告，不做强制接管：
+
+```text
+不会新增业务对象
+不会扩 UI
+不会新增 generation API
+不会编译/执行团队
+不会改变现有 Business Portal 创建流程
+```
+
+它先把 Team Blueprint 的 active version 与 Hermes foundation 做 grounding：
+
+```text
+workspace -> tenant
+tool names -> ToolRegistry
+toolset availability -> ToolRegistry
+tool approval risk -> ToolEntry / ApprovalSystem metadata
+tenant tool policy -> TenantSecurityPolicy
+prompt refs -> prompt:// 格式与可选 PromptAssetService bridge
+agent ids -> duplicate / missing 检查
+```
+
+这一步的意义是：后续 TeamBlueprintCompiler / BusinessTeamGenerationService 不能再凭空相信 `allowedTools` 字符串。
+
+下一刀建议：
+
+```text
+TeamBlueprintCompiler skeleton
+```
+
+它应该先消费 validation report，再把设计时对象映射到：
+
+```text
+TeamManager.createTeam(...)
+TenantContext.registerAgentRole(...)
+Team.addMember(...)
+Team.setLead(...)
+```

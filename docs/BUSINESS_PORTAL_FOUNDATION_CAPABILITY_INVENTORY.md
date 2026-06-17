@@ -1021,3 +1021,78 @@ The key architecture rule remains:
 Business Portal presents and orchestrates.
 Hermes Foundation executes and owns truth.
 ```
+
+---
+
+## 9. Iteration 1 Status: FoundationCapabilityValidator
+
+Date: 2026-06-17
+
+First adapter-first implementation has started with:
+
+```text
+com.nousresearch.hermes.blueprint.FoundationCapabilityValidator
+com.nousresearch.hermes.blueprint.FoundationCapabilityValidationReport
+```
+
+This implementation is intentionally non-mutating:
+
+```text
+It does not create business objects.
+It does not expand UI.
+It does not add generation API.
+It does not compile or execute teams.
+```
+
+Current validation coverage:
+
+```text
+Workspace exists and resolves to tenantId
+Tenant can be loaded through TenantManager
+Active TeamBlueprintVersion can be located
+Prompt refs use prompt://assetId or prompt://assetId#vN format
+Agent role cards declare non-duplicate agentId
+Agent responsibilities are present as warnings
+Agent allowedTools resolve to ToolRegistry entries
+Toolset availability is checked through ToolRegistry
+Tool approval requirements are surfaced as warnings
+Tenant security policy deny-list / allow-list is enforced in the report
+```
+
+Current finding codes include:
+
+```text
+workspace_missing
+tenant_missing
+active_version_missing
+prompt_ref_invalid
+prompt_ref_missing
+agent_id_missing
+agent_id_duplicate
+agent_responsibility_missing
+requested_tool_unavailable
+toolset_unavailable
+tool_requires_approval
+requested_tool_denied_by_tenant_policy
+requested_tool_not_allowed_by_tenant_policy
+```
+
+Important boundary:
+
+```text
+FoundationCapabilityValidator is a reporting gate, not an enforcement hook yet.
+```
+
+This preserves existing Business Portal smoke/demo flows while giving the next adapters and future generation path a real foundation grounding check.
+
+Next likely iteration:
+
+```text
+TeamBlueprintCompiler design / skeleton
+```
+
+The compiler should consume a valid or warning-only validation report before mapping:
+
+```text
+TeamBlueprintVersion -> TeamManager / Team / AgentRole
+```
