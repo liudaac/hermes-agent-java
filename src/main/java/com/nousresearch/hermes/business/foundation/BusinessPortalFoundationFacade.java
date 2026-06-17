@@ -9,6 +9,7 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalAdapter;
 import com.nousresearch.hermes.business.approval.BusinessApprovalRecord;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
+import com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightRecord;
 import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
@@ -45,6 +46,7 @@ public class BusinessPortalFoundationFacade {
     private final BusinessRunProjectionAdapter runProjectionAdapter;
     private final BusinessApprovalAdapter approvalAdapter;
     private final BusinessInsightProjectionAdapter insightProjectionAdapter;
+    private final BusinessEvalRunProjectionAdapter evalRunProjectionAdapter;
     private final EvolutionProposalAdapter evolutionProposalAdapter;
     private final BusinessPortalFoundationDiagnostics diagnostics = new BusinessPortalFoundationDiagnostics();
 
@@ -55,6 +57,7 @@ public class BusinessPortalFoundationFacade {
                                           BusinessRunProjectionAdapter runProjectionAdapter,
                                           BusinessApprovalAdapter approvalAdapter,
                                           BusinessInsightProjectionAdapter insightProjectionAdapter,
+                                          BusinessEvalRunProjectionAdapter evalRunProjectionAdapter,
                                           EvolutionProposalAdapter evolutionProposalAdapter) {
         this.promptAssetResolver = Objects.requireNonNull(promptAssetResolver, "promptAssetResolver");
         this.capabilityValidator = Objects.requireNonNull(capabilityValidator, "capabilityValidator");
@@ -63,6 +66,7 @@ public class BusinessPortalFoundationFacade {
         this.runProjectionAdapter = Objects.requireNonNull(runProjectionAdapter, "runProjectionAdapter");
         this.approvalAdapter = Objects.requireNonNull(approvalAdapter, "approvalAdapter");
         this.insightProjectionAdapter = Objects.requireNonNull(insightProjectionAdapter, "insightProjectionAdapter");
+        this.evalRunProjectionAdapter = Objects.requireNonNull(evalRunProjectionAdapter, "evalRunProjectionAdapter");
         this.evolutionProposalAdapter = Objects.requireNonNull(evolutionProposalAdapter, "evolutionProposalAdapter");
     }
 
@@ -119,6 +123,14 @@ public class BusinessPortalFoundationFacade {
         return insightProjectionAdapter.fromEvolutionSummary(workspaceId, evolutionSummary);
     }
 
+    public BusinessEvalRunProjectionAdapter.BusinessEvalRunProjection projectEvalRun(String workspaceId, com.nousresearch.hermes.org.eval.AgentEvaluation.EvalResult result) {
+        return evalRunProjectionAdapter.fromEvalResult(workspaceId, result);
+    }
+
+    public List<BusinessEvalRunProjectionAdapter.BusinessEvalRunProjection> projectEvalRuns(String workspaceId, List<com.nousresearch.hermes.org.eval.AgentEvaluation.EvalResult> results) {
+        return evalRunProjectionAdapter.fromEvalResults(workspaceId, results);
+    }
+
     public FailureCase projectProposalFailureCase(EvolutionProposalRecord proposal) {
         return evolutionProposalAdapter.toFailureCase(proposal);
     }
@@ -150,5 +162,6 @@ public class BusinessPortalFoundationFacade {
     public BusinessRunProjectionAdapter runProjectionAdapter() { return runProjectionAdapter; }
     public BusinessApprovalAdapter approvalAdapter() { return approvalAdapter; }
     public BusinessInsightProjectionAdapter insightProjectionAdapter() { return insightProjectionAdapter; }
+    public BusinessEvalRunProjectionAdapter evalRunProjectionAdapter() { return evalRunProjectionAdapter; }
     public EvolutionProposalAdapter evolutionProposalAdapter() { return evolutionProposalAdapter; }
 }

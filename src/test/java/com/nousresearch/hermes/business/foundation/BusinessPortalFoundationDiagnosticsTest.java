@@ -3,6 +3,7 @@ package com.nousresearch.hermes.business.foundation;
 import com.nousresearch.hermes.blueprint.FoundationCapabilityValidator;
 import com.nousresearch.hermes.blueprint.TeamBlueprintCompiler;
 import com.nousresearch.hermes.business.approval.BusinessApprovalAdapter;
+import com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
@@ -43,6 +44,7 @@ class BusinessPortalFoundationDiagnosticsTest {
             new BusinessRunProjectionAdapter(),
             approvalAdapter,
             new BusinessInsightProjectionAdapter(),
+            new BusinessEvalRunProjectionAdapter(),
             new EvolutionProposalAdapter(workspaceService, tenantManager, approvalAdapter)
         );
 
@@ -50,7 +52,7 @@ class BusinessPortalFoundationDiagnosticsTest {
 
         assertTrue(report.facadeReady());
         assertEquals("BusinessPortalFoundationFacade", report.boundary());
-        assertEquals(8, report.adapters().size());
+        assertEquals(9, report.adapters().size());
         assertTrue(report.adapters().stream().allMatch(BusinessPortalFoundationDiagnostics.AdapterStatus::present));
         assertTrue(report.guardrails().stream().anyMatch(guardrail -> guardrail.contains("BusinessPortalFoundationFacade")));
         assertTrue(report.nonGoals().contains("No generation API"));

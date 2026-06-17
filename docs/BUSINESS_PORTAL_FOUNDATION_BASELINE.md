@@ -828,3 +828,37 @@ Following the alignment review in `docs/BUSINESS_PORTAL_FOUNDATION_ALIGNMENT_REV
 ```
 
 This closes one of the deviations (BusinessRunRecord dual-track) at the code level and converts the remaining deviations into explicit design contracts.
+
+---
+
+## 22. EvalRun Projection Adapter Skeleton Implemented
+
+Date: 2026-06-17
+
+The first design contract from `docs/BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md` is now implemented as an adapter skeleton:
+
+```text
+com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter
+com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter.BusinessEvalRunProjection
+```
+
+Wired into:
+
+```text
+BusinessPortalFoundationFacade.projectEvalRun(workspaceId, EvalResult)
+BusinessPortalFoundationFacade.projectEvalRuns(workspaceId, List<EvalResult>)
+BusinessPortalAdapterRegistry composes BusinessEvalRunProjectionAdapter
+BusinessPortalFoundationDiagnostics now reports 9 adapters including evalRunProjectionAdapter
+BusinessPortalFoundationArchitectureTest allowlists the new adapter class
+```
+
+Boundary preserved:
+
+```text
+metadata.source = "foundation:agent-evaluation"
+No EvalSet business object created.
+No mutation of AgentEvaluation state.
+No automatic evolution proposal creation.
+No new business object beyond the projection record.
+No new dashboard endpoint (deferred per the design doc).
+```

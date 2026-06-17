@@ -5270,3 +5270,25 @@ docs/BUSINESS_PORTAL_FOUNDATION_NOTIFICATION_ADAPTER_DESIGN.md
 EvalRun / 安全阀 / 通知通道 三块在实现前先有 contract
 继续保持 read-only / no generation / no UI 的边界
 ```
+
+### 21.33 EvalRun projection adapter skeleton 已落地
+
+按 `docs/BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md` 实现：
+
+```text
+com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter
+BusinessPortalFoundationFacade.projectEvalRun(...)
+BusinessPortalFoundationFacade.projectEvalRuns(...)
+```
+
+Registry / Diagnostics / Architecture test 已同步更新（adapter count 9）。
+
+边界保持：
+
+```text
+metadata.source = foundation:agent-evaluation
+不创建 EvalSet 业务对象
+不修改 AgentEvaluation 状态
+不创建 evolution proposal
+不新增 dashboard endpoint（延后到设计文档下一刀）
+```
