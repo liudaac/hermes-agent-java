@@ -1787,3 +1787,59 @@ BusinessRunProjectionAdapter
 ```
 
 This preserves existing adapter implementations while preventing future Business Portal service/dashboard/projection classes from bypassing the facade boundary.
+
+---
+
+## 20. Iteration 12 Status: BusinessInsightProjectionAdapter Skeleton
+
+Date: 2026-06-17
+
+Twelfth adapter-first iteration adds:
+
+```text
+com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter
+```
+
+Purpose:
+
+```text
+Project foundation observability/evaluation/evolution signals into Business Portal insight records.
+Keep AgentTrace / AgentEvaluation / SelfEvolutionEngine as source-of-truth signals.
+Avoid making BusinessInsightService the only analytics truth from file-backed business records.
+```
+
+Boundary:
+
+```text
+It does not replace BusinessInsightService.
+It does not analyze file-backed BusinessRunRecord as runtime truth.
+It does not mutate traces, evals or evolution state.
+It does not create proposals automatically.
+It does not add UI or API.
+```
+
+Adapter behavior:
+
+```text
+AgentTrace list -> trace failure / human handoff / cost baseline insights
+AgentEvaluation.EvalResult list -> eval regression insight
+SelfEvolutionEngine.getSummary() map -> evolution backlog / pending suggestions insights
+Combined foundation signals -> BusinessInsightSummary
+```
+
+Current methods:
+
+```text
+fromFoundationSignals(workspaceId, traces, evalResults, evolutionSummary)
+fromTraces(workspaceId, traces)
+fromEvalResults(workspaceId, evalResults)
+fromEvolutionSummary(workspaceId, evolutionSummary)
+```
+
+Architecture guard update:
+
+```text
+BusinessInsightProjectionAdapter is now an explicit allowed bridge in BusinessPortalFoundationArchitectureTest.
+```
+
+This preserves the rule that ordinary Business Portal classes must not directly import foundation packages.

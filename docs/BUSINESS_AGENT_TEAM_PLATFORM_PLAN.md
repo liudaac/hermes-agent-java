@@ -4683,3 +4683,45 @@ BusinessRunProjectionAdapter
 ```
 
 后续如果需要新增 adapter exception，必须显式更新 architecture test 和 docs/BUSINESS_PORTAL_FOUNDATION_ADAPTERS.md。
+
+### 21.17 Iteration 12：BusinessInsightProjectionAdapter skeleton 已落地
+
+第十二刀完成 foundation-backed insight projection：
+
+```text
+com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter
+```
+
+它把 foundation signals 投影成 Business Portal 洞察：
+
+```text
+AgentTrace -> trace failure / human handoff / cost baseline insights
+AgentEvaluation.EvalResult -> eval regression insight
+SelfEvolutionEngine.getSummary() -> evolution backlog / pending suggestions insights
+combined signals -> BusinessInsightSummary
+```
+
+明确边界：
+
+```text
+不替代 BusinessInsightService
+不把 file-backed BusinessRunRecord 当 runtime truth
+不修改 trace / eval / evolution state
+不自动创建 proposal
+不新增 UI
+不新增 API
+```
+
+这一步补齐了之前 inventory 中的 insight 收敛缺口：
+
+```text
+BusinessInsightService 仍可服务当前 Business Portal 页面
+BusinessInsightProjectionAdapter 则提供 foundation-backed insight projection
+```
+
+architecture test 同步更新：
+
+```text
+BusinessInsightProjectionAdapter 被列为显式允许 bridge
+普通 Business Portal 类仍不能直接 import foundation packages
+```

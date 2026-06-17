@@ -307,3 +307,45 @@ Future Business Portal product code should go through BusinessPortalFoundationFa
 ```
 
 If a future feature needs a new adapter exception, add it deliberately and update this document with the reason.
+
+---
+
+## 10. BusinessInsightProjectionAdapter
+
+Date: 2026-06-17
+
+Foundation-backed insight projection adapter:
+
+```text
+com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter
+```
+
+Allowed inputs:
+
+```text
+AgentTrace
+AgentEvaluation.EvalResult
+SelfEvolutionEngine.getSummary() map
+```
+
+Allowed outputs:
+
+```text
+BusinessInsightRecord
+BusinessInsightSummary
+```
+
+Ownership:
+
+```text
+Owns projection from foundation signals to business-readable insights.
+Does not own trace/eval/evolution analytics truth.
+Does not create evolution proposals automatically.
+Does not mutate foundation state.
+```
+
+Architecture test status:
+
+```text
+Explicit bridge allowed in BusinessPortalFoundationArchitectureTest.
+```

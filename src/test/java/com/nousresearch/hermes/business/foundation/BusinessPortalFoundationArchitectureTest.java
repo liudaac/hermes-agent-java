@@ -37,7 +37,8 @@ class BusinessPortalFoundationArchitectureTest {
 
     private static final Set<String> EXPLICITLY_ALLOWED_FILES = Set.of(
         "src/main/java/com/nousresearch/hermes/business/approval/BusinessApprovalAdapter.java",
-        "src/main/java/com/nousresearch/hermes/business/run/BusinessRunProjectionAdapter.java"
+        "src/main/java/com/nousresearch/hermes/business/run/BusinessRunProjectionAdapter.java",
+        "src/main/java/com/nousresearch/hermes/business/insight/BusinessInsightProjectionAdapter.java"
     );
 
     @Test
