@@ -552,6 +552,67 @@ public class DashboardServer {
                 ));
             }
         });
+        app.post("/api/v1/business/foundation/runs/project", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            String intentRunId = body.getString("intentRunId");
+            if (workspaceId == null || workspaceId.isBlank() || intentRunId == null || intentRunId.isBlank()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId and intentRunId are required"
+                ));
+                return;
+            }
+            try {
+                var workspace = workspaceService.requireWorkspace(workspaceId);
+                var tenant = tenantManager.getTenant(workspace.getTenantId());
+                if (tenant == null) {
+                    ctx.status(404).json(Map.of(
+                        "ok", false,
+                        "error", "Tenant not found for workspace: " + workspaceId,
+                        "workspaceId", workspaceId,
+                        "intentRunId", intentRunId
+                    ));
+                    return;
+                }
+                var run = tenant.getIntentOrchestrator().getRun(intentRunId);
+                if (run == null) {
+                    ctx.status(404).json(Map.of(
+                        "ok", false,
+                        "error", "Intent run not found: " + intentRunId,
+                        "workspaceId", workspaceId,
+                        "intentRunId", intentRunId
+                    ));
+                    return;
+                }
+                String scenarioId = body.getString("scenarioId");
+                String scenarioName = body.getString("scenarioName");
+                if (scenarioName == null || scenarioName.isBlank()) {
+                    scenarioName = scenarioId != null && !scenarioId.isBlank() ? scenarioId : "Foundation intent run";
+                }
+                var projection = businessPortalFoundationFacade.projectIntentRun(workspaceId, scenarioId, scenarioName, run);
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "intentRunId", intentRunId,
+                    "projection", projection
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "intentRunId", intentRunId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId,
+                    "intentRunId", intentRunId
+                ));
+            }
+        });
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);

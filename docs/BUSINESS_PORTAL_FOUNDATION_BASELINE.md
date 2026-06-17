@@ -601,3 +601,52 @@ Does not change UI.
 ```
 
 This endpoint is intentionally by-reference. It previews how an existing scenario would map into IntentOrchestrator planning without starting execution.
+
+---
+
+## 16. Read-only IntentRun Projection Preview
+
+Date: 2026-06-17
+
+A read-only run projection preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/runs/project
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "intentRunId": "run_1",
+  "scenarioId": "after-sales-ticket",
+  "scenarioName": "售后工单处理"
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "intentRunId": "...",
+  "projection": BusinessRunRecord projection
+}
+```
+
+Boundary:
+
+```text
+Reads an existing IntentRun from TenantContext.getIntentOrchestrator().getRun(...).
+Projects through BusinessPortalFoundationFacade.projectIntentRun(...).
+Does not execute.
+Does not create IntentRun.
+Does not persist BusinessRunRecord.
+Does not mutate foundation or business stores.
+Does not generate content.
+Does not change UI.
+```
+
+This endpoint is intentionally by-reference. It does not accept arbitrary run payloads and cannot be used to create fake business run truth.

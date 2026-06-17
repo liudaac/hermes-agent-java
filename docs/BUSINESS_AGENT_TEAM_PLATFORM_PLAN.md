@@ -5028,3 +5028,43 @@ POST /api/v1/business/foundation/scenarios/plan
 ```
 
 这是 by-reference plan preview，不接受任意 scenario payload，不启动运行。
+
+### 21.26 Read-only IntentRun projection preview endpoint
+
+新增只读 IntentRun projection preview endpoint：
+
+```text
+POST /api/v1/business/foundation/runs/project
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "intentRunId": "run_1",
+  "scenarioId": "after-sales-ticket",
+  "scenarioName": "售后工单处理"
+}
+```
+
+行为：
+
+```text
+从 TenantContext.getIntentOrchestrator().getRun(intentRunId) 读取已有 foundation IntentRun
+通过 BusinessPortalFoundationFacade.projectIntentRun(...) 生成 BusinessRunRecord projection
+返回 projection，但不持久化
+```
+
+边界：
+
+```text
+不 execute
+不创建 IntentRun
+不创建/保存 BusinessRunRecord
+不修改 foundation 或 business store
+不 generation
+不新增 UI
+```
+
+这是 by-reference projection preview，不接受任意 run payload，避免成为伪造 BusinessRun truth 的入口。
