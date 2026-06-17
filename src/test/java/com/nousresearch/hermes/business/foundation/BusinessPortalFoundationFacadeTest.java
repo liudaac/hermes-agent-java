@@ -6,6 +6,7 @@ import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.prompt.PromptAssetService;
 import com.nousresearch.hermes.scenario.ScenarioRecord;
@@ -89,6 +90,16 @@ class BusinessPortalFoundationFacadeTest {
         run.setStatus(IntentOrchestrator.RunStatus.COMPLETED);
         BusinessRunRecord projection = facade.projectIntentRun("customer-service", "after-sales-ticket", "售后工单", run);
         assertEquals("intent://facade-run-1", projection.getTechnicalTraceRef());
+
+        var insights = facade.projectFoundationInsights("customer-service",
+            List.of(new AgentTrace("trace-facade", "classifier", "session", "refund order")
+                .step(AgentTrace.Step.error("missing policy context"))
+                .end(AgentTrace.Status.FAILED)),
+            List.of(),
+            Map.of("total_failures", 1, "resolved", 0));
+        assertFalse(insights.getInsights().isEmpty());
+        assertTrue(insights.getInsights().stream().anyMatch(insight -> "foundation-trace-failures".equals(insight.getInsightId())
+            || "foundation-evolution-backlog".equals(insight.getInsightId())));
     }
 
     private ToolRegistry isolatedRegistry() {

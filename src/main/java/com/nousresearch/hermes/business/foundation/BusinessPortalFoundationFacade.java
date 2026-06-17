@@ -9,11 +9,15 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalAdapter;
 import com.nousresearch.hermes.business.approval.BusinessApprovalRecord;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
+import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
+import com.nousresearch.hermes.business.insight.BusinessInsightRecord;
+import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
 import com.nousresearch.hermes.collaboration.DelegatedTask;
 import com.nousresearch.hermes.collaboration.IntentOrchestrator;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalRecord;
 import com.nousresearch.hermes.org.evolution.FailureCase;
+import com.nousresearch.hermes.org.eval.AgentEvaluation;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.prompt.PromptContext;
@@ -39,6 +43,7 @@ public class BusinessPortalFoundationFacade {
     private final ScenarioIntentAdapter scenarioIntentAdapter;
     private final BusinessRunProjectionAdapter runProjectionAdapter;
     private final BusinessApprovalAdapter approvalAdapter;
+    private final BusinessInsightProjectionAdapter insightProjectionAdapter;
     private final EvolutionProposalAdapter evolutionProposalAdapter;
 
     public BusinessPortalFoundationFacade(PromptAssetResolver promptAssetResolver,
@@ -47,6 +52,7 @@ public class BusinessPortalFoundationFacade {
                                           ScenarioIntentAdapter scenarioIntentAdapter,
                                           BusinessRunProjectionAdapter runProjectionAdapter,
                                           BusinessApprovalAdapter approvalAdapter,
+                                          BusinessInsightProjectionAdapter insightProjectionAdapter,
                                           EvolutionProposalAdapter evolutionProposalAdapter) {
         this.promptAssetResolver = Objects.requireNonNull(promptAssetResolver, "promptAssetResolver");
         this.capabilityValidator = Objects.requireNonNull(capabilityValidator, "capabilityValidator");
@@ -54,6 +60,7 @@ public class BusinessPortalFoundationFacade {
         this.scenarioIntentAdapter = Objects.requireNonNull(scenarioIntentAdapter, "scenarioIntentAdapter");
         this.runProjectionAdapter = Objects.requireNonNull(runProjectionAdapter, "runProjectionAdapter");
         this.approvalAdapter = Objects.requireNonNull(approvalAdapter, "approvalAdapter");
+        this.insightProjectionAdapter = Objects.requireNonNull(insightProjectionAdapter, "insightProjectionAdapter");
         this.evolutionProposalAdapter = Objects.requireNonNull(evolutionProposalAdapter, "evolutionProposalAdapter");
     }
 
@@ -92,6 +99,24 @@ public class BusinessPortalFoundationFacade {
         return runProjectionAdapter.fromIntentRun(workspaceId, scenarioId, scenarioName, run, traces);
     }
 
+    public BusinessInsightSummary projectFoundationInsights(String workspaceId, List<AgentTrace> traces,
+                                                             List<AgentEvaluation.EvalResult> evalResults,
+                                                             java.util.Map<String, Object> evolutionSummary) {
+        return insightProjectionAdapter.fromFoundationSignals(workspaceId, traces, evalResults, evolutionSummary);
+    }
+
+    public List<BusinessInsightRecord> projectTraceInsights(String workspaceId, List<AgentTrace> traces) {
+        return insightProjectionAdapter.fromTraces(workspaceId, traces);
+    }
+
+    public List<BusinessInsightRecord> projectEvalInsights(String workspaceId, List<AgentEvaluation.EvalResult> evalResults) {
+        return insightProjectionAdapter.fromEvalResults(workspaceId, evalResults);
+    }
+
+    public List<BusinessInsightRecord> projectEvolutionInsights(String workspaceId, java.util.Map<String, Object> evolutionSummary) {
+        return insightProjectionAdapter.fromEvolutionSummary(workspaceId, evolutionSummary);
+    }
+
     public FailureCase recordProposalLearning(EvolutionProposalRecord proposal) {
         return evolutionProposalAdapter.recordFailureLearning(proposal);
     }
@@ -110,5 +135,6 @@ public class BusinessPortalFoundationFacade {
     public ScenarioIntentAdapter scenarioIntentAdapter() { return scenarioIntentAdapter; }
     public BusinessRunProjectionAdapter runProjectionAdapter() { return runProjectionAdapter; }
     public BusinessApprovalAdapter approvalAdapter() { return approvalAdapter; }
+    public BusinessInsightProjectionAdapter insightProjectionAdapter() { return insightProjectionAdapter; }
     public EvolutionProposalAdapter evolutionProposalAdapter() { return evolutionProposalAdapter; }
 }

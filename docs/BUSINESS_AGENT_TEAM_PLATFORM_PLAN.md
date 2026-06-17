@@ -4725,3 +4725,43 @@ architecture test 同步更新：
 BusinessInsightProjectionAdapter 被列为显式允许 bridge
 普通 Business Portal 类仍不能直接 import foundation packages
 ```
+
+### 21.18 Iteration 13：Insight projection 已接入 Foundation Facade
+
+第十三刀把 `BusinessInsightProjectionAdapter` 接入统一 facade：
+
+```text
+BusinessPortalFoundationFacade
+BusinessPortalAdapterRegistry
+```
+
+新增 facade 方法：
+
+```text
+projectFoundationInsights(workspaceId, traces, evalResults, evolutionSummary)
+projectTraceInsights(workspaceId, traces)
+projectEvalInsights(workspaceId, evalResults)
+projectEvolutionInsights(workspaceId, evolutionSummary)
+```
+
+Registry 现在会统一组合：
+
+```text
+BusinessInsightProjectionAdapter
+```
+
+意义：
+
+```text
+后续 API/UI 如果要拿 foundation-backed insights，不需要也不应该自己 new BusinessInsightProjectionAdapter。
+统一从 BusinessPortalFoundationFacade 进入。
+```
+
+仍然不新增：
+
+```text
+不新增 API
+不新增 UI
+不新增 generation
+不改 BusinessInsightService
+```

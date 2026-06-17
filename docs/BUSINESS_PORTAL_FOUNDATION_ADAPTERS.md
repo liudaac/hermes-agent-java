@@ -349,3 +349,16 @@ Architecture test status:
 ```text
 Explicit bridge allowed in BusinessPortalFoundationArchitectureTest.
 ```
+
+### 10.1 Facade Integration
+
+`BusinessInsightProjectionAdapter` is now available through:
+
+```text
+BusinessPortalFoundationFacade.projectFoundationInsights(...)
+BusinessPortalFoundationFacade.projectTraceInsights(...)
+BusinessPortalFoundationFacade.projectEvalInsights(...)
+BusinessPortalFoundationFacade.projectEvolutionInsights(...)
+```
+
+Future product code should use these facade methods instead of manually constructing the adapter.

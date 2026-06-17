@@ -1843,3 +1843,40 @@ BusinessInsightProjectionAdapter is now an explicit allowed bridge in BusinessPo
 ```
 
 This preserves the rule that ordinary Business Portal classes must not directly import foundation packages.
+
+---
+
+## 21. Iteration 13 Status: Insight Projection Added to Foundation Facade
+
+Date: 2026-06-17
+
+Thirteenth adapter-first iteration wires `BusinessInsightProjectionAdapter` into the unified foundation boundary:
+
+```text
+BusinessPortalFoundationFacade
+BusinessPortalAdapterRegistry
+```
+
+New facade methods:
+
+```text
+projectFoundationInsights(workspaceId, traces, evalResults, evolutionSummary)
+projectTraceInsights(workspaceId, traces)
+projectEvalInsights(workspaceId, evalResults)
+projectEvolutionInsights(workspaceId, evolutionSummary)
+```
+
+Registry now composes:
+
+```text
+BusinessInsightProjectionAdapter
+```
+
+Purpose:
+
+```text
+Keep all Business Portal foundation-backed projections reachable through BusinessPortalFoundationFacade.
+Avoid making future API/UI code instantiate BusinessInsightProjectionAdapter directly when using the standard boundary.
+```
+
+No API/UI/generation surface was added.

@@ -4,6 +4,7 @@ import com.nousresearch.hermes.blueprint.FoundationCapabilityValidator;
 import com.nousresearch.hermes.blueprint.TeamBlueprintCompiler;
 import com.nousresearch.hermes.business.approval.BusinessApprovalAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
+import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.prompt.PromptAssetService;
@@ -44,6 +45,7 @@ public class BusinessPortalAdapterRegistry {
         ScenarioIntentAdapter scenarioAdapter = new ScenarioIntentAdapter(workspaceService, tenantManager);
         BusinessRunProjectionAdapter runProjectionAdapter = new BusinessRunProjectionAdapter();
         BusinessApprovalAdapter approvalAdapter = new BusinessApprovalAdapter();
+        BusinessInsightProjectionAdapter insightProjectionAdapter = new BusinessInsightProjectionAdapter();
         EvolutionProposalAdapter evolutionAdapter = new EvolutionProposalAdapter(workspaceService, tenantManager, approvalAdapter);
         return new BusinessPortalFoundationFacade(
             promptResolver,
@@ -52,6 +54,7 @@ public class BusinessPortalAdapterRegistry {
             scenarioAdapter,
             runProjectionAdapter,
             approvalAdapter,
+            insightProjectionAdapter,
             evolutionAdapter
         );
     }
