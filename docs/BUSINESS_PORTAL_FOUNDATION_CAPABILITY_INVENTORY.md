@@ -1637,3 +1637,76 @@ apply runtime mutations from evolution proposals
 ```
 
 The current adapter-first baseline is now validated as a chain, not only as isolated adapters.
+
+---
+
+## 17. Iteration 9 Status: BusinessPortalFoundationFacade / AdapterRegistry
+
+Date: 2026-06-17
+
+Ninth adapter-first iteration adds a thin integration boundary:
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationFacade
+com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry
+```
+
+Purpose:
+
+```text
+Give future Business Portal API/UI/generation code one foundation-grounded adapter boundary.
+Prevent future product code from bypassing validation, compilation, projection and governance adapters.
+```
+
+Boundary:
+
+```text
+It does not add product routes.
+It does not add UI.
+It does not add generation API.
+It does not create new business objects.
+It does not execute agents by itself.
+It only composes existing adapters.
+```
+
+Facade operations currently exposed:
+
+```text
+resolvePromptContext(...)
+validateTeamBlueprint(...)
+compileTeamBlueprint(...)
+buildScenarioIntentRequest(...)
+planScenarioIntent(...)
+executeScenarioIntent(...)
+projectIntentRun(...)
+recordProposalLearning(...)
+projectProposalApproval(...)
+createProposalReviewTask(...)
+```
+
+Registry wiring:
+
+```text
+PromptAssetResolver
+FoundationCapabilityValidator
+TeamBlueprintCompiler
+ScenarioIntentAdapter
+BusinessRunProjectionAdapter
+BusinessApprovalAdapter
+EvolutionProposalAdapter
+```
+
+Design rule:
+
+```text
+Future Business Portal API/UI/generation code should depend on BusinessPortalFoundationFacade.
+It should not directly stitch together low-level services in route handlers or UI integration classes.
+```
+
+Test coverage:
+
+```text
+BusinessPortalFoundationFacadeTest
+```
+
+The test verifies facade-level composition for prompt resolution, capability validation, team compilation, scenario planning and intent-run projection.

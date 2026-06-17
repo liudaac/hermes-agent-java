@@ -4525,3 +4525,75 @@ BusinessPortalFoundationFacade / BusinessPortalAdapterRegistry skeleton
 ```
 
 用于统一组合这些 adapters，但仍不暴露 generation API/UI。
+
+### 21.14 Iteration 9：BusinessPortalFoundationFacade / AdapterRegistry 已落地
+
+第九刀完成一个很薄的 integration boundary：
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationFacade
+com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry
+```
+
+它不新增产品能力，只组合前面已经落地的 adapters：
+
+```text
+PromptAssetResolver
+FoundationCapabilityValidator
+TeamBlueprintCompiler
+ScenarioIntentAdapter
+BusinessRunProjectionAdapter
+BusinessApprovalAdapter
+EvolutionProposalAdapter
+```
+
+Facade 当前暴露：
+
+```text
+resolvePromptContext(...)
+validateTeamBlueprint(...)
+compileTeamBlueprint(...)
+buildScenarioIntentRequest(...)
+planScenarioIntent(...)
+executeScenarioIntent(...)
+projectIntentRun(...)
+recordProposalLearning(...)
+projectProposalApproval(...)
+createProposalReviewTask(...)
+```
+
+明确边界：
+
+```text
+不新增 product route
+不新增 UI
+不新增 generation API
+不新增业务对象
+不自行执行 agent
+只组合 adapter，不创建新 runtime
+```
+
+后续规则：
+
+```text
+未来 Business Portal API/UI/generation 如果要接 foundation，优先依赖 BusinessPortalFoundationFacade。
+不要在 route handler / dashboard integration 里手工拼低层 service，避免绕开 validation / compiler / projection / governance 边界。
+```
+
+测试：
+
+```text
+BusinessPortalFoundationFacadeTest
+```
+
+验证 facade 层能完成：
+
+```text
+Prompt resolution
+Capability validation
+Team blueprint compile
+Scenario intent request / planning
+IntentRun -> BusinessRun projection
+```
+
+到这里，Business Portal foundation convergence 的 adapter-first 基座已经可以作为后续功能入口保护层。
