@@ -650,3 +650,51 @@ Does not change UI.
 ```
 
 This endpoint is intentionally by-reference. It does not accept arbitrary run payloads and cannot be used to create fake business run truth.
+
+---
+
+## 17. Read-only Foundation Insight Projection Preview
+
+Date: 2026-06-17
+
+A read-only foundation insight projection preview endpoint is now available:
+
+```text
+POST /api/v1/business/foundation/insights/project
+```
+
+Request body:
+
+```json
+{
+  "workspaceId": "customer-service",
+  "limit": 50
+}
+```
+
+Response shape:
+
+```text
+{
+  "ok": true,
+  "workspaceId": "...",
+  "traceCount": 3,
+  "summary": BusinessInsightSummary projection
+}
+```
+
+Boundary:
+
+```text
+Reads recent AgentTrace records from TenantContext.getObservability().getAllRecentTraces(limit).
+Reads SelfEvolutionEngine.getSummary().
+Projects through BusinessPortalFoundationFacade.projectFoundationInsights(...).
+Does not create BusinessInsightRecord.
+Does not create EvolutionProposalRecord.
+Does not create BusinessRunRecord.
+Does not mutate foundation or business stores.
+Does not generate content.
+Does not change UI.
+```
+
+This endpoint is a projection preview only. It does not replace BusinessInsightService and does not persist insight artifacts.

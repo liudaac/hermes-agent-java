@@ -613,6 +613,58 @@ public class DashboardServer {
                 ));
             }
         });
+        app.post("/api/v1/business/foundation/insights/project", ctx -> {
+            JSONObject body = ctx.body() == null || ctx.body().isBlank() ? new JSONObject() : JSON.parseObject(ctx.body());
+            String workspaceId = body.getString("workspaceId");
+            if (workspaceId == null || workspaceId.isBlank()) {
+                ctx.status(400).json(Map.of(
+                    "ok", false,
+                    "error", "workspaceId is required"
+                ));
+                return;
+            }
+            try {
+                var workspace = workspaceService.requireWorkspace(workspaceId);
+                var tenant = tenantManager.getTenant(workspace.getTenantId());
+                if (tenant == null) {
+                    ctx.status(404).json(Map.of(
+                        "ok", false,
+                        "error", "Tenant not found for workspace: " + workspaceId,
+                        "workspaceId", workspaceId
+                    ));
+                    return;
+                }
+                int limit = body.getIntValue("limit");
+                if (limit <= 0) limit = 50;
+                if (limit > 200) limit = 200;
+                var traces = tenant.getObservability().getAllRecentTraces(limit);
+                var evolutionSummary = tenant.getEvolutionEngine().getSummary();
+                var summary = businessPortalFoundationFacade.projectFoundationInsights(
+                    workspaceId,
+                    traces,
+                    java.util.List.of(),
+                    evolutionSummary
+                );
+                ctx.status(200).json(Map.of(
+                    "ok", true,
+                    "workspaceId", workspaceId,
+                    "traceCount", traces.size(),
+                    "summary", summary
+                ));
+            } catch (WorkspaceService.WorkspaceNotFoundException e) {
+                ctx.status(404).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId
+                ));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of(
+                    "ok", false,
+                    "error", e.getMessage(),
+                    "workspaceId", workspaceId
+                ));
+            }
+        });
 
         // ========== AI原生组织 API ==========
         app.get("/api/organization/overview", orgOverviewHandler::getOverview);

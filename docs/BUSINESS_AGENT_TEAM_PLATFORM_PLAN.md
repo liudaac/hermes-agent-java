@@ -5068,3 +5068,42 @@ POST /api/v1/business/foundation/runs/project
 ```
 
 这是 by-reference projection preview，不接受任意 run payload，避免成为伪造 BusinessRun truth 的入口。
+
+### 21.27 Read-only foundation insight projection preview endpoint
+
+新增只读 foundation insight projection preview endpoint：
+
+```text
+POST /api/v1/business/foundation/insights/project
+```
+
+请求：
+
+```json
+{
+  "workspaceId": "customer-service",
+  "limit": 50
+}
+```
+
+行为：
+
+```text
+从 TenantContext.getObservability().getAllRecentTraces(limit) 读取 recent AgentTrace
+从 SelfEvolutionEngine.getSummary() 读取 evolution summary
+通过 BusinessPortalFoundationFacade.projectFoundationInsights(...) 生成 BusinessInsightSummary projection
+返回 summary，但不持久化
+```
+
+边界：
+
+```text
+不创建 BusinessInsightRecord
+不创建 EvolutionProposalRecord
+不创建 BusinessRunRecord
+不修改 foundation 或 business store
+不 generation
+不新增 UI
+```
+
+测试中采用 artifact-based 副作用检查：验证不会创建 BusinessRun/EvolutionProposal，而不假设 BusinessInsightService 的即时 summary 为空。
