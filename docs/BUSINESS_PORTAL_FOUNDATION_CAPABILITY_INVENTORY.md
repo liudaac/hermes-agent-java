@@ -1490,3 +1490,94 @@ or a cross-adapter smoke test wiring:
 ```text
 ScenarioIntentAdapter -> BusinessRunProjectionAdapter -> BusinessInsight/Evolution path
 ```
+
+---
+
+## 15. Iteration 7 Status: PromptAssetResolver / PromptContext Skeleton
+
+Date: 2026-06-17
+
+Seventh adapter-first implementation:
+
+```text
+com.nousresearch.hermes.prompt.PromptAssetResolver
+com.nousresearch.hermes.prompt.PromptContext
+com.nousresearch.hermes.prompt.FoundationPromptAssetBridge
+```
+
+Purpose:
+
+```text
+Resolve business-managed prompt:// refs into explicit prompt context segments.
+Optionally enrich prompt context from existing foundation memory, skills and org knowledge.
+Avoid turning PromptAssetService into a second Memory / Skill / Knowledge system.
+```
+
+Boundary:
+
+```text
+It does not write prompt assets.
+It does not modify memory, skills or organizational knowledge.
+It does not add UI.
+It does not add generation API.
+It does not merge sources into a new knowledge store.
+```
+
+Adapter behavior:
+
+```text
+prompt://assetId -> active PromptAssetVersion
+prompt://assetId#vN -> pinned PromptAssetVersion
+PromptAssetVersion -> PromptContext.Segment(source=business-prompt-asset)
+TenantMemoryManager.getSystemPromptSnapshot -> Segment(source=foundation-memory)
+TenantSkillManager.listAvailableSkills -> Segment(source=foundation-skills)
+OrganizationalKnowledgeBase.buildRagContext -> Segment(source=foundation-org-knowledge)
+```
+
+Current methods:
+
+```text
+PromptAssetResolver.resolve(workspaceId, refs)
+PromptAssetResolver.resolve(workspaceId, refs, taskContext, ResolveOptions)
+PromptAssetResolver.exists(workspaceId, assetId, version)
+PromptAssetResolver.parse(ref)
+PromptContext.render()
+PromptContext.toMap()
+```
+
+Integration note:
+
+```text
+FoundationCapabilityValidator now accepts FoundationPromptAssetBridge.
+PromptAssetResolver implements that bridge, so capability validation can check real prompt refs without depending on prompt storage internals.
+```
+
+Current mapping:
+
+| Source | PromptContext segment |
+|---|---|
+| `PromptAssetVersion` | `business-prompt-asset` |
+| `TenantMemoryManager` snapshot | `foundation-memory` |
+| `TenantSkillManager` available skills | `foundation-skills` |
+| `OrganizationalKnowledgeBase` RAG context | `foundation-org-knowledge` |
+
+Important note:
+
+```text
+PromptContext is a projection for agent/runtime context assembly.
+It is not a new source of truth.
+```
+
+Next likely iteration:
+
+```text
+Cross-adapter smoke test
+```
+
+Suggested chain:
+
+```text
+PromptAssetResolver + FoundationCapabilityValidator + TeamBlueprintCompiler + ScenarioIntentAdapter + BusinessRunProjectionAdapter + EvolutionProposalAdapter
+```
+
+This would validate the adapter-first architecture without adding product API/UI.

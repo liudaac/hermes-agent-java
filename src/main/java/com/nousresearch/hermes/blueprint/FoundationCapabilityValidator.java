@@ -30,7 +30,7 @@ public class FoundationCapabilityValidator {
     private final WorkspaceService workspaceService;
     private final TenantManager tenantManager;
     private final ToolRegistry toolRegistry;
-    private final PromptAssetServiceBridge promptAssetService;
+    private final com.nousresearch.hermes.prompt.FoundationPromptAssetBridge promptAssetService;
 
     public FoundationCapabilityValidator(WorkspaceService workspaceService, TenantManager tenantManager) {
         this(workspaceService, tenantManager, ToolRegistry.getInstance(), null);
@@ -41,7 +41,7 @@ public class FoundationCapabilityValidator {
     }
 
     public FoundationCapabilityValidator(WorkspaceService workspaceService, TenantManager tenantManager,
-                                         ToolRegistry toolRegistry, PromptAssetServiceBridge promptAssetService) {
+                                         ToolRegistry toolRegistry, com.nousresearch.hermes.prompt.FoundationPromptAssetBridge promptAssetService) {
         this.workspaceService = Objects.requireNonNull(workspaceService, "workspaceService");
         this.tenantManager = Objects.requireNonNull(tenantManager, "tenantManager");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
@@ -296,8 +296,4 @@ public class FoundationCapabilityValidator {
 
     private record PromptAssetRef(String assetId, Integer version) {}
 
-    /** Small bridge to avoid making validation depend on one prompt storage implementation. */
-    public interface PromptAssetServiceBridge {
-        boolean exists(String workspaceId, String assetId, Integer version);
-    }
 }

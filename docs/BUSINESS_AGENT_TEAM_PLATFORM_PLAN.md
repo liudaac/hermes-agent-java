@@ -4408,3 +4408,67 @@ ScenarioIntentAdapter -> IntentRun -> BusinessRunProjectionAdapter -> EvolutionP
 ```
 
 验证 adapter-first 链路能串起来，但仍不新增产品 API/UI。
+
+### 21.12 Iteration 7：PromptAssetResolver / PromptContext skeleton 已落地
+
+第七刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.prompt.PromptAssetResolver
+com.nousresearch.hermes.prompt.PromptContext
+com.nousresearch.hermes.prompt.FoundationPromptAssetBridge
+```
+
+它把业务 prompt 引用解析成明确上下文片段：
+
+```text
+prompt://assetId -> active PromptAssetVersion
+prompt://assetId#vN -> pinned PromptAssetVersion
+PromptAssetVersion -> PromptContext.Segment(source=business-prompt-asset)
+```
+
+也支持可选 foundation context enrichment：
+
+```text
+TenantMemoryManager.getSystemPromptSnapshot -> foundation-memory
+TenantSkillManager.listAvailableSkills -> foundation-skills
+OrganizationalKnowledgeBase.buildRagContext -> foundation-org-knowledge
+```
+
+明确边界：
+
+```text
+不写 PromptAsset
+不修改 Memory / Skill / Org Knowledge
+不新增 UI
+不新增 generation API
+不把多来源内容合并成新的 knowledge store
+```
+
+同时做了一个架构收敛点：
+
+```text
+FoundationCapabilityValidator 现在接收 FoundationPromptAssetBridge
+PromptAssetResolver implements FoundationPromptAssetBridge
+```
+
+这样后续 capability validation 可以校验真实 prompt ref，但 validator 不需要知道 prompt 存储实现。
+
+下一刀建议：
+
+```text
+Cross-adapter smoke test
+```
+
+串起：
+
+```text
+PromptAssetResolver
+FoundationCapabilityValidator
+TeamBlueprintCompiler
+ScenarioIntentAdapter
+BusinessRunProjectionAdapter
+EvolutionProposalAdapter
+```
+
+目标是验证 adapter-first 链路已经能闭环，但仍不新增产品 API/UI。
