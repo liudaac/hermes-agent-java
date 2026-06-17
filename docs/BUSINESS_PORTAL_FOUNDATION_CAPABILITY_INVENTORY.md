@@ -1331,3 +1331,78 @@ BusinessApprovalAdapter skeleton
 ```
 
 That should project ApprovalRequest / ApprovalResult into business approval cards without making BusinessApprovalService a second approval engine.
+
+---
+
+## 13. Iteration 5 Status: BusinessApprovalAdapter Skeleton
+
+Date: 2026-06-17
+
+Fifth adapter-first implementation:
+
+```text
+com.nousresearch.hermes.business.approval.BusinessApprovalAdapter
+```
+
+Purpose:
+
+```text
+Project foundation ApprovalRequest / ApprovalResult into Business Portal approval cards.
+Keep ApprovalSystem as source of truth.
+Avoid turning BusinessApprovalService into a second approval engine.
+```
+
+Boundary:
+
+```text
+It does not request approval itself.
+It does not approve or deny ApprovalRequest directly.
+It does not add UI.
+It does not add generation API.
+It does not create a new approval state machine.
+```
+
+Adapter behavior:
+
+```text
+ApprovalRequest -> BusinessApprovalRecord projection
+ApprovalResult -> in-memory card resolution projection
+BusinessApprovalService.createApproval(...) can persist the projection
+BusinessApprovalService.approve/reject(...) can mirror a foundation result onto persisted cards
+```
+
+Current methods:
+
+```text
+BusinessApprovalAdapter.fromApprovalRequest(workspaceId, teamId, request)
+BusinessApprovalAdapter.persistRequest(service, projection)
+BusinessApprovalAdapter.withResult(card, result, actor)
+BusinessApprovalAdapter.resolvePersisted(service, workspaceId, approvalId, result, actor)
+```
+
+Current mapping:
+
+| Foundation field | Business approval projection |
+|---|---|
+| `ApprovalRequest.type` | title / evidence.approvalType / metadata.foundationApprovalType |
+| `ApprovalRequest.operation` | summary / approveEffect / rejectEffect / evidence.operation |
+| `ApprovalRequest.details` | summary / evidence.details |
+| `ApprovalRequest.dangerous` | riskLevel / reasonRequired / evidence.dangerous |
+| `ApprovalResult.approved` | APPROVED / REJECTED mirror status |
+| `ApprovalResult.reason` | resolutionReason |
+| `ApprovalResult.sessionApproved` | metadata.foundationSessionApproved |
+
+Important note:
+
+```text
+Business approval cards are UX/projection artifacts.
+Foundation ApprovalRequest.approve()/deny(...) remains the actual engine transition.
+```
+
+Next likely iteration:
+
+```text
+EvolutionProposalAdapter skeleton
+```
+
+That should connect business evolution proposals to SelfEvolutionEngine / DelegatedTaskStore / ApprovalSystem boundaries without creating a second evolution engine.

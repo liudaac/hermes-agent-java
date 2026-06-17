@@ -4275,3 +4275,72 @@ ApprovalRequest / ApprovalResult / ApprovalSystem
 ```
 
 投影成业务审批卡，而不是让 `BusinessApprovalService` 成为第二套 approval engine。
+
+### 21.10 Iteration 5：BusinessApprovalAdapter skeleton 已落地
+
+第五刀 adapter-first 迭代完成：
+
+```text
+com.nousresearch.hermes.business.approval.BusinessApprovalAdapter
+```
+
+它把 foundation approval 投影成业务审批卡：
+
+```text
+ApprovalRequest -> BusinessApprovalRecord
+ApprovalResult -> BusinessApprovalRecord resolution projection
+```
+
+明确边界：
+
+```text
+不发起 approval
+不直接 approve/deny ApprovalRequest
+不新增 UI
+不新增 generation API
+不创建新的 approval state machine
+```
+
+当前投影规则：
+
+```text
+ApprovalRequest.type -> title / evidence / metadata
+ApprovalRequest.operation -> summary / approveEffect / rejectEffect
+ApprovalRequest.details -> summary / evidence.details
+ApprovalRequest.dangerous -> riskLevel / reasonRequired
+ApprovalResult.approved -> APPROVED / REJECTED mirror status
+ApprovalResult.reason -> resolutionReason
+ApprovalResult.sessionApproved -> metadata.foundationSessionApproved
+```
+
+也提供可选持久化/镜像入口：
+
+```text
+persistRequest(BusinessApprovalService, BusinessApprovalRecord)
+resolvePersisted(BusinessApprovalService, workspaceId, approvalId, ApprovalResult, actor)
+```
+
+但语义必须保持：
+
+```text
+BusinessApprovalService 是业务卡片仓库
+ApprovalSystem / ApprovalRequest / ApprovalResult 是审批事实源
+```
+
+下一刀建议：
+
+```text
+EvolutionProposalAdapter skeleton
+```
+
+把 Business Portal 的优化提案收敛到：
+
+```text
+SelfEvolutionEngine
+FailureCase
+DelegatedTaskStore
+ApprovalSystem
+TeamBlueprint versioning
+```
+
+边界上，避免 `EvolutionProposalService` 变成第二套 evolution engine。
