@@ -1,0 +1,380 @@
+# Business Portal Foundation Baseline
+
+Date: 2026-06-17
+
+This document freezes the current Business Portal foundation-convergence baseline after the adapter-first iteration series.
+
+It is a consolidation document, not a new feature spec.
+
+---
+
+## 1. Baseline Statement
+
+Business Portal is now expected to integrate with Hermes foundation through explicit adapters and a single facade boundary.
+
+```text
+Business Portal presents, frames, stores projections and collects human review.
+Hermes foundation owns tenant, tools, prompts, runtime teams, intent execution, traces, approvals, evolution and delegation truth.
+```
+
+Current default integration boundary:
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationFacade
+```
+
+Current factory/wiring boundary:
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry
+```
+
+Current read-only baseline check:
+
+```text
+BusinessPortalFoundationFacade.diagnostics()
+```
+
+Future product code should not manually stitch low-level foundation services together if a facade method exists.
+
+---
+
+## 2. Implemented Adapter Baseline
+
+| Area | Adapter / Boundary | Status | Source of Truth |
+|---|---|---|---|
+| Prompt context | `PromptAssetResolver`, `PromptContext`, `FoundationPromptAssetBridge` | Implemented | PromptAssetService + Memory/Skill/OrgKnowledge foundation |
+| Capability grounding | `FoundationCapabilityValidator`, `FoundationCapabilityValidationReport` | Implemented | Workspace/Tenant + ToolRegistry + tenant policy + prompt bridge |
+| Team topology | `TeamBlueprintCompiler`, `TeamBlueprintCompileResult` | Implemented | `TeamManager`, `Team`, `AgentRole`, `TenantContext` |
+| Scenario intent | `ScenarioIntentAdapter`, `ScenarioIntentRequest` | Implemented | `IntentOrchestrator` |
+| Run story | `BusinessRunProjectionAdapter` | Implemented | `IntentRun`, `AgentTrace` |
+| Approval card | `BusinessApprovalAdapter` | Implemented | `ApprovalSystem`, `ApprovalRequest`, `ApprovalResult` |
+| Insight projection | `BusinessInsightProjectionAdapter` | Implemented | `AgentTrace`, `AgentEvaluation`, `SelfEvolutionEngine` summary |
+| Evolution governance | `EvolutionProposalAdapter` | Implemented | `SelfEvolutionEngine`, `FailureCase`, `ApprovalSystem`, `DelegatedTaskStore` |
+| Unified boundary | `BusinessPortalFoundationFacade`, `BusinessPortalAdapterRegistry` | Implemented | Adapter composition only |
+| Diagnostics | `BusinessPortalFoundationDiagnostics` | Implemented | Read-only facade/adapter baseline |
+| Architecture guard | `BusinessPortalFoundationArchitectureTest` | Implemented | Source-level boundary test |
+
+---
+
+## 3. Facade Surface
+
+The facade currently exposes:
+
+```text
+resolvePromptContext(...)
+validateTeamBlueprint(...)
+compileTeamBlueprint(...)
+buildScenarioIntentRequest(...)
+planScenarioIntent(...)
+executeScenarioIntent(...)
+projectIntentRun(...)
+projectFoundationInsights(...)
+projectTraceInsights(...)
+projectEvalInsights(...)
+projectEvolutionInsights(...)
+recordProposalLearning(...)
+projectProposalApproval(...)
+createProposalReviewTask(...)
+diagnostics()
+```
+
+This is intentionally a thin adapter composition surface.
+
+It is not:
+
+```text
+a product API
+a dashboard API
+a generation service
+a runtime execution engine
+a persistence repository
+```
+
+---
+
+## 4. Tests Guarding the Baseline
+
+Key tests added during convergence:
+
+```text
+FoundationCapabilityValidatorTest
+TeamBlueprintCompilerTest
+ScenarioIntentAdapterTest
+BusinessRunProjectionAdapterTest
+BusinessApprovalAdapterTest
+EvolutionProposalAdapterTest
+PromptAssetResolverTest
+BusinessPortalAdapterChainSmokeTest
+BusinessPortalFoundationFacadeTest
+BusinessPortalFoundationArchitectureTest
+BusinessInsightProjectionAdapterTest
+BusinessPortalFoundationDiagnosticsTest
+```
+
+Important test design rule:
+
+```text
+Prefer artifact-based assertions over global-count assertions.
+```
+
+Reason:
+
+```text
+Tenant foundation may load persisted test-home state such as memories, intent runs or delegated tasks.
+Tests should verify the artifact produced by the current test instead of assuming foundation stores are empty.
+```
+
+---
+
+## 5. Current Non-goals
+
+Still intentionally out of scope:
+
+```text
+No generation API
+No Business Portal UI expansion
+No new business domain objects
+No direct channel notification delivery
+No autonomous evolution proposal apply
+No automatic runtime team execution from blueprint compile
+No second approval engine
+No second workflow engine
+No second trace store
+No second knowledge store
+```
+
+---
+
+## 6. Future Feature Entry Rules
+
+## 6.1 Team generation / editing
+
+Must enter through:
+
+```text
+BusinessPortalFoundationFacade.resolvePromptContext(...)
+BusinessPortalFoundationFacade.validateTeamBlueprint(...)
+BusinessPortalFoundationFacade.compileTeamBlueprint(...)
+```
+
+Required behavior:
+
+```text
+Generated tool names must be grounded in ToolRegistry.
+Prompt refs must resolve through PromptAssetResolver.
+Team topology mutation must go through TeamBlueprintCompiler.
+High-risk changes must produce approval/delegated-task artifacts.
+```
+
+Forbidden behavior:
+
+```text
+Direct TeamManager mutation from route handlers.
+Trusting allowedTools strings without validation.
+Creating TenantAwareAIAgent sessions from blueprint compile.
+Mutating tenant policy from generated JSON without approval.
+```
+
+## 6.2 Scenario execution
+
+Must enter through:
+
+```text
+BusinessPortalFoundationFacade.buildScenarioIntentRequest(...)
+BusinessPortalFoundationFacade.planScenarioIntent(...)
+BusinessPortalFoundationFacade.executeScenarioIntent(...)
+```
+
+Forbidden behavior:
+
+```text
+ScenarioService implementing task decomposition.
+ScenarioService selecting teammates.
+ScenarioService executing workflow steps.
+ScenarioService becoming a trace store.
+```
+
+## 6.3 Run / trace display
+
+Must preserve foundation references:
+
+```text
+technicalTraceRef = intent://<runId> or trace://<traceId>
+metadata.source = foundation:intent-run / foundation:agent-trace / equivalent
+```
+
+Manual/demo run records must be clearly identified as non-foundation truth.
+
+## 6.4 Approval UX
+
+Approval cards must mirror foundation approval state.
+
+Allowed:
+
+```text
+ApprovalRequest -> BusinessApprovalAdapter.fromApprovalRequest(...)
+ApprovalResult -> card resolution projection
+```
+
+Forbidden:
+
+```text
+Approving foundation requests only by changing BusinessApprovalRecord status.
+Creating local approval semantics that hide ApprovalRequest / ApprovalResult.
+```
+
+## 6.5 Insight and evolution
+
+Foundation-backed insights should use:
+
+```text
+BusinessPortalFoundationFacade.projectFoundationInsights(...)
+BusinessPortalFoundationFacade.projectTraceInsights(...)
+BusinessPortalFoundationFacade.projectEvalInsights(...)
+BusinessPortalFoundationFacade.projectEvolutionInsights(...)
+```
+
+Evolution proposals should use:
+
+```text
+BusinessPortalFoundationFacade.recordProposalLearning(...)
+BusinessPortalFoundationFacade.projectProposalApproval(...)
+BusinessPortalFoundationFacade.createProposalReviewTask(...)
+```
+
+Forbidden:
+
+```text
+Applying proposal runtime mutations directly from EvolutionProposalService.
+Skipping SelfEvolutionEngine for learning records.
+Executing delegated tasks automatically.
+```
+
+---
+
+## 7. Architecture Guard Status
+
+Current executable guard:
+
+```text
+BusinessPortalFoundationArchitectureTest
+```
+
+Current scope:
+
+```text
+com.nousresearch.hermes.business.*
+```
+
+Current rule:
+
+```text
+Ordinary Business Portal classes must not directly import low-level foundation packages.
+Only business.foundation and explicit adapter classes may bridge to foundation packages.
+```
+
+Current thin `business.foundation` package allowlist:
+
+```text
+BusinessPortalFoundationFacade
+BusinessPortalAdapterRegistry
+BusinessPortalFoundationDiagnostics
+```
+
+Current explicit adapter bridges include:
+
+```text
+BusinessApprovalAdapter
+BusinessRunProjectionAdapter
+BusinessInsightProjectionAdapter
+```
+
+The guard intentionally does not police legacy dashboard/org handlers yet.
+
+---
+
+## 8. Documentation Map
+
+Related documents:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_AUDIT.md
+docs/BUSINESS_PORTAL_FOUNDATION_CAPABILITY_INVENTORY.md
+docs/BUSINESS_PORTAL_FOUNDATION_ADAPTERS.md
+docs/BUSINESS_AGENT_TEAM_PLATFORM_PLAN.md
+docs/BUSINESS_PORTAL_FOUNDATION_BASELINE.md
+```
+
+How to read them:
+
+```text
+AUDIT = original overlap/risk analysis
+CAPABILITY_INVENTORY = code-level source-of-truth inventory + iteration log
+ADAPTERS = development contract and guardrails
+PLATFORM_PLAN = product/platform plan with section 21 iteration trail
+BASELINE = current frozen summary of the adapter-first foundation state
+```
+
+---
+
+## 9. Recommended Next Phase
+
+If continuing without expanding product surface:
+
+```text
+1. Keep hardening adapter tests.
+2. Add diagnostics assertions to smoke tests if useful.
+3. Consider extending architecture guard to selected dashboard integration classes only after a separate audit.
+```
+
+If starting product integration later, begin read-only:
+
+```text
+1. Expose diagnostics/reporting through an existing safe admin path.
+2. Show validation reports and projection previews before any mutation endpoint.
+3. Defer generation and mutation endpoints until the facade path is fully exercised.
+```
+
+Do not start the next phase with:
+
+```text
+POST /team-generation
+auto-apply evolution proposal
+runtime team execution from blueprint compile
+new Business Portal UI tabs that bypass the facade
+```
+
+---
+
+## 10. Baseline Acceptance Criteria
+
+The current baseline is acceptable when:
+
+```text
+mvn -q -DskipTests compile
+```
+
+passes, and the following tests pass:
+
+```text
+BusinessPortalFoundationArchitectureTest
+BusinessPortalFoundationFacadeTest
+BusinessPortalFoundationDiagnosticsTest
+BusinessPortalAdapterChainSmokeTest
+FoundationCapabilityValidatorTest
+TeamBlueprintCompilerTest
+ScenarioIntentAdapterTest
+BusinessRunProjectionAdapterTest
+BusinessApprovalAdapterTest
+BusinessInsightProjectionAdapterTest
+EvolutionProposalAdapterTest
+PromptAssetResolverTest
+```
+
+The architecture rule remains:
+
+```text
+Business Portal presents and governs.
+Hermes foundation owns truth and execution.
+```

@@ -4807,3 +4807,38 @@ architecture test 同步更新：
 ```text
 business.foundation 包仍保持很薄，只允许 Facade / Registry / Diagnostics 三个类。
 ```
+
+### 21.20 Iteration 15：Foundation baseline consolidation 已完成
+
+第十五刀新增最终基线文档：
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_BASELINE.md
+```
+
+这份文档把当前 adapter-first foundation 状态压成一份可引用 baseline，包含：
+
+```text
+baseline statement
+implemented adapter map
+facade surface
+tests guarding the baseline
+current non-goals
+future feature entry rules
+architecture guard status
+documentation map
+recommended next phase
+baseline acceptance criteria
+```
+
+本刀只改文档，不新增：
+
+```text
+API
+UI
+generation
+runtime behavior
+business objects
+```
+
+后续如果进入产品集成，应该先从 read-only diagnostics / validation preview 开始，而不是直接上 generation 或 mutation endpoint。

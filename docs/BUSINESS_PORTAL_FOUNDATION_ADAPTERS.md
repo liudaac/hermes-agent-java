@@ -399,3 +399,17 @@ Diagnostics must remain read-only.
 Diagnostics must not execute foundation operations.
 Diagnostics must not become a product API by itself.
 ```
+
+---
+
+## 12. Baseline Consolidation
+
+Date: 2026-06-17
+
+Current adapter-first foundation baseline is consolidated in:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_BASELINE.md
+```
+
+Use that document as the starting checklist before adding any future Business Portal API/UI/generation feature that touches Hermes foundation behavior.

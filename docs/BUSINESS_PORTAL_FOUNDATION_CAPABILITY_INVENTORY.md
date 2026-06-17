@@ -1930,3 +1930,25 @@ business.foundation is still thin, now explicitly allowing:
 - BusinessPortalAdapterRegistry
 - BusinessPortalFoundationDiagnostics
 ```
+
+---
+
+## 23. Iteration 15 Status: Foundation Baseline Consolidation
+
+Date: 2026-06-17
+
+Fifteenth adapter-first iteration adds a final baseline consolidation document:
+
+```text
+docs/BUSINESS_PORTAL_FOUNDATION_BASELINE.md
+```
+
+Purpose:
+
+```text
+Freeze the current adapter-first foundation state.
+Summarize implemented adapters, facade surface, diagnostics, architecture tests, non-goals and next-phase entry rules.
+Provide one concise baseline for future API/UI/generation work to reference before touching Business Portal foundation behavior.
+```
+
+This is documentation-only. No runtime/API/UI/generation changes were made.
