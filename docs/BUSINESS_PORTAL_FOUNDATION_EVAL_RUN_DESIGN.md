@@ -85,10 +85,41 @@ not assume a Business Portal EvalSet object exists
 ## 6. Facade and dashboard surface (deferred)
 
 ```text
-BusinessPortalFoundationFacade.projectEvalRun(...)
-GET  /api/v1/business/foundation/eval-runs?workspaceId=...&agentId=...
-POST /api/v1/business/foundation/eval-runs/preview (request body for filters)
+BusinessPortalFoundationFacade.projectEvalRun(...)        // implemented
+BusinessPortalFoundationFacade.projectEvalRuns(...)       // implemented
+GET  /api/v1/business/foundation/eval-runs?workspaceId=...&agentId=...     // blocked: see section 6.1
+POST /api/v1/business/foundation/eval-runs/preview        // blocked: see section 6.1
 ```
+
+### 6.1 Foundation gap discovered (2026-06-17)
+
+While preparing the dashboard preview endpoint we confirmed:
+
+```text
+Hermes foundation currently has no per-tenant EvalResultStore.
+AgentEvaluation.EvalResult is a value object built ad hoc.
+There is no list/query API for foundation eval results.
+```
+
+Implications:
+
+```text
+A by-reference eval-runs/preview endpoint cannot be honest right now: it would have to
+accept an EvalResult payload in the request body, which violates the read-only/by-reference
+guarantee defined in BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md section 1.
+```
+
+Decision:
+
+```text
+Do not add eval-runs/preview HTTP endpoint until a foundation EvalResultStore (or equivalent
+listing API) is in place.
+The BusinessEvalRunProjectionAdapter remains usable from facade for in-process callers
+that already have a List<EvalResult>, e.g. tests, smoke checks or future foundation code.
+```
+
+This is recorded in `docs/BUSINESS_PORTAL_FOUNDATION_ALIGNMENT_REVIEW.md` so the gap cannot
+be silently skipped.
 
 Both endpoints stay read-only. They cannot be merged before the alignment review’s
 acceptance test cycle is satisfied.

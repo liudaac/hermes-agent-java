@@ -5292,3 +5292,32 @@ metadata.source = foundation:agent-evaluation
 不创建 evolution proposal
 不新增 dashboard endpoint（延后到设计文档下一刀）
 ```
+
+### 21.34 EvalRun preview endpoint 暂缓 + foundation gap 记录
+
+按 EvalRun design doc 第二刀本来要做：
+
+```text
+GET  /api/v1/business/foundation/eval-runs?workspaceId=...&agentId=...
+POST /api/v1/business/foundation/eval-runs/preview
+```
+
+实际检查后发现：
+
+```text
+Hermes foundation 目前没有 per-tenant EvalResult store / list API。
+如果现在加 endpoint，preview 只能要求请求体里带 EvalResult，
+这违反 BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md 第 1 节的
+read-only / by-reference 约束。
+```
+
+因此本刀只做：
+
+```text
+1. 把 foundation EvalResultStore 缺口写入 docs/BUSINESS_PORTAL_FOUNDATION_ALIGNMENT_REVIEW.md 第 9 节
+2. 在 docs/BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md 第 6.1 节标记 endpoint 暂缓
+3. 不向 DashboardServer 加任何 eval-runs endpoint
+4. BusinessEvalRunProjectionAdapter 已实现，仍可在进程内 / facade / 测试中使用
+```
+
+这次是显式拒绝写代码的“下一刀”，确保 read-only 集成不会因为产品压力被破坏。

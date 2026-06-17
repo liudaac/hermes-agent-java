@@ -190,3 +190,30 @@ Read-only product integration is the first time the platform exposes foundation 
 ```
 
 The remaining gaps (EvalSet, replay/canary, notification adapter) are tracked here so they cannot be quietly skipped later.
+
+---
+
+## 9. Foundation Gap Logged: EvalResult listing
+
+Date: 2026-06-17
+
+While trying to add a read-only `/api/v1/business/foundation/eval-runs/preview` endpoint, we confirmed that Hermes foundation does not currently expose a per-tenant `EvalResult` store or query API.
+
+Consequences:
+
+```text
+A by-reference EvalRun preview endpoint cannot honor the read-only/by-reference
+guarantee in BUSINESS_PORTAL_FOUNDATION_READONLY_ENDPOINTS.md section 1.
+The BusinessEvalRunProjectionAdapter is implemented and tested, but the dashboard
+preview endpoint is intentionally deferred until foundation provides EvalResult listing.
+```
+
+This is the first explicit foundation-side gap surfaced by the convergence work. It does not change the alignment status, but it is logged so it cannot be silently skipped.
+
+Recommended next steps:
+
+```text
+- Treat foundation EvalResultStore/list API as a prerequisite for any eval-runs HTTP endpoint.
+- Continue read-only endpoint coverage where foundation already has listing APIs (traces, intent runs, evolution summary, prompt assets, team blueprints, scenarios, evolution proposals, approvals).
+- Update BUSINESS_PORTAL_FOUNDATION_EVAL_RUN_DESIGN.md section 6.1 to reflect the gap.
+```
