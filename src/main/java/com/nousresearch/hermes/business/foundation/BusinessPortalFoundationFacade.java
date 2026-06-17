@@ -45,6 +45,7 @@ public class BusinessPortalFoundationFacade {
     private final BusinessApprovalAdapter approvalAdapter;
     private final BusinessInsightProjectionAdapter insightProjectionAdapter;
     private final EvolutionProposalAdapter evolutionProposalAdapter;
+    private final BusinessPortalFoundationDiagnostics diagnostics = new BusinessPortalFoundationDiagnostics();
 
     public BusinessPortalFoundationFacade(PromptAssetResolver promptAssetResolver,
                                           FoundationCapabilityValidator capabilityValidator,
@@ -127,6 +128,10 @@ public class BusinessPortalFoundationFacade {
 
     public DelegatedTask createProposalReviewTask(EvolutionProposalRecord proposal) {
         return evolutionProposalAdapter.createDelegatedReviewTask(proposal);
+    }
+
+    public BusinessPortalFoundationDiagnostics.DiagnosticsReport diagnostics() {
+        return diagnostics.inspect(this);
     }
 
     public PromptAssetResolver promptAssetResolver() { return promptAssetResolver; }

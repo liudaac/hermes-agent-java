@@ -1880,3 +1880,53 @@ Avoid making future API/UI code instantiate BusinessInsightProjectionAdapter dir
 ```
 
 No API/UI/generation surface was added.
+
+---
+
+## 22. Iteration 14 Status: Read-only Foundation Diagnostics
+
+Date: 2026-06-17
+
+Fourteenth adapter-first iteration adds a read-only diagnostics projection:
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationDiagnostics
+BusinessPortalFoundationFacade.diagnostics()
+```
+
+Purpose:
+
+```text
+Expose the current facade/adapter baseline as a diagnostics report without adding API/UI.
+Make it easy for future product integrations to verify the standard foundation boundary is wired and ready.
+```
+
+Diagnostics report includes:
+
+```text
+generatedAt
+boundary name
+adapter presence and implementation classes
+guardrails
+non-goals
+facadeReady flag
+```
+
+Boundary:
+
+```text
+No runtime state mutation
+No product route
+No UI
+No generation API
+No foundation operation execution
+```
+
+Architecture guard update:
+
+```text
+business.foundation is still thin, now explicitly allowing:
+- BusinessPortalFoundationFacade
+- BusinessPortalAdapterRegistry
+- BusinessPortalFoundationDiagnostics
+```

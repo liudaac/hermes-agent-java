@@ -100,6 +100,11 @@ class BusinessPortalFoundationFacadeTest {
         assertFalse(insights.getInsights().isEmpty());
         assertTrue(insights.getInsights().stream().anyMatch(insight -> "foundation-trace-failures".equals(insight.getInsightId())
             || "foundation-evolution-backlog".equals(insight.getInsightId())));
+
+        var diagnostics = facade.diagnostics();
+        assertTrue(diagnostics.facadeReady());
+        assertTrue(diagnostics.adapters().stream().anyMatch(adapter -> "insightProjectionAdapter".equals(adapter.name()) && adapter.present()));
+        assertTrue(diagnostics.nonGoals().contains("No generation API"));
     }
 
     private ToolRegistry isolatedRegistry() {

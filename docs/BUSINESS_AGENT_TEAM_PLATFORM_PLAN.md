@@ -4765,3 +4765,45 @@ BusinessInsightProjectionAdapter
 不新增 generation
 不改 BusinessInsightService
 ```
+
+### 21.19 Iteration 14：Read-only Foundation Diagnostics 已落地
+
+第十四刀新增只读诊断投影：
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationDiagnostics
+BusinessPortalFoundationFacade.diagnostics()
+```
+
+它输出当前 foundation adapter baseline：
+
+```text
+generatedAt
+boundary
+adapter presence / implementationClass / role
+guardrails
+nonGoals
+facadeReady
+```
+
+用途：
+
+```text
+后续 API/UI/generation 接入前，可以先用 diagnostics 确认 facade/adapter 边界已正确组合。
+```
+
+明确边界：
+
+```text
+不读写业务状态
+不执行 foundation operation
+不新增产品 API
+不新增 UI
+不新增 generation API
+```
+
+architecture test 同步更新：
+
+```text
+business.foundation 包仍保持很薄，只允许 Facade / Registry / Diagnostics 三个类。
+```

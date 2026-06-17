@@ -68,7 +68,8 @@ class BusinessPortalFoundationArchitectureTest {
         try (Stream<Path> files = Files.walk(foundationDir)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 String name = file.getFileName().toString();
-                if (!name.equals("BusinessPortalFoundationFacade.java") && !name.equals("BusinessPortalAdapterRegistry.java")) {
+                if (!name.equals("BusinessPortalFoundationFacade.java") && !name.equals("BusinessPortalAdapterRegistry.java")
+                    && !name.equals("BusinessPortalFoundationDiagnostics.java")) {
                     violations.add(file.toString());
                 }
             }

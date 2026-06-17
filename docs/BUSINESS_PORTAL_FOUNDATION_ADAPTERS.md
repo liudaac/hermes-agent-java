@@ -362,3 +362,40 @@ BusinessPortalFoundationFacade.projectEvolutionInsights(...)
 ```
 
 Future product code should use these facade methods instead of manually constructing the adapter.
+
+---
+
+## 11. Read-only Diagnostics
+
+Date: 2026-06-17
+
+The facade now exposes a read-only diagnostics report:
+
+```text
+BusinessPortalFoundationFacade.diagnostics()
+```
+
+Implementation:
+
+```text
+com.nousresearch.hermes.business.foundation.BusinessPortalFoundationDiagnostics
+```
+
+Diagnostics report contains:
+
+```text
+adapter presence
+adapter implementation classes
+adapter roles
+guardrails
+non-goals
+facadeReady
+```
+
+Rules:
+
+```text
+Diagnostics must remain read-only.
+Diagnostics must not execute foundation operations.
+Diagnostics must not become a product API by itself.
+```
