@@ -26,6 +26,7 @@ public class BusinessPortalFoundationDiagnostics {
             adapter("approvalAdapter", facade.approvalAdapter(), "ApprovalRequest / ApprovalResult -> BusinessApprovalRecord projection"),
             adapter("insightProjectionAdapter", facade.insightProjectionAdapter(), "AgentTrace / Eval / Evolution summary -> BusinessInsight projection"),
             adapter("evalRunProjectionAdapter", facade.evalRunProjectionAdapter(), "AgentEvaluation.EvalResult -> BusinessEvalRunProjection"),
+            adapter("safetyValveAdapter", facade.safetyValveAdapter(), "Replay / Canary / Rollback -> ApprovalRequest + DelegatedTaskEnvelope"),
             adapter("evolutionProposalAdapter", facade.evolutionProposalAdapter(), "EvolutionProposal -> FailureCase / Approval / DelegatedTask boundaries")
         );
         return new DiagnosticsReport(

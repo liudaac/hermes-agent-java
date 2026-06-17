@@ -11,6 +11,7 @@ import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
+import com.nousresearch.hermes.business.safetyvalve.BusinessSafetyValveAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightRecord;
 import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
 import com.nousresearch.hermes.collaboration.DelegatedTask;
@@ -47,6 +48,7 @@ public class BusinessPortalFoundationFacade {
     private final BusinessApprovalAdapter approvalAdapter;
     private final BusinessInsightProjectionAdapter insightProjectionAdapter;
     private final BusinessEvalRunProjectionAdapter evalRunProjectionAdapter;
+    private final BusinessSafetyValveAdapter safetyValveAdapter;
     private final EvolutionProposalAdapter evolutionProposalAdapter;
     private final BusinessPortalFoundationDiagnostics diagnostics = new BusinessPortalFoundationDiagnostics();
 
@@ -58,6 +60,7 @@ public class BusinessPortalFoundationFacade {
                                           BusinessApprovalAdapter approvalAdapter,
                                           BusinessInsightProjectionAdapter insightProjectionAdapter,
                                           BusinessEvalRunProjectionAdapter evalRunProjectionAdapter,
+                                          BusinessSafetyValveAdapter safetyValveAdapter,
                                           EvolutionProposalAdapter evolutionProposalAdapter) {
         this.promptAssetResolver = Objects.requireNonNull(promptAssetResolver, "promptAssetResolver");
         this.capabilityValidator = Objects.requireNonNull(capabilityValidator, "capabilityValidator");
@@ -67,6 +70,7 @@ public class BusinessPortalFoundationFacade {
         this.approvalAdapter = Objects.requireNonNull(approvalAdapter, "approvalAdapter");
         this.insightProjectionAdapter = Objects.requireNonNull(insightProjectionAdapter, "insightProjectionAdapter");
         this.evalRunProjectionAdapter = Objects.requireNonNull(evalRunProjectionAdapter, "evalRunProjectionAdapter");
+        this.safetyValveAdapter = Objects.requireNonNull(safetyValveAdapter, "safetyValveAdapter");
         this.evolutionProposalAdapter = Objects.requireNonNull(evolutionProposalAdapter, "evolutionProposalAdapter");
     }
 
@@ -163,5 +167,6 @@ public class BusinessPortalFoundationFacade {
     public BusinessApprovalAdapter approvalAdapter() { return approvalAdapter; }
     public BusinessInsightProjectionAdapter insightProjectionAdapter() { return insightProjectionAdapter; }
     public BusinessEvalRunProjectionAdapter evalRunProjectionAdapter() { return evalRunProjectionAdapter; }
+    public BusinessSafetyValveAdapter safetyValveAdapter() { return safetyValveAdapter; }
     public EvolutionProposalAdapter evolutionProposalAdapter() { return evolutionProposalAdapter; }
 }

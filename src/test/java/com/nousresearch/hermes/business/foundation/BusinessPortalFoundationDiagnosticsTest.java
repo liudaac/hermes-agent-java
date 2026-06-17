@@ -52,7 +52,7 @@ class BusinessPortalFoundationDiagnosticsTest {
 
         assertTrue(report.facadeReady());
         assertEquals("BusinessPortalFoundationFacade", report.boundary());
-        assertEquals(9, report.adapters().size());
+        assertEquals(10, report.adapters().size());
         assertTrue(report.adapters().stream().allMatch(BusinessPortalFoundationDiagnostics.AdapterStatus::present));
         assertTrue(report.guardrails().stream().anyMatch(guardrail -> guardrail.contains("BusinessPortalFoundationFacade")));
         assertTrue(report.nonGoals().contains("No generation API"));

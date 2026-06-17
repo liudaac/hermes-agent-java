@@ -39,7 +39,8 @@ class BusinessPortalFoundationArchitectureTest {
         "src/main/java/com/nousresearch/hermes/business/approval/BusinessApprovalAdapter.java",
         "src/main/java/com/nousresearch/hermes/business/run/BusinessRunProjectionAdapter.java",
         "src/main/java/com/nousresearch/hermes/business/insight/BusinessInsightProjectionAdapter.java",
-        "src/main/java/com/nousresearch/hermes/business/insight/BusinessEvalRunProjectionAdapter.java"
+        "src/main/java/com/nousresearch/hermes/business/insight/BusinessEvalRunProjectionAdapter.java",
+        "src/main/java/com/nousresearch/hermes/business/safetyvalve/BusinessSafetyValveAdapter.java"
     );
 
     @Test
