@@ -159,6 +159,7 @@ public final class TeamBlueprintDashboardIntegration {
                 .setResponsibility(object.getString("responsibility"))
                 .setKnowledgeRefs(parseStringList(object.getJSONArray("knowledgeRefs")))
                 .setAllowedTools(parseStringList(object.getJSONArray("allowedTools")))
+                .setAllowedSkills(parseStringList(object.getJSONArray("allowedSkills")))
                 .setApprovalRules(parseStringList(object.getJSONArray("approvalRules")))
                 .setMetadata(new LinkedHashMap<>(WorkspaceDashboardIntegration.objectMap(object.getJSONObject("metadata"))));
             agents.add(agent);

@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
+import TeamBlueprintEditor from "@/components/business/TeamBlueprintEditor";
 import {
   DemoDataGuide,
   InsightsAndActionsSection,
@@ -54,6 +55,8 @@ export default function BusinessPortalPage() {
   const [approvals, setApprovals] = useState<BusinessApprovalRecord[]>([]);
   const [insights, setInsights] = useState<BusinessInsightRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [executingId, setExecutingId] = useState<string | null>(null);
+  const [editingTeam, setEditingTeam] = useState<BusinessTeamCard | null>(null);
 
   const selectedWorkspace = workspaceId || undefined;
 
@@ -97,6 +100,20 @@ export default function BusinessPortalPage() {
     await load();
   };
 
+  const executeScenario = async (targetScenarioId: string, userInput: string) => {
+    if (!workspaceId) return;
+    setExecutingId(targetScenarioId);
+    try {
+      const response = await api.executeBusinessScenario(workspaceId, targetScenarioId, userInput);
+      showToast(`Scenario executed: ${response.runId}`, "success");
+      await load();
+    } catch (err) {
+      showToast(`Execution failed: ${String(err)}`, "error");
+    } finally {
+      setExecutingId(null);
+    }
+  };
+
   const approveApproval = async (approval: BusinessApprovalRecordType, reason: string) => {
     await api.approveBusinessApproval(approval.workspaceId, approval.approvalId, {
       actor: "business-portal-ui",
@@ -122,6 +139,23 @@ export default function BusinessPortalPage() {
     });
     showToast(`Requested more info: ${approval.approvalId}`, "success");
     await load();
+  };
+
+  const resumeExecution = async (approval: BusinessApprovalRecordType) => {
+    const evidence = approval.evidence as Record<string, string> | undefined;
+    const scenarioId = evidence?.scenarioId;
+    const userInput = evidence?.userInput;
+    if (!scenarioId || !userInput) {
+      showToast("Missing scenarioId or userInput in approval evidence", "error");
+      return;
+    }
+    try {
+      const response = await api.resumeExecution(approval.workspaceId, approval.approvalId, scenarioId, userInput);
+      showToast(`Execution resumed: ${response.runId}`, "success");
+      await load();
+    } catch (err) {
+      showToast(`Resume failed: ${String(err)}`, "error");
+    }
   };
 
   const load = async () => {
@@ -249,16 +283,46 @@ export default function BusinessPortalPage() {
 
       <TodayAndAttentionSection home={home} />
       <section className="grid gap-4 xl:grid-cols-2">
-        <ScenariosSection scenarios={scenarios} />
+        <ScenariosSection scenarios={scenarios} workspaceId={workspaceId} onExecute={executeScenario} executingId={executingId} />
         <PromptAssetsSection promptAssets={promptAssets} />
       </section>
-      <TeamsSection teams={teams} home={home} />
+      <TeamsSection teams={teams} home={home} onEditTeam={setEditingTeam} />
+
+      {/* Team Blueprint Editor Drawer */}
+      {editingTeam && workspaceId && (
+        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setEditingTeam(null)}>
+          <div
+            className="absolute right-0 top-0 h-full w-full max-w-2xl bg-background shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h2 className="text-sm font-semibold">Team Blueprint Editor</h2>
+                <Button variant="ghost" size="sm" onClick={() => setEditingTeam(null)}>
+                  Close
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <TeamBlueprintEditor
+                  workspaceId={workspaceId}
+                  team={editingTeam}
+                  onSaved={() => {
+                    load();
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <RunsAndApprovalsSection
         runs={runs}
         approvals={approvals}
         onApproveApproval={approveApproval}
         onRejectApproval={rejectApproval}
         onRequestApprovalInfo={requestApprovalInfo}
+        onResumeExecution={resumeExecution}
       />
       <InsightsAndActionsSection insights={insights} actions={home?.nextActions ?? []} />
     </div>

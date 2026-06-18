@@ -1,5 +1,7 @@
 package com.nousresearch.hermes.business.run;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
@@ -59,17 +61,24 @@ class BusinessRunServiceTest {
     void rejectsRunForMissingWorkspace() {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
-        BusinessRunService service = new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService);
+        TeamBlueprintService teamBlueprintService = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService);
+        BusinessRunService service = new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService, scenarioService);
 
         assertThrows(WorkspaceService.WorkspaceNotFoundException.class,
-            () -> service.createRun("missing", "team", null, null, "任务", null, null, null, null, null, null, null, null, List.of(), Map.of(), Map.of()));
+            () -> service.createRun("missing", "team", null, null, "任务", null, null, null, null, null, null, null, null, List.of(), 0L, 0.0, Map.of(), Map.of()));
     }
 
     private BusinessRunService serviceWithWorkspace() {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
-        return new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService);
+        TeamBlueprintService teamBlueprintService = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        teamBlueprintService.createTeamBlueprint("customer-service", "after-sales", "售后团队", "处理售后",
+            null, null, List.of(), List.of(), null, Map.of());
+        ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService);
+        scenarioService.createScenario("customer-service", "after-sales-ticket", "售后工单", null, "after-sales", List.of(), List.of(), Map.of());
+        return new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService, scenarioService);
     }
 
     private BusinessRunStep step(String actor, String title, String summary) {

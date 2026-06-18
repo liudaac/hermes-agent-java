@@ -1,5 +1,7 @@
 package com.nousresearch.hermes.business.run;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
@@ -82,6 +84,8 @@ class BusinessRunMetadataSourceTest {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
-        return new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService);
+        TeamBlueprintService teamBlueprintService = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService);
+        return new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService, scenarioService);
     }
 }

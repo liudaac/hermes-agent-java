@@ -2,6 +2,7 @@ package com.nousresearch.hermes.business.approval;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import io.javalin.Javalin;
@@ -19,7 +20,7 @@ public final class BusinessApprovalDashboardIntegration {
     private BusinessApprovalDashboardIntegration() {
     }
 
-    public static void registerRoutes(Javalin app, BusinessApprovalService service) {
+    public static void registerRoutes(Javalin app, BusinessApprovalService service, ScenarioService scenarioService, com.nousresearch.hermes.business.run.BusinessRunService runService) {
         logger.info("Registering Business Approval Center routes");
         app.get("/api/v1/workspaces/{workspaceId}/approvals", ctx -> listApprovals(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/approvals", ctx -> createApproval(ctx, service));
@@ -27,6 +28,7 @@ public final class BusinessApprovalDashboardIntegration {
         app.post("/api/v1/workspaces/{workspaceId}/approvals/{approvalId}/approve", ctx -> approve(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/approvals/{approvalId}/reject", ctx -> reject(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/approvals/{approvalId}/request-info", ctx -> requestInfo(ctx, service));
+        app.post("/api/v1/workspaces/{workspaceId}/approvals/{approvalId}/resume-execution", ctx -> resumeExecution(ctx, service, scenarioService, runService));
     }
 
     static void listApprovals(Context ctx, BusinessApprovalService service) {
@@ -87,6 +89,34 @@ public final class BusinessApprovalDashboardIntegration {
 
     static void requestInfo(Context ctx, BusinessApprovalService service) {
         resolve(ctx, service, "request-info");
+    }
+
+    static void resumeExecution(Context ctx, BusinessApprovalService service, ScenarioService scenarioService, com.nousresearch.hermes.business.run.BusinessRunService runService) {
+        String workspaceId = ctx.pathParam("workspaceId");
+        String approvalId = ctx.pathParam("approvalId");
+        JSONObject body = parseBody(ctx);
+        try {
+            BusinessApprovalRecord record = service.requireApproval(workspaceId, approvalId);
+            if (!BusinessApprovalService.APPROVED.equals(record.getStatus())) {
+                ctx.status(409).json(Map.of("ok", false, "error", "Approval is not approved", "workspaceId", workspaceId, "approvalId", approvalId, "status", record.getStatus()));
+                return;
+            }
+            String scenarioId = body.getString("scenarioId");
+            String userInput = body.getString("userInput");
+            if (scenarioId == null || scenarioId.isBlank()) {
+                ctx.status(400).json(Map.of("ok", false, "error", "scenarioId is required", "workspaceId", workspaceId, "approvalId", approvalId));
+                return;
+            }
+            var run = scenarioService.executeScenario(workspaceId, scenarioId, userInput, runService, true);
+            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "approvalId", approvalId, "runId", run.getRunId(), "run", run, "message", "Execution resumed"));
+        } catch (ScenarioService.ApprovalRequiredException e) {
+            ctx.status(409).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "approvalId", approvalId));
+        } catch (WorkspaceService.WorkspaceNotFoundException | BusinessApprovalService.BusinessApprovalNotFoundException | ScenarioService.ScenarioNotFoundException e) {
+            ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "approvalId", approvalId));
+        } catch (Exception e) {
+            logger.error("Failed to resume execution", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "approvalId", approvalId));
+        }
     }
 
     private static void resolve(Context ctx, BusinessApprovalService service, String action) {

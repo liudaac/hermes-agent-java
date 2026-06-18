@@ -1,7 +1,9 @@
 package com.nousresearch.hermes.business.run;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.collaboration.IntentOrchestrator;
 import com.nousresearch.hermes.org.observe.AgentTrace;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
@@ -67,7 +69,10 @@ class BusinessRunProjectionAdapterTest {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
-        BusinessRunService service = new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService);
+        BusinessRunService service = new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService,
+            new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService),
+            new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService,
+                new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService)));
 
         var assignment = new IntentOrchestrator.SubtaskAssignment("classify", "classifier", "工单分类员", 0.9, List.of("refund"));
         var run = new IntentOrchestrator.IntentRun("run_44", "classify", List.of(assignment), null, "execute", "after-sales", "售后团队");

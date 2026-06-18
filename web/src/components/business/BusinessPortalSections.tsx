@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Pencil,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -160,7 +161,15 @@ export function TodayAndAttentionSection({ home }: { home: BusinessHomeResponse 
   );
 }
 
-export function TeamsSection({ teams, home }: { teams: BusinessTeamCard[]; home: BusinessHomeResponse | null }) {
+export function TeamsSection({
+  teams,
+  home,
+  onEditTeam,
+}: {
+  teams: BusinessTeamCard[];
+  home: BusinessHomeResponse | null;
+  onEditTeam?: (team: BusinessTeamCard) => void;
+}) {
   return (
     <section className="grid gap-4 xl:grid-cols-3">
       <Card className="xl:col-span-2">
@@ -172,7 +181,9 @@ export function TeamsSection({ teams, home }: { teams: BusinessTeamCard[]; home:
           {teams.length === 0 ? (
             <EmptyLine text="No teams yet." />
           ) : (
-            teams.slice(0, 6).map((team) => <TeamRow key={`${team.workspaceId}:${team.teamId}`} team={team} />)
+            teams.slice(0, 6).map((team) => (
+              <TeamRow key={`${team.workspaceId}:${team.teamId}`} team={team} onEdit={onEditTeam} />
+            ))
           )}
         </CardContent>
       </Card>
@@ -193,12 +204,20 @@ export function TeamsSection({ teams, home }: { teams: BusinessTeamCard[]; home:
   );
 }
 
-function TeamRow({ team }: { team: BusinessTeamCard }) {
+function TeamRow({ team, onEdit }: { team: BusinessTeamCard; onEdit?: (team: BusinessTeamCard) => void }) {
   return (
     <div className="rounded-sm border border-border/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-expanded text-sm tracking-[0.08em]">{team.name || team.teamId}</div>
-        <Badge variant={statusVariant(team.status)}>{team.status || "UNKNOWN"}</Badge>
+        <div className="flex items-center gap-2">
+          {onEdit && (
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => onEdit(team)}>
+              <Pencil className="h-3 w-3" />
+              Edit
+            </Button>
+          )}
+          <Badge variant={statusVariant(team.status)}>{team.status || "UNKNOWN"}</Badge>
+        </div>
       </div>
       <div className="mt-2 text-xs normal-case text-muted-foreground">
         {team.scenario || "No scenario"} · scenarioId {team.scenarioId || "-"} · v{fmt(team.activeVersion)} · {team.workspaceId}
@@ -213,12 +232,14 @@ export function RunsAndApprovalsSection({
   onApproveApproval,
   onRejectApproval,
   onRequestApprovalInfo,
+  onResumeExecution,
 }: {
   runs: BusinessRunRecord[];
   approvals: BusinessApprovalRecord[];
   onApproveApproval?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onRejectApproval?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onRequestApprovalInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
+  onResumeExecution?: (approval: BusinessApprovalRecord) => Promise<void>;
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-2">
@@ -252,6 +273,7 @@ export function RunsAndApprovalsSection({
                 onApprove={onApproveApproval}
                 onReject={onRejectApproval}
                 onRequestInfo={onRequestApprovalInfo}
+                onResumeExecution={onResumeExecution}
               />
             ))
           )}
@@ -269,8 +291,10 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
         <Badge variant={statusVariant(run.status)}>{run.status || "UNKNOWN"}</Badge>
       </div>
       <p className="mt-2 text-sm normal-case text-muted-foreground">{run.resultSummary || "No result summary."}</p>
-      <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
-        {run.teamId ?? "-"} · {timeLabel(run.createdAt)}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] tracking-[0.12em] opacity-60">
+        <span>{run.teamId ?? "-"} · {timeLabel(run.createdAt)}</span>
+        {(run.tokensUsed ?? 0) > 0 && <span>🪙 {run.tokensUsed} tokens</span>}
+        {(run.estimatedCost ?? 0) > 0 && <span>💰 ${(run.estimatedCost ?? 0).toFixed(4)}</span>}
       </div>
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
         <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Run details</summary>
@@ -294,11 +318,13 @@ function ApprovalRow({
   onApprove,
   onReject,
   onRequestInfo,
+  onResumeExecution,
 }: {
   approval: BusinessApprovalRecord;
   onApprove?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onReject?: (approval: BusinessApprovalRecord, reason: string) => Promise<void>;
   onRequestInfo?: (approval: BusinessApprovalRecord, requestedInfo: string) => Promise<void>;
+  onResumeExecution?: (approval: BusinessApprovalRecord) => Promise<void>;
 }) {
   const [approveReason, setApproveReason] = useState("Approved from Business Portal UI.");
   const [rejectReason, setRejectReason] = useState("Rejected from Business Portal UI.");
@@ -307,6 +333,8 @@ function ApprovalRow({
   const [rejectConfirm, setRejectConfirm] = useState("");
   const [working, setWorking] = useState<string | null>(null);
   const isPending = (approval.status || "").toUpperCase() === "PENDING";
+  const isApproved = (approval.status || "").toUpperCase() === "APPROVED";
+  const isAutoApproval = approval.metadata?.source === "auto";
   const riskLevelText = (approval.riskLevel || "").toUpperCase();
   const requiresHighRiskConfirm = riskLevelText === "HIGH" || riskLevelText === "CRITICAL";
   const approveConfirmPhrase = `APPROVE ${riskLevelText || "HIGH"}`;
@@ -413,6 +441,19 @@ function ApprovalRow({
               </Button>
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {isApproved && isAutoApproval && onResumeExecution ? (
+        <div className="mt-3">
+          <Button
+            size="sm"
+            variant="default"
+            className="w-full"
+            disabled={Boolean(working)}
+            onClick={() => runAction("resume", () => onResumeExecution(approval))}
+          >
+            {working === "resume" ? "Resuming..." : "▶ Resume Execution"}
+          </Button>
         </div>
       ) : null}
     </div>
@@ -530,7 +571,19 @@ export function DemoDataGuide({ workspaceId }: { workspaceId?: string }) {
   );
 }
 
-export function ScenariosSection({ scenarios }: { scenarios: BusinessScenarioRecord[] }) {
+export function ScenariosSection({
+  scenarios,
+  workspaceId,
+  onExecute,
+  executingId,
+}: {
+  scenarios: BusinessScenarioRecord[];
+  workspaceId?: string;
+  onExecute?: (scenarioId: string, userInput: string) => Promise<void>;
+  executingId?: string | null;
+}) {
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+
   return (
     <Card>
       <CardHeader>
@@ -551,6 +604,29 @@ export function ScenariosSection({ scenarios }: { scenarios: BusinessScenarioRec
               <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
                 {scenario.scenarioId} · entry team {scenario.entryTeamId || "-"}
               </div>
+              {onExecute && workspaceId ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  <Input
+                    placeholder="Enter task input..."
+                    value={inputs[scenario.scenarioId] ?? ""}
+                    onChange={(e) =>
+                      setInputs((prev) => ({ ...prev, [scenario.scenarioId]: e.target.value }))
+                    }
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs"
+                    disabled={executingId === scenario.scenarioId}
+                    onClick={() =>
+                      onExecute(scenario.scenarioId, inputs[scenario.scenarioId] ?? "")
+                    }
+                  >
+                    {executingId === scenario.scenarioId ? "Executing..." : "Execute"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ))
         )}

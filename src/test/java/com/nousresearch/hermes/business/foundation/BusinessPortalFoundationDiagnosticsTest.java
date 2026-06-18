@@ -6,6 +6,7 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalAdapter;
 import com.nousresearch.hermes.business.insight.BusinessEvalRunProjectionAdapter;
 import com.nousresearch.hermes.business.insight.BusinessInsightProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
+import com.nousresearch.hermes.business.safetyvalve.BusinessSafetyValveAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.prompt.PromptAssetService;
@@ -45,6 +46,7 @@ class BusinessPortalFoundationDiagnosticsTest {
             approvalAdapter,
             new BusinessInsightProjectionAdapter(),
             new BusinessEvalRunProjectionAdapter(),
+            new BusinessSafetyValveAdapter(),
             new EvolutionProposalAdapter(workspaceService, tenantManager, approvalAdapter)
         );
 

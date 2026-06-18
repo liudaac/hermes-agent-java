@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.business.run;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.config.Constants;
+import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.workspace.WorkspaceRecord;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 
@@ -18,6 +20,7 @@ public class BusinessRunService {
     public static final String FAILED = "FAILED";
     public static final String NEEDS_APPROVAL = "NEEDS_APPROVAL";
     public static final String RUNNING = "RUNNING";
+    public static final String TRIAL = "TRIAL";
 
     /** Allowed metadata.source values for BusinessRunRecord. */
     public static final String SOURCE_MANUAL = "manual";
@@ -35,31 +38,54 @@ public class BusinessRunService {
 
     private final FileBusinessRunRepository repository;
     private final WorkspaceService workspaceService;
+    private final TeamBlueprintService teamBlueprintService;
+    private final ScenarioService scenarioService;
 
-    public BusinessRunService(WorkspaceService workspaceService) {
-        this(new FileBusinessRunRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService);
+    public BusinessRunService(WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, ScenarioService scenarioService) {
+        this(new FileBusinessRunRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService, teamBlueprintService, scenarioService);
     }
 
-    public BusinessRunService(Path workspacesRoot, WorkspaceService workspaceService) {
-        this(new FileBusinessRunRepository(workspacesRoot), workspaceService);
+    public BusinessRunService(Path workspacesRoot, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, ScenarioService scenarioService) {
+        this(new FileBusinessRunRepository(workspacesRoot), workspaceService, teamBlueprintService, scenarioService);
     }
 
-    public BusinessRunService(FileBusinessRunRepository repository, WorkspaceService workspaceService) {
+    public BusinessRunService(FileBusinessRunRepository repository, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, ScenarioService scenarioService) {
         this.repository = repository;
         this.workspaceService = workspaceService;
+        this.teamBlueprintService = teamBlueprintService;
+        this.scenarioService = scenarioService;
+    }
+
+    /** Backward-compatible createRun without cost fields. */
+    public BusinessRunRecord createRun(String workspaceId, String teamId, String scenario, String scenarioId, String taskTitle,
+                                       String taskInput, String resultSummary, String conclusionReason,
+                                       String systemAction, String riskJudgement, String nextSuggestion,
+                                       String status, String technicalTraceRef, List<BusinessRunStep> steps,
+                                       Map<String, Object> metrics, Map<String, Object> metadata) {
+        return createRun(workspaceId, teamId, scenario, scenarioId, taskTitle, taskInput, resultSummary, conclusionReason,
+            systemAction, riskJudgement, nextSuggestion, status, technicalTraceRef, steps, 0L, 0.0, metrics, metadata);
     }
 
     public BusinessRunRecord createRun(String workspaceId, String teamId, String scenario, String scenarioId, String taskTitle,
                                        String taskInput, String resultSummary, String conclusionReason,
                                        String systemAction, String riskJudgement, String nextSuggestion,
                                        String status, String technicalTraceRef, List<BusinessRunStep> steps,
+                                       long tokensUsed, double estimatedCost,
                                        Map<String, Object> metrics, Map<String, Object> metadata) {
         workspaceService.requireWorkspace(workspaceId);
+        String teamVersion = null;
+        if (teamId != null && !teamId.isBlank()) {
+            teamVersion = String.valueOf(teamBlueprintService.requireTeamBlueprint(workspaceId, teamId).getActiveVersion());
+        }
+        if (scenarioId != null && !scenarioId.isBlank()) {
+            scenarioService.requireScenario(workspaceId, scenarioId);
+        }
         Instant now = Instant.now();
         BusinessRunRecord record = new BusinessRunRecord()
             .setRunId("run-" + UUID.randomUUID().toString().substring(0, 10))
             .setWorkspaceId(workspaceId)
             .setTeamId(teamId)
+            .setTeamVersion(teamVersion)
             .setScenario(scenario)
             .setScenarioId(scenarioId)
             .setTaskTitle(defaultText(taskTitle, "业务任务"))
@@ -72,8 +98,50 @@ public class BusinessRunService {
             .setStatus(normalizeStatus(status))
             .setTechnicalTraceRef(technicalTraceRef)
             .setSteps(normalizeSteps(steps))
+            .setTokensUsed(tokensUsed)
+            .setEstimatedCost(estimatedCost)
             .setMetrics(metrics)
             .setMetadata(normalizeMetadataSource(metadata, technicalTraceRef))
+            .setCreatedAt(now)
+            .setUpdatedAt(now);
+        repository.save(record);
+        return record;
+    }
+
+    /**
+     * Create a trial run for a scenario. Validates the scenario and its entry team,
+     * records the active team version, and produces a business story with Execute-Verify-Report skeleton.
+     */
+    public BusinessRunRecord createTrialRun(String workspaceId, String scenarioId, String taskInput) {
+        var scenario = scenarioService.requireScenario(workspaceId, scenarioId);
+        String teamId = scenario.getEntryTeamId();
+        String teamVersion = null;
+        if (teamId != null && !teamId.isBlank()) {
+            teamVersion = String.valueOf(teamBlueprintService.requireTeamBlueprint(workspaceId, teamId).getActiveVersion());
+        }
+        Instant now = Instant.now();
+        List<BusinessRunStep> steps = List.of(
+            new BusinessRunStep().setStepId("step-1").setTitle("执行").setSummary("接收任务输入并解析").setActor(teamId != null ? teamId : "system").setStatus("COMPLETED").setTimestamp(now),
+            new BusinessRunStep().setStepId("step-2").setTitle("验证").setSummary("对照场景成功标准进行初步校验").setActor("validator").setStatus("COMPLETED").setTimestamp(now),
+            new BusinessRunStep().setStepId("step-3").setTitle("汇报").setSummary("生成试运行报告").setActor("reporter").setStatus("COMPLETED").setTimestamp(now)
+        );
+        BusinessRunRecord record = new BusinessRunRecord()
+            .setRunId("run-" + UUID.randomUUID().toString().substring(0, 10))
+            .setWorkspaceId(workspaceId)
+            .setTeamId(teamId)
+            .setTeamVersion(teamVersion)
+            .setScenario(scenario.getName())
+            .setScenarioId(scenarioId)
+            .setTaskTitle(scenario.getName() + " 试运行")
+            .setTaskInput(taskInput)
+            .setResultSummary("试运行完成。任务已按场景配置进入执行-验证-汇报流程。")
+            .setConclusionReason("试运行模式下未调用真实 Agent Runtime，仅验证场景-团队绑定关系。")
+            .setSystemAction("记录试运行结果并等待业务方确认")
+            .setRiskJudgement("低风险 — 试运行未产生外部副作用")
+            .setNextSuggestion("检查团队配置和审批规则后，可转为正式运行或调整蓝图版本。")
+            .setStatus(TRIAL)
+            .setSteps(steps)
+            .setMetadata(Map.of("source", SOURCE_MANUAL, "trial", true))
             .setCreatedAt(now)
             .setUpdatedAt(now);
         repository.save(record);
@@ -125,7 +193,7 @@ public class BusinessRunService {
         }
         String normalized = status.trim().toUpperCase();
         return switch (normalized) {
-            case COMPLETED, FAILED, NEEDS_APPROVAL, RUNNING -> normalized;
+            case COMPLETED, FAILED, NEEDS_APPROVAL, RUNNING, TRIAL -> normalized;
             default -> COMPLETED;
         };
     }

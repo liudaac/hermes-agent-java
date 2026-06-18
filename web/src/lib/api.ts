@@ -287,6 +287,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  executeBusinessScenario: (workspaceId: string, scenarioId: string, userInput: string) =>
+    fetchJSON<CreateBusinessRunResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios/${encodeURIComponent(scenarioId)}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userInput }),
+    }),
   createBusinessPromptAsset: (workspaceId: string, payload: CreateBusinessPromptAssetPayload) =>
     fetchJSON<CreateBusinessPromptAssetResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/prompt-assets`, {
       method: "POST",
@@ -309,6 +315,24 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       },
+    ),
+  getBusinessTeamBlueprint: (workspaceId: string, teamId: string) =>
+    fetchJSON<{ ok: boolean; team: BusinessTeamCard }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/team-blueprints/${encodeURIComponent(teamId)}`,
+    ),
+  createTeamBlueprintDraftVersion: (workspaceId: string, teamId: string, payload: { changeSummary: string; agents?: AgentBlueprintPayload[] }) =>
+    fetchJSON<{ ok: boolean; version: { version: number; status: string } }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/team-blueprints/${encodeURIComponent(teamId)}/versions`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  activateTeamBlueprintVersion: (workspaceId: string, teamId: string, version: number) =>
+    fetchJSON<{ ok: boolean; activeVersion: number }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/team-blueprints/${encodeURIComponent(teamId)}/versions/${version}/activate`,
+      { method: "POST" },
     ),
 
   createBusinessRun: (workspaceId: string, payload: CreateBusinessRunPayload) =>
@@ -346,6 +370,91 @@ export const api = {
   requestBusinessApprovalInfo: (workspaceId: string, approvalId: string, payload: RequestBusinessApprovalInfoPayload) =>
     fetchJSON<ResolveBusinessApprovalResponse>(
       `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals/${encodeURIComponent(approvalId)}/request-info`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  resumeExecution: (workspaceId: string, approvalId: string, scenarioId: string, userInput: string) =>
+    fetchJSON<CreateBusinessRunResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals/${encodeURIComponent(approvalId)}/resume-execution`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenarioId, userInput }),
+      },
+    ),
+  // EvalSet APIs
+  listEvalSets: (workspaceId: string, scenarioId: string) =>
+    fetchJSON<{ ok: boolean; evalSets: unknown[]; total: number }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios/${encodeURIComponent(scenarioId)}/evalsets`,
+    ),
+  createEvalSet: (workspaceId: string, scenarioId: string, payload: Record<string, unknown>) =>
+    fetchJSON<{ ok: boolean; evalSetId: string; evalSet: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/scenarios/${encodeURIComponent(scenarioId)}/evalsets`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  // Canary Release APIs
+  listCanaries: (workspaceId: string, teamId: string) =>
+    fetchJSON<{ ok: boolean; canaries: unknown[] }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries`,
+    ),
+  startCanary: (workspaceId: string, teamId: string, payload: Record<string, unknown>) =>
+    fetchJSON<{ ok: boolean; canary: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  getActiveCanary: (workspaceId: string, teamId: string) =>
+    fetchJSON<{ ok: boolean; canary: unknown | null }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries/active`,
+    ),
+  updateCanaryTraffic: (workspaceId: string, teamId: string, releaseId: string, trafficPercent: number) =>
+    fetchJSON<{ ok: boolean; canary: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries/${encodeURIComponent(releaseId)}/traffic`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trafficPercent }),
+      },
+    ),
+  promoteCanary: (workspaceId: string, teamId: string, releaseId: string) =>
+    fetchJSON<{ ok: boolean; canary: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries/${encodeURIComponent(releaseId)}/promote`,
+      { method: "POST" },
+    ),
+  rollbackCanary: (workspaceId: string, teamId: string, releaseId: string) =>
+    fetchJSON<{ ok: boolean; canary: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/${encodeURIComponent(teamId)}/canaries/${encodeURIComponent(releaseId)}/rollback`,
+      { method: "POST" },
+    ),
+
+  // Active Memory APIs
+  listMemories: (workspaceId: string) =>
+    fetchJSON<{ ok: boolean; memories: unknown[]; total: number }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/memories`,
+    ),
+  createMemory: (workspaceId: string, payload: Record<string, unknown>) =>
+    fetchJSON<{ ok: boolean; memoryId: string; memory: unknown }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/memories`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  recallMemories: (workspaceId: string, payload: Record<string, unknown>) =>
+    fetchJSON<{ ok: boolean; memories: unknown[]; count: number }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/memories/recall`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1223,6 +1332,8 @@ export interface BusinessRunRecord {
   metrics?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   status: string;
+  tokensUsed?: number;
+  estimatedCost?: number;
   createdAt?: string;
 }
 
@@ -1299,6 +1410,7 @@ export interface AgentBlueprintPayload {
   responsibility?: string;
   knowledgeRefs?: string[];
   allowedTools?: string[];
+  allowedSkills?: string[];
   approvalRules?: string[];
   metadata?: Record<string, unknown>;
 }

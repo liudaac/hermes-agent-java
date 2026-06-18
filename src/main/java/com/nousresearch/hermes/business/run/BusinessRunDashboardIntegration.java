@@ -58,6 +58,8 @@ public final class BusinessRunDashboardIntegration {
                 body.getString("status"),
                 body.getString("technicalTraceRef"),
                 parseSteps(body.getJSONArray("steps")),
+                body.getLongValue("tokensUsed", 0L),
+                body.containsKey("estimatedCost") ? body.getDoubleValue("estimatedCost") : 0.0,
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metrics")),
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
             );

@@ -86,6 +86,8 @@ public class BusinessRunProjectionAdapter {
             .setStatus(mapStatus(run.status))
             .setTechnicalTraceRef("intent://" + run.runId)
             .setSteps(steps)
+            .setTokensUsed(traces != null ? traces.stream().mapToLong(AgentTrace::getTotalTokens).sum() : 0L)
+            .setEstimatedCost(traces != null ? traces.stream().mapToDouble(AgentTrace::getEstimatedCost).sum() : 0.0)
             .setMetrics(metrics)
             .setMetadata(metadata)
             .setCreatedAt(createdAt)
@@ -111,6 +113,8 @@ public class BusinessRunProjectionAdapter {
             projection.getStatus(),
             projection.getTechnicalTraceRef(),
             projection.getSteps(),
+            projection.getTokensUsed(),
+            projection.getEstimatedCost(),
             projection.getMetrics(),
             withProjectionMetadata(projection.getMetadata(), projection.getRunId())
         );

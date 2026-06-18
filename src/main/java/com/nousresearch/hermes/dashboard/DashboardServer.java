@@ -16,6 +16,7 @@ import com.nousresearch.hermes.org.market.CostAttribution;
 import com.nousresearch.hermes.org.observe.AgentObservability;
 import com.nousresearch.hermes.org.workflow.WorkflowEngine;
 import java.util.function.Supplier;
+import java.time.Instant;
 import java.util.Map;
 import com.nousresearch.hermes.config.HermesConfig;
 import java.nio.file.Path;
@@ -37,6 +38,11 @@ import com.nousresearch.hermes.prompt.PromptAssetService;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.evolution.EvolutionProposalDashboardIntegration;
 import com.nousresearch.hermes.evolution.EvolutionProposalService;
+import com.nousresearch.hermes.memory.ActiveMemoryService;
+import com.nousresearch.hermes.policy.PolicyDashboardIntegration;
+import com.nousresearch.hermes.policy.PolicyService;
+import com.nousresearch.hermes.evalset.EvalSetService;
+import com.nousresearch.hermes.canary.CanaryReleaseService;
 import com.nousresearch.hermes.business.foundation.BusinessPortalAdapterRegistry;
 import com.nousresearch.hermes.business.foundation.BusinessPortalFoundationFacade;
 import io.javalin.Javalin;
@@ -51,6 +57,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
@@ -70,6 +77,7 @@ public class DashboardServer {
     private final HermesConfig config;
     private Javalin app;
     private volatile boolean running = false;
+    private final long startTime = System.currentTimeMillis();
 
     // Security
     private final String sessionToken;
@@ -126,6 +134,10 @@ public class DashboardServer {
     private final ScenarioService scenarioService;
     private final PromptAssetService promptAssetService;
     private final EvolutionProposalService evolutionProposalService;
+    private final PolicyService policyService;
+    private final com.nousresearch.hermes.evalset.EvalSetService evalSetService;
+    private final com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
+    private final com.nousresearch.hermes.memory.ActiveMemoryService activeMemoryService;
     private final BusinessPortalFoundationFacade businessPortalFoundationFacade;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
@@ -171,12 +183,19 @@ public class DashboardServer {
         this.analyticsHandler = new AnalyticsHandler();
         this.workspaceService = new WorkspaceService(tenantManager);
         this.teamBlueprintService = new TeamBlueprintService(workspaceService);
+        this.scenarioService = new ScenarioService(workspaceService, teamBlueprintService);
+        this.scenarioService.setScenarioIntentAdapter(new com.nousresearch.hermes.scenario.ScenarioIntentAdapter(workspaceService, tenantManager));
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
-        this.businessRunService = new BusinessRunService(workspaceService);
+        this.businessRunService = new BusinessRunService(workspaceService, teamBlueprintService, scenarioService);
         this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
-        this.scenarioService = new ScenarioService(workspaceService);
         this.promptAssetService = new PromptAssetService(workspaceService);
         this.evolutionProposalService = new EvolutionProposalService(workspaceService, teamBlueprintService);
+        this.policyService = new PolicyService(workspaceService, teamBlueprintService);
+        this.scenarioService.setPolicyService(policyService, businessApprovalService);
+        this.scenarioService.setActiveMemoryService(new com.nousresearch.hermes.memory.ActiveMemoryService(workspaceService));
+        this.evalSetService = new EvalSetService(workspaceService, scenarioService);
+        this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
+        this.activeMemoryService = new ActiveMemoryService(workspaceService);
         this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
             workspaceService,
             tenantManager,
@@ -345,7 +364,19 @@ public class DashboardServer {
      */
     private void registerApiRoutes() {
         // Health check
-        app.get("/health", ctx -> ctx.result("OK"));
+        app.get("/health", ctx -> {
+            Map<String, Object> health = new LinkedHashMap<>();
+            health.put("status", "UP");
+            health.put("version", "0.1.0-SNAPSHOT");
+            health.put("timestamp", Instant.now().toString());
+            health.put("uptimeMs", System.currentTimeMillis() - startTime);
+            try {
+                health.put("tenants", tenantManager.listRegisteredTenants().size());
+            } catch (Exception e) {
+                health.put("tenants", -1);
+            }
+            ctx.status(200).json(health);
+        });
 
         // Status API
         app.get("/api/status", this::handleStatus);
@@ -421,13 +452,17 @@ public class DashboardServer {
 
         // ========== Business Portal APIs ==========
         WorkspaceDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService);
-        ScenarioDashboardIntegration.registerRoutes(app, scenarioService);
+        ScenarioDashboardIntegration.registerRoutes(app, scenarioService, businessRunService);
         PromptAssetDashboardIntegration.registerRoutes(app, promptAssetService);
         EvolutionProposalDashboardIntegration.registerRoutes(app, evolutionProposalService);
-        BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService);
+        BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService, scenarioService, businessRunService);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
+        PolicyDashboardIntegration.registerRoutes(app, policyService);
         BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService, businessInsightService);
+        com.nousresearch.hermes.evalset.EvalSetDashboardIntegration.registerRoutes(app, evalSetService);
+        com.nousresearch.hermes.canary.CanaryReleaseDashboardIntegration.registerRoutes(app, canaryReleaseService);
+        com.nousresearch.hermes.memory.ActiveMemoryDashboardIntegration.registerRoutes(app, activeMemoryService);
         app.get("/api/v1/business/foundation/diagnostics", ctx -> ctx.status(200).json(Map.of(
             "ok", true,
             "diagnostics", businessPortalFoundationFacade.diagnostics().toMap()

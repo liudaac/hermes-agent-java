@@ -3,6 +3,9 @@ package com.nousresearch.hermes.scenario;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
+import com.nousresearch.hermes.business.run.BusinessRunRecord;
+import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import io.javalin.Javalin;
@@ -21,11 +24,13 @@ public final class ScenarioDashboardIntegration {
     private ScenarioDashboardIntegration() {
     }
 
-    public static void registerRoutes(Javalin app, ScenarioService service) {
+    public static void registerRoutes(Javalin app, ScenarioService service, BusinessRunService runService) {
         logger.info("Registering Business Scenario routes");
         app.get("/api/v1/workspaces/{workspaceId}/scenarios", ctx -> listScenarios(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/scenarios", ctx -> createScenario(ctx, service));
         app.get("/api/v1/workspaces/{workspaceId}/scenarios/{scenarioId}", ctx -> getScenario(ctx, service));
+        app.post("/api/v1/workspaces/{workspaceId}/scenarios/{scenarioId}/trial-run", ctx -> trialRun(ctx, service, runService));
+        app.post("/api/v1/workspaces/{workspaceId}/scenarios/{scenarioId}/execute", ctx -> executeScenario(ctx, service, runService));
     }
 
     static void listScenarios(Context ctx, ScenarioService service) {
@@ -57,7 +62,7 @@ public final class ScenarioDashboardIntegration {
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
             );
             ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", record.getScenarioId(), "scenario", record, "message", "Scenario created"));
-        } catch (WorkspaceService.WorkspaceNotFoundException e) {
+        } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId == null ? "" : scenarioId));
         } catch (ScenarioService.ScenarioAlreadyExistsException e) {
             ctx.status(409).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId == null ? "" : scenarioId));
@@ -79,6 +84,40 @@ public final class ScenarioDashboardIntegration {
                     () -> ctx.status(404).json(Map.of("ok", false, "error", "Scenario not found", "workspaceId", workspaceId, "scenarioId", scenarioId))
                 );
         } catch (Exception e) {
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
+        }
+    }
+
+    static void executeScenario(Context ctx, ScenarioService service, BusinessRunService runService) {
+        String workspaceId = ctx.pathParam("workspaceId");
+        String scenarioId = ctx.pathParam("scenarioId");
+        JSONObject body = parseBody(ctx);
+        try {
+            BusinessRunRecord record = service.executeScenario(workspaceId, scenarioId, body.getString("userInput"), runService);
+            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId, "runId", record.getRunId(), "run", record, "message", "Scenario executed"));
+        } catch (ScenarioService.ApprovalRequiredException e) {
+            ctx.status(202).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId, "approvalId", e.getApprovalId(), "status", "NEEDS_APPROVAL", "message", "Execution blocked pending approval"));
+        } catch (WorkspaceService.WorkspaceNotFoundException | ScenarioService.ScenarioNotFoundException e) {
+            ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
+        } catch (IllegalStateException e) {
+            ctx.status(503).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
+        } catch (Exception e) {
+            logger.error("Failed to execute scenario", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
+        }
+    }
+
+    static void trialRun(Context ctx, ScenarioService service, BusinessRunService runService) {
+        String workspaceId = ctx.pathParam("workspaceId");
+        String scenarioId = ctx.pathParam("scenarioId");
+        JSONObject body = parseBody(ctx);
+        try {
+            BusinessRunRecord record = runService.createTrialRun(workspaceId, scenarioId, body.getString("taskInput"));
+            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId, "runId", record.getRunId(), "run", record, "message", "Trial run created"));
+        } catch (WorkspaceService.WorkspaceNotFoundException | ScenarioService.ScenarioNotFoundException e) {
+            ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
+        } catch (Exception e) {
+            logger.error("Failed to create trial run", e);
             ctx.status(500).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
         }
     }

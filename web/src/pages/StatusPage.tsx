@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  ArrowRight,
+  BriefcaseBusiness,
   CheckCircle2,
   Clock,
   Cpu,
@@ -253,6 +255,32 @@ export default function StatusPage() {
           </div>
         </div>
       )}
+
+      {/* Business Portal Entry Banner */}
+      <div className="rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <BriefcaseBusiness className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Business Portal</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Manage workspaces, digital employee teams, scenarios, approvals, and insights.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5 text-xs"
+            onClick={() => window.location.href = "/business-portal"}
+          >
+            Open Portal
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
 
       <Grid className="border-b md:!grid-cols-2 lg:!grid-cols-4">
         {items.map(({ icon: Icon, label, value, badgeText, badgeVariant }) => (

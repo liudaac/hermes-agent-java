@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.scenario;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
@@ -56,7 +57,10 @@ class ScenarioServiceTest {
         TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
-        ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService);
+        TeamBlueprintService teamBlueprintService = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        teamBlueprintService.createTeamBlueprint("customer-service", "after-sales-team", "售后团队", "处理售后",
+            null, null, List.of(), List.of(), null, Map.of());
+        ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService);
         return new Fixture(workspaceService, scenarioService);
     }
 

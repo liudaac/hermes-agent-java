@@ -11,6 +11,7 @@ public class BusinessRunRecord {
     private String runId;
     private String workspaceId;
     private String teamId;
+    private String teamVersion;
     private String scenario;
     private String scenarioId;
     private String taskTitle;
@@ -23,6 +24,8 @@ public class BusinessRunRecord {
     private String status = "COMPLETED";
     private String technicalTraceRef;
     private List<BusinessRunStep> steps = new ArrayList<>();
+    private long tokensUsed;
+    private double estimatedCost;
     private Map<String, Object> metrics = new LinkedHashMap<>();
     private Map<String, Object> metadata = new LinkedHashMap<>();
     private Instant createdAt;
@@ -37,6 +40,8 @@ public class BusinessRunRecord {
     public BusinessRunRecord setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; return this; }
     public String getTeamId() { return teamId; }
     public BusinessRunRecord setTeamId(String teamId) { this.teamId = teamId; return this; }
+    public String getTeamVersion() { return teamVersion; }
+    public BusinessRunRecord setTeamVersion(String teamVersion) { this.teamVersion = teamVersion; return this; }
     public String getScenario() { return scenario; }
     public BusinessRunRecord setScenario(String scenario) { this.scenario = scenario; return this; }
     public String getScenarioId() { return scenarioId; }
@@ -61,6 +66,10 @@ public class BusinessRunRecord {
     public BusinessRunRecord setTechnicalTraceRef(String technicalTraceRef) { this.technicalTraceRef = technicalTraceRef; return this; }
     public List<BusinessRunStep> getSteps() { return steps; }
     public BusinessRunRecord setSteps(List<BusinessRunStep> steps) { this.steps = steps != null ? steps : new ArrayList<>(); return this; }
+    public long getTokensUsed() { return tokensUsed; }
+    public BusinessRunRecord setTokensUsed(long tokensUsed) { this.tokensUsed = tokensUsed; return this; }
+    public double getEstimatedCost() { return estimatedCost; }
+    public BusinessRunRecord setEstimatedCost(double estimatedCost) { this.estimatedCost = estimatedCost; return this; }
     public Map<String, Object> getMetrics() { return metrics; }
     public BusinessRunRecord setMetrics(Map<String, Object> metrics) { this.metrics = metrics != null ? metrics : new LinkedHashMap<>(); return this; }
     public Map<String, Object> getMetadata() { return metadata; }
