@@ -38,6 +38,21 @@ class DashboardBusinessFoundationScenarioPlanRouteTest {
                 .POST(HttpRequest.BodyPublishers.ofString("{\"workspaceId\":\"customer-service\",\"name\":\"客服业务空间\"}"))
                 .header("Content-Type", "application/json")).statusCode());
 
+            // Create team blueprint first (scenario requires entryTeamId to exist)
+            String teamJson = """
+                {
+                  "teamId":"after-sales",
+                  "name":"售后团队",
+                  "agents":[
+                    {"agentId":"classifier","displayName":"工单分类员","role":"分类"}
+                  ]
+                }
+                """;
+            assertEquals(201, send(client, token, HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/api/v1/workspaces/customer-service/team-blueprints"))
+                .POST(HttpRequest.BodyPublishers.ofString(teamJson))
+                .header("Content-Type", "application/json")).statusCode());
+
             String scenarioJson = """
                 {
                   "scenarioId":"after-sales-ticket",

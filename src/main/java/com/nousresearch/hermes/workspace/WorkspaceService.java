@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.workspace;
 
 import com.nousresearch.hermes.config.Constants;
+import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 
@@ -71,6 +72,21 @@ public class WorkspaceService {
 
     public boolean exists(String workspaceId) {
         return repository.exists(workspaceId);
+    }
+
+    /**
+     * Resolve the TenantContext for a workspace.
+     * Workspace is a business facade over a tenant; this gives access to
+     * the underlying tenant runtime (agent execution, tool sandbox, etc).
+     */
+    public TenantContext resolveTenantContext(String workspaceId) {
+        WorkspaceRecord workspace = requireWorkspace(workspaceId);
+        return tenantManager.getTenant(workspace.getTenantId());
+    }
+
+    /** Expose the underlying TenantManager for advanced wiring (e.g. TeamBlueprintRuntime). */
+    public TenantManager getTenantManager() {
+        return tenantManager;
     }
 
     private static void validateId(String value, String field) {

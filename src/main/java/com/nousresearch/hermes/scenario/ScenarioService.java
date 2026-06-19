@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.scenario;
 
+import com.nousresearch.hermes.blueprint.TeamBlueprintRuntime;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.approval.BusinessApprovalRecord;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
@@ -25,6 +26,7 @@ public class ScenarioService {
     private final FileScenarioRepository repository;
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
+    private final TeamBlueprintRuntime teamBlueprintRuntime;
     private ScenarioIntentAdapter scenarioIntentAdapter;
     private PolicyService policyService;
     private BusinessApprovalService businessApprovalService;
@@ -42,6 +44,7 @@ public class ScenarioService {
         this.repository = repository;
         this.workspaceService = workspaceService;
         this.teamBlueprintService = teamBlueprintService;
+        this.teamBlueprintRuntime = new TeamBlueprintRuntime(workspaceService, teamBlueprintService);
     }
 
     /** Wire the intent adapter after construction (breaks circular dependency with TenantManager). */
@@ -122,6 +125,12 @@ public class ScenarioService {
             throw new IllegalStateException("ScenarioIntentAdapter not wired — cannot execute scenario");
         }
         ScenarioRecord scenario = requireScenario(workspaceId, scenarioId);
+
+        // Ensure the team blueprint has running agent instances on the tenant bus
+        String entryTeamId = scenario.getEntryTeamId();
+        if (entryTeamId != null && !entryTeamId.isBlank()) {
+            teamBlueprintRuntime.ensureTeamRuntime(workspaceId, entryTeamId);
+        }
 
         // Approval gate: check if any agent's approval rules require human review
         if (!skipApprovalCheck && policyService != null && businessApprovalService != null) {

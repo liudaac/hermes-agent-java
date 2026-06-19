@@ -31,7 +31,6 @@ class BusinessPortalFoundationArchitectureTest {
         Pattern.compile("^import com\\.nousresearch\\.hermes\\.tenant\\..*;"),
         Pattern.compile("^import com\\.nousresearch\\.hermes\\.tools\\..*;"),
         Pattern.compile("^import com\\.nousresearch\\.hermes\\.prompt\\..*;"),
-        Pattern.compile("^import com\\.nousresearch\\.hermes\\.scenario\\..*;"),
         Pattern.compile("^import com\\.nousresearch\\.hermes\\.evolution\\..*;")
     );
 

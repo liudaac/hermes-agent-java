@@ -144,6 +144,16 @@ public class TenantAwareAIAgent {
     }
 
     /**
+     * Create an agent from a blueprint definition with an explicit agentId and role.
+     * Used by TeamBlueprintRuntime to spin up team members with stable IDs
+     * that the IntentOrchestrator can route to.
+     */
+    public static TenantAwareAIAgent forBlueprint(TenantContext context, String agentId,
+                                                  AgentRole role, String sessionId, HermesConfig config) {
+        return new TenantAwareAIAgent(context, agentId, role, sessionId, config);
+    }
+
+    /**
      * 从网关消息创建 Agent（自动识别租户）
      */
     public static TenantAwareAIAgent fromGateway(String platform, String channelId,
@@ -171,6 +181,26 @@ public class TenantAwareAIAgent {
 
     private TenantAwareAIAgent(TenantContext context, HermesConfig config,
                                 String explicitSessionId) {
+        this(context, null, null, explicitSessionId, config, false);
+    }
+
+    /**
+     * Blueprint-aware constructor: uses an explicit agentId and role instead
+     * of generating a random ID and default role. Used by TeamBlueprintRuntime.
+     */
+    private TenantAwareAIAgent(TenantContext context, String explicitAgentId,
+                                AgentRole explicitRole, String explicitSessionId,
+                                HermesConfig config) {
+        this(context, explicitAgentId, explicitRole, explicitSessionId, config, true);
+    }
+
+    /**
+     * Unified internal constructor for tenant-context-bound agents.
+     * @param registerOnBus if true, registers the agent on the TenantBus for team collaboration
+     */
+    private TenantAwareAIAgent(TenantContext context, String explicitAgentId,
+                                AgentRole explicitRole, String explicitSessionId,
+                                HermesConfig config, boolean registerOnBus) {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
         }
@@ -196,23 +226,49 @@ public class TenantAwareAIAgent {
         this.interrupted = new AtomicBoolean(false);
 
         // ======== AI原生组织：绑定角色与治理策略 ========
-        this.agentId = "agent_" + UUID.randomUUID().toString().substring(0, 8);
-        AgentRole existingRole = context.getAgentRole(this.agentId);
-        if (existingRole != null) {
-            this.agentRole = existingRole;
+        if (explicitAgentId != null && !explicitAgentId.isBlank()) {
+            this.agentId = explicitAgentId;
         } else {
-            this.agentRole = buildDefaultRole();
-            context.registerAgentRole(this.agentId, this.agentRole);
+            this.agentId = "agent_" + UUID.randomUUID().toString().substring(0, 8);
+        }
+
+        if (explicitRole != null) {
+            context.registerAgentRole(this.agentId, explicitRole);
+            this.agentRole = explicitRole;
+        } else {
+            AgentRole existingRole = context.getAgentRole(this.agentId);
+            if (existingRole != null) {
+                this.agentRole = existingRole;
+            } else {
+                this.agentRole = buildDefaultRole();
+                context.registerAgentRole(this.agentId, this.agentRole);
+            }
         }
         this.governancePolicy = context.getGovernancePolicy();
         this.orgHealthChecker = tenantContext.getOrgHealthChecker();
-        logger.info("Agent {} bound to role '{}' in tenant {}",
-            this.agentId, this.agentRole.getRoleName(), this.tenantId);
+        this.evolutionEngine = tenantContext.getEvolutionEngine();
 
         initializeLearningComponents();
         initializeTools();
         initTenantApproval();
         tenantContext.initCollaboration();
+
+        // Register on bus only for long-lived team agents (blueprint scenario)
+        if (registerOnBus) {
+            try {
+                var team = this.tenantContext.getTeamManager().getOrCreateDefaultTeam(this.agentId);
+                this.team = team;
+                var bus = this.tenantContext.getTenantBus();
+                bus.register(this.agentId, msg -> handleBusMessage(msg));
+                logger.info("Agent {} joined team '{}' and registered on bus",
+                    this.agentId, team.getName());
+            } catch (Exception e) {
+                logger.warn("Failed to register agent on team/bus: {}", e.getMessage());
+            }
+        }
+
+        logger.info("Agent {} bound to role '{}' in tenant {}",
+            this.agentId, this.agentRole.getRoleName(), this.tenantId);
 
         logger.info("Created TenantAwareAIAgent for existing tenant context: {}, session: {}",
             this.tenantId, this.sessionId);
@@ -1212,26 +1268,87 @@ public class TenantAwareAIAgent {
             logger.debug("Agent {} received bus message from {}: action={}",
                 agentId, msg.getSenderId(), msg.getAction());
 
-            // Auto-reply to REQUEST messages with a default response
+            // Handle REQUEST messages
             if (msg.getType() == com.nousresearch.hermes.collaboration.AgentMessage.Type.REQUEST) {
-                var reply = com.nousresearch.hermes.collaboration.AgentMessage.builder(
-                        agentId, msg.getSenderId(), com.nousresearch.hermes.collaboration.AgentMessage.Type.RESPONSE)
-                    .action("ack")
-                    .payload(java.util.Map.of(
+                String action = msg.getAction();
+                if ("intent_subtask".equals(action)) {
+                    // Actually process the subtask using the agent's model and tools
+                    handleIntentSubtask(msg);
+                } else {
+                    // Default ack for other actions
+                    sendBusReply(msg, "ack", Map.of(
                         "received", true,
                         "from", agentId,
-                        "original_action", msg.getAction()
-                    ))
-                    .replyTo(msg.getMessageId())
-                    .build();
-                // Use the bus to reply (need to get it from context)
-                if (tenantContext != null) {
-                    tenantContext.getTenantBus().reply(msg, reply);
+                        "original_action", action
+                    ));
                 }
             }
         } catch (Exception e) {
             logger.warn("Failed to handle bus message for {}: {}", agentId, e.getMessage());
+            try {
+                sendBusReply(msg, "error", Map.of("error", e.getMessage()));
+            } catch (Exception ignored) {}
         }
+    }
+
+    /**
+     * Handle an intent subtask request from the orchestrator.
+     * Extracts the task description from the payload, processes it through
+     * the agent's normal message loop, and sends the result back.
+     */
+    private void handleIntentSubtask(com.nousresearch.hermes.collaboration.AgentMessage msg) {
+        var payload = msg.getPayload();
+        Object subtaskObj = payload != null ? payload.get("subtask") : null;
+        String subtask = subtaskObj != null ? String.valueOf(subtaskObj) : "unknown task";
+
+        logger.info("Agent {} processing intent subtask: {}", agentId, subtask);
+
+        try {
+            // Build the task prompt including role context
+            StringBuilder taskBuilder = new StringBuilder();
+            taskBuilder.append("Role: ").append(agentRole.getRoleName()).append("\n");
+            taskBuilder.append("Responsibilities: ").append(String.join(", ", agentRole.getResponsibilities())).append("\n");
+            taskBuilder.append("Task: ").append(subtask).append("\n\n");
+            if (payload != null && payload.get("matched_skills") != null) {
+                taskBuilder.append("Relevant skills: ").append(payload.get("matched_skills")).append("\n");
+            }
+            taskBuilder.append("Please complete this task to the best of your ability. ");
+            taskBuilder.append("Provide a clear result summary.");
+
+            String result = processMessage(taskBuilder.toString());
+
+            // Send the result back
+            sendBusReply(msg, "subtask_result", Map.of(
+                "result", result,
+                "subtask", subtask,
+                "status", "completed"
+            ));
+
+            logger.info("Agent {} completed subtask: {}", agentId, subtask);
+        } catch (Exception e) {
+            logger.error("Agent {} failed to process subtask '{}': {}", agentId, subtask, e.getMessage());
+            sendBusReply(msg, "subtask_failed", Map.of(
+                "error", e.getMessage(),
+                "subtask", subtask,
+                "status", "failed"
+            ));
+        }
+    }
+
+    private void sendBusReply(com.nousresearch.hermes.collaboration.AgentMessage request,
+                               String action, Map<String, Object> payload) {
+        if (tenantContext == null) return;
+        var reply = com.nousresearch.hermes.collaboration.AgentMessage.builder(
+                agentId, request.getSenderId(),
+                com.nousresearch.hermes.collaboration.AgentMessage.Type.RESPONSE)
+            .action(action)
+            .payload(payload)
+            .replyTo(request.getMessageId())
+            .build();
+        reply.setResultText(payload != null && payload.get("result") != null
+            ? String.valueOf(payload.get("result"))
+            : null);
+        tenantContext.getTenantBus().reply(request, reply);
     }
 
     // ==================== Helper Methods ====================

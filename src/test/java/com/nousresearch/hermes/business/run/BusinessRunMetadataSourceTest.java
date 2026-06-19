@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.business.run;
 
+import com.nousresearch.hermes.blueprint.AgentBlueprintRecord;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
@@ -85,7 +86,14 @@ class BusinessRunMetadataSourceTest {
         WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
         workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
         TeamBlueprintService teamBlueprintService = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
+        teamBlueprintService.createTeamBlueprint("customer-service", "after-sales", "售后团队",
+            "处理售后工单", "售后工单处理", "after-sales-ticket",
+            List.of(new AgentBlueprintRecord().setAgentId("classifier").setDisplayName("工单分类员").setResponsibility("工单分类")),
+            List.of(), "分类工单并路由", Map.of());
         ScenarioService scenarioService = new ScenarioService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService);
+        scenarioService.createScenario("customer-service", "after-sales-ticket", "售后工单处理",
+            "自动分析售后退款工单并生成建议", "after-sales",
+            List.of("正确识别退款类型"), List.of("高风险退款人工审批"), Map.of());
         return new BusinessRunService(tempDir.resolve("business/workspaces"), workspaceService, teamBlueprintService, scenarioService);
     }
 }
