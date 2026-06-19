@@ -11,27 +11,25 @@
 
 ## 核心文档
 
-- [架构说明](ARCHITECTURE.md) - 系统架构、模块关系、数据流
-- [API 文档](API.md) - HTTP/WebSocket/SSE 与管理接口
-- [部署指南](DEPLOYMENT.md) - 环境准备、构建、运行、部署
-- [实现细节](IMPLEMENTATION_DETAILS.md) - 关键实现说明
-- [实现状态](IMPLEMENTATION_STATUS.md) - 当前功能完成情况
+- [架构说明](ARCHITECTURE.md) — 系统架构、租户隔离、组件关系、持久化、监控、Gateway 服务模式
+- [API 文档](API.md) — HTTP/WebSocket/SSE 与管理接口
+- [部署指南](DEPLOYMENT.md) — 环境准备、配置、Docker、systemd、高可用、故障排查
+- [资源隔离](RESOURCE_ISOLATION.md) — 进程/网络/存储/线程池隔离、Delegated Executor 安全契约、前端集成
 
-## 多租户与重构
+## 业务平台
 
-- [重构与迁移](REFACTORING.md) - 全租户模式重构方案与迁移清单
-- [资源隔离](RESOURCE_ISOLATION.md) - 进程、网络、存储、线程池隔离
-- [租户集成](TENANT_INTEGRATION.md) - 多租户 Dashboard/API 集成说明
-- [集成指南](INTEGRATION.md) - 与现有模块集成说明
+- [业务智能体团队平台方案](BUSINESS_AGENT_TEAM_PLATFORM_PLAN.md) — 整体方案、对象模型、API、开发路线、org 模块
+- [Dashboard](DASHBOARD.md) — Dashboard 功能与使用说明
 
-## 子系统
+## 插件
 
-- [Dashboard](DASHBOARD.md) - Dashboard 功能与使用说明
-- [自我进化机制对齐](SELF_EVOLUTION.md) - Java 版与 Python 版自我进化机制对齐
-- [部署扩展指南](DEPLOYMENT_GUIDE.md) - 较完整的部署/运维说明
+- [插件架构](PLUGIN_ARCHITECTURE.md) — 插件系统设计分析
+- [插件开发指南](PLUGIN_DEVELOPMENT.md) — 从零开始写一个 Hermes Java 插件
 
-## 子目录文档
+## 协议与契约
 
-- [web](../web/README.md)
-- [插件开发指南](PLUGIN_DEVELOPMENT.md) - 从零开始写一个 Hermes Java 插件
-- [ui-tui](../ui-tui/README.md)
+- [Browser Bridge 契约](browser-bridge-contract.md) — 浏览器桥接协议 v1
+
+## 历史过程文档
+
+开发过程中的迭代记录、状态快照、中间设计文档等已清理，不保留。
