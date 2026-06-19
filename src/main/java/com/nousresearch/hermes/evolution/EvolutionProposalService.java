@@ -130,6 +130,7 @@ public class EvolutionProposalService {
     public EvolutionProposalRecord apply(String workspaceId, String proposalId, String targetTeamId) {
         EvolutionProposalRecord record = requireStatus(workspaceId, proposalId, APPROVED);
         String teamId = firstNonBlank(targetTeamId, record.getTargetTeamId(), record.getTeamId());
+        Integer draftVersion = null;
         if (teamBlueprintService != null && teamId != null) {
             TeamBlueprintVersion draft = teamBlueprintService.createDraftVersion(
                 workspaceId,
@@ -144,8 +145,9 @@ public class EvolutionProposalService {
                     "expectedBenefit", record.getExpectedBenefit() == null ? "" : record.getExpectedBenefit()
                 )
             );
+            draftVersion = draft.getVersion();
             record.setTargetTeamId(teamId);
-            record.setTargetDraftVersion(draft.getVersion());
+            record.setTargetDraftVersion(draftVersion);
         } else if (teamId != null) {
             record.setTargetTeamId(teamId);
         }
@@ -153,6 +155,31 @@ public class EvolutionProposalService {
         record.setStatus(APPLIED)
             .setAppliedAt(now)
             .setUpdatedAt(now);
+        repository.save(record);
+        return record;
+    }
+
+    /**
+     * Activate the draft version created by the proposal.
+     * This actually rolls out the change — should be called after evaluation passes.
+     */
+    public EvolutionProposalRecord activate(String workspaceId, String proposalId) {
+        EvolutionProposalRecord record = requireProposal(workspaceId, proposalId);
+        if (!APPLIED.equals(record.getStatus())) {
+            throw new InvalidEvolutionProposalTransitionException(record.getStatus(), "ACTIVATE");
+        }
+        if (teamBlueprintService == null) {
+            throw new IllegalStateException("TeamBlueprintService not wired — cannot activate");
+        }
+        String teamId = record.getTargetTeamId();
+        Integer draftVersion = record.getTargetDraftVersion();
+        if (teamId == null || draftVersion == null) {
+            throw new IllegalStateException("Proposal has no target team or draft version to activate");
+        }
+        teamBlueprintService.activateVersion(workspaceId, teamId, draftVersion);
+        appendResolutionMetadata(record, "activatedBy", "system",
+            "Activated draft version v" + draftVersion);
+        record.setUpdatedAt(Instant.now());
         repository.save(record);
         return record;
     }
