@@ -7,11 +7,15 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.run.BusinessRunService;
+import com.nousresearch.hermes.business.run.BusinessRunStep;
+import com.nousresearch.hermes.business.run.RunEventBus;
 import com.nousresearch.hermes.collaboration.IntentOrchestrator;
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.memory.ActiveMemoryService;
 import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -23,6 +27,7 @@ import java.util.Optional;
 
 /** Business service for scenarios. */
 public class ScenarioService {
+    private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
     private final FileScenarioRepository repository;
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
@@ -173,7 +178,117 @@ public class ScenarioService {
             }
         }
 
-        return projectionAdapter.persistProjection(runService, projection);
+        BusinessRunRecord persisted = projectionAdapter.persistProjection(runService, projection);
+
+        // Stream: start a watcher that publishes incremental events as the run progresses
+        startRunWatcher(workspaceId, persisted.getRunId(), intentRun, runService);
+
+        return persisted;
+    }
+
+    /**
+     * Watch an IntentRun in the background and publish business run events as it progresses.
+     * Polls every 200ms until the run reaches a terminal state.
+     */
+    private void startRunWatcher(String workspaceId, String runId, IntentOrchestrator.IntentRun intentRun,
+                                  BusinessRunService runService) {
+        Thread t = new Thread(() -> {
+            try {
+                int lastAttemptCount = 0;
+                int lastSuccessCount = 0;
+                int lastFailureCount = 0;
+
+                // Mark run as running
+                runService.updateRunStatus(workspaceId, runId, BusinessRunService.RUNNING, "Run started");
+                runService.getEventBus().publish(new RunEventBus.RunEvent(
+                    runId, workspaceId, RunEventBus.EventType.RUN_STARTED,
+                    "Run started", Map.of("intent", intentRun.intent)));
+
+                while (intentRun.status != IntentOrchestrator.RunStatus.COMPLETED &&
+                       intentRun.status != IntentOrchestrator.RunStatus.PARTIAL &&
+                       intentRun.status != IntentOrchestrator.RunStatus.FAILED) {
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+
+                    // Check for new attempts (steps started)
+                    int currentAttempts = intentRun.attempts.size();
+                    if (currentAttempts > lastAttemptCount) {
+                        for (int i = lastAttemptCount; i < currentAttempts; i++) {
+                            var attempt = intentRun.attempts.get(i);
+                            BusinessRunStep step = new BusinessRunStep()
+                                .setStepId("attempt-" + (i + 1))
+                                .setTitle(attempt.subtask() != null ? attempt.subtask() : "Task " + (i + 1))
+                                .setSummary(attempt.agentId() + " is processing")
+                                .setActor(attempt.roleName() != null && !attempt.roleName().isBlank() ? attempt.roleName() : attempt.agentId())
+                                .setStatus("RUNNING");
+                            runService.addRunStep(workspaceId, runId, step);
+                        }
+                        lastAttemptCount = currentAttempts;
+                    }
+
+                    // Check for new successes
+                    int currentSuccesses = intentRun.successes.size();
+                    if (currentSuccesses > lastSuccessCount) {
+                        // Update steps that just completed
+                        for (int i = 0; i < intentRun.attempts.size(); i++) {
+                            var attempt = intentRun.attempts.get(i);
+                            if (intentRun.successes.containsKey(attempt.subtask())) {
+                                BusinessRunStep step = new BusinessRunStep()
+                                    .setStepId("attempt-" + (i + 1))
+                                    .setTitle(attempt.subtask() != null ? attempt.subtask() : "Task " + (i + 1))
+                                    .setSummary(intentRun.successes.get(attempt.subtask()))
+                                    .setActor(attempt.roleName() != null && !attempt.roleName().isBlank() ? attempt.roleName() : attempt.agentId())
+                                    .setStatus("COMPLETED");
+                                runService.getEventBus().publish(new RunEventBus.RunEvent(
+                                    runId, workspaceId, RunEventBus.EventType.STEP_COMPLETED,
+                                    attempt.subtask() + " completed", Map.of("step", step.toMap())));
+                            }
+                        }
+                        lastSuccessCount = currentSuccesses;
+                    }
+
+                    // Check for new failures
+                    int currentFailures = intentRun.failures.size();
+                    if (currentFailures > lastFailureCount) {
+                        for (var entry : intentRun.failures.entrySet()) {
+                            BusinessRunStep step = new BusinessRunStep()
+                                .setStepId("fail-" + entry.getKey())
+                                .setTitle(entry.getKey())
+                                .setSummary(entry.getValue())
+                                .setStatus("FAILED");
+                            runService.getEventBus().publish(new RunEventBus.RunEvent(
+                                runId, workspaceId, RunEventBus.EventType.STEP_FAILED,
+                                entry.getKey() + " failed", Map.of("step", step.toMap())));
+                        }
+                        lastFailureCount = currentFailures;
+                    }
+                }
+
+                // Run finished — update final status
+                String finalStatus = switch (intentRun.status) {
+                    case COMPLETED -> BusinessRunService.COMPLETED;
+                    case PARTIAL, FAILED -> BusinessRunService.FAILED;
+                    default -> BusinessRunService.FAILED;
+                };
+                runService.updateRunStatus(workspaceId, runId, finalStatus,
+                    "Run " + finalStatus.toLowerCase() +
+                        " — " + intentRun.successes.size() + " succeeded, " +
+                        intentRun.failures.size() + " failed");
+
+            } catch (Exception e) {
+                logger.warn("Run watcher error for {}: {}", runId, e.getMessage());
+                try {
+                    runService.updateRunStatus(workspaceId, runId, BusinessRunService.FAILED,
+                        "Watcher error: " + e.getMessage());
+                } catch (Exception ignored) {}
+            }
+        }, "run-watcher-" + runId.substring(0, Math.min(10, runId.length())));
+        t.setDaemon(true);
+        t.start();
     }
 
     public static class ApprovalRequiredException extends RuntimeException {

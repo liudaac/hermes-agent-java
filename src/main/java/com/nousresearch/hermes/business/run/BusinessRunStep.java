@@ -34,4 +34,19 @@ public class BusinessRunStep {
     public BusinessRunStep setTimestamp(Instant timestamp) { this.timestamp = timestamp; return this; }
     public Map<String, Object> getMetadata() { return metadata; }
     public BusinessRunStep setMetadata(Map<String, Object> metadata) { this.metadata = metadata != null ? metadata : new LinkedHashMap<>(); return this; }
+
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("stepId", stepId);
+        map.put("title", title);
+        map.put("summary", summary);
+        map.put("actor", actor);
+        map.put("evidence", evidence);
+        map.put("status", status);
+        map.put("timestamp", timestamp != null ? timestamp.toString() : null);
+        if (metadata != null && !metadata.isEmpty()) {
+            map.put("metadata", metadata);
+        }
+        return map;
+    }
 }

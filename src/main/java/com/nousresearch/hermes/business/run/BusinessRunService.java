@@ -40,6 +40,7 @@ public class BusinessRunService {
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final ScenarioService scenarioService;
+    private final RunEventBus eventBus = new RunEventBus();
 
     public BusinessRunService(WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, ScenarioService scenarioService) {
         this(new FileBusinessRunRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService, teamBlueprintService, scenarioService);
@@ -251,6 +252,50 @@ public class BusinessRunService {
             return SOURCE_FOUNDATION_AGENT_TRACE;
         }
         return SOURCE_MANUAL;
+    }
+
+    // ===== Event Bus =====
+
+    public RunEventBus getEventBus() {
+        return eventBus;
+    }
+
+    /** Publish a run event and optionally update the persisted run record. */
+    public void publishEvent(RunEventBus.RunEvent event) {
+        eventBus.publish(event);
+    }
+
+    /** Update a run record and publish an update event. */
+    public BusinessRunRecord updateRunStatus(String workspaceId, String runId, String newStatus, String message) {
+        BusinessRunRecord run = requireRun(workspaceId, runId);
+        run.setStatus(newStatus);
+        run.setUpdatedAt(Instant.now());
+        repository.save(run);
+        RunEventBus.EventType eventType = switch (newStatus) {
+            case COMPLETED -> RunEventBus.EventType.RUN_COMPLETED;
+            case FAILED -> RunEventBus.EventType.RUN_FAILED;
+            case NEEDS_APPROVAL -> RunEventBus.EventType.RUN_NEEDS_APPROVAL;
+            default -> RunEventBus.EventType.STEP_UPDATED;
+        };
+        eventBus.publish(new RunEventBus.RunEvent(runId, workspaceId, eventType, message,
+            Map.of("status", newStatus)));
+        return run;
+    }
+
+    /** Add/update a step in the run and publish an event. */
+    public void addRunStep(String workspaceId, String runId, BusinessRunStep step) {
+        BusinessRunRecord run = requireRun(workspaceId, runId);
+        List<BusinessRunStep> steps = new java.util.ArrayList<>(run.getSteps());
+        steps.add(step);
+        run.setSteps(steps);
+        run.setUpdatedAt(Instant.now());
+        repository.save(run);
+        eventBus.publish(new RunEventBus.RunEvent(runId, workspaceId,
+            "COMPLETED".equals(step.getStatus()) ? RunEventBus.EventType.STEP_COMPLETED
+            : "FAILED".equals(step.getStatus()) ? RunEventBus.EventType.STEP_FAILED
+            : "RUNNING".equals(step.getStatus()) ? RunEventBus.EventType.STEP_STARTED
+            : RunEventBus.EventType.STEP_UPDATED,
+            step.getTitle(), Map.of("step", step.toMap())));
     }
 
     public static class BusinessRunNotFoundException extends RuntimeException {

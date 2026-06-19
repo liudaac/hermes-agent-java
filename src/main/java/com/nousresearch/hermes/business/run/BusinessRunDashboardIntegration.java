@@ -7,6 +7,7 @@ import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
+import io.javalin.http.sse.SseClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,6 +15,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /** Business Portal run story routes. */
 public final class BusinessRunDashboardIntegration {
@@ -27,6 +31,7 @@ public final class BusinessRunDashboardIntegration {
         app.get("/api/v1/workspaces/{workspaceId}/runs", ctx -> listRuns(ctx, service));
         app.post("/api/v1/workspaces/{workspaceId}/runs", ctx -> createRun(ctx, service));
         app.get("/api/v1/workspaces/{workspaceId}/runs/{runId}", ctx -> getRun(ctx, service));
+        app.sse("/api/v1/workspaces/{workspaceId}/runs/{runId}/stream", client -> streamRun(service, client));
     }
 
     static void listRuns(Context ctx, BusinessRunService service) {
@@ -114,5 +119,88 @@ public final class BusinessRunDashboardIntegration {
     private static int parseInt(String raw, int fallback) {
         if (raw == null || raw.isBlank()) return fallback;
         try { return Integer.parseInt(raw); } catch (Exception ignored) { return fallback; }
+    }
+
+    /**
+     * SSE endpoint for real-time run progress.
+     *
+     * <p>Subscribes to the run event bus and pushes events as SSE messages.
+     * Sends the current run state immediately, then streams incremental updates.
+     * Events: run.started, step.started, step.completed, step.failed, run.completed, run.failed</p>
+     */
+    static void streamRun(BusinessRunService service, SseClient client) {
+        String workspaceId = client.ctx().pathParam("workspaceId");
+        String runId = client.ctx().pathParam("runId");
+
+        client.keepAlive();
+
+        try {
+            // Send current state immediately
+            BusinessRunRecord current = service.requireRun(workspaceId, runId);
+            client.sendEvent("run.state", runToJson(current));
+        } catch (Exception e) {
+            client.sendEvent("error", "{\"error\":\"" + escapeJson(e.getMessage()) + "\"}");
+            client.close();
+            return;
+        }
+
+        // Subscribe to event bus
+        Consumer<RunEventBus.RunEvent> subscriber = event -> {
+            try {
+                client.sendEvent(event.type().name().toLowerCase().replace('_', '.'), eventToJson(event));
+                if (event.type().isTerminal()) {
+                    // Give client a moment to receive terminal event, then close
+                    try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                    client.close();
+                }
+            } catch (Exception ex) {
+                logger.debug("SSE send failed for run {}: {}", runId, ex.getMessage());
+            }
+        };
+
+        service.getEventBus().subscribe(runId, subscriber);
+        client.onClose(() -> service.getEventBus().unsubscribe(runId, subscriber));
+    }
+
+    private static String runToJson(BusinessRunRecord run) {
+        JSONObject obj = new JSONObject();
+        obj.put("runId", run.getRunId());
+        obj.put("workspaceId", run.getWorkspaceId());
+        obj.put("teamId", run.getTeamId());
+        obj.put("teamVersion", run.getTeamVersion());
+        obj.put("scenario", run.getScenario());
+        obj.put("scenarioId", run.getScenarioId());
+        obj.put("taskTitle", run.getTaskTitle());
+        obj.put("status", run.getStatus());
+        obj.put("resultSummary", run.getResultSummary());
+        obj.put("riskJudgement", run.getRiskJudgement());
+        obj.put("steps", run.getSteps().stream().map(BusinessRunStep::toMap).toList());
+        obj.put("tokensUsed", run.getTokensUsed());
+        obj.put("estimatedCost", run.getEstimatedCost());
+        obj.put("createdAt", run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
+        obj.put("updatedAt", run.getUpdatedAt() != null ? run.getUpdatedAt().toString() : null);
+        return obj.toJSONString();
+    }
+
+    private static String eventToJson(RunEventBus.RunEvent event) {
+        JSONObject obj = new JSONObject();
+        obj.put("runId", event.runId());
+        obj.put("workspaceId", event.workspaceId());
+        obj.put("type", event.type().name());
+        obj.put("message", event.message());
+        obj.put("timestamp", event.timestamp());
+        if (event.data() != null && !event.data().isEmpty()) {
+            obj.put("data", event.data());
+        }
+        return obj.toJSONString();
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t");
     }
 }
