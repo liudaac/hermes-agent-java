@@ -1,7 +1,9 @@
 package com.nousresearch.hermes.business.approval;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Business-facing approval card for Business Portal and mobile approvals. */
@@ -9,6 +11,8 @@ public class BusinessApprovalRecord {
     private String approvalId;
     private String workspaceId;
     private String teamId;
+    private String runId;
+    private String scenarioId;
     private String title;
     private String summary;
     private String reasonRequired;
@@ -25,6 +29,7 @@ public class BusinessApprovalRecord {
     private String resolvedBy;
     private String resolutionReason;
     private String requestedInfo;
+    private List<Map<String, Object>> timeline = new java.util.ArrayList<>();
 
     public BusinessApprovalRecord() {
     }
@@ -35,6 +40,10 @@ public class BusinessApprovalRecord {
     public BusinessApprovalRecord setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; return this; }
     public String getTeamId() { return teamId; }
     public BusinessApprovalRecord setTeamId(String teamId) { this.teamId = teamId; return this; }
+    public String getRunId() { return runId; }
+    public BusinessApprovalRecord setRunId(String runId) { this.runId = runId; return this; }
+    public String getScenarioId() { return scenarioId; }
+    public BusinessApprovalRecord setScenarioId(String scenarioId) { this.scenarioId = scenarioId; return this; }
     public String getTitle() { return title; }
     public BusinessApprovalRecord setTitle(String title) { this.title = title; return this; }
     public String getSummary() { return summary; }
@@ -67,4 +76,18 @@ public class BusinessApprovalRecord {
     public BusinessApprovalRecord setResolutionReason(String resolutionReason) { this.resolutionReason = resolutionReason; return this; }
     public String getRequestedInfo() { return requestedInfo; }
     public BusinessApprovalRecord setRequestedInfo(String requestedInfo) { this.requestedInfo = requestedInfo; return this; }
+    public List<Map<String, Object>> getTimeline() { return timeline; }
+    public BusinessApprovalRecord setTimeline(List<Map<String, Object>> timeline) { this.timeline = timeline != null ? timeline : new java.util.ArrayList<>(); return this; }
+    public BusinessApprovalRecord addTimelineEntry(String action, String actor, String detail, Map<String, Object> data) {
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("action", action);
+        entry.put("actor", actor);
+        entry.put("detail", detail);
+        entry.put("timestamp", Instant.now().toString());
+        if (data != null && !data.isEmpty()) {
+            entry.put("data", data);
+        }
+        this.timeline.add(entry);
+        return this;
+    }
 }

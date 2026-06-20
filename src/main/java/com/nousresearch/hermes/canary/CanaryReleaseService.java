@@ -110,6 +110,44 @@ public class CanaryReleaseService {
     }
 
     /**
+     * Record a run outcome against the active canary's metrics.
+     * Tracks per-version success/failure counts so users can compare canary vs baseline.
+     */
+    public void recordRunOutcome(String workspaceId, String teamId, int teamVersion,
+                                  String runStatus, long durationMs, double cost) {
+        Optional<CanaryReleaseRecord> opt = repository.findActive(workspaceId, teamId);
+        if (opt.isEmpty()) return;
+
+        CanaryReleaseRecord canary = opt.get();
+        Map<String, Object> metrics = canary.getMetrics() != null ? canary.getMetrics() : new java.util.LinkedHashMap<>();
+
+        boolean isCanaryVersion = teamVersion == canary.getToVersion();
+        String prefix = isCanaryVersion ? "canary" : "baseline";
+
+        long total = ((Number) metrics.getOrDefault(prefix + "Total", 0L)).longValue() + 1;
+        long succeeded = ((Number) metrics.getOrDefault(prefix + "Succeeded", 0L)).longValue();
+        long failed = ((Number) metrics.getOrDefault(prefix + "Failed", 0L)).longValue();
+        double totalDuration = ((Number) metrics.getOrDefault(prefix + "TotalDurationMs", 0.0)).doubleValue() + durationMs;
+        double totalCost = ((Number) metrics.getOrDefault(prefix + "TotalCost", 0.0)).doubleValue() + cost;
+
+        if ("COMPLETED".equals(runStatus)) succeeded++;
+        else if ("FAILED".equals(runStatus)) failed++;
+
+        metrics.put(prefix + "Total", total);
+        metrics.put(prefix + "Succeeded", succeeded);
+        metrics.put(prefix + "Failed", failed);
+        metrics.put(prefix + "TotalDurationMs", totalDuration);
+        metrics.put(prefix + "TotalCost", totalCost);
+        metrics.put(prefix + "AvgDurationMs", total > 0 ? totalDuration / total : 0.0);
+        metrics.put(prefix + "AvgCost", total > 0 ? totalCost / total : 0.0);
+        metrics.put(prefix + "SuccessRate", total > 0 ? (double) succeeded / total : 0.0);
+
+        canary.setMetrics(metrics);
+        canary.setUpdatedAt(Instant.now());
+        repository.save(canary);
+    }
+
+    /**
      * Determine which version should handle a request.
      * Returns toVersion for canary traffic, otherwise active version.
      */

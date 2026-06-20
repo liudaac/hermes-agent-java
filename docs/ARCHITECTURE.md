@@ -1,636 +1,302 @@
-# Hermes Agent Java - 架构文档
+# Hermes Agent Java — 架构设计
 
-> 系统整体架构、租户隔离机制与关键流程的核心视图。
+> 业务智能体团队平台：定义团队 → 配置场景 → 执行任务 → 评估 → 自我进化
 
----
+## 一、总体架构
 
-## 一、整体系统架构
-
-```mermaid
-graph TB
-    subgraph "External Layer"
-        Users[用户/客户端]
-        Platforms[消息平台<br/>Discord/Telegram/Feishu/QQ]
-        ExternalAPIs[外部API<br/>OpenAI/Anthropic/Brave]
-    end
-
-    subgraph "Gateway Layer"
-        Gateway[GatewayServer<br/>HTTP WebSocket]
-        AuthFilter[TenantAuthFilter<br/>租户认证]
-        RateLimiter[租户级限流]
-    end
-
-    subgraph "Core Engine"
-        Agent[HermesAgentV2<br/>核心Agent引擎]
-        ModelClient[ModelClient<br/>模型客户端]
-        Transport[TransportFactory<br/>传输层适配]
-    end
-
-    subgraph "Tool System"
-        ToolRegistry[ToolRegistry<br/>工具注册中心]
-        subgraph "Built-in Tools"
-            FileTool[FileTool]
-            CodeTool[CodeTool]
-            Browser[BrowserToolV2]
-            WebSearch[WebSearchToolV2]
-            Terminal[TerminalTool]
-            GitTool[GitTool]
-            MCPTool[MCPTool]
-            SubAgent[SubAgentTool]
-        end
-        subgraph "Platform Tools"
-            Feishu[FeishuDocTool]
-            Discord[DiscordTool]
-            QQBot[QQBotAdapter]
-        end
-    end
-
-    subgraph "Multi-Tenant System"
-        TenantMgr[TenantManager]
-        TenantCtx[TenantContext]
-        subgraph "Tenant Isolation"
-            FileSandbox[文件沙箱]
-            ProcessSandbox[进程沙箱]
-            NetworkSandbox[网络沙箱]
-            StorageQuota[存储配额]
-            ThreadPool[线程池隔离]
-        end
-        subgraph "Tenant Management"
-            Config[租户配置]
-            Quota[资源配额]
-            Security[安全策略]
-            Audit[审计日志]
-            SessionMgr[会话管理]
-        end
-    end
-
-    subgraph "Storage Layer"
-        LocalFS[本地文件系统<br/>sandbox/{tenantId}/]
-        GitRepos[Git仓库]
-    end
-
-    Users -->|HTTP/WebSocket| Gateway
-    Platforms -->|Webhook| Gateway
-    Gateway --> AuthFilter --> RateLimiter --> Agent
-    Agent --> ModelClient --> Transport --> ExternalAPIs
-    Agent --> ToolRegistry
-    ToolRegistry --> FileTool & CodeTool & Browser & WebSearch & Terminal & GitTool & MCPTool & SubAgent
-    ToolRegistry --> Feishu & Discord & QQBot
-    Agent --> TenantMgr --> TenantCtx
-    TenantCtx --> FileSandbox & ProcessSandbox & NetworkSandbox & StorageQuota & ThreadPool
-    TenantCtx --> Config & Quota & Security & Audit & SessionMgr
-    FileSandbox --> LocalFS
-    ProcessSandbox --> LocalFS
-    Terminal --> LocalFS
-    GitTool --> GitRepos
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Dashboard API Layer                           │
+│  (Javalin HTTP + SSE，所有模块通过 DashboardIntegration 注册路由)     │
+├──────────────┬──────────────┬──────────────┬────────────────────────┤
+│   Workspace  │  Blueprint   │   Scenario   │     Run / Approval     │
+│   业务空间    │  团队蓝图     │   业务场景    │  运行记录 / 审批中心    │
+├──────────────┴──────────────┴──────────────┴────────────────────────┤
+│                        Business Services 业务服务层                   │
+│  ┌──────────┬─────────┬──────────┬──────────┬────────────────────┐ │
+│  │ Approval │   Run   │ Insight  │  Policy  │    Safety Valve    │ │
+│  │ 审批中心   │ 业务运行  │ 洞察分析  │  策略服务  │    安全阀适配器     │ │
+│  └──────────┴─────────┴──────────┴──────────┴────────────────────┘ │
+├─────────────────────────────────────────────────────────────────────┤
+│                      Blueprint / Domain Model 领域层                 │
+│  TeamBlueprint (版本化)  AgentBlueprint  Scenario  EvalSet          │
+│  Evolution Proposal  Canary Release  Active Memory                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                   Collaboration Foundation 协作内核                   │
+│  IntentOrchestrator  TaskOrchestrator  TeamManager  TenantBus       │
+│  AgentRole  DelegationPolicy  GovernancePolicy                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                      Agent Core Agent 核心层                         │
+│  TenantAwareAIAgent  ToolRegistry  ToolDispatcher  ModelClient     │
+│  MemoryManager  CognitiveTrace  IterationBudget                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                     Tenant Infrastructure 租户基础设施               │
+│  TenantContext  TenantManager  TenantConfig  TenantSecurityPolicy  │
+│  TenantQuota  TenantSandbox  TenantAudit  TenantSkillManager       │
+├─────────────────────────────────────────────────────────────────────┤
+│                       Plugins & Extensions 扩展层                    │
+│  PluginLoader  PluginScanner  PluginRegistry  HookSystem           │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## 二、核心概念
 
-## 二、租户隔离架构
+| 概念 | 说明 | 对应模块 |
+|------|------|----------|
+| **Workspace** | 业务空间，隔离不同业务线/团队的数据 | `workspace/` |
+| **Team Blueprint** | 团队蓝图，定义一个 agent 团队的成员、角色、工具权限 | `blueprint/` |
+| **Agent Blueprint** | Agent 蓝图，定义单个 agent 的职责、工具、审批规则、工具级审批规则 | `blueprint/` |
+| **Scenario** | 业务场景，定义一类任务的入口、成功标准、审批规则 | `scenario/` |
+| **Run** | 运行记录，一次场景执行的完整业务故事，含路由的版本号 | `business/run/` |
+| **Approval** | 审批记录，含场景级 + 工具级两种类型 | `business/approval/` |
+| **ToolApprovalCoordinator** | 工具级审批协调器，连接 agent 和审批中心 | `business/approval/` |
+| **Eval Set** | 评估集，用于验证 agent 团队的表现 | `evalset/` |
+| **Evolution Proposal** | 进化提案，系统自动生成的团队优化建议 | `evolution/` |
+| **Canary Release** | 灰度发布，新版本逐步放量 + 双版本对比指标 | `canary/` |
+| **Policy** | 策略服务，workspace 和 agent 级别的 tool/skill 权限 + 审批规则 | `policy/` |
 
-### 2.1 多层隔离模型
+## 三、核心链路：从场景定义到执行完成
 
-```mermaid
-graph TB
-    subgraph "Physical Layer"
-        JVM[JVM进程]
-        OS[操作系统]
-    end
-
-    subgraph "Tenant Isolation Layer"
-        subgraph "Tenant A"
-            TA_Config[独立配置]
-            TA_FS[文件沙箱]
-            TA_Process[进程沙箱]
-            TA_Network[网络沙箱]
-            TA_Thread[线程池]
-            TA_Storage[存储配额]
-        end
-        subgraph "Tenant B"
-            TB_Config[独立配置]
-            TB_FS[文件沙箱]
-            TB_Process[进程沙箱]
-            TB_Network[网络沙箱]
-            TB_Thread[线程池]
-            TB_Storage[存储配额]
-        end
-    end
-
-    subgraph "Shared Resources"
-        Shared_Model[模型客户端<br/>共享连接池]
-        Shared_Tool[工具注册表<br/>只读共享]
-        Shared_Platform[平台适配器<br/>多路复用]
-    end
-
-    TenantA --> TA_Config & TA_FS & TA_Process & TA_Network & TA_Thread & TA_Storage
-    TenantB --> TB_Config & TB_FS & TB_Process & TB_Network & TB_Thread & TB_Storage
-    TenantA & TenantB --> Shared_Model & Shared_Tool & Shared_Platform
+```
+1. 创建 Workspace
+   ↓
+2. 创建 Team Blueprint（含多个 Agent）
+   ↓
+3. 创建 Scenario（绑定入口 Team）
+   ↓
+4. 触发 Scenario 执行
+   ├─→ 检查审批规则 → 需要审批 → 创建 Approval + 挂起 Run
+   │     ↓ 用户审批通过
+   └─→ 审批通过 / 无需审批
+        ↓
+5. TeamBlueprintRuntime 确保 agent 实例运行在 TenantBus 上
+   ↓
+6. IntentOrchestrator 分解任务，委派给合适的 agent
+   ↓
+7. Agent 接收子任务，调用工具，生成结果
+   ↓
+8. BusinessRunProjectionAdapter 投影为业务故事（Run）
+   ↓
+9. SSE 实时推送进度到前端
+   ↓
+10. 执行完成 → 可通过 Eval Set 评估 → 生成 Evolution Proposal
 ```
 
-### 2.2 五大隔离维度
+## 四、权限模型（三层）
 
-| 维度 | 组件 | 核心能力 |
-|---|---|---|
-| 文件 | TenantFileSandbox | 路径限制、权限控制、审计日志 |
-| 进程 | ProcessSandbox | 命令白/黑名单、工作目录限制、环境变量清理、超时控制 |
-| 网络 | NetworkSandbox | 域名白/黑名单、速率限制、请求审计 |
-| 存储 | StorageQuotaEnforcer | 配额检查、流式写入追踪、阈值告警 |
-| 线程 | TenantThreadPool | 线程数上限、队列限制、资源统计 |
-
----
-
-## 三、关键流程时序
-
-### 3.1 工具执行流程（带资源限制）
-
-```mermaid
-sequenceDiagram
-    participant Agent as Agent
-    participant Tool as ToolRegistry
-    participant Ctx as TenantContext
-    participant Sandbox as SandboxComponents
-    participant FS as 文件系统/进程
-
-    Agent->>Tool: executeTool(name, args)
-    Tool->>Ctx: 获取租户上下文
-    Ctx-->>Tool: TenantContext
-    
-    Tool->>Ctx: 权限检查
-    Ctx->>Ctx: SecurityPolicy.check()
-    Ctx-->>Tool: 允许/拒绝
-    
-    alt 权限拒绝
-        Tool-->>Agent: PermissionDeniedError
-    else 权限通过
-        Tool->>Ctx: 配额检查
-        Ctx->>Ctx: Quota.check()
-        Ctx-->>Tool: 通过/超限
-        
-        alt 配额超限
-            Tool-->>Agent: QuotaExceededError
-        else 配额充足
-            Tool->>Sandbox: 沙箱执行
-            Sandbox->>FS: 实际操作
-            FS-->>Sandbox: 结果
-            Sandbox-->>Tool: 执行结果
-            Tool->>Ctx: 记录审计日志
-            Tool-->>Agent: ToolResult
-        end
-    end
+```
+租户级 Security Policy (TenantSecurityPolicy)
+       ↓ 全局兜底
+工作区级 Policy (WorkspacePolicyRecord)
+       ↓ workspace ∩ agent
+Agent 蓝图级 (AgentBlueprintRecord.allowedTools)
+       ↓ 写入运行时
+运行时 AgentRole (allowedTools + deniedTools)
+       ↓ 两处拦截
+├─ buildToolDefinitions() → LLM 看不到不允许的工具
+└─ executeToolCall() → 硬拦截，绕过 LLM 也没用
 ```
 
-### 3.2 租户创建流程
+**解析规则：**
+- 白名单：取交集（workspace ∩ agent），最严格者胜
+- 黑名单：取并集（workspace denied 全局生效）
+- 都没配置：不限制（默认放行）
 
-```mermaid
-sequenceDiagram
-    participant Caller as 调用方
-    participant TM as TenantManager
-    participant TC as TenantContext
-    participant SB as 沙箱组件
-    participant FS as 文件系统
+## 五、审批模型
 
-    Caller->>TM: provisionTenant(tenantId, config)
-    TM->>TM: 检查租户是否已存在
-    TM->>FS: 创建租户目录 sandbox/{tenantId}/
-    TM->>TC: 创建TenantContext
-    TC->>SB: 初始化各沙箱组件
-    SB->>SB: 文件沙箱 + 进程沙箱 + 网络沙箱
-    SB->>SB: 存储配额 + 线程池
-    TC->>TC: 初始化配置、审计、会话管理
-    TC-->>TM: TenantContext
-    TM-->>Caller: 租户创建成功
+### 审批触发点
+
+| 触发点 | 粒度 | 配置位置 | 说明 |
+|--------|------|---------|------|
+| Scenario 执行前 | 场景级 | `agent.approvalRules` | 执行前检查规则，需要就挂起整个场景 |
+| 工具调用时 | 工具级 | `agent.toolApprovalRules` | agent 调用高风险工具时暂停，断点续传 |
+
+### 审批规则语法
+
+```json
+{
+  "approvalRules": [
+    "always",                    // 任何执行都要批
+    "high-risk",                 // 命中高风险关键词才批
+    "external-action",           // 涉及外部动作才批
+    "contains:删除"              // 输入包含特定关键词
+  ],
+  "toolApprovalRules": [
+    "always",                    // 所有工具调用都要批
+    "high-risk",                 // exec/delete/write/refund 等高风险工具
+    "external",                  // send/email/post/browser 等对外工具
+    "tool:exec",                 // 特定工具
+    "contains:rm -rf"            // 工具参数包含特定关键词
+  ]
+}
 ```
 
----
+### 审批状态流转
 
-## 四、组件关系
-
-### 4.1 工具系统与租户隔离的集成
-
-```mermaid
-graph TB
-    subgraph "Agent Core"
-        Agent[HermesAgentV2]
-        Model[ModelClient]
-    end
-
-    subgraph "Tool System"
-        Registry[ToolRegistry]
-        subgraph "Sandboxed Tools"
-            Code[CodeTool]
-            Terminal[TerminalTool]
-            Git[GitTool]
-            File[FileTool]
-        end
-        subgraph "Network Tools"
-            WebSearch[WebSearchToolV2]
-            Browser[BrowserToolV2]
-        end
-        subgraph "External Tools"
-            MCP[MCPTool]
-            SubAgent[SubAgentTool]
-        end
-    end
-
-    subgraph "Tenant Context"
-        Context[TenantContext]
-        subgraph "Resource Controls"
-            FileSB[TenantFileSandbox]
-            ProcessSB[ProcessSandbox]
-            NetworkSB[NetworkSandbox]
-            Storage[StorageQuotaEnforcer]
-            Threads[TenantThreadPool]
-        end
-        subgraph "Security & Audit"
-            Policy[TenantSecurityPolicy]
-            Quota[TenantQuota]
-            Audit[TenantAuditLogger]
-        end
-    end
-
-    Agent --> Model
-    Agent --> Registry
-    Registry --> Code & Terminal & Git & File & WebSearch & Browser & MCP & SubAgent
-    Code & Terminal & Git & File & WebSearch & Browser & MCP & SubAgent --> Context
-    Context --> FileSB & ProcessSB & NetworkSB & Storage & Threads
-    Context --> Policy & Quota & Audit
+```
+PENDING → APPROVED → 执行恢复
+   │
+   ├→ REJECTED → Run 标记为 FAILED（场景级）/ 工具调用注入"拒绝"错误（工具级）
+   │
+   └→ INFO_REQUESTED → 等待补充信息
 ```
 
-### 4.2 配置继承关系
+### 工具级审批：断点续传
 
-```mermaid
-graph BT
-    Default[default-config.json<br/>系统默认值 + 安全基线]
-    Tenant[tenant-config.json<br/>租户自定义（继承+覆盖）]
-    Session[session-config<br/>运行时临时覆盖]
-    
-    Default -.->|继承| Tenant
-    Tenant -.->|继承| Session
-    
-    Session --> ProcessConfig[ProcessSandboxConfig]
-    Session --> NetworkConfig[NetworkPolicy]
-    Session --> QuotaConfig[TenantQuota]
-    Session --> SecurityConfig[TenantSecurityPolicy]
-    Tenant --> ProcessConfig & NetworkConfig & QuotaConfig & SecurityConfig
+工具级审批使用 **路线 B（断点续传）** 实现，agent 不需要重新执行：
+
+```
+1. Agent LLM 决定调用工具
+2. executeToolCall() 命中 toolApprovalRules
+3. Agent 保存 Checkpoint：
+   - assistantMessage（含所有 tool calls）
+   - toolCalls 列表 + pendingIndex
+   - completedResults（已执行的工具结果）
+   - 对话历史快照位置
+   - 剩余迭代预算
+4. 抛 ToolApprovalRequiredException
+5. ToolApprovalCoordinator 创建 BusinessApprovalRecord（type=tool-call）
+6. 用户审批 → coordinator.resumeToolApproval()
+   → agent.resumeToolApproval(approved, reason)
+7. 批准：执行该工具 → 继续剩余 tool calls → 继续 LLM 循环
+   拒绝：注入 "Tool call rejected" → LLM 看到错误后调整策略
 ```
 
-配置优先级：**默认 < 租户 < 会话（运行时）**，高优先级覆盖低优先级。
+### 审批与 Run 双向关联
 
----
+- 审批触发时自动创建 `NEEDS_APPROVAL` 状态的 Run
+- Approval.runId ↔ Run.approvalId 双向关联
+- 审批通过自动恢复执行（`/approve` 接口自动 resume）
+- 审批拒绝自动标记 Run 为 FAILED
+- 审批记录维护 timeline：`CREATED` → `APPROVED/REJECTED` → `EXECUTION_RESUMED`/`TOOL_APPROVED`
 
-## 五、部署架构
+### 实时推送
 
-```mermaid
-graph TB
-    subgraph "Client Layer"
-        WebUI[Web UI]
-        CLI[CLI Client]
-        API[API Client]
-    end
+- 工作区级 SSE：`/api/v1/workspaces/{id}/approvals/stream`
+- 单审批 SSE：`/api/v1/workspaces/{id}/approvals/{apvId}/stream`
+- Run 级 SSE：`/api/v1/workspaces/{id}/runs/{runId}/stream`
 
-    subgraph "Load Balancer"
-        LB[Nginx/ALB<br/>SSL终止 + 负载均衡]
-    end
+## 六、版本与进化
 
-    subgraph "Hermes Cluster"
-        Node1[Node 1<br/>Gateway + TenantManager + Agent]
-        Node2[Node 2<br/>Gateway + TenantManager + Agent]
-        Node3[Node 3<br/>Gateway + TenantManager + Agent]
-    end
+### 完整版本生命周期
 
-    subgraph "Shared Storage"
-        NFS[NFS/EFS<br/>租户文件持久化]
-        Redis[Redis<br/>会话缓存 + 限流计数]
-        DB[(PostgreSQL<br/>租户元数据 + 审计)]
-    end
-
-    subgraph "External Services"
-        LLM[LLM API<br/>OpenAI/Anthropic]
-        Search[Search APIs<br/>Brave/Tavily]
-        MCP[MCP Servers]
-    end
-
-    subgraph "Monitoring"
-        Prom[Prometheus<br/>指标采集]
-        Grafana[Grafana<br/>可视化]
-    end
-
-    WebUI & CLI & API --> LB --> Node1 & Node2 & Node3
-    Node1 & Node2 & Node3 --> NFS & Redis & DB
-    Node1 & Node2 & Node3 --> LLM & Search & MCP
-    Node1 & Node2 & Node3 --> Prom --> Grafana
+```
+Team Blueprint v1（active）
+      ↓
+Evolution Proposal（系统自动生成优化建议）
+      ↓ 用户审批
+应用 → Team Blueprint v2（draft）
+      ↓
+Canary Release: v1 → v2, 10% 流量
+      ↓ 双版本并行运行，确定性哈希路由
+      ├─ canary metrics: total / succeeded / failed / avgDuration / avgCost / successRate
+      └─ baseline metrics: 同上
+      ↓
+比较指标
+      ├─ 满意 → promote → v2 全量激活
+      └─ 不满意 → rollback → 维持 v1
+      ↓
+Eval Set 评估 → 验证效果
 ```
 
-**最小部署形态（单机）：** JAR + systemd / Docker-compose + 文件存储 + SQLite 可选。
+### Canary 灰度发布
 
----
+- **确定性路由**：同一个 user/request key 始终路由到同一版本（哈希取模）
+- **双版本并行**：active version 和 canary version 的 agents 同时在 TenantBus 上运行
+- **指标自动对比**：每个 run 完成时按版本累计 success rate / duration / cost
+- **Run 可追溯**：每个 Run 的 metadata 都标记了路由的版本和是否走了灰度
+- **流量调节**：可以从 5% → 25% → 50% → 100% 逐步放量
+- **API**：`/api/v1/workspaces/{id}/teams/{tId}/canaries`
 
-## 六、数据流
+## 七、关键设计决策
 
-### 6.1 请求处理数据流
+### 1. 业务层 vs 基础层分离
 
-```mermaid
-flowchart LR
-    A[用户请求] --> B{消息平台}
-    B -->|各平台Adapter| G[GatewayServer]
-    G --> H[TenantAuthFilter]
-    H -->|认证通过| I[HermesAgentV2]
-    H -->|失败| J[401]
-    
-    I --> K{请求类型}
-    K -->|聊天| L[ModelClient] --> N[TransportFactory] --> O[LLM API]
-    K -->|工具调用| M[ToolRegistry] --> P[工具执行]
-    
-    P --> Q[TenantContext] --> R[沙箱检查]
-    R -->|通过| S[实际执行] --> U[AuditLogger]
-    R -->|拒绝| T[返回错误]
-    
-    O --> I
-    S --> I
-    I --> G --> B --> W[返回用户]
+Business 层的所有模块（Approval/Run/Insight/SafetyValve）都通过 **Adapter** 模式接入基础层。业务层不直接依赖 agent 内部实现，而是通过 IntentOrchestrator 等公共接口交互。
+
+好处：
+- 业务逻辑可以独立演进
+- 基础层保持通用
+- 换底层引擎不影响业务层
+
+### 2. Projection 模式
+
+基础层的执行结果（IntentRun）通过 `ProjectionAdapter` 投影为业务层的 `BusinessRunRecord`。不是一一对应，而是业务视角的翻译。
+
+### 3. DashboardIntegration 模式
+
+每个模块自己定义 HTTP 路由，通过 `registerRoutes(app, service)` 统一注册到 DashboardServer。模块化、零侵入。
+
+### 4. 文件存储优先
+
+所有业务数据默认文件存储（`File*Repository`），不依赖数据库。简单、可移植、方便调试。后续需要时可以替换为数据库实现。
+
+## 八、代码结构
+
+```
+src/main/java/com/nousresearch/hermes/
+├── agent/                    # Agent 核心（TenantAwareAIAgent）
+├── approval/                 # 基础审批（ACP approval classifier）
+├── blueprint/                # 团队蓝图（TeamBlueprint）
+├── business/                 # 业务层
+│   ├── approval/             # 业务审批中心
+│   ├── foundation/           # 业务门户基础（适配器注册）
+│   ├── insight/              # 业务洞察
+│   ├── run/                  # 业务运行记录
+│   └── safetyvalve/          # 安全阀
+├── canary/                   # 灰度发布
+├── collaboration/            # 协作内核（IntentOrchestrator, TeamManager）
+├── dashboard/                # Dashboard HTTP API
+├── evolution/                # 进化提案
+├── evalset/                  # 评估集
+├── gateway/                  # 消息网关（飞书/QQ 等）
+├── memory/                   # 记忆系统
+├── org/                      # AI 原生组织（旧版组织模型）
+├── policy/                   # 策略服务
+├── scenario/                 # 场景服务
+├── skills/                   # 技能系统
+├── tenant/                   # 租户基础设施
+├── tools/                    # 工具系统
+└── workspace/                # 工作空间
 ```
 
----
+## 九、测试覆盖
 
-## 七、核心类关系
+- 测试类：133+ 个
+- 用例数：546 个（0 失败，4 跳过）
+- 覆盖范围：单元测试 + 集成测试 + HTTP 路由测试 + Canary 路由测试 + 工具级审批测试
 
-```mermaid
-classDiagram
-    class HermesAgentV2 {
-        -ModelClient modelClient
-        -ToolRegistry toolRegistry
-        -TenantManager tenantManager
-        +processMessage(Message)
-        +executeTool(ToolCall)
-    }
-    class TenantManager {
-        -Map~String,TenantContext~ tenants
-        +provisionTenant(request)
-        +getTenant(tenantId)
-        +destroyTenant(tenantId)
-    }
-    class TenantContext {
-        -String tenantId
-        -TenantConfig config
-        -TenantFileSandbox fileSandbox
-        -ProcessSandbox processSandbox
-        -NetworkSandbox networkSandbox
-        -StorageQuotaEnforcer storageQuota
-        -TenantThreadPool threadPool
-        +exec(command, options)
-        +httpGet(url)
-        +writeFile(path, data)
-        +submit(task)
-    }
-    class ToolRegistry {
-        -Map~String,ToolEntry~ tools
-        +register(tool)
-        +getTool(name)
-        +execute(name, args, context)
-    }
-    class ProcessSandbox {
-        -ProcessSandboxConfig config
-        +exec(command, options)
-        -isCommandAllowed(command)
-    }
-    class NetworkSandbox {
-        -NetworkPolicy policy
-        -RateLimiter rateLimiter
-        +get(url) + post(url, body)
-        -isHostAllowed(host)
-    }
-    class TenantFileSandbox {
-        -Path sandboxRoot
-        +readFile(path) + writeFile(path, data)
-        -resolvePath(path)
-    }
-    class StorageQuotaEnforcer {
-        -TenantQuota quota
-        +canWrite(bytes) + writeFile(path, data)
-    }
-    class TenantThreadPool {
-        -ThreadPoolExecutor executor
-        +submit(task) + getStatistics()
-    }
+## 十、已知限制 & 下一步方向
 
-    HermesAgentV2 --> TenantManager
-    HermesAgentV2 --> ToolRegistry
-    TenantManager --> TenantContext
-    TenantContext --> ProcessSandbox
-    TenantContext --> NetworkSandbox
-    TenantContext --> TenantFileSandbox
-    TenantContext --> StorageQuotaEnforcer
-    TenantContext --> TenantThreadPool
-```
+### 已完成的核心能力 ✅
 
----
+- ✅ Workspace + Team Blueprint + Scenario + Run（业务建模 + 执行）
+- ✅ SSE 实时事件流（Run + Approval）
+- ✅ 三层工具权限（tenant ∩ workspace ∩ agent）+ 拦截
+- ✅ 场景级审批（执行前门禁 + 自动恢复）
+- ✅ 工具级审批（执行中暂停 + 断点续传）
+- ✅ Evolution Proposal 闭环（生成 → 审批 → 应用 → 激活 → 评估）
+- ✅ Canary 灰度发布（双版本并行 + 哈希路由 + 指标对比）
+- ✅ Eval Set 评估
+- ✅ 审批时间线 + 双向关联
 
-## 八、状态机
+### 短期（生产化）
 
-### 8.1 租户生命周期
+- [ ] 飞书/钉钉审批卡片集成
+- [ ] 多级审批链（金额/风险等级动态决定层级）
+- [ ] 审计日志统一入口
+- [ ] 首页 Dashboard 数据概览
+- [ ] 性能监控 + 成本分析
 
-```mermaid
-stateDiagram-v2
-    [*] --> Provisioning: 创建请求
-    Provisioning --> Active: 初始化完成
-    Provisioning --> Failed: 初始化失败
-    Active --> Suspended: 暂停/欠费
-    Active --> Terminating: 删除请求
-    Suspended --> Active: 恢复/缴费
-    Suspended --> Terminating: 强制删除
-    Terminating --> Terminated: 清理完成
-    Failed --> Terminating: 重试失败
-    Terminated --> [*]
-```
+### 中期（深化）
 
-### 8.2 工具执行状态机
+- [ ] Active Memory 知识沉淀
+- [ ] Skill / Tool 市场（可插拔）
+- [ ] 多团队跨团队协作
+- [ ] 数据库存储选项（替换 File*Repository）
 
-```mermaid
-stateDiagram-v2
-    [*] --> Validating: 接收调用
-    Validating --> Rejected: 权限检查失败
-    Validating --> QuotaCheck: 权限通过
-    QuotaCheck --> Rejected: 配额超限
-    QuotaCheck --> SandboxCheck: 配额充足
-    SandboxCheck --> Rejected: 沙箱检查失败
-    SandboxCheck --> Executing: 通过
-    Executing --> Succeeded: 成功
-    Executing --> Failed: 错误
-    Executing --> TimedOut: 超时
-    Succeeded & Failed & TimedOut & Rejected --> Logging: 记录
-    Logging --> [*]
-```
+### 长期（差异化）
 
-执行路径上的每一次拒绝都进入审计日志。
-
----
-
-## 九、持久化（Persistence）
-
-Hermes Agent Java 使用分层持久化策略存储租户状态、会话、配额使用、轨迹和审计数据。
-
-### 9.1 存储后端
-
-`TenantStateRepository` 定义存储契约，已实现两种后端：
-
-| 后端 | 实现类 | 适用场景 |
-|---|---|---|
-| PostgreSQL | `PostgresTenantRepository` | 生产环境、多节点部署 |
-| 文件系统 | `FileSystemTenantRepository` | 本地开发、嵌入式部署、单节点 |
-
-### 9.2 文件系统安全保障
-
-文件系统后端采用两步数据安全链保护 JSON 状态文件：
-
-1. **临时文件写入** → 先写 `*.tmp`
-2. **原子替换** → 支持的文件系统用 `ATOMIC_MOVE`，否则 `REPLACE_EXISTING`
-3. **备份保留** → 替换前复制旧版本到 `*.bak`
-4. **备份恢复** → 加载时主文件缺失/损坏则回退到 `.bak`
-
-目录布局：
-```text
-~/.hermes/persistence/
-├── tenants/{tenantId}/
-│   ├── state.json
-│   └── state.json.bak
-└── sessions/{tenantId}/
-    ├── {sessionId}.json
-    └── {sessionId}.json.bak
-```
-
-### 9.3 会话持久化
-
-`SessionSerializer` / `JsonSessionSerializer` 序列化会话上下文，包含：session id、tenant id、node id、时间戳、metadata、active 标记、消息列表。
-
-### 9.4 配额使用持久化
-
-当前使用量：`~/.hermes/tenants/{tenantId}/state/usage.json`
-历史归档（按天）：`~/.hermes/tenants/{tenantId}/state/history/YYYY-MM-DD.json`
-
-### 9.5 轨迹持久化
-
-```text
-~/.hermes/trajectories/
-├── trajectory_samples.jsonl
-├── failed_trajectories.jsonl
-├── compressed/{trajectoryId}.json
-└── insights.jsonl
-```
-
----
-
-## 十、监控（Monitoring）
-
-### 10.1 指标暴露
-
-通过 `MetricsCollector` 和 `TenantMetrics` 以 Prometheus 文本格式暴露租户和系统指标。
-
-**租户级指标：**
-- 内存 used / max / usage percent
-- 网络请求总数与被拦截数、QPS
-- 活跃 Agent 数与会话数
-- 存储使用量与配额、文件数
-- 活跃进程数
-- 近 1 小时审计事件数
-- 配额告警/超限标记、租户状态
-
-**告警投递指标：**
-```text
-hermes_alerts_fired_total
-hermes_alerts_suppressed_total
-hermes_alert_deliveries_succeeded_total
-hermes_alert_deliveries_failed_total
-hermes_alert_channel_deliveries_succeeded_total{channel="..."}
-hermes_alert_channel_deliveries_failed_total{channel="..."}
-```
-
-### 10.2 告警通道
-
-| 通道 | 实现类 | 说明 |
-|---|---|---|
-| Email | `EmailAlertChannel` | SMTP |
-| Webhook | `WebhookAlertChannel` | 钉钉、飞书、Slack、Discord、通用 JSON |
-
-配置通过环境变量：
-```bash
-export ALERT_WEBHOOK_URL="https://..."
-export ALERT_EMAIL_SENDER="bot@example.com"
-export ALERT_EMAIL_RECIPIENT="ops@example.com"
-export ALERT_SMTP_HOST="smtp.example.com"
-export ALERT_SMTP_PORT="465"
-export ALERT_EMAIL_SSL="true"
-```
-
-### 10.3 告警冷却
-
-每个 `tenant:type` 有 5 分钟冷却，防止告警风暴。被抑制的告警计入 `hermes_alerts_suppressed_total`。
-
-### 10.4 建议的 Prometheus 告警规则
-
-```yaml
-groups:
-  - name: hermes
-    rules:
-      - alert: HermesTenantMemoryHigh
-        expr: hermes_tenant_memory_usage_percent > 0.8
-        for: 5m
-        labels: { severity: warning }
-
-      - alert: HermesAlertDeliveryFailing
-        expr: increase(hermes_alert_deliveries_failed_total[10m]) > 0
-        for: 1m
-        labels: { severity: warning }
-```
-
----
-
-## 十一、Gateway 服务模式
-
-Hermes Gateway 支持轻量级服务模式，基于 PID 文件管理进程。
-
-### 11.1 PID 文件
-
-默认位置：`~/.hermes/gateway.pid`，用于检测是否已有网关进程运行，以及后续停止服务。
-
-### 11.2 启动与停止
-
-```bash
-# 启动（前台运行，记录 PID）
-java -jar target/hermes-agent-java-*.jar gateway start
-
-# 停止（读取 PID 发终止信号，超时强制销毁）
-java -jar target/hermes-agent-java-*.jar gateway stop
-```
-
-### 11.3 生产部署建议
-
-生产环境建议使用 systemd / Docker / Kubernetes 等进程管理器。服务模式提供 PID 记账，但本身不是完整的守护进程监督器。
-
-**systemd 示例：**
-```ini
-[Unit]
-Description=Hermes Agent Java Gateway
-After=network.target
-
-[Service]
-Type=simple
-User=hermes
-WorkingDirectory=/opt/hermes-agent-java
-ExecStart=/usr/bin/java -jar hermes-agent-java.jar gateway start
-ExecStop=/usr/bin/java -jar hermes-agent-java.jar gateway stop
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**行为说明：**
-- JVM 正常退出时 PID 文件自动移除
-- 进程被异常杀死时，下次启动检测 PID 是否存活，自动清理陈旧文件
-- 网关优雅关闭时会停止适配器、API 服务、Dashboard 和租户管理器
-
----
-
-*版本: v1.2（含持久化、监控、Gateway）*
+- [ ] Agent 自我反思 + 跨 run 学习
+- [ ] 协作模式可视化编辑器
+- [ ] 多模态输入（图片/文档/语音）

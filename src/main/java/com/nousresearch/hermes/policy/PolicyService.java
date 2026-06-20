@@ -125,6 +125,22 @@ public class PolicyService {
         return allowed.contains(skillName);
     }
 
+    /** Resolve effective denied tools for an agent (workspace denied list; no agent-level denied yet). */
+    public Set<String> resolveDeniedTools(String workspaceId, String teamId, String agentId) {
+        WorkspacePolicyRecord workspacePolicy = getOrCreatePolicy(workspaceId);
+        Set<String> denied = new HashSet<>();
+        denied.addAll(workspacePolicy.getDeniedTools());
+        return denied;
+    }
+
+    /** Resolve effective denied skills for an agent. */
+    public Set<String> resolveDeniedSkills(String workspaceId, String teamId, String agentId) {
+        WorkspacePolicyRecord workspacePolicy = getOrCreatePolicy(workspaceId);
+        Set<String> denied = new HashSet<>();
+        denied.addAll(workspacePolicy.getDeniedSkills());
+        return denied;
+    }
+
     /** Check if a tool is permitted for an agent. */
     public boolean isToolPermitted(String workspaceId, String teamId, String agentId, String toolName) {
         Set<String> allowed = resolveAllowedTools(workspaceId, teamId, agentId);
@@ -133,6 +149,77 @@ public class PolicyService {
             return !wp.getDeniedTools().contains(toolName);
         }
         return allowed.contains(toolName);
+    }
+
+    /** Check if a specific tool call requires approval for the given agent. */
+    public ApprovalCheckResult checkToolApprovalRequired(String workspaceId, String teamId, String agentId,
+                                                           String toolName, Map<String, Object> toolArgs) {
+        AgentBlueprintRecord agent = findAgent(workspaceId, teamId, agentId);
+        if (agent == null || agent.getToolApprovalRules() == null || agent.getToolApprovalRules().isEmpty()) {
+            return ApprovalCheckResult.noApprovalNeeded();
+        }
+
+        String argsStr = toolArgs != null ? toolArgs.toString().toLowerCase() : "";
+
+        for (String rule : agent.getToolApprovalRules()) {
+            if (rule == null || rule.isBlank()) continue;
+            String normalized = rule.trim().toLowerCase();
+
+            // Rule: always — every tool call needs approval
+            if ("always".equals(normalized)) {
+                return ApprovalCheckResult.approvalNeeded(agentId, rule, "Every tool call requires approval");
+            }
+
+            // Rule: high-risk — high-risk tools need approval
+            if ("high-risk".equals(normalized) || "high-risk-tools".equals(normalized)) {
+                if (isHighRiskTool(toolName)) {
+                    return ApprovalCheckResult.approvalNeeded(agentId, rule,
+                        "High-risk tool: " + toolName);
+                }
+            }
+
+            // Rule: external — external-facing tools need approval
+            if ("external".equals(normalized) || "external-tools".equals(normalized)) {
+                if (isExternalTool(toolName)) {
+                    return ApprovalCheckResult.approvalNeeded(agentId, rule,
+                        "External tool: " + toolName);
+                }
+            }
+
+            // Rule: tool:<name> — specific tool needs approval
+            if (normalized.startsWith("tool:")) {
+                String targetTool = normalized.substring("tool:".length()).trim();
+                if (toolName.toLowerCase().equals(targetTool)) {
+                    return ApprovalCheckResult.approvalNeeded(agentId, rule,
+                        "Tool requires approval: " + toolName);
+                }
+            }
+
+            // Rule: contains:<keyword> — tool args contain keyword
+            if (normalized.startsWith("contains:")) {
+                String keyword = normalized.substring("contains:".length()).trim();
+                if (argsStr.contains(keyword)) {
+                    return ApprovalCheckResult.approvalNeeded(agentId, rule,
+                        "Keyword '" + keyword + "' detected in tool arguments");
+                }
+            }
+        }
+        return ApprovalCheckResult.noApprovalNeeded();
+    }
+
+    private static boolean isHighRiskTool(String toolName) {
+        String lower = toolName.toLowerCase();
+        return lower.contains("exec") || lower.contains("delete") || lower.contains("remove")
+            || lower.contains("write") || lower.contains("send_") || lower.contains("post")
+            || lower.contains("email") || lower.contains("payment") || lower.contains("refund")
+            || lower.contains("transfer") || lower.contains("publish");
+    }
+
+    private static boolean isExternalTool(String toolName) {
+        String lower = toolName.toLowerCase();
+        return lower.contains("send") || lower.contains("email") || lower.contains("post")
+            || lower.contains("tweet") || lower.contains("message") || lower.contains("browser")
+            || lower.contains("web_fetch") || lower.contains("http");
     }
 
     /** Check if any agent in the team requires approval for this action. */

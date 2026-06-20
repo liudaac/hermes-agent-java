@@ -3,12 +3,15 @@ package com.nousresearch.hermes.blueprint;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.collaboration.AgentRole;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -30,6 +33,9 @@ public class TeamBlueprintRuntime {
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService blueprintService;
     private final HermesConfig baseConfig;
+    private PolicyService policyService;
+    private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
+    private com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
 
     /** Cache of active agent instances per team: workspaceId -> teamId -> agentId -> agent */
     private final Map<String, Map<String, Map<String, TenantAwareAIAgent>>> activeAgents = new ConcurrentHashMap<>();
@@ -42,6 +48,87 @@ public class TeamBlueprintRuntime {
         this.workspaceService = workspaceService;
         this.blueprintService = blueprintService;
         this.baseConfig = baseConfig;
+    }
+
+    /** Wire in PolicyService for workspace+agent-level tool/skill policy enforcement. Optional. */
+    public void setPolicyService(PolicyService policyService) {
+        this.policyService = policyService;
+    }
+
+    /** Wire in ToolApprovalCoordinator for tool-level approval. Optional. */
+    public void setToolApprovalCoordinator(com.nousresearch.hermes.business.approval.ToolApprovalCoordinator coordinator) {
+        this.toolApprovalCoordinator = coordinator;
+    }
+
+    /** Wire in CanaryReleaseService for traffic-based version selection. Optional. */
+    public void setCanaryReleaseService(com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService) {
+        this.canaryReleaseService = canaryReleaseService;
+    }
+
+    /**
+     * Resolve which version to use for a request. Considers active canary release
+     * (deterministic hash-based routing). Falls back to active version.
+     */
+    public int resolveVersionForRequest(String workspaceId, String teamId, String requestKey) {
+        if (canaryReleaseService != null) {
+            try {
+                return canaryReleaseService.resolveVersion(workspaceId, teamId,
+                    requestKey != null ? requestKey : java.util.UUID.randomUUID().toString());
+            } catch (Exception e) {
+                logger.debug("Canary version resolve failed for {}/{}: {}", workspaceId, teamId, e.getMessage());
+            }
+        }
+        var team = blueprintService.requireTeamBlueprint(workspaceId, teamId);
+        return team.getActiveVersion();
+    }
+
+    /**
+     * Ensure runtime for a specific version (used by canary routing).
+     * Different from ensureTeamRuntime which only sets up the active version.
+     */
+    public void ensureTeamRuntimeForVersion(String workspaceId, String teamId, int version) {
+        var blueprint = blueprintService.requireTeamBlueprint(workspaceId, teamId);
+        var versionRecord = blueprint.getVersions().stream()
+            .filter(v -> v.getVersion() == version)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException(
+                "Version " + version + " not found for team " + workspaceId + "/" + teamId));
+
+        TenantContext tenantCtx = workspaceService.resolveTenantContext(workspaceId);
+        if (tenantCtx == null) {
+            throw new IllegalStateException("Tenant context not available for workspace: " + workspaceId);
+        }
+
+        // Use a versioned key for canary agents: "<teamId>::v<version>"
+        String versionedKey = teamId + "::v" + version;
+        var teamAgents = activeAgents
+            .computeIfAbsent(workspaceId, k -> new ConcurrentHashMap<>())
+            .get(versionedKey);
+
+        if (teamAgents != null && !teamAgents.isEmpty()) {
+            boolean allPresent = versionRecord.getAgents().stream()
+                .allMatch(a -> teamAgents.containsKey(a.getAgentId()));
+            if (allPresent) {
+                logger.debug("Versioned runtime already active for {}/{} v{}", workspaceId, teamId, version);
+                return;
+            }
+        }
+
+        logger.info("Spinning up versioned runtime for {}/{} v{} ({} agents)",
+            workspaceId, teamId, version, versionRecord.getAgents().size());
+
+        Map<String, TenantAwareAIAgent> newAgents = new ConcurrentHashMap<>();
+        for (AgentBlueprintRecord agentBlueprint : versionRecord.getAgents()) {
+            try {
+                TenantAwareAIAgent agent = createAgentFromBlueprint(tenantCtx, workspaceId, teamId, agentBlueprint);
+                newAgents.put(agentBlueprint.getAgentId(), agent);
+            } catch (Exception e) {
+                logger.error("Failed to create canary agent '{}' in team {}/{} v{}: {}",
+                    agentBlueprint.getAgentId(), workspaceId, teamId, version, e.getMessage());
+            }
+        }
+
+        activeAgents.get(workspaceId).put(versionedKey, newAgents);
     }
 
     /**
@@ -86,7 +173,7 @@ public class TeamBlueprintRuntime {
         Map<String, TenantAwareAIAgent> newAgents = new ConcurrentHashMap<>();
         for (AgentBlueprintRecord agentBlueprint : version.getAgents()) {
             try {
-                TenantAwareAIAgent agent = createAgentFromBlueprint(tenantCtx, agentBlueprint);
+                TenantAwareAIAgent agent = createAgentFromBlueprint(tenantCtx, workspaceId, teamId, agentBlueprint);
                 newAgents.put(agentBlueprint.getAgentId(), agent);
                 logger.info("  ✓ Agent '{}' ({}) registered on bus",
                     agentBlueprint.getAgentId(), agentBlueprint.getDisplayName());
@@ -128,7 +215,7 @@ public class TeamBlueprintRuntime {
      * Create a single agent instance from a blueprint record.
      * Wires the AgentRole, registers on the bus.
      */
-    private TenantAwareAIAgent createAgentFromBlueprint(TenantContext tenantCtx, AgentBlueprintRecord blueprint) {
+    private TenantAwareAIAgent createAgentFromBlueprint(TenantContext tenantCtx, String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
         String agentId = blueprint.getAgentId();
 
         // Build the AgentRole from blueprint
@@ -143,23 +230,126 @@ public class TeamBlueprintRuntime {
             role.responsibilities(blueprint.getResponsibility());
         }
 
-        // Wire allowed tools
-        if (blueprint.getAllowedTools() != null) {
-            for (String tool : blueprint.getAllowedTools()) {
-                role.allowedTools(tool);
-            }
+        // Wire allowed tools — resolve effective policy: workspace ∩ agent blueprint
+        Set<String> effectiveTools = resolveEffectiveAllowedTools(workspaceId, teamId, blueprint);
+        for (String tool : effectiveTools) {
+            role.allowedTools(tool);
         }
 
-        // Wire allowed skills
-        if (blueprint.getAllowedSkills() != null) {
-            for (String skill : blueprint.getAllowedSkills()) {
-                role.skills(skill);
+        // Wire denied tools — workspace-level deny list
+        Set<String> deniedTools = resolveEffectiveDeniedTools(workspaceId, teamId, blueprint);
+        for (String tool : deniedTools) {
+            role.deniedTools(tool);
+        }
+
+        // Wire allowed skills — resolve effective policy
+        Set<String> effectiveSkills = resolveEffectiveAllowedSkills(workspaceId, teamId, blueprint);
+        for (String skill : effectiveSkills) {
+            role.skills(skill);
+        }
+
+        // Wire tool approval rules from blueprint
+        if (blueprint.getToolApprovalRules() != null) {
+            for (String rule : blueprint.getToolApprovalRules()) {
+                if (rule != null && !rule.isBlank()) {
+                    role.toolApprovalRules(rule);
+                }
             }
         }
 
         // Create agent instance with explicit agentId and role
-        String sessionId = "team-agent:" + agentId;
-        return TenantAwareAIAgent.forBlueprint(tenantCtx, agentId, role, sessionId, baseConfig);
+        String sessionId = "team-agent:" + blueprint.getAgentId();
+        TenantAwareAIAgent agent = TenantAwareAIAgent.forBlueprint(tenantCtx, blueprint.getAgentId(), role, sessionId, baseConfig);
+
+        // Wire tool approval coordinator if available
+        if (toolApprovalCoordinator != null) {
+            final String wsId = workspaceId;
+            final String tId = teamId;
+            final String aId = blueprint.getAgentId();
+            final TenantAwareAIAgent agentRef = agent;
+            agent.setToolApprovalCallback(ex -> {
+                // Generate a tool call ID — the agent uses the actual ToolCall ID,
+                // but our exception only has tool name. We extract from the agent's pending approval.
+                var pending = agentRef.getPendingToolApproval();
+                String toolCallId = pending != null
+                    ? extractToolCallId(agentRef)
+                    : null;
+                toolApprovalCoordinator.requestToolApproval(
+                    wsId, tId, aId,
+                    ex.getToolName(), ex.getToolArguments(),
+                    ex.getMatchedRule(), ex.getReason(),
+                    toolCallId,
+                    agentRef
+                );
+            });
+        }
+
+        return agent;
+    }
+
+    private static String extractToolCallId(TenantAwareAIAgent agent) {
+        // The agent stores the pending tool call internally; use its ID for traceability.
+        // We rely on the agent's internal checkpoint to track the actual ToolCall.id.
+        // For now, return a placeholder — the resume() call will use the agent's stored tool call ID.
+        return null;
+    }
+
+    /**
+     * Resolve effective allowed tools for an agent: workspace policy ∩ agent blueprint.
+     * If PolicyService is wired, use its full resolution. Otherwise fall back to blueprint-only.
+     */
+    private Set<String> resolveEffectiveAllowedTools(String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
+        if (policyService != null) {
+            return policyService.resolveAllowedTools(workspaceId, teamId, blueprint.getAgentId());
+        }
+        // Fallback: blueprint allowedTools only
+        Set<String> result = new HashSet<>();
+        if (blueprint.getAllowedTools() != null) {
+            for (String tool : blueprint.getAllowedTools()) {
+                if (tool != null && !tool.isBlank()) {
+                    result.add(tool);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Resolve effective allowed skills for an agent: workspace policy ∩ agent blueprint.
+     */
+    private Set<String> resolveEffectiveAllowedSkills(String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
+        if (policyService != null) {
+            return policyService.resolveAllowedSkills(workspaceId, teamId, blueprint.getAgentId());
+        }
+        Set<String> result = new HashSet<>();
+        if (blueprint.getAllowedSkills() != null) {
+            for (String skill : blueprint.getAllowedSkills()) {
+                if (skill != null && !skill.isBlank()) {
+                    result.add(skill);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Resolve effective denied tools for an agent (workspace denied list + blueprint-level).
+     */
+    private Set<String> resolveEffectiveDeniedTools(String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
+        if (policyService != null) {
+            return policyService.resolveDeniedTools(workspaceId, teamId, blueprint.getAgentId());
+        }
+        return Set.of();
+    }
+
+    /**
+     * Resolve effective denied skills for an agent.
+     */
+    private Set<String> resolveEffectiveDeniedSkills(String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
+        if (policyService != null) {
+            return policyService.resolveDeniedSkills(workspaceId, teamId, blueprint.getAgentId());
+        }
+        return Set.of();
     }
 
     public boolean isTeamActive(String workspaceId, String teamId) {

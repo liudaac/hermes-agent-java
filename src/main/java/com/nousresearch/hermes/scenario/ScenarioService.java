@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Business service for scenarios. */
 public class ScenarioService {
@@ -36,6 +37,7 @@ public class ScenarioService {
     private PolicyService policyService;
     private BusinessApprovalService businessApprovalService;
     private ActiveMemoryService activeMemoryService;
+    private com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
 
     public ScenarioService(WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
         this(new FileScenarioRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService, teamBlueprintService);
@@ -61,11 +63,24 @@ public class ScenarioService {
     public void setPolicyService(PolicyService policyService, BusinessApprovalService businessApprovalService) {
         this.policyService = policyService;
         this.businessApprovalService = businessApprovalService;
+        // Also wire policy into the team runtime so agent tool permissions are enforced
+        this.teamBlueprintRuntime.setPolicyService(policyService);
     }
 
     /** Wire active memory service for knowledge recall. */
     public void setActiveMemoryService(ActiveMemoryService activeMemoryService) {
         this.activeMemoryService = activeMemoryService;
+    }
+
+    /** Wire canary release service for traffic-based version routing + metrics. */
+    public void setCanaryReleaseService(com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService) {
+        this.canaryReleaseService = canaryReleaseService;
+        this.teamBlueprintRuntime.setCanaryReleaseService(canaryReleaseService);
+    }
+
+    /** Expose the underlying team blueprint runtime (for wiring tool-approval coordinator etc). */
+    public TeamBlueprintRuntime getTeamBlueprintRuntime() {
+        return this.teamBlueprintRuntime;
     }
 
     public ScenarioRecord createScenario(String workspaceId, String scenarioId, String name, String description,
@@ -135,12 +150,21 @@ public class ScenarioService {
         String entryTeamId = scenario.getEntryTeamId();
         if (entryTeamId != null && !entryTeamId.isBlank()) {
             teamBlueprintRuntime.ensureTeamRuntime(workspaceId, entryTeamId);
+
+            // Canary support: also spin up the canary version's runtime if active
+            int canaryVersion = teamBlueprintRuntime.resolveVersionForRequest(
+                workspaceId, entryTeamId, scenarioId + ":" + System.nanoTime());
+            var team = teamBlueprintService.requireTeamBlueprint(workspaceId, entryTeamId);
+            if (canaryVersion != team.getActiveVersion()) {
+                teamBlueprintRuntime.ensureTeamRuntimeForVersion(workspaceId, entryTeamId, canaryVersion);
+            }
         }
 
         // Approval gate: check if any agent's approval rules require human review
         if (!skipApprovalCheck && policyService != null && businessApprovalService != null) {
             var check = policyService.checkApprovalRequired(workspaceId, scenario.getEntryTeamId(), "execute", userInput);
             if (check.approvalNeeded()) {
+                // Create the approval record with scenario + run linkage
                 BusinessApprovalRecord approval = businessApprovalService.createApproval(
                     workspaceId,
                     scenario.getEntryTeamId(),
@@ -152,9 +176,34 @@ public class ScenarioService {
                     "Review input for policy compliance.",
                     "MEDIUM",
                     Map.of("scenarioId", scenarioId, "agentId", check.agentId(), "matchedRule", check.matchedRule(), "userInput", userInput),
-                    Map.of("source", "auto", "trigger", check.reason())
+                    Map.of("source", "auto", "trigger", check.reason(), "scenarioId", scenarioId)
                 );
-                throw new ApprovalRequiredException(approval.getApprovalId(), check.reason());
+                approval.setScenarioId(scenarioId);
+
+                // Create a NEEDS_APPROVAL run record so the execution is tracked
+                BusinessRunRecord pendingRun = runService.createRun(
+                    workspaceId, scenario.getEntryTeamId(), scenario.getName(), scenarioId,
+                    scenario.getName() + " — 待审批",
+                    userInput,
+                    "审批通过后自动开始执行。",
+                    "触发审批规则：" + check.matchedRule(),
+                    "等待人工审批",
+                    "中风险 — 触发了 " + check.matchedRule() + " 审批规则",
+                    "审批通过后开始执行；如被拒绝则取消本次运行。",
+                    BusinessRunService.NEEDS_APPROVAL,
+                    null, List.of(),
+                    0L, 0.0,
+                    Map.of(),
+                    Map.of("source", BusinessRunService.SOURCE_MANUAL, "approvalId", approval.getApprovalId(), "approvalReason", check.reason())
+                );
+                pendingRun.setApprovalId(approval.getApprovalId());
+                approval.setRunId(pendingRun.getRunId());
+
+                // Re-save to persist the cross-references
+                businessApprovalService.updateApproval(approval);
+                runService.updateRun(pendingRun);
+
+                throw new ApprovalRequiredException(approval.getApprovalId(), check.reason(), pendingRun.getRunId());
             }
         }
 
@@ -162,6 +211,23 @@ public class ScenarioService {
         BusinessRunProjectionAdapter projectionAdapter = new BusinessRunProjectionAdapter();
         BusinessRunRecord projection = projectionAdapter.fromIntentRun(
             workspaceId, scenarioId, scenario.getName(), intentRun);
+
+        // Canary: tag the run with which version handled it
+        if (entryTeamId != null && !entryTeamId.isBlank()) {
+            int routedVersion = teamBlueprintRuntime.resolveVersionForRequest(
+                workspaceId, entryTeamId, scenarioId + ":" + intentRun.runId);
+            projection.setTeamVersion(String.valueOf(routedVersion));
+            Map<String, Object> meta = new LinkedHashMap<>(projection.getMetadata() != null ? projection.getMetadata() : Map.of());
+            meta.put("teamVersion", String.valueOf(routedVersion));
+            // Mark canary if a canary release is active and this run was routed differently
+            var team = teamBlueprintService.requireTeamBlueprint(workspaceId, entryTeamId);
+            if (routedVersion != team.getActiveVersion()) {
+                meta.put("canary", true);
+                meta.put("canaryRoutedVersion", routedVersion);
+                meta.put("baselineVersion", team.getActiveVersion());
+            }
+            projection.setMetadata(meta);
+        }
 
         // Active Memory: recall relevant knowledge and attach to run metadata
         if (activeMemoryService != null) {
@@ -233,7 +299,7 @@ public class ScenarioService {
                     // Check for new successes
                     int currentSuccesses = intentRun.successes.size();
                     if (currentSuccesses > lastSuccessCount) {
-                        // Update steps that just completed
+                        // Update existing steps that just completed, and add new completed steps
                         for (int i = 0; i < intentRun.attempts.size(); i++) {
                             var attempt = intentRun.attempts.get(i);
                             if (intentRun.successes.containsKey(attempt.subtask())) {
@@ -248,6 +314,8 @@ public class ScenarioService {
                                     attempt.subtask() + " completed", Map.of("step", step.toMap())));
                             }
                         }
+                        // Also update the persisted run steps (overwrite with latest state)
+                        updateRunStepsFromIntent(runService, workspaceId, runId, intentRun);
                         lastSuccessCount = currentSuccesses;
                     }
 
@@ -264,20 +332,57 @@ public class ScenarioService {
                                 runId, workspaceId, RunEventBus.EventType.STEP_FAILED,
                                 entry.getKey() + " failed", Map.of("step", step.toMap())));
                         }
+                        // Update persisted run steps
+                        updateRunStepsFromIntent(runService, workspaceId, runId, intentRun);
                         lastFailureCount = currentFailures;
                     }
                 }
 
-                // Run finished — update final status
+                // Run finished — final step update + final status
+                updateRunStepsFromIntent(runService, workspaceId, runId, intentRun);
+
                 String finalStatus = switch (intentRun.status) {
                     case COMPLETED -> BusinessRunService.COMPLETED;
                     case PARTIAL, FAILED -> BusinessRunService.FAILED;
                     default -> BusinessRunService.FAILED;
                 };
-                runService.updateRunStatus(workspaceId, runId, finalStatus,
-                    "Run " + finalStatus.toLowerCase() +
-                        " — " + intentRun.successes.size() + " succeeded, " +
-                        intentRun.failures.size() + " failed");
+                String finalMessage = "Run " + finalStatus.toLowerCase() +
+                    " — " + intentRun.successes.size() + " succeeded, " +
+                    intentRun.failures.size() + " failed";
+
+                // Update result summary as well
+                var finishedRun = runService.requireRun(workspaceId, runId);
+                finishedRun.setResultSummary(finalMessage);
+                if (intentRun.successes.size() > 0) {
+                    String firstResult = intentRun.successes.values().iterator().next();
+                    if (firstResult != null && !firstResult.isBlank()) {
+                        finishedRun.setResultSummary(firstResult.length() > 500
+                            ? firstResult.substring(0, 500) + "..."
+                            : firstResult);
+                    }
+                }
+                finishedRun.setConclusionReason("Execution completed with " +
+                    intentRun.successes.size() + " successes and " +
+                    intentRun.failures.size() + " failures");
+                finishedRun.setSystemAction("Run finished — review results and decide next steps");
+                runService.updateRun(finishedRun);
+
+                runService.updateRunStatus(workspaceId, runId, finalStatus, finalMessage);
+
+                // Canary metrics: record outcome
+                if (canaryReleaseService != null && finishedRun.getTeamId() != null && finishedRun.getTeamVersion() != null) {
+                    try {
+                        int version = Integer.parseInt(finishedRun.getTeamVersion());
+                        long durationMs = finishedRun.getMetrics() != null && finishedRun.getMetrics().get("durationMs") != null
+                            ? ((Number) finishedRun.getMetrics().get("durationMs")).longValue()
+                            : 0;
+                        canaryReleaseService.recordRunOutcome(
+                            workspaceId, finishedRun.getTeamId(), version,
+                            finalStatus, durationMs, finishedRun.getEstimatedCost());
+                    } catch (Exception canaryEx) {
+                        logger.debug("Failed to record canary metrics for run {}: {}", runId, canaryEx.getMessage());
+                    }
+                }
 
             } catch (Exception e) {
                 logger.warn("Run watcher error for {}: {}", runId, e.getMessage());
@@ -291,13 +396,93 @@ public class ScenarioService {
         t.start();
     }
 
+    /**
+     * Update the persisted run's steps from the current IntentRun state.
+     * Updates matching stepIds in-place (for attempt-N steps) and adds new ones.
+     * Preserves non-attempt steps (assignments, traces, etc.) from the projection.
+     */
+    private void updateRunStepsFromIntent(BusinessRunService runService, String workspaceId,
+                                           String runId, IntentOrchestrator.IntentRun intentRun) {
+        try {
+            var run = runService.requireRun(workspaceId, runId);
+            List<BusinessRunStep> existingSteps = new ArrayList<>(run.getSteps());
+
+            // Build a map of attempt steps by stepId for quick lookup
+            Map<String, Integer> attemptIndex = new java.util.HashMap<>();
+            for (int i = 0; i < existingSteps.size(); i++) {
+                String sid = existingSteps.get(i).getStepId();
+                if (sid != null && sid.startsWith("attempt-")) {
+                    attemptIndex.put(sid, i);
+                }
+            }
+
+            Set<String> completedSubtasks = intentRun.successes.keySet();
+
+            // Update or add attempt steps
+            for (int i = 0; i < intentRun.attempts.size(); i++) {
+                var attempt = intentRun.attempts.get(i);
+                String stepId = "attempt-" + (i + 1);
+                String status;
+                String summary;
+                if (completedSubtasks.contains(attempt.subtask())) {
+                    status = "COMPLETED";
+                    summary = intentRun.successes.get(attempt.subtask());
+                } else if (intentRun.failures.containsKey(attempt.subtask())) {
+                    status = "FAILED";
+                    summary = intentRun.failures.get(attempt.subtask());
+                } else {
+                    status = "RUNNING";
+                    summary = attempt.agentId() + " is processing";
+                }
+
+                BusinessRunStep step = new BusinessRunStep()
+                    .setStepId(stepId)
+                    .setTitle(attempt.subtask() != null ? attempt.subtask() : "Task " + (i + 1))
+                    .setSummary(summary)
+                    .setActor(attempt.roleName() != null && !attempt.roleName().isBlank()
+                        ? attempt.roleName() : attempt.agentId())
+                    .setStatus(status);
+
+                Integer idx = attemptIndex.get(stepId);
+                if (idx != null) {
+                    // Update existing step in place
+                    existingSteps.set(idx, step);
+                } else {
+                    // Add new step
+                    existingSteps.add(step);
+                }
+            }
+
+            run.setSteps(existingSteps);
+            run.setMetrics(Map.of(
+                "subtasksTotal", intentRun.attempts.size(),
+                "succeeded", intentRun.successes.size(),
+                "failed", intentRun.failures.size(),
+                "attempts", intentRun.attempts.size(),
+                "durationMs", System.currentTimeMillis() - (run.getCreatedAt() != null
+                    ? run.getCreatedAt().toEpochMilli() : System.currentTimeMillis())
+            ));
+            runService.updateRun(run);
+        } catch (Exception e) {
+            logger.warn("Failed to update run steps for {}: {}", runId, e.getMessage());
+        }
+    }
+
     public static class ApprovalRequiredException extends RuntimeException {
         private final String approvalId;
+        private final String runId;
         public ApprovalRequiredException(String approvalId, String reason) {
             super("Approval required: " + approvalId + " — " + reason);
             this.approvalId = approvalId;
+            this.runId = null;
+        }
+        public ApprovalRequiredException(String approvalId, String reason, String runId) {
+            super("Approval required: " + approvalId + " — " + reason);
+            this.approvalId = approvalId;
+            this.runId = runId;
         }
         public String getApprovalId() { return approvalId; }
+        public String getRunId() { return runId; }
     }
 
     private static void validateId(String value, String field) {

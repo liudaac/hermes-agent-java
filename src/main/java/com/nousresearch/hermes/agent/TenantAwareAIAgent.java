@@ -87,6 +87,13 @@ public class TenantAwareAIAgent {
 
     private static final int AUTO_SAVE_INTERVAL = 5;
 
+    // ===== 工具级审批挂起状态 =====
+    private volatile boolean approvalCheckpointActive = false;
+    private ToolApprovalCheckpoint approvalCheckpoint;
+
+    /** Callback invoked when a tool call requires approval. External code should create an approval record. */
+    private java.util.function.Consumer<ToolApprovalRequiredException> toolApprovalCallback;
+
     private static final String MEMORY_REVIEW_PROMPT =
         "Review the conversation above and consider saving to memory if appropriate.\n\n" +
         "Focus on:\n" +
@@ -800,18 +807,53 @@ public class TenantAwareAIAgent {
                         responseBuilder.append(assistantMessage.getContent());
                     }
 
-                    for (ToolCall toolCall : assistantMessage.getToolCalls()) {
+                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
+                    List<ToolCallResult> completedToolResults = new ArrayList<>();
+                    boolean approvalHit = false;
+
+                    for (int toolIdx = 0; toolIdx < toolCalls.size(); toolIdx++) {
+                        ToolCall toolCall = toolCalls.get(toolIdx);
                         long toolStart = System.currentTimeMillis();
                         boolean toolOk = true;
                         String result;
                         try {
                             result = executeToolCall(toolCall);
+                        } catch (ToolApprovalRequiredException ex) {
+                            // Save checkpoint and re-throw — caller will resume later
+                            toolOk = false;
+
+                            // Snapshot current state
+                            approvalCheckpoint = new ToolApprovalCheckpoint(
+                                assistantMessage,
+                                new ArrayList<>(toolCalls),
+                                toolIdx,
+                                new ArrayList<>(completedToolResults),
+                                conversationHistory.size(), // history size after assistant message + completed tools
+                                iterationBudget.getRemaining(),
+                                userTurnCount,
+                                false,
+                                null,
+                                null
+                            );
+                            approvalCheckpointActive = true;
+
+                            // Notify callback
+                            if (toolApprovalCallback != null) {
+                                try {
+                                    toolApprovalCallback.accept(ex);
+                                } catch (Exception cbEx) {
+                                    logger.warn("Tool approval callback failed: {}", cbEx.getMessage());
+                                }
+                            }
+
+                            throw ex;
                         } catch (RuntimeException ex) {
                             toolOk = false;
                             throw ex;
                         } finally {
                             recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
                         }
+                        completedToolResults.add(new ToolCallResult(toolCall.getId(), result));
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
 
                         // Cognitive trace: evaluate tool result
@@ -1121,6 +1163,28 @@ public class TenantAwareAIAgent {
             }
             return ToolRegistry.toolError(msg);
         }
+        if (agentRole != null && agentRole.getDeniedTools().contains(toolName)) {
+            String msg = "Access denied: '" + toolName + "' is denied for role '" + agentRole.getRoleName() + "'";
+            logger.warn("Tenant {} agent {} {}", tenantId, agentId, msg);
+            if (currentTrace != null) {
+                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
+            }
+            return ToolRegistry.toolError(msg);
+        }
+
+        // ======== 工具级审批检查 ========
+        if (agentRole != null && !agentRole.getToolApprovalRules().isEmpty()) {
+            var approvalCheck = checkToolApproval(toolName, arguments);
+            if (approvalCheck.approvalNeeded()) {
+                String msg = "Tool approval required: '" + toolName + "' — " + approvalCheck.reason();
+                logger.info("Tenant {} agent {} {}", tenantId, agentId, msg);
+                if (currentTrace != null) {
+                    currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
+                }
+                throw new ToolApprovalRequiredException(
+                    toolName, arguments, approvalCheck.agentId(), approvalCheck.matchedRule(), approvalCheck.reason());
+            }
+        }
 
         try {
             @SuppressWarnings("unchecked")
@@ -1325,6 +1389,18 @@ public class TenantAwareAIAgent {
             ));
 
             logger.info("Agent {} completed subtask: {}", agentId, subtask);
+        } catch (ToolApprovalRequiredException e) {
+            logger.info("Agent {} subtask '{}' requires tool approval: {} ({})",
+                agentId, subtask, e.getToolName(), e.getReason());
+            sendBusReply(msg, "subtask_approval_required", Map.of(
+                "error", e.getMessage(),
+                "subtask", subtask,
+                "status", "approval_required",
+                "toolName", e.getToolName(),
+                "toolArguments", e.getToolArguments(),
+                "matchedRule", e.getMatchedRule(),
+                "reason", e.getReason()
+            ));
         } catch (Exception e) {
             logger.error("Agent {} failed to process subtask '{}': {}", agentId, subtask, e.getMessage());
             sendBusReply(msg, "subtask_failed", Map.of(
@@ -1397,7 +1473,7 @@ public class TenantAwareAIAgent {
         var registry = ToolRegistry.getInstance();
         Set<String> toolNames = new HashSet<>(registry.getAllToolNames());
 
-        // 如果处于租户模式，过滤掉不允许的工具
+        // 如果处于租户模式，过滤掉不允许的工具（租户级）
         if (tenantContext != null) {
             var allowed = tenantContext.getSecurityPolicy().getAllowedTools();
             var denied = tenantContext.getSecurityPolicy().getDeniedTools();
@@ -1406,6 +1482,16 @@ public class TenantAwareAIAgent {
                 toolNames.retainAll(allowed);
             }
             toolNames.removeAll(denied);
+        }
+
+        // Agent 角色级工具权限过滤（蓝图 / 业务策略生效点）
+        if (agentRole != null) {
+            if (!agentRole.getAllowedTools().isEmpty()) {
+                toolNames.retainAll(agentRole.getAllowedTools());
+            }
+            if (!agentRole.getDeniedTools().isEmpty()) {
+                toolNames.removeAll(agentRole.getDeniedTools());
+            }
         }
 
         // Convert Map definitions to ToolDefinition objects
@@ -1783,5 +1869,433 @@ public class TenantAwareAIAgent {
     private HookEngine getHookEngine() {
         PluginManager pm = PluginManager.getInstance();
         return pm != null ? pm.getHookEngineFacade() : null;
+    }
+
+    /**
+     * Check if a tool call requires approval based on the agent role's toolApprovalRules.
+     * Mirrors the rule semantics from PolicyService.checkToolApprovalRequired.
+     */
+    private com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult checkToolApproval(
+            String toolName, String arguments) {
+        if (agentRole == null || agentRole.getToolApprovalRules().isEmpty()) {
+            return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.noApprovalNeeded();
+        }
+
+        String argsStr = arguments != null ? arguments.toLowerCase() : "";
+
+        for (String rule : agentRole.getToolApprovalRules()) {
+            if (rule == null || rule.isBlank()) continue;
+            String normalized = rule.trim().toLowerCase();
+
+            if ("always".equals(normalized)) {
+                return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
+                    agentId, rule, "Every tool call requires approval");
+            }
+
+            if ("high-risk".equals(normalized) || "high-risk-tools".equals(normalized)) {
+                if (isHighRiskTool(toolName)) {
+                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
+                        agentId, rule, "High-risk tool: " + toolName);
+                }
+            }
+
+            if ("external".equals(normalized) || "external-tools".equals(normalized)) {
+                if (isExternalTool(toolName)) {
+                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
+                        agentId, rule, "External tool: " + toolName);
+                }
+            }
+
+            if (normalized.startsWith("tool:")) {
+                String targetTool = normalized.substring("tool:".length()).trim();
+                if (toolName.toLowerCase().equals(targetTool)) {
+                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
+                        agentId, rule, "Tool requires approval: " + toolName);
+                }
+            }
+
+            if (normalized.startsWith("contains:")) {
+                String keyword = normalized.substring("contains:".length()).trim();
+                if (argsStr.contains(keyword)) {
+                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
+                        agentId, rule, "Keyword '" + keyword + "' detected in tool arguments");
+                }
+            }
+        }
+        return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.noApprovalNeeded();
+    }
+
+    private static boolean isHighRiskTool(String toolName) {
+        String lower = toolName.toLowerCase();
+        return lower.contains("exec") || lower.contains("delete") || lower.contains("remove")
+            || lower.contains("write") || lower.contains("send_") || lower.contains("post")
+            || lower.contains("email") || lower.contains("payment") || lower.contains("refund")
+            || lower.contains("transfer") || lower.contains("publish");
+    }
+
+    private static boolean isExternalTool(String toolName) {
+        String lower = toolName.toLowerCase();
+        return lower.contains("send") || lower.contains("email") || lower.contains("post")
+            || lower.contains("tweet") || lower.contains("message") || lower.contains("browser")
+            || lower.contains("web_fetch") || lower.contains("http");
+    }
+
+    /**
+     * Checkpoint state saved when a tool call requires approval.
+     * Allows resuming execution from exactly where it left off.
+     */
+    private static class ToolApprovalCheckpoint {
+        /** The assistant message containing all tool calls */
+        final ModelMessage assistantMessage;
+        /** List of all tool calls from this assistant message */
+        final List<ToolCall> toolCalls;
+        /** Index of the tool call that triggered the approval */
+        final int pendingIndex;
+        /** Results of tool calls already executed (before the pending one) */
+        final List<ToolCallResult> completedResults;
+        /** Snapshot of conversation history at the point of the assistant message */
+        final int historySize;
+        /** The iteration budget state (remaining iterations) */
+        final int remainingIterations;
+        /** User turn count */
+        final int userTurnCount;
+        /** Whether we were in the processMessage call from handleIntentSubtask */
+        final boolean fromSubtask;
+        /** The original subtask description (for resuming subtask reply) */
+        final String subtask;
+        /** The original bus message (for replying when subtask completes) */
+        final com.nousresearch.hermes.collaboration.AgentMessage subtaskMessage;
+
+        ToolApprovalCheckpoint(ModelMessage assistantMessage, List<ToolCall> toolCalls,
+                                int pendingIndex, List<ToolCallResult> completedResults,
+                                int historySize, int remainingIterations, int userTurnCount,
+                                boolean fromSubtask, String subtask,
+                                com.nousresearch.hermes.collaboration.AgentMessage subtaskMessage) {
+            this.assistantMessage = assistantMessage;
+            this.toolCalls = toolCalls;
+            this.pendingIndex = pendingIndex;
+            this.completedResults = completedResults;
+            this.historySize = historySize;
+            this.remainingIterations = remainingIterations;
+            this.userTurnCount = userTurnCount;
+            this.fromSubtask = fromSubtask;
+            this.subtask = subtask;
+            this.subtaskMessage = subtaskMessage;
+        }
+    }
+
+    /** Result of a single tool call (stored in checkpoint for completed ones) */
+    private static class ToolCallResult {
+        final String toolCallId;
+        final String result;
+        ToolCallResult(String toolCallId, String result) {
+            this.toolCallId = toolCallId;
+            this.result = result;
+        }
+    }
+
+    /** Set a callback that fires whenever a tool call requires approval. */
+    public void setToolApprovalCallback(java.util.function.Consumer<ToolApprovalRequiredException> callback) {
+        this.toolApprovalCallback = callback;
+    }
+
+    /** Check if this agent is currently paused waiting for tool approval. */
+    public boolean isAwaitingToolApproval() {
+        return approvalCheckpointActive && approvalCheckpoint != null;
+    }
+
+    /** Get info about the pending tool approval (if any). */
+    public ToolApprovalRequiredException getPendingToolApproval() {
+        if (!approvalCheckpointActive || approvalCheckpoint == null) return null;
+        ToolCall pending = approvalCheckpoint.toolCalls.get(approvalCheckpoint.pendingIndex);
+        return new ToolApprovalRequiredException(
+            pending.getFunction().getName(),
+            pending.getFunction().getArguments(),
+            agentId,
+            "tool-level approval rule",
+            "Tool '" + pending.getFunction().getName() + "' requires approval"
+        );
+    }
+
+    /**
+     * Resume execution after a tool approval decision has been made.
+     *
+     * <p>If approved, executes the pending tool call normally and continues the
+     * conversation loop. If rejected, injects a "tool call rejected" error as the
+     * tool result and continues (the LLM will see the rejection and adjust).</p>
+     *
+     * @param toolCallId ID of the tool call that was pending approval
+     * @param approved true if approved, false if rejected
+     * @param reason reason for the decision (shown to LLM if rejected)
+     * @return final response from the agent after continuing execution
+     * @throws IllegalStateException if no approval is pending
+     */
+    public String resumeToolApproval(String toolCallId, boolean approved, String reason) {
+        if (!approvalCheckpointActive || approvalCheckpoint == null) {
+            throw new IllegalStateException("No pending tool approval");
+        }
+
+        ToolApprovalCheckpoint cp = approvalCheckpoint;
+        ToolCall pendingTool = cp.toolCalls.get(cp.pendingIndex);
+
+        // Verify the tool call ID matches
+        if (!pendingTool.getId().equals(toolCallId)) {
+            throw new IllegalArgumentException("Tool call ID mismatch: expected "
+                + pendingTool.getId() + " but got " + toolCallId);
+        }
+
+        // Clear the checkpoint (we'll either succeed or fail completely)
+        approvalCheckpointActive = false;
+        approvalCheckpoint = null;
+
+        StringBuilder responseBuilder = new StringBuilder();
+
+        // Execute the pending tool (or inject rejection)
+        String pendingResult;
+        boolean toolOk;
+        long toolStart = System.currentTimeMillis();
+        try {
+            if (approved) {
+                pendingResult = executeToolCall(pendingTool);
+                toolOk = true;
+            } else {
+                pendingResult = ToolRegistry.toolError(
+                    "Tool call rejected by approver: " + (reason != null ? reason : "no reason provided"));
+                toolOk = false;
+            }
+        } catch (Exception e) {
+            pendingResult = ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
+            toolOk = false;
+        }
+        recordToolCall(pendingTool, toolOk, System.currentTimeMillis() - toolStart);
+
+        // Add the pending tool result to conversation
+        conversationHistory.add(ModelMessage.tool(pendingResult, pendingTool.getId()));
+
+        if (cognitiveTraceCollector != null) {
+            cognitiveTraceCollector.evaluate(cp.userTurnCount,
+                "Tool " + pendingTool.getFunction().getName() + " " +
+                    (approved ? "approved and executed" : "rejected") + ": " +
+                    pendingResult.substring(0, Math.min(100, pendingResult.length())));
+        }
+
+        // Process remaining tool calls (after the pending one)
+        for (int i = cp.pendingIndex + 1; i < cp.toolCalls.size(); i++) {
+            ToolCall toolCall = cp.toolCalls.get(i);
+            long tStart = System.currentTimeMillis();
+            boolean tOk = true;
+            String tResult;
+            try {
+                tResult = executeToolCall(toolCall);
+            } catch (ToolApprovalRequiredException ex) {
+                // Another tool needs approval — save new checkpoint
+                approvalCheckpoint = new ToolApprovalCheckpoint(
+                    cp.assistantMessage,
+                    new ArrayList<>(cp.toolCalls),
+                    i,
+                    collectCompletedResults(cp, pendingResult, i),
+                    cp.historySize + i, // already added pending + this will be next
+                    cp.remainingIterations,
+                    cp.userTurnCount,
+                    cp.fromSubtask,
+                    cp.subtask,
+                    cp.subtaskMessage
+                );
+                approvalCheckpointActive = true;
+                if (toolApprovalCallback != null) {
+                    try { toolApprovalCallback.accept(ex); } catch (Exception ignored) {}
+                }
+                throw ex;
+            } catch (RuntimeException ex) {
+                tOk = false;
+                throw ex;
+            } finally {
+                recordToolCall(toolCall, tOk, System.currentTimeMillis() - tStart);
+            }
+            conversationHistory.add(ModelMessage.tool(tResult, toolCall.getId()));
+
+            if (cognitiveTraceCollector != null) {
+                cognitiveTraceCollector.evaluate(cp.userTurnCount,
+                    "Tool " + toolCall.getFunction().getName() + " returned: " +
+                        tResult.substring(0, Math.min(100, tResult.length())));
+            }
+        }
+
+        // Continue the LLM conversation loop
+        return continueConversationLoop(responseBuilder, cp.userTurnCount, cp.remainingIterations);
+    }
+
+    /** Helper: collect all completed tool results up to current index. */
+    private List<ToolCallResult> collectCompletedResults(ToolApprovalCheckpoint cp,
+                                                          String pendingResult, int currentIndex) {
+        List<ToolCallResult> results = new ArrayList<>(cp.completedResults);
+        results.add(new ToolCallResult(cp.toolCalls.get(cp.pendingIndex).getId(), pendingResult));
+        // Results for tools between pending+1 and currentIndex
+        // These haven't been collected yet since we're at currentIndex which is the next approval
+        return results;
+    }
+
+    /**
+     * Continue the LLM conversation loop from the current state.
+     * Assumes conversation history is already set up with tool results.
+     */
+    private String continueConversationLoop(StringBuilder responseBuilder,
+                                             int startTurnCount, int remainingIterations) {
+        boolean continueLoop = true;
+        userTurnCount = startTurnCount;
+
+        // Create a fresh iteration budget with remaining iterations
+        IterationBudget resumeBudget = new IterationBudget(remainingIterations);
+
+        while (continueLoop && !interrupted.get() && resumeBudget.hasRemaining()) {
+            if (!resumeBudget.consume()) {
+                responseBuilder.append("\n[Reached maximum iterations]");
+                break;
+            }
+
+            // Governance check
+            if (governancePolicy.isPaused()) {
+                responseBuilder.append("\n").append("⚠️ Agent paused: ").append(governancePolicy.getPauseReason());
+                break;
+            }
+
+            try {
+                // Plugin hook: pre_llm_call
+                HookEngine he = getHookEngine();
+                if (he != null) {
+                    Map<String, Object> preCtx = new HashMap<>();
+                    preCtx.put("messages", new ArrayList<>(conversationHistory));
+                    preCtx.put("session_id", sessionId);
+                    preCtx.put("tenant_id", tenantId);
+                    preCtx.put("turn", userTurnCount);
+                    List<Object> injects = he.invoke(
+                        com.nousresearch.hermes.plugin.hook.HookType.PRE_LLM_CALL, preCtx);
+                    for (Object inj : injects) {
+                        if (inj instanceof String s && !s.isEmpty()) {
+                            conversationHistory.add(ModelMessage.system(s));
+                        }
+                    }
+                }
+
+                var response = modelClient.chatCompletion(
+                    conversationHistory,
+                    buildToolDefinitions(),
+                    false,
+                    modelParams
+                );
+
+                ModelMessage assistantMessage = response.getMessage();
+                if (assistantMessage == null) {
+                    responseBuilder.append("\n[No response from model]");
+                    break;
+                }
+
+                recordModelUsage(response);
+                conversationHistory.add(assistantMessage);
+                autoSaveSession();
+
+                if (response.hasToolCalls()) {
+                    if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
+                        if (responseBuilder.length() > 0) {
+                            responseBuilder.append("\n\n");
+                        }
+                        responseBuilder.append(assistantMessage.getContent());
+                    }
+
+                    // Check tool calls for approval requirements
+                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
+                    List<ToolCallResult> completedResults = new ArrayList<>();
+                    for (int toolIdx = 0; toolIdx < toolCalls.size(); toolIdx++) {
+                        ToolCall toolCall = toolCalls.get(toolIdx);
+                        long toolStart = System.currentTimeMillis();
+                        boolean toolOk = true;
+                        String result;
+                        try {
+                            result = executeToolCall(toolCall);
+                        } catch (ToolApprovalRequiredException ex) {
+                            // Save checkpoint and re-throw
+                            toolOk = false;
+                            approvalCheckpoint = new ToolApprovalCheckpoint(
+                                assistantMessage,
+                                new ArrayList<>(toolCalls),
+                                toolIdx,
+                                new ArrayList<>(completedResults),
+                                conversationHistory.size(),
+                                resumeBudget.getRemaining(),
+                                userTurnCount,
+                                false, null, null
+                            );
+                            approvalCheckpointActive = true;
+                            if (toolApprovalCallback != null) {
+                                try { toolApprovalCallback.accept(ex); } catch (Exception ignored) {}
+                            }
+                            throw ex;
+                        } catch (RuntimeException ex) {
+                            toolOk = false;
+                            throw ex;
+                        } finally {
+                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                        }
+                        completedResults.add(new ToolCallResult(toolCall.getId(), result));
+                        conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
+                    }
+
+                    if (skillNudgeInterval > 0) itersSinceSkill++;
+                    continueLoop = true;
+                } else {
+                    String content = assistantMessage.getContent();
+                    if (content != null && !content.isEmpty()) {
+                        if (responseBuilder.length() > 0) {
+                            responseBuilder.append("\n\n");
+                        }
+                        responseBuilder.append(content);
+                    }
+                    continueLoop = false;
+                }
+
+                if ("stop".equals(response.getFinishReason())) {
+                    continueLoop = false;
+                }
+
+            } catch (ToolApprovalRequiredException ex) {
+                throw ex; // propagate to caller
+            } catch (Exception e) {
+                logger.error("Error in resumed conversation loop: {}", e.getMessage(), e);
+                responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
+                break;
+            }
+        }
+
+        persistSession();
+        return responseBuilder.toString();
+    }
+
+    /**
+     * Exception thrown when a tool call requires approval.
+     * Propagates up from the agent to the orchestrator/run watcher so a business
+     * approval can be created and execution can be halted.
+     */
+    public static class ToolApprovalRequiredException extends RuntimeException {
+        private final String toolName;
+        private final String toolArguments;
+        private final String agentId;
+        private final String matchedRule;
+        private final String reason;
+
+        public ToolApprovalRequiredException(String toolName, String toolArguments,
+                                              String agentId, String matchedRule, String reason) {
+            super("Tool approval required: " + toolName + " — " + reason);
+            this.toolName = toolName;
+            this.toolArguments = toolArguments;
+            this.agentId = agentId;
+            this.matchedRule = matchedRule;
+            this.reason = reason;
+        }
+
+        public String getToolName() { return toolName; }
+        public String getToolArguments() { return toolArguments; }
+        public String getAgentId() { return agentId; }
+        public String getMatchedRule() { return matchedRule; }
+        public String getReason() { return reason; }
     }
 }

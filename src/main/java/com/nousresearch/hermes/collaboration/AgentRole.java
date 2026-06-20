@@ -27,6 +27,8 @@ public class AgentRole {
     
     // Permission boundaries
     private final Set<String> allowedTools = new LinkedHashSet<>();
+    private final Set<String> deniedTools = new LinkedHashSet<>();
+    private final Set<String> toolApprovalRules = new LinkedHashSet<>();
     private final Set<String> restrictedPaths = new LinkedHashSet<>();
     private ToolRisk maxAutoRisk = ToolRisk.MEDIUM;
     
@@ -51,6 +53,8 @@ public class AgentRole {
     public AgentRole collaborators(String... ids) { Collections.addAll(collaborators, ids); return this; }
     public AgentRole manages(String... ids) { Collections.addAll(manages, ids); return this; }
     public AgentRole allowedTools(String... tools) { Collections.addAll(allowedTools, tools); return this; }
+    public AgentRole deniedTools(String... tools) { Collections.addAll(deniedTools, tools); return this; }
+    public AgentRole toolApprovalRules(String... rules) { Collections.addAll(toolApprovalRules, rules); return this; }
     public AgentRole restrictedPaths(String... paths) { Collections.addAll(restrictedPaths, paths); return this; }
     public AgentRole maxAutoRisk(ToolRisk risk) { this.maxAutoRisk = risk; return this; }
     public AgentRole kpi(String name, double target) { kpis.put(name, target); return this; }
@@ -75,6 +79,8 @@ public class AgentRole {
     public Set<String> getCollaborators() { return Collections.unmodifiableSet(collaborators); }
     public Set<String> getManages() { return Collections.unmodifiableSet(manages); }
     public Set<String> getAllowedTools() { return Collections.unmodifiableSet(allowedTools); }
+    public Set<String> getDeniedTools() { return Collections.unmodifiableSet(deniedTools); }
+    public Set<String> getToolApprovalRules() { return Collections.unmodifiableSet(toolApprovalRules); }
     public Set<String> getRestrictedPaths() { return Collections.unmodifiableSet(restrictedPaths); }
     public ToolRisk getMaxAutoRisk() { return maxAutoRisk; }
     public Map<String, Double> getKpis() { return Collections.unmodifiableMap(kpis); }

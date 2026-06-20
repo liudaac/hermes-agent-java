@@ -60,14 +60,30 @@ class DashboardApprovalResumeTest {
             assertEquals(202, exec.statusCode());
             String approvalId = JSON.parseObject(exec.body()).getString("approvalId");
 
-            // Approve the approval
+            // Approve the approval — should auto-resume execution since scenario is linked
             HttpResponse<String> approve = send(client, token, HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/v1/workspaces/cs/approvals/" + approvalId + "/approve"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"actor\":\"owner\",\"reason\":\"approved\"}"))
                 .header("Content-Type", "application/json"));
-            assertEquals(200, approve.statusCode());
 
-            // Resume execution
+            // Approve may return 200 (approval resolved) or 201 (auto-resumed execution)
+            int approveStatus = approve.statusCode();
+            assertTrue(approveStatus == 200 || approveStatus == 201,
+                "Approve should return 200 or 201, got: " + approveStatus);
+            JSONObject approveBody = JSON.parseObject(approve.body());
+            assertTrue(approveBody.getBooleanValue("ok"));
+            assertEquals("APPROVED", approveBody.getString("status"));
+
+            // If auto-resumed, we should have a runId
+            if (approveStatus == 201) {
+                assertTrue(approveBody.getBooleanValue("autoResumed"),
+                    "201 response should have autoResumed=true");
+                assertNotNull(approveBody.getString("runId"),
+                    "Auto-resumed response should have runId");
+                return; // No need to test manual resume
+            }
+
+            // Resume execution (only if auto-resume didn't happen)
             HttpResponse<String> resume = send(client, token, HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/api/v1/workspaces/cs/approvals/" + approvalId + "/resume-execution"))
                 .POST(HttpRequest.BodyPublishers.ofString("{\"scenarioId\":\"refund\",\"userInput\":\"客户要求退款\"}"))

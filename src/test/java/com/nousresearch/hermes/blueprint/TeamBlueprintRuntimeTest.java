@@ -4,6 +4,7 @@ import com.nousresearch.hermes.collaboration.IntentOrchestrator;
 import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.run.BusinessRunService;
+import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
 import com.nousresearch.hermes.workspace.WorkspaceService;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -169,5 +171,155 @@ class TeamBlueprintRuntimeTest {
         assertFalse(result.getSteps().isEmpty(), "Run should have at least one step");
         assertTrue(result.getSteps().size() >= 1,
             "Run should have steps from the execution projection");
+    }
+
+    @Test
+    void agentAllowedToolsFromBlueprintAreEnforcedInRole() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("workspaces"), tenantManager);
+        workspaceService.createWorkspace("demo-workspace", "Demo Workspace", null, "ops", Map.of());
+
+        TeamBlueprintService blueprintService = new TeamBlueprintService(tempDir.resolve("workspaces"), workspaceService);
+        TeamBlueprintRuntime runtime = new TeamBlueprintRuntime(workspaceService, blueprintService);
+
+        // Create an agent with explicit allowedTools
+        blueprintService.createTeamBlueprint("demo-workspace", "ops-team", "Ops Team",
+            "Operations team", "ops", "ops-task",
+            List.of(
+                new AgentBlueprintRecord().setAgentId("reader").setDisplayName("Read-only Agent")
+                    .setResponsibility("Read and analyze files")
+                    .setAllowedTools(List.of("read", "memory_recall", "web_search"))
+            ),
+            List.of(), "Read-only operations", Map.of());
+
+        runtime.ensureTeamRuntime("demo-workspace", "ops-team");
+
+        // Verify the agent's role has the correct allowed tools
+        var tenantCtx = workspaceService.resolveTenantContext("demo-workspace");
+        var role = tenantCtx.getAgentRole("reader");
+        assertNotNull(role, "Agent role should be registered");
+
+        Set<String> allowed = role.getAllowedTools();
+        assertEquals(3, allowed.size(), "Should have exactly 3 allowed tools");
+        assertTrue(allowed.contains("read"), "read should be allowed");
+        assertTrue(allowed.contains("memory_recall"), "memory_recall should be allowed");
+        assertTrue(allowed.contains("web_search"), "web_search should be allowed");
+        assertFalse(allowed.contains("exec"), "exec should NOT be allowed");
+        assertFalse(allowed.contains("write"), "write should NOT be allowed");
+    }
+
+    @Test
+    void workspacePolicyIntersectsWithAgentAllowedTools() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("workspaces"), tenantManager);
+        workspaceService.createWorkspace("demo-workspace", "Demo Workspace", null, "ops", Map.of());
+
+        TeamBlueprintService blueprintService = new TeamBlueprintService(tempDir.resolve("workspaces"), workspaceService);
+        PolicyService policyService = new PolicyService(tempDir.resolve("workspaces"), workspaceService, blueprintService);
+        TeamBlueprintRuntime runtime = new TeamBlueprintRuntime(workspaceService, blueprintService);
+        runtime.setPolicyService(policyService);
+
+        // Workspace allows: read, write, exec, web_search
+        policyService.updatePolicy("demo-workspace",
+            List.of(), List.of(),
+            List.of("read", "write", "exec", "web_search"), List.of());
+
+        // Agent blueprint allows: read, memory_recall, web_search
+        blueprintService.createTeamBlueprint("demo-workspace", "ops-team", "Ops Team",
+            "Operations team", "ops", "ops-task",
+            List.of(
+                new AgentBlueprintRecord().setAgentId("analyst").setDisplayName("Analyst")
+                    .setResponsibility("Analyze data")
+                    .setAllowedTools(List.of("read", "memory_recall", "web_search"))
+            ),
+            List.of(), "Analysis", Map.of());
+
+        runtime.ensureTeamRuntime("demo-workspace", "ops-team");
+
+        // Effective tools = workspace ∩ agent = {read, web_search}
+        // (memory_recall is not in workspace whitelist, so it's excluded)
+        var tenantCtx = workspaceService.resolveTenantContext("demo-workspace");
+        var role = tenantCtx.getAgentRole("analyst");
+        assertNotNull(role);
+
+        Set<String> allowed = role.getAllowedTools();
+        assertEquals(2, allowed.size(),
+            "Effective tools should be workspace ∩ agent = {read, web_search}, got: " + allowed);
+        assertTrue(allowed.contains("read"), "read should be in intersection");
+        assertTrue(allowed.contains("web_search"), "web_search should be in intersection");
+    }
+
+    @Test
+    void workspaceDeniedToolsAreEnforced() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("workspaces"), tenantManager);
+        workspaceService.createWorkspace("demo-workspace", "Demo Workspace", null, "ops", Map.of());
+
+        TeamBlueprintService blueprintService = new TeamBlueprintService(tempDir.resolve("workspaces"), workspaceService);
+        PolicyService policyService = new PolicyService(tempDir.resolve("workspaces"), workspaceService, blueprintService);
+        TeamBlueprintRuntime runtime = new TeamBlueprintRuntime(workspaceService, blueprintService);
+        runtime.setPolicyService(policyService);
+
+        // Workspace denies: exec, write
+        policyService.updatePolicy("demo-workspace",
+            List.of(), List.of(),
+            List.of(), List.of("exec", "write"));
+
+        // Agent blueprint allows a broader set
+        blueprintService.createTeamBlueprint("demo-workspace", "dev-team", "Dev Team",
+            "Dev team", "dev", "dev-task",
+            List.of(
+                new AgentBlueprintRecord().setAgentId("developer").setDisplayName("Developer")
+                    .setResponsibility("Develop features")
+                    .setAllowedTools(List.of("read", "write", "exec", "web_search"))
+            ),
+            List.of(), "Development", Map.of());
+
+        runtime.ensureTeamRuntime("demo-workspace", "dev-team");
+
+        var tenantCtx = workspaceService.resolveTenantContext("demo-workspace");
+        var role = tenantCtx.getAgentRole("developer");
+        assertNotNull(role);
+
+        // Allowed tools should have exec and write filtered out by workspace deny list
+        Set<String> allowed = role.getAllowedTools();
+        // When workspace has no allowed list but has denied list, agent's allowed list minus denied
+        assertTrue(allowed.contains("read"), "read should be allowed");
+        assertTrue(allowed.contains("web_search"), "web_search should be allowed");
+        // Denied tools should be in the denied set
+        Set<String> denied = role.getDeniedTools();
+        assertTrue(denied.contains("exec"), "exec should be in denied tools");
+        assertTrue(denied.contains("write"), "write should be in denied tools");
+    }
+
+    @Test
+    void noAllowedToolsListedMeansNoRestrictionAtRoleLevel() {
+        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
+        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("workspaces"), tenantManager);
+        workspaceService.createWorkspace("demo-workspace", "Demo Workspace", null, "ops", Map.of());
+
+        TeamBlueprintService blueprintService = new TeamBlueprintService(tempDir.resolve("workspaces"), workspaceService);
+        TeamBlueprintRuntime runtime = new TeamBlueprintRuntime(workspaceService, blueprintService);
+
+        // Agent with no allowedTools specified — should have empty allowed set (no restriction)
+        blueprintService.createTeamBlueprint("demo-workspace", "free-team", "Free Team",
+            "Free access", "free", "free-task",
+            List.of(
+                new AgentBlueprintRecord().setAgentId("free-agent").setDisplayName("Free Agent")
+                    .setResponsibility("Do anything")
+            ),
+            List.of(), "Free form", Map.of());
+
+        runtime.ensureTeamRuntime("demo-workspace", "free-team");
+
+        var tenantCtx = workspaceService.resolveTenantContext("demo-workspace");
+        var role = tenantCtx.getAgentRole("free-agent");
+        assertNotNull(role);
+
+        // Empty allowedTools means no restriction (default allow)
+        assertTrue(role.getAllowedTools().isEmpty(),
+            "No allowedTools specified should mean empty set (no restriction)");
+        assertTrue(role.getDeniedTools().isEmpty(),
+            "No deny policy should mean empty denied set");
     }
 }

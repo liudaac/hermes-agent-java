@@ -14,6 +14,7 @@ public class AgentBlueprintRecord {
     private List<String> allowedTools = new ArrayList<>();
     private List<String> allowedSkills = new ArrayList<>();
     private List<String> approvalRules = new ArrayList<>();
+    private List<String> toolApprovalRules = new ArrayList<>();
     private Map<String, Object> metadata = new LinkedHashMap<>();
 
     public AgentBlueprintRecord() {
@@ -33,6 +34,8 @@ public class AgentBlueprintRecord {
     public AgentBlueprintRecord setAllowedSkills(List<String> allowedSkills) { this.allowedSkills = allowedSkills != null ? allowedSkills : new ArrayList<>(); return this; }
     public List<String> getApprovalRules() { return approvalRules; }
     public AgentBlueprintRecord setApprovalRules(List<String> approvalRules) { this.approvalRules = approvalRules != null ? approvalRules : new ArrayList<>(); return this; }
+    public List<String> getToolApprovalRules() { return toolApprovalRules; }
+    public AgentBlueprintRecord setToolApprovalRules(List<String> toolApprovalRules) { this.toolApprovalRules = toolApprovalRules != null ? toolApprovalRules : new ArrayList<>(); return this; }
     public Map<String, Object> getMetadata() { return metadata; }
     public AgentBlueprintRecord setMetadata(Map<String, Object> metadata) { this.metadata = metadata != null ? metadata : new LinkedHashMap<>(); return this; }
 }

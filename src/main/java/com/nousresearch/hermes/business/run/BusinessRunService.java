@@ -76,7 +76,13 @@ public class BusinessRunService {
         workspaceService.requireWorkspace(workspaceId);
         String teamVersion = null;
         if (teamId != null && !teamId.isBlank()) {
-            teamVersion = String.valueOf(teamBlueprintService.requireTeamBlueprint(workspaceId, teamId).getActiveVersion());
+            // Allow caller to override team version via metadata.teamVersion (e.g. canary routing)
+            String overrideVersion = metadata != null && metadata.get("teamVersion") != null
+                ? String.valueOf(metadata.get("teamVersion"))
+                : null;
+            teamVersion = overrideVersion != null
+                ? overrideVersion
+                : String.valueOf(teamBlueprintService.requireTeamBlueprint(workspaceId, teamId).getActiveVersion());
         }
         if (scenarioId != null && !scenarioId.isBlank()) {
             scenarioService.requireScenario(workspaceId, scenarioId);
@@ -166,6 +172,17 @@ public class BusinessRunService {
         workspaceService.requireWorkspace(workspaceId);
         return repository.findById(workspaceId, runId)
             .orElseThrow(() -> new BusinessRunNotFoundException(workspaceId, runId));
+    }
+
+    /** Update/save a run record directly (for cross-reference updates). */
+    public BusinessRunRecord updateRun(BusinessRunRecord record) {
+        if (record == null || record.getRunId() == null) {
+            throw new IllegalArgumentException("Run record and runId are required");
+        }
+        workspaceService.requireWorkspace(record.getWorkspaceId());
+        record.setUpdatedAt(Instant.now());
+        repository.save(record);
+        return record;
     }
 
     private static List<BusinessRunStep> normalizeSteps(List<BusinessRunStep> steps) {

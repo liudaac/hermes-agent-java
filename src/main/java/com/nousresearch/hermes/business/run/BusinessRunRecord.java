@@ -22,6 +22,7 @@ public class BusinessRunRecord {
     private String riskJudgement;
     private String nextSuggestion;
     private String status = "COMPLETED";
+    private String approvalId;
     private String technicalTraceRef;
     private List<BusinessRunStep> steps = new ArrayList<>();
     private long tokensUsed;
@@ -62,6 +63,8 @@ public class BusinessRunRecord {
     public BusinessRunRecord setNextSuggestion(String nextSuggestion) { this.nextSuggestion = nextSuggestion; return this; }
     public String getStatus() { return status; }
     public BusinessRunRecord setStatus(String status) { this.status = status; return this; }
+    public String getApprovalId() { return approvalId; }
+    public BusinessRunRecord setApprovalId(String approvalId) { this.approvalId = approvalId; return this; }
     public String getTechnicalTraceRef() { return technicalTraceRef; }
     public BusinessRunRecord setTechnicalTraceRef(String technicalTraceRef) { this.technicalTraceRef = technicalTraceRef; return this; }
     public List<BusinessRunStep> getSteps() { return steps; }

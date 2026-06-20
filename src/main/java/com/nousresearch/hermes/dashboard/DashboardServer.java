@@ -129,6 +129,7 @@ public class DashboardServer {
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
+    private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
     private final BusinessRunService businessRunService;
     private final BusinessInsightService businessInsightService;
     private final ScenarioService scenarioService;
@@ -193,8 +194,15 @@ public class DashboardServer {
         this.policyService = new PolicyService(workspaceService, teamBlueprintService);
         this.scenarioService.setPolicyService(policyService, businessApprovalService);
         this.scenarioService.setActiveMemoryService(new com.nousresearch.hermes.memory.ActiveMemoryService(workspaceService));
+        // Wire tool-level approval coordinator into team runtime
+        var toolApprovalCoordinator = new com.nousresearch.hermes.business.approval.ToolApprovalCoordinator(
+            workspaceService, businessApprovalService);
+        this.scenarioService.getTeamBlueprintRuntime().setToolApprovalCoordinator(toolApprovalCoordinator);
+        this.toolApprovalCoordinator = toolApprovalCoordinator;
         this.evalSetService = new EvalSetService(workspaceService, scenarioService);
         this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
+        // Wire canary into scenario service for traffic-based version routing + metrics
+        this.scenarioService.setCanaryReleaseService(canaryReleaseService);
         this.activeMemoryService = new ActiveMemoryService(workspaceService);
         this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
             workspaceService,
@@ -455,7 +463,7 @@ public class DashboardServer {
         ScenarioDashboardIntegration.registerRoutes(app, scenarioService, businessRunService);
         PromptAssetDashboardIntegration.registerRoutes(app, promptAssetService);
         EvolutionProposalDashboardIntegration.registerRoutes(app, evolutionProposalService);
-        BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService, scenarioService, businessRunService);
+        BusinessApprovalDashboardIntegration.registerRoutes(app, businessApprovalService, scenarioService, businessRunService, toolApprovalCoordinator);
         BusinessRunDashboardIntegration.registerRoutes(app, businessRunService);
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
         PolicyDashboardIntegration.registerRoutes(app, policyService);

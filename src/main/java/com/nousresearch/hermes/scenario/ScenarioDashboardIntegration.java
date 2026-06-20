@@ -96,7 +96,9 @@ public final class ScenarioDashboardIntegration {
             BusinessRunRecord record = service.executeScenario(workspaceId, scenarioId, body.getString("userInput"), runService);
             ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId, "runId", record.getRunId(), "run", record, "message", "Scenario executed"));
         } catch (ScenarioService.ApprovalRequiredException e) {
-            ctx.status(202).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId, "approvalId", e.getApprovalId(), "status", "NEEDS_APPROVAL", "message", "Execution blocked pending approval"));
+            ctx.status(202).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", scenarioId,
+                "approvalId", e.getApprovalId(), "runId", e.getRunId(),
+                "status", "NEEDS_APPROVAL", "message", "Execution blocked pending approval"));
         } catch (WorkspaceService.WorkspaceNotFoundException | ScenarioService.ScenarioNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "scenarioId", scenarioId));
         } catch (IllegalStateException e) {
