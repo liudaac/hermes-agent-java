@@ -1,9 +1,9 @@
 package com.nousresearch.hermes.soak;
 
 import com.nousresearch.hermes.collaboration.AgentMessage;
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
@@ -51,8 +51,8 @@ class OrganizationSoakHarnessTest {
             TenantContext tenant = TenantContext.create(tenantId,
                 TenantProvisioningRequest.builder(tenantId, "soak-test").build());
             tenant.initCollaboration();
-            tenant.registerAgentRole("agent-reviewer", new AgentRole("reviewer", "Reviews code", AgentRole.Level.SENIOR).skills("review", "code"));
-            tenant.registerAgentRole("agent-release", new AgentRole("release-manager", "Ships releases", AgentRole.Level.LEAD).skills("release", "deploy"));
+            tenant.registerAgentRole("agent-reviewer", new AgentRuntimeProfile("reviewer", "Reviews code", AgentRuntimeProfile.Level.SENIOR).skills("review", "code"));
+            tenant.registerAgentRole("agent-release", new AgentRuntimeProfile("release-manager", "Ships releases", AgentRuntimeProfile.Level.LEAD).skills("release", "deploy"));
             tenant.getTenantBus().register("agent-reviewer", msg -> reply(tenant, msg, "review ok"));
             tenant.getTenantBus().register("agent-release", msg -> reply(tenant, msg, "release ok"));
             contexts.add(tenant);
@@ -70,7 +70,7 @@ class OrganizationSoakHarnessTest {
             ));
             auditEvents++;
 
-            AgentRole reviewer = tenant.getAgentRole("agent-reviewer");
+            AgentRuntimeProfile reviewer = tenant.getAgentRole("agent-reviewer");
             reviewer.disabled(true);
             reviewer.updateMetric("manual_expires_at", System.currentTimeMillis() - 1_000);
             var restoredScore = CapabilityScorer.score("review code", "agent-reviewer", reviewer, tenant);
@@ -78,21 +78,21 @@ class OrganizationSoakHarnessTest {
 
             for (int i = 0; i < iterations; i++) {
                 long runStarted = System.currentTimeMillis();
-                var run = tenant.getIntentOrchestrator().execute("review code and release deploy");
+                var run = tenant.getScenarioOrchestrator().execute("review code and release deploy");
                 waitForTerminal(run);
                 latencies.add(System.currentTimeMillis() - runStarted);
-                if (run.status == IntentOrchestrator.RunStatus.COMPLETED) completed++;
+                if (run.status == ScenarioOrchestrator.RunStatus.COMPLETED) completed++;
                 else failed++;
-                assertEquals(IntentOrchestrator.RunStatus.COMPLETED, run.status, "run should complete for " + tenant.getTenantId());
+                assertEquals(ScenarioOrchestrator.RunStatus.COMPLETED, run.status, "run should complete for " + tenant.getTenantId());
                 assertTrue(run.successes().size() >= 1);
                 assertFalse(run.attempts().isEmpty());
             }
 
-            tenant.getIntentOrchestrator().saveRuns();
-            IntentOrchestrator reloaded = new IntentOrchestrator(tenant);
+            tenant.getScenarioOrchestrator().saveRuns();
+            ScenarioOrchestrator reloaded = new ScenarioOrchestrator(tenant);
             persistedRuns += reloaded.listRuns().size();
             assertTrue(reloaded.listRuns().size() >= iterations);
-            assertNotNull(reloaded.getRun(tenant.getIntentOrchestrator().listRuns().get(0).runId));
+            assertNotNull(reloaded.getRun(tenant.getScenarioOrchestrator().listRuns().get(0).runId));
         }
 
         long durationMs = System.currentTimeMillis() - startedAt;
@@ -137,12 +137,12 @@ class OrganizationSoakHarnessTest {
         tenant.getTenantBus().reply(original, reply);
     }
 
-    private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
+    private static void waitForTerminal(ScenarioOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
         while (System.nanoTime() < deadline) {
-            if (run.status == IntentOrchestrator.RunStatus.COMPLETED
-                || run.status == IntentOrchestrator.RunStatus.PARTIAL
-                || run.status == IntentOrchestrator.RunStatus.FAILED) return;
+            if (run.status == ScenarioOrchestrator.RunStatus.COMPLETED
+                || run.status == ScenarioOrchestrator.RunStatus.PARTIAL
+                || run.status == ScenarioOrchestrator.RunStatus.FAILED) return;
             Thread.sleep(20);
         }
         fail("run did not finish: " + run.runId + " status=" + run.status);

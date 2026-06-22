@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.org.observe;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
@@ -37,9 +37,9 @@ class AgentObservabilityIntegrationTest {
         tenantContext = TenantContext.create("obs-tenant", request);
 
         tenantContext.registerAgentRole("agent-A",
-            new AgentRole("engineer", "Builds things", AgentRole.Level.SENIOR));
+            new AgentRuntimeProfile("engineer", "Builds things", AgentRuntimeProfile.Level.SENIOR));
         tenantContext.registerAgentRole("agent-B",
-            new AgentRole("reviewer", "Reviews", AgentRole.Level.LEAD));
+            new AgentRuntimeProfile("reviewer", "Reviews", AgentRuntimeProfile.Level.LEAD));
 
         dispatcher = new TenantAwareToolDispatcher(tenantContext, registry);
     }

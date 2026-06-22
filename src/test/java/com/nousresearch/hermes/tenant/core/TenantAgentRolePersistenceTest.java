@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.tenant.core;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.CapabilityScorer;
 import org.junit.jupiter.api.Test;
 
@@ -19,13 +19,13 @@ class TenantAgentRolePersistenceTest {
         String tenantId = "role-persist-" + System.nanoTime();
         var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
         TenantContext created = TenantContext.create(tenantId, request);
-        created.registerAgentRole("agent-qa", new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.SENIOR)
+        created.registerAgentRole("agent-qa", new AgentRuntimeProfile("qa-engineer", "Runs tests", AgentRuntimeProfile.Level.SENIOR)
             .skills("qa", "tests")
             .deprioritize(1.5));
         created.save();
 
         TenantContext loaded = TenantContext.load(tenantId);
-        AgentRole role = loaded.getAgentRole("agent-qa");
+        AgentRuntimeProfile role = loaded.getAgentRole("agent-qa");
 
         assertNotNull(role);
         assertEquals("qa-engineer", role.getRoleName());

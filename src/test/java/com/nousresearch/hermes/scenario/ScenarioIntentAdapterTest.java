@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.scenario;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
@@ -40,7 +40,7 @@ class ScenarioIntentAdapterTest {
     void plansThroughIntentOrchestratorWithPreferredTeam() {
         Fixture fixture = fixture();
         TenantContext tenant = fixture.tenantManager.getTenant("customer-service");
-        tenant.registerAgentRole("classifier", new AgentRole("工单分类员", "处理售后分类", AgentRole.Level.LEAD)
+        tenant.registerAgentRole("classifier", new AgentRuntimeProfile("工单分类员", "处理售后分类", AgentRuntimeProfile.Level.LEAD)
             .skills("售后", "工单", "refund"));
         var team = tenant.getTeamManager().createTeam("after-sales", "售后团队", "处理售后", "test");
         team.addMember("classifier");
@@ -57,7 +57,7 @@ class ScenarioIntentAdapterTest {
     void executeReturnsFoundationIntentRun() {
         Fixture fixture = fixture();
         TenantContext tenant = fixture.tenantManager.getTenant("customer-service");
-        tenant.registerAgentRole("classifier", new AgentRole("工单分类员", "处理售后分类", AgentRole.Level.LEAD)
+        tenant.registerAgentRole("classifier", new AgentRuntimeProfile("工单分类员", "处理售后分类", AgentRuntimeProfile.Level.LEAD)
             .skills("售后", "工单", "refund"));
 
         var run = fixture.adapter.execute(scenario(Map.of()), "refund order");

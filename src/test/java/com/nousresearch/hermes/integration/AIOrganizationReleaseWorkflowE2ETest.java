@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.integration;
 
 import com.nousresearch.hermes.collaboration.AgentMessage;
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.org.evolution.FailureCase;
 import com.nousresearch.hermes.org.evolution.SelfEvolutionEngine;
 import com.nousresearch.hermes.org.knowledge.KnowledgeEntry;
@@ -53,13 +53,13 @@ class AIOrganizationReleaseWorkflowE2ETest {
 
         // ===== 0. Organization setup: roles, team, knowledge, fake teammates =====
         tenant.registerAgentRole("agent-reviewer",
-            new AgentRole("code-reviewer", "Reviews release code", AgentRole.Level.SENIOR)
+            new AgentRuntimeProfile("code-reviewer", "Reviews release code", AgentRuntimeProfile.Level.SENIOR)
                 .skills("java", "code", "review", "tests"));
         tenant.registerAgentRole("agent-qa",
-            new AgentRole("qa-engineer", "Runs release tests", AgentRole.Level.MID)
+            new AgentRuntimeProfile("qa-engineer", "Runs release tests", AgentRuntimeProfile.Level.MID)
                 .skills("qa", "test", "tests", "validation"));
         tenant.registerAgentRole("agent-release",
-            new AgentRole("release-manager", "Deploys releases", AgentRole.Level.LEAD)
+            new AgentRuntimeProfile("release-manager", "Deploys releases", AgentRuntimeProfile.Level.LEAD)
                 .skills("release", "deploy", "deployment", "production", "ci-cd"));
 
         var team = tenant.getTeamManager().createTeam(

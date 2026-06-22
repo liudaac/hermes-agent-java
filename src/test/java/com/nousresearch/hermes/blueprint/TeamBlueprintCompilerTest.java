@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.blueprint;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantManagerConfig;
@@ -45,7 +45,7 @@ class TeamBlueprintCompilerTest {
         assertEquals("classifier", team.getLead());
         assertEquals(1, team.getState("business_blueprint_version"));
 
-        AgentRole role = tenant.getAgentRole("classifier");
+        AgentRuntimeProfile role = tenant.getAgentRole("classifier");
         assertNotNull(role);
         assertEquals("工单分类员", role.getRoleName());
         assertTrue(role.getAllowedTools().contains("order.query"));

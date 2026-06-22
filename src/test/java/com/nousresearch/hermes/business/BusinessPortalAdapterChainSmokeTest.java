@@ -10,7 +10,7 @@ import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.approval.BusinessApprovalRecord;
 import com.nousresearch.hermes.business.run.BusinessRunProjectionAdapter;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalRecord;
 import com.nousresearch.hermes.org.evolution.FailureCase;
@@ -117,11 +117,11 @@ class BusinessPortalAdapterChainSmokeTest {
             .setMetadata(Map.of("contextSignals", List.of("refund", "multi_step")));
 
         ScenarioIntentAdapter scenarioAdapter = new ScenarioIntentAdapter(workspaceService, tenantManager);
-        IntentOrchestrator.IntentPlan plan = scenarioAdapter.plan(scenario, "refund order policy");
+        ScenarioOrchestrator.IntentPlan plan = scenarioAdapter.plan(scenario, "refund order policy");
         assertEquals("after-sales", plan.preferredTeamId());
         assertTrue(plan.assignments().stream().anyMatch(a -> "policy-expert".equals(a.agentId())));
 
-        IntentOrchestrator.IntentRun foundationRun = new IntentOrchestrator.IntentRun(
+        ScenarioOrchestrator.IntentRun foundationRun = new ScenarioOrchestrator.IntentRun(
             "smoke-run-1",
             plan.intent(),
             plan.assignments(),
@@ -130,9 +130,9 @@ class BusinessPortalAdapterChainSmokeTest {
             plan.preferredTeamId(),
             plan.preferredTeamName()
         );
-        IntentOrchestrator.SubtaskAssignment assignment = plan.assignments().get(0);
+        ScenarioOrchestrator.SubtaskAssignment assignment = plan.assignments().get(0);
         foundationRun.recordSuccess(assignment.subtask(), "identified refund policy path");
-        foundationRun.recordAttempt(new IntentOrchestrator.IntentAttempt(
+        foundationRun.recordAttempt(new ScenarioOrchestrator.IntentAttempt(
             assignment.subtask(),
             assignment.agentId(),
             assignment.roleName(),
@@ -147,7 +147,7 @@ class BusinessPortalAdapterChainSmokeTest {
             assignment.teamId(),
             assignment.teamName()
         ));
-        foundationRun.setStatus(IntentOrchestrator.RunStatus.COMPLETED);
+        foundationRun.setStatus(ScenarioOrchestrator.RunStatus.COMPLETED);
 
         BusinessRunRecord businessRun = new BusinessRunProjectionAdapter().fromIntentRun(
             "customer-service",

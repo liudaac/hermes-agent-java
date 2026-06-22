@@ -14,17 +14,17 @@ import com.nousresearch.hermes.testutil.IsolatedHermesHome;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 /**
- * Tests for AI原生组织 第四刀：IntentOrchestrator
+ * Tests for AI原生组织 第四刀：ScenarioOrchestrator
  * Verifies task decomposition, agent matching, and run tracking.
  */
-class IntentOrchestratorTest {
+class ScenarioOrchestratorTest {
 
     @RegisterExtension
     final IsolatedHermesHome hermesHome = new IsolatedHermesHome();
 
 
     private TenantContext tenantContext;
-    private IntentOrchestrator orchestrator;
+    private ScenarioOrchestrator orchestrator;
 
     @BeforeEach
     void setUp() {
@@ -33,42 +33,42 @@ class IntentOrchestratorTest {
         tenantContext = TenantContext.create(tenantId, request);
         // Seed multiple agent roles for matching
         tenantContext.registerAgentRole("agent-1",
-            new AgentRole("code-reviewer", "Reviews code", AgentRole.Level.SENIOR)
+            new AgentRuntimeProfile("code-reviewer", "Reviews code", AgentRuntimeProfile.Level.SENIOR)
                 .skills("java", "python", "code-review"));
         tenantContext.registerAgentRole("agent-2",
-            new AgentRole("release-manager", "Manages releases", AgentRole.Level.LEAD)
+            new AgentRuntimeProfile("release-manager", "Manages releases", AgentRuntimeProfile.Level.LEAD)
                 .skills("devops", "deployment", "ci-cd"));
         tenantContext.registerAgentRole("agent-3",
-            new AgentRole("data-analyst", "Analyzes data", AgentRole.Level.MID)
+            new AgentRuntimeProfile("data-analyst", "Analyzes data", AgentRuntimeProfile.Level.MID)
                 .skills("sql", "python", "visualization"));
 
-        orchestrator = tenantContext.getIntentOrchestrator();
+        orchestrator = tenantContext.getScenarioOrchestrator();
     }
 
     // ======== Decomposition ========
 
     @Test
     void decomposeSplitsOnConjunctions() {
-        var result = IntentOrchestrator.decompose("review code, run tests, then deploy");
+        var result = ScenarioOrchestrator.decompose("review code, run tests, then deploy");
         assertTrue(result.size() >= 2, "Should split into multiple subtasks, got: " + result);
     }
 
     @Test
     void decomposeSingleStaysSingle() {
-        var result = IntentOrchestrator.decompose("review the code");
+        var result = ScenarioOrchestrator.decompose("review the code");
         assertEquals(1, result.size());
         assertTrue(result.get(0).contains("review"));
     }
 
     @Test
     void decomposeEmptyReturnsEmpty() {
-        assertTrue(IntentOrchestrator.decompose("").isEmpty());
-        assertTrue(IntentOrchestrator.decompose(null).isEmpty());
+        assertTrue(ScenarioOrchestrator.decompose("").isEmpty());
+        assertTrue(ScenarioOrchestrator.decompose(null).isEmpty());
     }
 
     @Test
     void decomposeSplitsOnAnd() {
-        var result = IntentOrchestrator.decompose("review code and run tests");
+        var result = ScenarioOrchestrator.decompose("review code and run tests");
         assertTrue(result.size() >= 1);
     }
 
@@ -77,7 +77,7 @@ class IntentOrchestratorTest {
     @Test
     void matchPicksCodeReviewerForCodeTask() {
         var roles = tenantContext.listAgentRoles();
-        var match = IntentOrchestrator.findBestMatch("review the code", roles);
+        var match = ScenarioOrchestrator.findBestMatch("review the code", roles);
         assertEquals("agent-1", match.agentId());
         assertEquals("code-reviewer", match.roleName());
         assertTrue(match.score() > 0);
@@ -86,7 +86,7 @@ class IntentOrchestratorTest {
     @Test
     void matchPicksReleaseManagerForDeployment() {
         var roles = tenantContext.listAgentRoles();
-        var match = IntentOrchestrator.findBestMatch("deploy to production", roles);
+        var match = ScenarioOrchestrator.findBestMatch("deploy to production", roles);
         assertEquals("agent-2", match.agentId());
         assertEquals("release-manager", match.roleName());
     }
@@ -94,7 +94,7 @@ class IntentOrchestratorTest {
     @Test
     void matchPicksDataAnalystForDataTask() {
         var roles = tenantContext.listAgentRoles();
-        var match = IntentOrchestrator.findBestMatch("analyze the data", roles);
+        var match = ScenarioOrchestrator.findBestMatch("analyze the data", roles);
         assertEquals("agent-3", match.agentId());
     }
 
@@ -102,10 +102,10 @@ class IntentOrchestratorTest {
     void matchPrefersHigherLevelForSameSkills() {
         // Add another data analyst at MID level
         tenantContext.registerAgentRole("agent-4",
-            new AgentRole("data-analyst-jr", "Junior analyst", AgentRole.Level.JUNIOR)
+            new AgentRuntimeProfile("data-analyst-jr", "Junior analyst", AgentRuntimeProfile.Level.JUNIOR)
                 .skills("sql", "python"));
         var roles = tenantContext.listAgentRoles();
-        var match = IntentOrchestrator.findBestMatch("analyze data", roles);
+        var match = ScenarioOrchestrator.findBestMatch("analyze data", roles);
         // agent-3 (MID) should win over agent-4 (JUNIOR) due to level bonus
         assertEquals("agent-3", match.agentId());
     }
@@ -115,7 +115,7 @@ class IntentOrchestratorTest {
         // Empty tenant
         var request = TenantProvisioningRequest.builder("empty-tenant", "user").build();
         var emptyCtx = TenantContext.create("empty-tenant", request);
-        var match = IntentOrchestrator.findBestMatch("anything", emptyCtx.listAgentRoles());
+        var match = ScenarioOrchestrator.findBestMatch("anything", emptyCtx.listAgentRoles());
         assertNull(match.agentId());
     }
 
@@ -152,11 +152,11 @@ class IntentOrchestratorTest {
     void runStatusStartsAsPendingOrRunning() {
         var run = orchestrator.execute("review the code");
         // Status is either PENDING or RUNNING (depends on how fast the executor is)
-        assertTrue(run.status == IntentOrchestrator.RunStatus.PENDING
-                || run.status == IntentOrchestrator.RunStatus.RUNNING
-                || run.status == IntentOrchestrator.RunStatus.PARTIAL
-                || run.status == IntentOrchestrator.RunStatus.COMPLETED
-                || run.status == IntentOrchestrator.RunStatus.FAILED,
+        assertTrue(run.status == ScenarioOrchestrator.RunStatus.PENDING
+                || run.status == ScenarioOrchestrator.RunStatus.RUNNING
+                || run.status == ScenarioOrchestrator.RunStatus.PARTIAL
+                || run.status == ScenarioOrchestrator.RunStatus.COMPLETED
+                || run.status == ScenarioOrchestrator.RunStatus.FAILED,
             "Status should be one of the expected values, was: " + run.status);
     }
 
@@ -207,10 +207,10 @@ class IntentOrchestratorTest {
         var run = orchestrator.execute("review the code");
         waitForTerminal(run);
 
-        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, run.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.COMPLETED, run.status);
         assertEquals(1, run.successes().size());
         assertFalse(run.attempts().isEmpty());
-        assertTrue(run.attempts().stream().allMatch(IntentOrchestrator.IntentAttempt::success));
+        assertTrue(run.attempts().stream().allMatch(ScenarioOrchestrator.IntentAttempt::success));
         assertTrue(tenantContext.getObservability().getRecentTraces("agent-1", 5).size() >= 1);
         assertFalse(tenantContext.getEvolutionEngine().getSuccessPatterns("agent-1").isEmpty());
     }
@@ -220,7 +220,7 @@ class IntentOrchestratorTest {
         var run = orchestrator.execute("deploy to production");
         waitForTerminal(run);
 
-        assertEquals(IntentOrchestrator.RunStatus.PARTIAL, run.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.PARTIAL, run.status);
         assertFalse(run.failures().isEmpty());
         assertFalse(run.attempts().isEmpty());
         assertTrue(run.attempts().stream().anyMatch(a -> !a.success()));
@@ -233,7 +233,7 @@ class IntentOrchestratorTest {
     void replayFailuresCreatesControlRunForFailedSubtasks() throws Exception {
         var failed = orchestrator.execute("review the code");
         waitForTerminal(failed);
-        assertEquals(IntentOrchestrator.RunStatus.PARTIAL, failed.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.PARTIAL, failed.status);
         assertFalse(failed.failures().isEmpty());
 
         tenantContext.getTenantBus().register("agent-1", msg -> {
@@ -251,14 +251,14 @@ class IntentOrchestratorTest {
 
         assertEquals(failed.runId, replay.parentRunId);
         assertEquals("replay_failed", replay.controlAction);
-        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, replay.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.COMPLETED, replay.status);
         assertEquals(failed.failures().size(), replay.assignments().size());
     }
 
     @Test
     void rerouteCreatesControlRunForTargetAgent() throws Exception {
         tenantContext.registerAgentRole("agent-4",
-            new AgentRole("backup-reviewer", "Backup reviewer", AgentRole.Level.SENIOR)
+            new AgentRuntimeProfile("backup-reviewer", "Backup reviewer", AgentRuntimeProfile.Level.SENIOR)
                 .skills("review", "code"));
         tenantContext.getTenantBus().register("agent-4", msg -> {
             var reply = AgentMessage.builder(msg.getReceiverId(), msg.getSenderId(), AgentMessage.Type.RESPONSE)
@@ -278,7 +278,7 @@ class IntentOrchestratorTest {
 
         assertEquals(original.runId, reroute.parentRunId);
         assertEquals("reroute", reroute.controlAction);
-        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, reroute.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.COMPLETED, reroute.status);
         assertEquals("agent-4", reroute.assignments().get(0).agentId());
     }
 
@@ -289,7 +289,7 @@ class IntentOrchestratorTest {
         waitForTerminal(run);
         orchestrator.saveRuns();
 
-        var reloaded = new IntentOrchestrator(tenantContext);
+        var reloaded = new ScenarioOrchestrator(tenantContext);
         var restored = reloaded.getRun(run.runId);
 
         assertNotNull(restored);
@@ -304,7 +304,7 @@ class IntentOrchestratorTest {
 
     @Test
     void persistedActiveRunsReloadAsInterruptedAndReplayable() throws Exception {
-        var assignment = new IntentOrchestrator.SubtaskAssignment(
+        var assignment = new ScenarioOrchestrator.SubtaskAssignment(
             "review the code",
             "agent-1",
             "code-reviewer",
@@ -312,7 +312,7 @@ class IntentOrchestratorTest {
             java.util.List.of("review"),
             java.util.Map.of("skill_match", 1.0)
         );
-        var active = new IntentOrchestrator.IntentRun(
+        var active = new ScenarioOrchestrator.IntentRun(
             "run_9999",
             "review the code",
             java.util.List.of(assignment),
@@ -320,7 +320,7 @@ class IntentOrchestratorTest {
             "execute",
             System.currentTimeMillis() - 10_000,
             0L,
-            IntentOrchestrator.RunStatus.RUNNING,
+            ScenarioOrchestrator.RunStatus.RUNNING,
             "review the code"
         );
         var path = tenantContext.getTenantDir().resolve("state").resolve("intent-runs.json");
@@ -328,11 +328,11 @@ class IntentOrchestratorTest {
         new com.fasterxml.jackson.databind.ObjectMapper().writerWithDefaultPrettyPrinter()
             .writeValue(path.toFile(), java.util.List.of(active.toMap()));
 
-        var reloaded = new IntentOrchestrator(tenantContext);
+        var reloaded = new ScenarioOrchestrator(tenantContext);
         var interrupted = reloaded.getRun("run_9999");
 
         assertNotNull(interrupted);
-        assertEquals(IntentOrchestrator.RunStatus.INTERRUPTED, interrupted.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.INTERRUPTED, interrupted.status);
         assertTrue(interrupted.completedAt > 0);
         assertTrue(interrupted.failures().containsKey("review the code"));
 
@@ -348,7 +348,7 @@ class IntentOrchestratorTest {
         });
         var replay = reloaded.replayFailures("run_9999");
         waitForTerminal(replay);
-        assertEquals(IntentOrchestrator.RunStatus.COMPLETED, replay.status);
+        assertEquals(ScenarioOrchestrator.RunStatus.COMPLETED, replay.status);
     }
 
 
@@ -363,7 +363,7 @@ class IntentOrchestratorTest {
             }
             orchestrator.saveRuns();
 
-            var reloaded = new IntentOrchestrator(tenantContext);
+            var reloaded = new ScenarioOrchestrator(tenantContext);
             var runs = reloaded.listRuns();
 
             assertEquals(3, runs.size());
@@ -383,13 +383,13 @@ class IntentOrchestratorTest {
         var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
         var tenant = TenantContext.create(tenantId, request);
         tenant.registerAgentRole("agent-outsider",
-            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+            new AgentRuntimeProfile("qa-engineer", "Runs tests", AgentRuntimeProfile.Level.MID).skills("tests", "qa"));
         tenant.registerAgentRole("agent-team",
-            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+            new AgentRuntimeProfile("qa-engineer", "Runs tests", AgentRuntimeProfile.Level.MID).skills("tests", "qa"));
         var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
         team.addMember("agent-team");
 
-        var plan = tenant.getIntentOrchestrator().plan("run tests", "release");
+        var plan = tenant.getScenarioOrchestrator().plan("run tests", "release");
         var assignment = plan.assignments().get(0);
 
         assertEquals("release", plan.preferredTeamId());
@@ -407,27 +407,27 @@ class IntentOrchestratorTest {
         var request = TenantProvisioningRequest.builder(tenantId, "test-user").build();
         var tenant = TenantContext.create(tenantId, request);
         tenant.registerAgentRole("agent-outsider",
-            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+            new AgentRuntimeProfile("qa-engineer", "Runs tests", AgentRuntimeProfile.Level.MID).skills("tests", "qa"));
         tenant.registerAgentRole("agent-team",
-            new AgentRole("qa-engineer", "Runs tests", AgentRole.Level.MID).skills("tests", "qa"));
+            new AgentRuntimeProfile("qa-engineer", "Runs tests", AgentRuntimeProfile.Level.MID).skills("tests", "qa"));
         var team = tenant.getTeamManager().createTeam("release", "Release Team", "Ship releases", "test");
         team.addMember("agent-team");
 
-        var baseline = IntentOrchestrator.findBestMatch("run tests", tenant.listAgentRoles(), tenant);
-        var planned = tenant.getIntentOrchestrator().plan("run tests").assignments().get(0);
+        var baseline = ScenarioOrchestrator.findBestMatch("run tests", tenant.listAgentRoles(), tenant);
+        var planned = tenant.getScenarioOrchestrator().plan("run tests").assignments().get(0);
 
         assertEquals(baseline.agentId(), planned.agentId());
-        assertNull(tenant.getIntentOrchestrator().plan("run tests").preferredTeamId());
+        assertNull(tenant.getScenarioOrchestrator().plan("run tests").preferredTeamId());
         assertEquals(0.0, planned.scoreComponents().get("team_preference"), 0.001);
     }
 
-    private static void waitForTerminal(IntentOrchestrator.IntentRun run) throws InterruptedException {
+    private static void waitForTerminal(ScenarioOrchestrator.IntentRun run) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
         while (System.nanoTime() < deadline) {
-            if (run.status == IntentOrchestrator.RunStatus.COMPLETED
-                || run.status == IntentOrchestrator.RunStatus.PARTIAL
-                || run.status == IntentOrchestrator.RunStatus.FAILED
-                || run.status == IntentOrchestrator.RunStatus.INTERRUPTED) {
+            if (run.status == ScenarioOrchestrator.RunStatus.COMPLETED
+                || run.status == ScenarioOrchestrator.RunStatus.PARTIAL
+                || run.status == ScenarioOrchestrator.RunStatus.FAILED
+                || run.status == ScenarioOrchestrator.RunStatus.INTERRUPTED) {
                 return;
             }
             Thread.sleep(20);

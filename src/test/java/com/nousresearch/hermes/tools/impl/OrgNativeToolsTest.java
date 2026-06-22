@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.tools.impl;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.org.knowledge.KnowledgeEntry;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
@@ -38,13 +38,13 @@ class OrgNativeToolsTest {
         var request = TenantProvisioningRequest.builder("test-tenant", "test-user").build();
         tenantContext = TenantContext.create("test-tenant", request);
         tenantContext.registerAgentRole("agent-1",
-            new AgentRole("code-reviewer", "Review PRs", AgentRole.Level.SENIOR)
+            new AgentRuntimeProfile("code-reviewer", "Review PRs", AgentRuntimeProfile.Level.SENIOR)
                 .skills("java", "python", "security"));
         tenantContext.registerAgentRole("agent-2",
-            new AgentRole("release-manager", "Manage releases", AgentRole.Level.LEAD)
+            new AgentRuntimeProfile("release-manager", "Manage releases", AgentRuntimeProfile.Level.LEAD)
                 .skills("devops", "deployment", "ci-cd"));
         tenantContext.registerAgentRole("agent-3",
-            new AgentRole("data-analyst", "Analyze data", AgentRole.Level.MID)
+            new AgentRuntimeProfile("data-analyst", "Analyze data", AgentRuntimeProfile.Level.MID)
                 .skills("sql", "python", "visualization"));
 
         // Seed some knowledge

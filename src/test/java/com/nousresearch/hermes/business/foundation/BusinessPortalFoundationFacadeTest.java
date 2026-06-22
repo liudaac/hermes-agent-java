@@ -5,7 +5,7 @@ import com.nousresearch.hermes.blueprint.AgentBlueprintRecord;
 import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.run.BusinessRunRecord;
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.prompt.PromptAssetService;
@@ -86,8 +86,8 @@ class BusinessPortalFoundationFacadeTest {
         var plan = facade.planScenarioIntent(scenario, "refund order");
         assertFalse(plan.assignments().isEmpty());
 
-        IntentOrchestrator.IntentRun run = new IntentOrchestrator.IntentRun("facade-run-1", plan.intent(), plan.assignments(), null, "execute", "after-sales", "售后团队");
-        run.setStatus(IntentOrchestrator.RunStatus.COMPLETED);
+        ScenarioOrchestrator.IntentRun run = new ScenarioOrchestrator.IntentRun("facade-run-1", plan.intent(), plan.assignments(), null, "execute", "after-sales", "售后团队");
+        run.setStatus(ScenarioOrchestrator.RunStatus.COMPLETED);
         BusinessRunRecord projection = facade.projectIntentRun("customer-service", "after-sales-ticket", "售后工单", run);
         assertEquals("intent://facade-run-1", projection.getTechnicalTraceRef());
 

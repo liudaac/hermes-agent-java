@@ -8,16 +8,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for AI原生组织 第三刀：Team + TeamManager
+ * Tests for AI原生组织 第三刀：TeamRuntime + TeamRuntimeRegistry
  */
-class TeamTest {
+class TeamRuntimeTest {
 
-    private TeamManager manager;
-    private Team team;
+    private TeamRuntimeRegistry manager;
+    private TeamRuntime team;
 
     @BeforeEach
     void setUp() {
-        manager = new TeamManager("test-tenant");
+        manager = new TeamRuntimeRegistry("test-tenant");
         team = manager.createTeam("team-1", "Engineering Team", "Build the dashboard", "test-user");
     }
 
@@ -106,11 +106,11 @@ class TeamTest {
         assertTrue(map.containsKey("created_at"));
     }
 
-    // ======== TeamManager ========
+    // ======== TeamRuntimeRegistry ========
 
     @Test
     void managerCreateAndListTeams() {
-        var team2 = manager.createTeam("team-2", "Ops Team", "Operate the cluster", "ops-user");
+        var team2 = manager.createTeam("team-2", "Ops TeamRuntime", "Operate the cluster", "ops-user");
         assertEquals(2, manager.teamCount());
         assertEquals(2, manager.listTeams().size());
         assertNotNull(manager.getTeam("team-1"));
@@ -126,7 +126,7 @@ class TeamTest {
 
     @Test
     void getTeamsForAgent() {
-        var team2 = manager.createTeam("team-2", "Ops Team", "Ops", "user");
+        var team2 = manager.createTeam("team-2", "Ops TeamRuntime", "Ops", "user");
         team.addMember("agent-1");
         team2.addMember("agent-1");
         team2.addMember("agent-2");
