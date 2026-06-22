@@ -34,17 +34,31 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ScenarioOrchestrator {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioOrchestrator.class);
+    /** 任务 ID 生成器 — 单调递增，保证 runId 唯一 */
     private static final AtomicLong TASK_ID_GEN = new AtomicLong();
+    /** JSON 序列化器 — 用于 runs 持久化 */
     private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    /** 运行记录持久化文件名 */
     private static final String RUNS_FILE = "intent-runs.json";
+    /** 默认最大保留运行记录数 — 超限后自动修剪 */
     private static final int DEFAULT_MAX_PERSISTED_RUNS = 1000;
 
+    /** 租户上下文 — 提供 Agent 角色、TenantBus、可观测性等运行时能力 */
     private final TenantContext tenantContext;
+    /** 任务编排器 — 底层任务调度 */
     private final TaskOrchestrator taskOrchestrator;
+    /** 委托任务存储 — 管理跨租户/跨团队的委托任务 */
     private final DelegatedTaskStore delegatedTaskStore;
+    /** 内存中的运行记录缓存 — runId → IntentRun */
     private final ConcurrentHashMap<String, IntentRun> runs = new ConcurrentHashMap<>();
+    /** 意图分解器 — 可选，用于 LLM 驱动的智能任务分解 */
     private IntentDecomposer intentDecomposer;
 
+    /**
+     * 构造函数 — 初始化并自动加载持久化的运行记录。
+     *
+     * @param tenantContext 租户上下文
+     */
     public ScenarioOrchestrator(TenantContext tenantContext) {
         this.tenantContext = tenantContext;
         this.taskOrchestrator = tenantContext.getTaskOrchestrator();
@@ -52,6 +66,7 @@ public class ScenarioOrchestrator {
         loadRuns();
     }
 
+    /** 注入意图分解器 — 启用 LLM 驱动的智能任务分解。 */
     public void setIntentDecomposer(IntentDecomposer decomposer) {
         this.intentDecomposer = decomposer;
     }
@@ -197,18 +212,25 @@ public class ScenarioOrchestrator {
         return startRun(original.intent, List.of(target.withDelegation(original.delegationDecision)), runId, "reroute", original.preferredTeamId, original.preferredTeamName, original.delegationDecision, original.collaborationPattern);
     }
 
+    /** 启动运行 — 简化版，无团队偏好。 */
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction) {
         return startRun(intent, assignments, parentRunId, controlAction, null, null, null, CollaborationPattern.SEQUENTIAL);
     }
 
+    /** 启动运行 — 指定团队偏好。 */
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName) {
         return startRun(intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName, null, CollaborationPattern.SEQUENTIAL);
     }
 
+    /** 启动运行 — 指定团队偏好和委托决策。 */
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName, DelegationDecision delegationDecision) {
         return startRun(intent, assignments, parentRunId, controlAction, preferredTeamId, preferredTeamName, delegationDecision, CollaborationPattern.SEQUENTIAL);
     }
 
+    /**
+     * 启动运行 — 完整参数版。
+     * <p>生成 runId，持久化到内存和磁盘，然后根据协作模式在后台线程中执行。</p>
+     */
     private IntentRun startRun(String intent, List<SubtaskAssignment> assignments, String parentRunId, String controlAction, String preferredTeamId, String preferredTeamName, DelegationDecision delegationDecision, CollaborationPattern pattern) {
         String runId = "run_" + TASK_ID_GEN.incrementAndGet();
         DelegatedTask delegatedTask = createDelegatedTaskIfRecommended(intent, runId, delegationDecision);
@@ -460,6 +482,10 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /**
+     * 统一处理执行失败 — 记录失败案例并尝试重新分配。
+     * <p>如果找到替代 Agent，会再次尝试 delegateOne；否则记录最终失败。</p>
+     */
     private void handleExecutionFailure(IntentRun run, SubtaskAssignment a, Exception e, boolean reassigned, String reassignedFrom) {
         recordExecutionFailure(run, a, e, reassigned, reassignedFrom);
         logger.warn("Subtask '{}' failed for {}: {} — attempting reassignment",
@@ -478,22 +504,29 @@ public class ScenarioOrchestrator {
         }
     }
 
-
+    /** 根据委托决策创建委托任务（仅在推荐委托时）。 */
     private DelegatedTask createDelegatedTaskIfRecommended(String intent, String runId, DelegationDecision decision) {
         if (decision == null || !decision.recommended()) return null;
         DelegatedTaskEnvelope envelope = DelegatedTaskEnvelope.of(intent, runId, decision);
         return delegatedTaskStore.createPending(envelope);
     }
 
+    /** 将委托任务附加到每个子任务分配上。 */
     private static List<SubtaskAssignment> attachDelegatedTask(List<SubtaskAssignment> assignments, DelegatedTask task) {
         if (task == null || assignments == null) return assignments != null ? assignments : List.of();
         return assignments.stream().map(a -> a.withDelegatedTask(task)).toList();
     }
 
+    /** 委托单个子任务 — 无额外 Payload 的便捷入口。 */
     private String delegateOne(IntentRun run, SubtaskAssignment a, boolean reassigned, String reassignedFrom) throws Exception {
         return delegateOne(run, a, reassigned, reassignedFrom, Map.of());
     }
 
+    /**
+     * 委托单个子任务到指定 Agent — 核心执行逻辑。
+     * <p>包括：启动 Trace、校验 Agent 注册、构造消息、通过 TenantBus 发送并等待回复、
+     * 记录成功/失败、更新进化引擎。</p>
+     */
     private String delegateOne(IntentRun run, SubtaskAssignment a, boolean reassigned, String reassignedFrom, Map<String, Object> extraPayload) throws Exception {
         if (a.agentId() == null) {
             throw new RuntimeException("No agent assigned");
@@ -571,6 +604,10 @@ public class ScenarioOrchestrator {
         }
     }
 
+    /**
+     * 记录执行失败到进化引擎 — 失败学习反馈。
+     * <p>异常被吞掉，确保学习反馈不会中断编排流程。</p>
+     */
     private void recordExecutionFailure(IntentRun run, SubtaskAssignment a, Exception e, boolean reassigned, String reassignedFrom) {
         if (a.agentId() == null) return;
         try {
@@ -590,6 +627,7 @@ public class ScenarioOrchestrator {
         }
     }
 
+    /** 根据异常消息分类根因 — 用于失败案例和学习反馈。 */
     private static FailureCase.RootCause classifyRootCause(Exception e) {
         String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
         if (e instanceof TenantBus.TimeoutException || msg.contains("timeout") || msg.contains("within")) {
@@ -604,29 +642,39 @@ public class ScenarioOrchestrator {
         return FailureCase.RootCause.UNKNOWN;
     }
 
+    /** 将根因分类映射为 Trace 状态。 */
     private static AgentTrace.Status classifyTraceStatus(Exception e) {
         return classifyRootCause(e) == FailureCase.RootCause.TIMEOUT
             ? AgentTrace.Status.TIMED_OUT
             : AgentTrace.Status.FAILED;
     }
 
+    /** 从子任务文本中提取成功模式标识 — 用于进化引擎记录。 */
     private static String successPattern(String subtask) {
         if (subtask == null || subtask.isBlank()) return "intent-subtask";
         String normalized = subtask.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
         return normalized.length() > 48 ? normalized.substring(0, 48) : normalized;
     }
 
-    /** 获取运行状态。 */
+    /** 按 ID 获取运行状态。 */
     public IntentRun getRun(String runId) {
         return runs.get(runId);
     }
 
+    /** 列出所有运行记录 — 按启动时间倒序。 */
     public List<IntentRun> listRuns() {
         return runs.values().stream()
             .sorted(Comparator.comparingLong((IntentRun r) -> r.startedAt).reversed())
             .toList();
     }
 
+    /**
+     * 分页列出运行记录。
+     *
+     * @param limit  每页条数（<=0 表示全部）
+     * @param offset 偏移量
+     * @return 运行记录列表
+     */
     public List<IntentRun> listRuns(int limit, int offset) {
         List<IntentRun> all = listRuns();
         int safeOffset = Math.max(0, offset);
@@ -635,6 +683,7 @@ public class ScenarioOrchestrator {
         return all.subList(safeOffset, Math.min(all.size(), safeOffset + safeLimit));
     }
 
+    /** 将运行记录持久化到磁盘 — 自动修剪超限记录。 */
     public synchronized void saveRuns() {
         try {
             Path path = runsPath();
@@ -647,6 +696,7 @@ public class ScenarioOrchestrator {
         }
     }
 
+    /** 从磁盘加载持久化的运行记录 — 启动时调用。 */
     private void loadRuns() {
         Path path = runsPath();
         if (!Files.exists(path)) return;
@@ -667,7 +717,7 @@ public class ScenarioOrchestrator {
         }
     }
 
-
+    /** 修剪运行记录 — 保留最新的 maxPersistedRuns 条。 */
     private void pruneRuns() {
         int maxRuns = maxPersistedRuns();
         if (maxRuns <= 0 || runs.size() <= maxRuns) return;
@@ -678,14 +728,17 @@ public class ScenarioOrchestrator {
         runs.keySet().removeIf(id -> !keep.contains(id));
     }
 
+    /** 读取系统属性 hermes.intent.runs.max，未设置时使用默认值。 */
     private static int maxPersistedRuns() {
         return Integer.getInteger("hermes.intent.runs.max", DEFAULT_MAX_PERSISTED_RUNS);
     }
 
+    /** 返回运行记录持久化文件的完整路径。 */
     private Path runsPath() {
         return tenantContext.getTenantDir().resolve("state").resolve(RUNS_FILE);
     }
 
+    /** 从 runId 解析数字序号 — 用于恢复 TASK_ID_GEN。 */
     private static long parseRunNumber(String runId) {
         if (runId == null) return 0;
         try { return Long.parseLong(runId.replaceFirst("^run_", "")); }
@@ -783,20 +836,27 @@ public class ScenarioOrchestrator {
     }
 
 
+    /** 规范化团队 ID — 校验团队存在性，不存在时仍返回原值（兼容外部团队引用）。 */
     private String normalizeTeamId(String preferredTeamId) {
         if (preferredTeamId == null || preferredTeamId.isBlank()) return null;
         return tenantContext.getTeamManager().getTeam(preferredTeamId) != null ? preferredTeamId : preferredTeamId;
     }
 
+    /** 按团队 ID 查询团队名称。 */
     private String teamName(String teamId) {
         TeamRuntime team = teamId == null ? null : tenantContext.getTeamManager().getTeam(teamId);
         return teamName(team);
     }
 
+    /** 为 Agent 查找所属团队 — 优先使用偏好团队。 */
     private TeamRuntime teamForAgent(String agentId, String preferredTeamId) {
         return teamForAgent(tenantContext, agentId, preferredTeamId);
     }
 
+    /**
+     * 为 Agent 查找所属团队 — 静态工具方法。
+     * <p>优先检查 preferredTeamId 是否包含该 Agent，否则返回 Agent 所在第一个团队。</p>
+     */
     private static TeamRuntime teamForAgent(TenantContext ctx, String agentId, String preferredTeamId) {
         if (ctx == null || agentId == null) return null;
         try {

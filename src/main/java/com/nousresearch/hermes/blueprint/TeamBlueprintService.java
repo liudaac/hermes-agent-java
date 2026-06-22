@@ -137,6 +137,15 @@ public class TeamBlueprintService {
         return version;
     }
 
+    /**
+     * 激活指定版本 — 将该版本置为 ACTIVE，原 ACTIVE 版本置为 INACTIVE。
+     *
+     * @param workspaceId   工作空间 ID
+     * @param teamId        团队 ID
+     * @param versionNumber 要激活的版本号
+     * @return 更新后的团队蓝图记录
+     * @throws TeamBlueprintVersionNotFoundException 版本不存在时抛出
+     */
     public TeamBlueprintRecord activateVersion(String workspaceId, String teamId, int versionNumber) {
         TeamBlueprintRecord record = requireTeamBlueprint(workspaceId, teamId);
         TeamBlueprintVersion target = record.getVersions().stream()
@@ -165,6 +174,13 @@ public class TeamBlueprintService {
         return repository.list(workspaceId);
     }
 
+    /**
+     * 按 ID 查询团队蓝图。
+     *
+     * @param workspaceId 工作空间 ID
+     * @param teamId      团队 ID
+     * @return 团队蓝图记录（可能为空）
+     */
     public Optional<TeamBlueprintRecord> getTeamBlueprint(String workspaceId, String teamId) {
         return repository.findById(workspaceId, teamId);
     }
@@ -176,6 +192,7 @@ public class TeamBlueprintService {
             .orElseThrow(() -> new TeamBlueprintNotFoundException(workspaceId, teamId));
     }
 
+    /** 校验 Prompt 资产引用列表 — 确保引用的资产（及指定版本）存在。 */
     private void validatePromptAssetRefs(String workspaceId, List<String> promptAssetRefs) {
         if (promptAssetRefs == null || promptAssetRefs.isEmpty()) {
             return;
@@ -196,6 +213,13 @@ public class TeamBlueprintService {
         }
     }
 
+    /**
+     * 解析 Prompt 资产引用字符串。
+     * <p>支持格式：<code>prompt://{assetId}</code> 或 <code>prompt://{assetId}#v{version}</code></p>
+     *
+     * @param ref 引用字符串
+     * @return 解析结果（格式不合法时返回 null）
+     */
     private static PromptAssetRef parsePromptAssetRef(String ref) {
         String prefix = "prompt://";
         if (!ref.startsWith(prefix)) {
@@ -228,8 +252,10 @@ public class TeamBlueprintService {
         return new PromptAssetRef(assetId, version);
     }
 
+    /** Prompt 资产引用解析结果 — 资产 ID 和可选版本号。 */
     private record PromptAssetRef(String assetId, Integer version) {}
 
+    /** 校验 ID 格式 — 2-64 位，仅允许字母、数字、点、下划线、横线。 */
     private static void validateId(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " is required");
@@ -239,14 +265,17 @@ public class TeamBlueprintService {
         }
     }
 
+    /** 团队蓝图已存在异常 — 创建时重复调用抛出。 */
     public static class TeamBlueprintAlreadyExistsException extends RuntimeException {
         public TeamBlueprintAlreadyExistsException(String workspaceId, String teamId) { super("Team blueprint already exists: " + workspaceId + "/" + teamId); }
     }
 
+    /** 团队蓝图不存在异常 — 用于统一 404 语义。 */
     public static class TeamBlueprintNotFoundException extends RuntimeException {
         public TeamBlueprintNotFoundException(String workspaceId, String teamId) { super("Team blueprint not found: " + workspaceId + "/" + teamId); }
     }
 
+    /** 团队蓝图版本不存在异常 — 激活或查询不存在的版本时抛出。 */
     public static class TeamBlueprintVersionNotFoundException extends RuntimeException {
         public TeamBlueprintVersionNotFoundException(String workspaceId, String teamId, int version) { super("Team blueprint version not found: " + workspaceId + "/" + teamId + "#" + version); }
     }

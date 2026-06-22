@@ -449,6 +449,7 @@ public class TenantContext {
         return createAgent(sessionId, hermesConfig);
     }
 
+    /** 从磁盘加载所有已持久化的组件 — 用于 TenantContext.load()。 */
     private void loadExistingComponents() {
         lifecycleLock.writeLock().lock();
         try {
@@ -469,11 +470,12 @@ public class TenantContext {
         }
     }
 
-
+    /** Agent 角色持久化文件路径。 */
     private Path agentRolesPath() {
         return tenantDir.resolve("config").resolve(AGENT_ROLES_FILE);
     }
 
+    /** 将内存中的 Agent 角色持久化到磁盘。 */
     private void saveAgentRoles() {
         try {
             Path path = agentRolesPath();
@@ -491,6 +493,7 @@ public class TenantContext {
         }
     }
 
+    /** 从磁盘加载 Agent 角色到内存。 */
     @SuppressWarnings("unchecked")
     private void loadAgentRoles() {
         Path path = agentRolesPath();
@@ -512,6 +515,7 @@ public class TenantContext {
         }
     }
 
+    /** 从 Map 反序列化 AgentRuntimeProfile。 */
     @SuppressWarnings("unchecked")
     private static AgentRuntimeProfile agentRoleFromMap(Map<String, Object> m) {
         String name = String.valueOf(m.getOrDefault("name", "agent"));
@@ -818,6 +822,7 @@ public class TenantContext {
 
     // ============ 状态检查 ============
 
+    /** 校验租户状态必须为 ACTIVE，否则抛出异常。 */
     private void checkState() {
         State current = state.get();
         if (current != State.ACTIVE) {
@@ -825,14 +830,17 @@ public class TenantContext {
         }
     }
 
+    /** 判断租户是否处于 ACTIVE 状态。 */
     public boolean isActive() {
         return state.get() == State.ACTIVE;
     }
 
+    /** 判断租户是否在指定时长内无任何活动。 */
     public boolean isIdle(long duration, TimeUnit unit) {
         return lastActivity.plus(duration, unit.toChronoUnit()).isBefore(Instant.now());
     }
 
+    /** 更新最后活动时间戳 — 通常在接收到新请求时调用。 */
     public void updateActivity() {
         this.lastActivity = Instant.now();
     }
@@ -1195,6 +1203,7 @@ public class TenantContext {
 
     // ============ 工具方法 ============
 
+    /** 清理租户 ID — 仅保留 Unicode 字母、数字、下划线和连字符，超长截断。 */
     private static String sanitizeTenantId(String tenantId) {
         // 允许 Unicode 字母、数字、中文、下划线和连字符
         String sanitized = tenantId.replaceAll("[^\\p{L}\\p{N}_-]", "_");
@@ -1204,6 +1213,7 @@ public class TenantContext {
         return sanitized.toLowerCase();
     }
 
+    /** 创建租户所需的完整目录结构。 */
     private static void createDirectoryStructure(Path tenantDir) throws IOException {
         // 创建租户目录结构
         Files.createDirectories(tenantDir);
@@ -1224,6 +1234,7 @@ public class TenantContext {
         logger.debug("Created tenant directory structure: {}", tenantDir);
     }
 
+    /** 递归删除目录 — 用于销毁租户时清理数据。 */
     private static void cleanupDirectory(Path dir) {
         try {
             if (Files.exists(dir)) {
@@ -1234,6 +1245,7 @@ public class TenantContext {
         }
     }
 
+    /** 递归删除文件或目录。 */
     private static void deleteRecursive(Path path) throws IOException {
         if (Files.isDirectory(path)) {
             try (var stream = Files.list(path)) {
@@ -1251,18 +1263,21 @@ public class TenantContext {
 
     // ============ 异常类 ============
 
+    /** 租户创建异常 — 目录创建或组件初始化失败时抛出。 */
     public static class TenantCreationException extends RuntimeException {
         public TenantCreationException(String message, Throwable cause) {
             super(message, cause);
         }
     }
 
+    /** 租户加载异常 — 从磁盘恢复租户失败时抛出。 */
     public static class TenantLoadException extends RuntimeException {
         public TenantLoadException(String message, Throwable cause) {
             super(message, cause);
         }
     }
 
+    /** 租户不存在异常 — 加载时目录缺失抛出。 */
     public static class TenantNotFoundException extends RuntimeException {
         public TenantNotFoundException(String message) {
             super(message);
@@ -1272,7 +1287,8 @@ public class TenantContext {
 
 
     /**
-     * Compatibility alias for callers/tests that refer to the active tenant id.
+     * 兼容性别名 — 供调用方/测试获取当前租户 ID。
+     * <p>通过反射尝试 getTenantId()、tenantId() 方法或直接字段访问。</p>
      */
     public String getCurrentTenantId() {
         try {

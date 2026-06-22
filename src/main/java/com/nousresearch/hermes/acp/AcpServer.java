@@ -1,301 +1,152 @@
+/**
+ * ACP（Agent Collaboration Protocol）服务器 — 基于 Javalin 的协议入口。
+ *
+ * <p>为外部 MCP 客户端提供统一的 Agent 协作接口，核心能力：
+ * <ul>
+ *   <li>WebSocket 长连接会话管理（多客户端并发）</li>
+ *   <li>HTTP REST API（状态查询、管理操作）</li>
+ *   <li>命令路由 — 将 MCP 协议命令映射到内部 ToolRegistry</li>
+ *   <li>租户隔离 — 每个会话绑定到特定 workspace/tenant</li>
+ *   <li>审批门控 — 高风险操作自动进入审批流</li>
+ *   <li>权限控制 — 基于角色的操作权限校验</li>
+ * </ul>
+ * <p>与 DashboardServer 的区别：DashboardServer 面向人类运营者（Web UI），
+ * AcpServer 面向机器客户端（MCP Protocol）。</p>
+ */
 package com.nousresearch.hermes.acp;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.acp.integration.*;
+import com.nousresearch.hermes.acp.protocol.*;
+import com.nousresearch.hermes.acp.security.*;
+import com.nousresearch.hermes.acp.session.*;
+import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.run.BusinessRunService;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
+import com.nousresearch.hermes.org.tools.ToolRegistry;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantManager;
+import com.nousresearch.hermes.workspace.WorkspaceService;
 import io.javalin.Javalin;
-import io.javalin.http.Context;
 import io.javalin.websocket.WsConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * ACP (Agent Communication Protocol) Server implementation.
- * Mirrors Python acp_adapter/server.py
- * Exposes Hermes Agent via the Agent Client Protocol.
- */
 public class AcpServer {
     private static final Logger logger = LoggerFactory.getLogger(AcpServer.class);
-    
-    private final Javalin app;
+
     private final int port;
-    private final AcpSessionManager sessionManager;
-    private final AcpPermissions permissions;
-    private final Map<String, AcpSession> sessions = new ConcurrentHashMap<>();
-    
-    public AcpServer(int port) {
+    private Javalin app;
+
+    // 依赖注入（由 Main.java 启动时传入）
+    private final TenantManager tenantManager;
+    private final ToolRegistry toolRegistry;
+    private final BusinessApprovalService approvalService;
+    private final BusinessRunService runService;
+    private final WorkspaceService workspaceService;
+    private final ScenarioOrchestrator scenarioOrchestrator;
+
+    // 活跃会话表 — sessionId → AcpSession
+    private final ConcurrentHashMap<String, AcpSession> sessions = new ConcurrentHashMap<>();
+    private final AcpSessionFactory sessionFactory;
+
+    public AcpServer(int port,
+                     TenantManager tenantManager,
+                     ToolRegistry toolRegistry,
+                     BusinessApprovalService approvalService,
+                     BusinessRunService runService,
+                     WorkspaceService workspaceService,
+                     ScenarioOrchestrator scenarioOrchestrator) {
         this.port = port;
-        this.sessionManager = new AcpSessionManager();
-        this.permissions = new AcpPermissions();
-        this.app = createApp();
+        this.tenantManager = tenantManager;
+        this.toolRegistry = toolRegistry;
+        this.approvalService = approvalService;
+        this.runService = runService;
+        this.workspaceService = workspaceService;
+        this.scenarioOrchestrator = scenarioOrchestrator;
+        this.sessionFactory = new AcpSessionFactory(
+            tenantManager, toolRegistry, approvalService,
+            runService, workspaceService, scenarioOrchestrator,
+            this::onSessionClose
+        );
     }
-    
-    private Javalin createApp() {
-        Javalin app = Javalin.create(config -> {
+
+    /**
+     * 启动 ACP 服务器 — 注册 WebSocket 和 HTTP 路由。
+     */
+    public void start() {
+        app = Javalin.create(config -> {
             config.showJavalinBanner = false;
         });
-        
-        // Health check
-        app.get("/health", this::handleHealth);
-        
-        // ACP Protocol endpoints
-        app.post("/acp/initialize", this::handleInitialize);
-        app.post("/acp/authenticate", this::handleAuthenticate);
-        app.post("/acp/sessions/new", this::handleNewSession);
-        app.post("/acp/sessions/{id}/fork", this::handleForkSession);
-        app.post("/acp/sessions/{id}/resume", this::handleResumeSession);
-        app.post("/acp/sessions/{id}/load", this::handleLoadSession);
-        app.get("/acp/sessions", this::handleListSessions);
-        app.get("/acp/sessions/{id}", this::handleGetSession);
-        app.post("/acp/sessions/{id}/config", this::handleSetSessionConfig);
-        app.post("/acp/sessions/{id}/model", this::handleSetSessionModel);
-        app.post("/acp/sessions/{id}/mode", this::handleSetSessionMode);
-        app.post("/acp/sessions/{id}/command", this::handleRunCommand);
-        app.post("/acp/sessions/{id}/abort", this::handleAbortSession);
-        app.ws("/acp/sessions/{id}/events", this::handleWebSocket);
-        
-        return app;
-    }
-    
-    public void start() {
+
+        // WebSocket 入口 — MCP 客户端长连接
+        app.ws("/acp/v1/ws", this::configureWebSocket);
+
+        // HTTP REST API — 状态查询、会话管理
+        app.get("/acp/v1/health", ctx -> ctx.json(Map.of("status", "ok", "sessions", sessions.size())));
+        app.get("/acp/v1/sessions", ctx -> ctx.json(Map.of(
+            "sessions", sessions.values().stream().map(AcpSession::toSummary).toList()
+        )));
+        app.post("/acp/v1/sessions/{sessionId}/close", ctx -> {
+            AcpSession session = sessions.remove(ctx.pathParam("sessionId"));
+            if (session != null) session.close();
+            ctx.json(Map.of("ok", true));
+        });
+
+        // 工具列表 — 客户端发现可用工具
+        app.get("/acp/v1/tools", ctx -> {
+            String tenantId = ctx.queryParam("tenantId");
+            ctx.json(Map.of("tools", toolRegistry.listTools(tenantId)));
+        });
+
         app.start(port);
         logger.info("ACP Server started on port {}", port);
     }
-    
+
+    /**
+     * 停止服务器，清理所有会话。
+     */
     public void stop() {
-        app.stop();
+        sessions.values().forEach(AcpSession::close);
+        sessions.clear();
+        if (app != null) app.stop();
         logger.info("ACP Server stopped");
     }
-    
-    // Handler methods
-    private void handleHealth(Context ctx) {
-        ctx.json(Map.of("status", "healthy", "protocol", "acp-0.1.0"));
-    }
-    
-    private void handleInitialize(Context ctx) {
-        JSONObject body = JSON.parseObject(ctx.body());
-        logger.debug("Initialize request: {}", body);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("protocol_version", "0.1.0");
-        response.put("server_info", Map.of(
-            "name", "hermes-java-acp",
-            "version", "0.1.0"
-        ));
-        response.put("capabilities", Map.of(
-            "sessions", true,
-            "forking", true,
-            "tools", true,
-            "resources", true,
-            "prompts", true
-        ));
-        
-        ctx.json(response);
-    }
-    
-    private void handleAuthenticate(Context ctx) {
-        JSONObject body = JSON.parseObject(ctx.body());
-        String token = body.getString("token");
-        
-        if (permissions.validateToken(token)) {
-            ctx.json(Map.of(
-                "authenticated", true,
-                "session_token", UUID.randomUUID().toString()
-            ));
-        } else {
-            ctx.status(401).json(Map.of("error", "Invalid token"));
-        }
-    }
-    
-    private void handleNewSession(Context ctx) {
-        JSONObject body = JSON.parseObject(ctx.body());
-        String sessionId = UUID.randomUUID().toString();
-        
-        AcpSession session = new AcpSession(sessionId, body);
-        sessions.put(sessionId, session);
-        
-        ctx.json(Map.of(
-            "session_id", sessionId,
-            "status", "created",
-            "capabilities", session.getCapabilities()
-        ));
-    }
-    
-    private void handleForkSession(Context ctx) {
-        String parentId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession parent = sessions.get(parentId);
-        if (parent == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        String newSessionId = UUID.randomUUID().toString();
-        AcpSession forked = parent.fork(newSessionId, body);
-        sessions.put(newSessionId, forked);
-        
-        ctx.json(Map.of(
-            "session_id", newSessionId,
-            "parent_id", parentId,
-            "status", "forked"
-        ));
-    }
-    
-    private void handleResumeSession(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        AcpSession session = sessions.get(sessionId);
-        
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.resume();
-        ctx.json(Map.of("session_id", sessionId, "status", "resumed"));
-    }
-    
-    private void handleLoadSession(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession session = sessions.get(sessionId);
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.loadState(body);
-        ctx.json(Map.of("session_id", sessionId, "status", "loaded"));
-    }
-    
-    private void handleListSessions(Context ctx) {
-        List<Map<String, Object>> sessionList = new ArrayList<>();
-        for (AcpSession session : sessions.values()) {
-            sessionList.add(session.getInfo());
-        }
-        ctx.json(Map.of("sessions", sessionList));
-    }
-    
-    private void handleGetSession(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        AcpSession session = sessions.get(sessionId);
-        
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        ctx.json(session.getInfo());
-    }
-    
-    private void handleSetSessionConfig(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession session = sessions.get(sessionId);
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.setConfig(body);
-        ctx.json(Map.of("session_id", sessionId, "status", "config_updated"));
-    }
-    
-    private void handleSetSessionModel(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession session = sessions.get(sessionId);
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.setModel(body.getString("model"));
-        ctx.json(Map.of("session_id", sessionId, "status", "model_updated"));
-    }
-    
-    private void handleSetSessionMode(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession session = sessions.get(sessionId);
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.setMode(body.getString("mode"));
-        ctx.json(Map.of("session_id", sessionId, "status", "mode_updated"));
-    }
-    
-    private void handleRunCommand(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        JSONObject body = JSON.parseObject(ctx.body());
-        
-        AcpSession session = sessions.get(sessionId);
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        String command = body.getString("command");
-        String result = session.runCommand(command, body);
-        
-        ctx.json(Map.of(
-            "session_id", sessionId,
-            "result", result,
-            "status", "completed"
-        ));
-    }
-    
-    private void handleAbortSession(Context ctx) {
-        String sessionId = ctx.pathParam("id");
-        AcpSession session = sessions.get(sessionId);
-        
-        if (session == null) {
-            ctx.status(404).json(Map.of("error", "Session not found"));
-            return;
-        }
-        
-        session.abort();
-        ctx.json(Map.of("session_id", sessionId, "status", "aborted"));
-    }
-    
-    private void handleWebSocket(WsConfig ws) {
-        ws.onConnect(ctx -> {
-            String sessionId = ctx.pathParam("id");
-            logger.debug("WebSocket connected for session: {}", sessionId);
-            
-            AcpSession session = sessions.get(sessionId);
-            if (session != null) {
-                session.addWebSocketConnection(ctx);
-            }
-        });
-        
-        ws.onMessage(ctx -> {
-            String message = ctx.message();
-            String sessionId = ctx.pathParam("id");
-            logger.debug("WebSocket message for session {}: {}", sessionId, message);
 
-            AcpSession session = sessions.get(sessionId);
+    // ---- WebSocket 配置 ----
+
+    private void configureWebSocket(WsConfig ws) {
+        ws.onConnect(ctx -> {
+            String sessionId = ctx.getSessionId();
+            // 从 query param 提取租户信息
+            String workspaceId = ctx.queryParam("workspaceId");
+            String apiKey = ctx.queryParam("apiKey");
+
+            AcpSession session = sessionFactory.create(sessionId, ctx, workspaceId, apiKey);
+            sessions.put(sessionId, session);
+            logger.info("ACP session connected: {} (workspace={})", sessionId, workspaceId);
+        });
+
+        ws.onMessage(ctx -> {
+            AcpSession session = sessions.get(ctx.getSessionId());
             if (session != null) {
-                session.handleWebSocketMessage(message);
+                session.onMessage(ctx.message());
             }
         });
 
         ws.onClose(ctx -> {
-            String sessionId = ctx.pathParam("id");
-            logger.debug("WebSocket closed for session: {}", sessionId);
-
-            AcpSession session = sessions.get(sessionId);
-            if (session != null) {
-                session.removeWebSocketConnection(ctx);
-            }
+            AcpSession session = sessions.remove(ctx.getSessionId());
+            if (session != null) session.close();
+            logger.info("ACP session closed: {}", ctx.getSessionId());
         });
     }
+
+    private void onSessionClose(String sessionId) {
+        sessions.remove(sessionId);
+    }
+
+    public int getPort() { return port; }
+    public int getActiveSessionCount() { return sessions.size(); }
 }

@@ -75,16 +75,19 @@ import java.util.Map;
 public class DashboardServer {
     private static final Logger logger = LoggerFactory.getLogger(DashboardServer.class);
 
-    // Server configuration
+    // ---- 服务器配置 ----
     private final int port;
     private final String host;
     private final HermesConfig config;
     private Javalin app;
     private volatile boolean running = false;
+    /** 服务器启动时间戳 — 用于计算 uptime */
     private final long startTime = System.currentTimeMillis();
 
-    // Security
+    // ---- 安全相关 ----
+    /** 会话令牌 — 生成后不可变，用于 /api/ 路由的 Bearer 鉴权 */
     private final String sessionToken;
+    /** 公开 API 路径白名单 — 无需鉴权 */
     private final Set<String> publicApiPaths = Set.of(
         "/api/status",
         "/api/config/defaults",
@@ -94,14 +97,15 @@ public class DashboardServer {
         "/api/dashboard/plugins",
         "/api/dashboard/plugins/rescan"
     );
+    /** 本地回环地址集合 — 用于 Host 头校验 */
     private final Set<String> loopbackHosts = Set.of("localhost", "127.0.0.1", "::1");
 
-    // Rate limiting for reveal endpoint
+    // ---- reveal 接口限流 ----
     private final ConcurrentHashMap<String, Long> revealTimestamps = new ConcurrentHashMap<>();
     private static final int REVEAL_MAX_PER_WINDOW = 5;
     private static final long REVEAL_WINDOW_SECONDS = 30;
 
-    // Handlers
+    // ---- Dashboard Handler ----
     private final ConfigHandler configHandler;
     private final SessionHandler sessionHandler;
     private final EnvHandler envHandler;
@@ -114,6 +118,7 @@ public class DashboardServer {
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     private final OrgControlCenterHandler orgControlCenterHandler;
+    /** AI 原生组织 API 统一处理器 — 聚合 identity、handoff、auth 等 12 个模块 */
     private final OrgApiHandler orgApiHandler = new OrgApiHandler()
             .with("identity", new AgentIdentityManager())
             .with("handoff", new HandoffProtocol())
@@ -126,13 +131,14 @@ public class DashboardServer {
             .with("distributed", new AgentRegistry())
             .with("evolution", new SelfEvolutionEngine())
             .with("compliance", new ComplianceFramework());
-    
-    // Tenant Manager
+
+    // ---- Business Portal 核心服务 ----
     private final TenantManager tenantManager;
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
     private final BusinessRunService businessRunService;
+    /** 工具级审批协调器 — 在 Agent 工具调用前检查审批规则 */
     private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
     private final QuickTeamBuilderService quickTeamBuilderService;
     private final BusinessInsightService businessInsightService;
@@ -144,6 +150,8 @@ public class DashboardServer {
     private final com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
     private final com.nousresearch.hermes.memory.BusinessMemoryNoteService activeMemoryService;
     private final BusinessPortalFoundationFacade businessPortalFoundationFacade;
+
+    // ---- 扩展编排服务 ----
     private final com.nousresearch.hermes.business.sla.SLAManager slaManager;
     private final com.nousresearch.hermes.business.dlq.DeadLetterQueue deadLetterQueue;
     private final com.nousresearch.hermes.business.analytics.ApprovalAnalytics approvalAnalytics;
@@ -152,17 +160,44 @@ public class DashboardServer {
     private final com.nousresearch.hermes.connector.ConnectorRegistry connectorRegistry;
     private final com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory ecommerceScenarioFactory;
     private final com.nousresearch.hermes.business.event.BusinessEventBus businessEventBus;
+
+    // ---- 外部状态供应 ----
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
+    /** 组织统计供应器 — 由外部注入，用于 OrgOverviewHandler */
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
+    /**
+     * 简化构造函数 — 使用默认 TenantManager 和断开状态的 Gateway 供应器。
+     *
+     * @param port   监听端口
+     * @param host   绑定主机
+     * @param config Hermes 配置
+     */
     public DashboardServer(int port, String host, HermesConfig config) {
         this(port, host, config, new TenantManager(), GatewayRuntimeStatus::disconnected);
     }
-    
+
+    /**
+     * 指定 TenantManager 的构造函数。
+     *
+     * @param port          监听端口
+     * @param host          绑定主机
+     * @param config        Hermes 配置
+     * @param tenantManager 租户管理器
+     */
     public DashboardServer(int port, String host, HermesConfig config, TenantManager tenantManager) {
         this(port, host, config, tenantManager, GatewayRuntimeStatus::disconnected);
     }
 
+    /**
+     * 完整构造函数 — 初始化所有 Handler 和 Business Portal 服务。
+     *
+     * @param port                  监听端口
+     * @param host                  绑定主机
+     * @param config                Hermes 配置
+     * @param tenantManager         租户管理器
+     * @param gatewayStatusSupplier Gateway 状态供应器
+     */
     public DashboardServer(int port, String host, HermesConfig config,
                            TenantManager tenantManager,
                            Supplier<GatewayRuntimeStatus> gatewayStatusSupplier) {
@@ -242,6 +277,9 @@ public class DashboardServer {
         this.humanOverrideService.setEventBus(businessEventBus);
         this.deadLetterQueue.setEventBus(businessEventBus);
 
+        // ---- ACP 集成：初始化 Agent Collaboration Protocol 服务器 ----
+        this.acpIntegration = new AcpIntegration();
+
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
 
@@ -254,6 +292,7 @@ public class DashboardServer {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    /** 获取当前会话令牌 — 用于前端鉴权和 SSE 连接参数。 */
     public String getSessionToken() {
         return sessionToken;
     }
@@ -903,6 +942,7 @@ public class DashboardServer {
         }
     }
 
+    /** 返回 index.html 并注入会话令牌 — 供 SPA fallback 使用。 */
     private void serveIndexHtml(Context ctx, java.nio.file.Path webDist) {
         java.nio.file.Path indexPath = webDist.resolve("index.html");
         if (java.nio.file.Files.exists(indexPath)) {
@@ -922,6 +962,12 @@ public class DashboardServer {
         }
     }
 
+    /**
+     * 解析前端静态资源目录路径。
+     * <p>查找顺序：HERMES_WEB_DIST 环境变量 → CWD 候选路径 → JAR 同级目录候选路径。</p>
+     *
+     * @return 解析到的 web_dist 路径（找不到时返回第一个候选路径，由调用方处理）
+     */
     java.nio.file.Path resolveWebDistPath() {
         String explicit = System.getenv("HERMES_WEB_DIST");
         if (explicit != null && !explicit.isBlank()) {
@@ -981,6 +1027,7 @@ public class DashboardServer {
         return fallback;
     }
 
+    /** 安全地提供静态文件 — 通过 basePath 校验防止目录穿越。 */
     private void serveStaticFile(Context ctx, java.nio.file.Path basePath) {
         try {
             String requestPath = ctx.path();
@@ -1006,6 +1053,7 @@ public class DashboardServer {
         }
     }
 
+    /** 根据文件扩展名推断 MIME Content-Type。 */
     private String getContentType(String filename) {
         if (filename.endsWith(".js")) return "application/javascript";
         if (filename.endsWith(".css")) return "text/css";
@@ -1027,6 +1075,7 @@ public class DashboardServer {
         ctx.json(buildStatus());
     }
 
+    /** 构造 Dashboard 状态响应 — 包含版本、Gateway 状态、租户数量等。 */
     JSONObject buildStatus() {
         JSONObject status = new JSONObject();
         status.put("version", "0.1.0");
