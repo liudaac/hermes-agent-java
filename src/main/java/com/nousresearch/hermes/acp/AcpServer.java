@@ -27,12 +27,13 @@ import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import io.javalin.Javalin;
-import io.javalin.websocket.WsConfig;
+import io.javalin.websocket.WsContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class AcpServer {
     private static final Logger logger = LoggerFactory.getLogger(AcpServer.class);
@@ -117,7 +118,7 @@ public class AcpServer {
 
     // ---- WebSocket 配置 ----
 
-    private void configureWebSocket(WsConfig ws) {
+    private void configureWebSocket(Consumer<WsContext> ws) {
         ws.onConnect(ctx -> {
             String sessionId = ctx.getSessionId();
             // 从 query param 提取租户信息
