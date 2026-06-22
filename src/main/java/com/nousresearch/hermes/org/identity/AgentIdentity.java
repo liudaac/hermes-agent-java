@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.org.identity;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 
 import com.nousresearch.hermes.org.OrgUtils;
 import java.time.Instant;
@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Full identity of an AI agent as an organizational member.
  *
- * <p>An AgentIdentity wraps an AgentRole with verified credentials,
+ * <p>An AgentIdentity wraps an AgentRuntimeProfile with verified credentials,
  * SSO binding, and signing capabilities. This is what transforms a
  * tenant agent from an anonymous worker into a recognized org member
  * with verifiable outputs.</p>
@@ -24,7 +24,7 @@ public class AgentIdentity {
     private final String displayName;
 
     /** Organizational role (capabilities + reporting structure). */
-    private final AgentRole role;
+    private final AgentRuntimeProfile role;
 
     /** Department / team the agent belongs to. */
     private String department;
@@ -53,7 +53,7 @@ public class AgentIdentity {
     /** Metadata tags for discovery. */
     private final Map<String, String> tags = new LinkedHashMap<>();
 
-    public AgentIdentity(String agentId, String displayName, AgentRole role) {
+    public AgentIdentity(String agentId, String displayName, AgentRuntimeProfile role) {
         this.agentId = Objects.requireNonNull(agentId, "agentId");
         this.displayName = Objects.requireNonNull(displayName, "displayName");
         this.role = Objects.requireNonNull(role, "role");
@@ -183,7 +183,7 @@ public class AgentIdentity {
 
     public String getAgentId() { return agentId; }
     public String getDisplayName() { return displayName; }
-    public AgentRole getRole() { return role; }
+    public AgentRuntimeProfile getRole() { return role; }
     public String getDepartment() { return department; }
     public Map<String, AgentCredential> getCredentials() { return Collections.unmodifiableMap(credentials); }
     public Instant getProvisionedAt() { return provisionedAt; }

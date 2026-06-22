@@ -21,11 +21,11 @@ public class CapabilityScorer {
 
     private CapabilityScorer() {}
 
-    public static CapabilityScore score(String subtask, String agentId, AgentRole role, TenantContext ctx) {
+    public static CapabilityScore score(String subtask, String agentId, AgentRuntimeProfile role, TenantContext ctx) {
         return score(subtask, agentId, role, ctx, null);
     }
 
-    public static CapabilityScore score(String subtask, String agentId, AgentRole role, TenantContext ctx, String preferredTeamId) {
+    public static CapabilityScore score(String subtask, String agentId, AgentRuntimeProfile role, TenantContext ctx, String preferredTeamId) {
         String lower = subtask == null ? "" : subtask.toLowerCase();
         String[] tokens = lower.split("\\W+");
 
@@ -55,7 +55,7 @@ public class CapabilityScorer {
         return new CapabilityScore(agentId, role.getRoleName(), total, matchedSkills, components);
     }
 
-    private static double skillMatchScore(String[] tokens, AgentRole role, List<String> matchedSkills) {
+    private static double skillMatchScore(String[] tokens, AgentRuntimeProfile role, List<String> matchedSkills) {
         double score = 0.0;
         for (String skill : role.getSkills()) {
             String s = skill.toLowerCase();
@@ -71,7 +71,7 @@ public class CapabilityScorer {
         return score;
     }
 
-    private static double roleMatchScore(String lower, String[] tokens, AgentRole role) {
+    private static double roleMatchScore(String lower, String[] tokens, AgentRuntimeProfile role) {
         String roleLower = role.getRoleName().toLowerCase();
         if (lower.contains(roleLower)) return 2.0;
 
@@ -89,7 +89,7 @@ public class CapabilityScorer {
         return score;
     }
 
-    private static double levelBonus(AgentRole.Level level) {
+    private static double levelBonus(AgentRuntimeProfile.Level level) {
         return switch (level) {
             case LEAD -> 0.5;
             case SENIOR -> 0.3;
@@ -124,7 +124,7 @@ public class CapabilityScorer {
     private static double teamPreferenceBonus(String agentId, TenantContext ctx, String preferredTeamId) {
         if (ctx == null || preferredTeamId == null || preferredTeamId.isBlank()) return 0.0;
         try {
-            Team team = ctx.getTeamManager().getTeam(preferredTeamId);
+            TeamRuntime team = ctx.getTeamManager().getTeam(preferredTeamId);
             if (team == null) return 0.0;
             if (!team.hasMember(agentId)) return 0.0;
             return agentId != null && agentId.equals(team.getLead()) ? 1.4 : 1.25;
@@ -133,7 +133,7 @@ public class CapabilityScorer {
         }
     }
 
-    public static boolean clearExpiredManualOverride(AgentRole role) {
+    public static boolean clearExpiredManualOverride(AgentRuntimeProfile role) {
         try {
             Object expiresAt = role.getMetrics().get("manual_expires_at");
             if (expiresAt == null) return false;
@@ -148,7 +148,7 @@ public class CapabilityScorer {
         }
     }
 
-    private static double manualOverrideScore(AgentRole role) {
+    private static double manualOverrideScore(AgentRuntimeProfile role) {
         try {
             clearExpiredManualOverride(role);
             Object disabled = role.getMetrics().get("manual_disabled");
@@ -164,7 +164,7 @@ public class CapabilityScorer {
         }
     }
 
-    private static double evolutionBonus(String agentId, String lower, AgentRole role, TenantContext ctx) {
+    private static double evolutionBonus(String agentId, String lower, AgentRuntimeProfile role, TenantContext ctx) {
         if (ctx == null) return 0.0;
         try {
             var engine = ctx.getEvolutionEngine();

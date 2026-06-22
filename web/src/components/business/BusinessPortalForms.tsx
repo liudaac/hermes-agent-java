@@ -161,21 +161,60 @@ export function CreateScenarioForm({ workspaceId, teams, onCreate }: { workspace
   const [entryTeamId, setEntryTeamId] = useState("");
   const [successCriteria, setSuccessCriteria] = useState("Correctly classify the ticket\nGenerate an actionable recommendation");
   const [approvalRules, setApprovalRules] = useState("High-risk or high-value actions require human approval");
+  const [collaborationPattern, setCollaborationPattern] = useState("SEQUENTIAL");
+  const [slaName, setSlaName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canSubmit = Boolean(workspaceId) && isValidBusinessId(scenarioId.trim()) && name.trim().length > 0 && !saving;
+
+  const COLLABORATION_PATTERNS = [
+    { value: "SEQUENTIAL", label: "Sequential", desc: "A → B → C in order" },
+    { value: "PARALLEL", label: "Parallel", desc: "All agents run simultaneously" },
+    { value: "REVIEW", label: "Review", desc: "Generate → Review → Approve" },
+    { value: "COMPETITIVE", label: "Competitive", desc: "Multiple agents, best wins" },
+    { value: "MASTER_WORKER", label: "Master-Worker", desc: "Lead plans, workers execute" },
+    { value: "PIPELINE", label: "Pipeline", desc: "Data flows through chain" },
+  ];
+
+  const SLA_OPTIONS = [
+    { value: "", label: "None" },
+    { value: "customer_service", label: "Customer Service (5min warn / 10min breach)" },
+    { value: "order_processing", label: "Order Processing (30s warn / 60s breach)" },
+    { value: "inventory_alert", label: "Inventory Alert (5min warn / 10min breach)" },
+    { value: "payment_processing", label: "Payment Processing (10s warn / 30s breach)" },
+    { value: "general", label: "General (5min warn / 10min breach)" },
+  ];
+
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!workspaceId) return; if (!canSubmit) { setError(BUSINESS_ID_HELP); return; }
     setSaving(true); setError(null);
-    try { await onCreate(workspaceId, { scenarioId: scenarioId.trim(), name: name.trim(), description: description.trim() || undefined, entryTeamId: entryTeamId || undefined, successCriteria: successCriteria.split("\n").map((x) => x.trim()).filter(Boolean), approvalRules: approvalRules.split("\n").map((x) => x.trim()).filter(Boolean), metadata: { source: "business-portal-ui" } }); }
+    try {
+      await onCreate(workspaceId, {
+        scenarioId: scenarioId.trim(),
+        name: name.trim(),
+        description: description.trim() || undefined,
+        entryTeamId: entryTeamId || undefined,
+        successCriteria: successCriteria.split("\n").map((x) => x.trim()).filter(Boolean),
+        approvalRules: approvalRules.split("\n").map((x) => x.trim()).filter(Boolean),
+        collaborationPattern: collaborationPattern || undefined,
+        slaName: slaName || undefined,
+        metadata: { source: "business-portal-ui" }
+      });
+    }
     catch (err) { setError(friendlyBusinessError(err, "scenario")); }
     finally { setSaving(false); }
   };
-  return <Card><CardHeader><CardTitle>Create Scenario</CardTitle><CardDescription>Create a reusable business scenario.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
+
+  return <Card><CardHeader><CardTitle>Create Scenario</CardTitle><CardDescription>Create a reusable business scenario with orchestration settings.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
     <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario ID</label><Input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} disabled={!workspaceId} required /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
     <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
     <div className="space-y-1 md:col-span-3"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Entry Team</label><select value={entryTeamId} onChange={(e) => setEntryTeamId(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm"><option value="">No entry team yet</option>{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
+
+    {/* Orchestration settings */}
+    <div className="space-y-1 md:col-span-2"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Collaboration Pattern</label><select value={collaborationPattern} onChange={(e) => setCollaborationPattern(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{COLLABORATION_PATTERNS.map((p) => <option key={p.value} value={p.value}>{p.label} — {p.desc}</option>)}</select><div className="text-[0.65rem] normal-case text-muted-foreground">How agents coordinate when executing this scenario.</div></div>
+    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">SLA Policy</label><select value={slaName} onChange={(e) => setSlaName(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{SLA_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
+
     <TextAreaField label="Description" value={description} onChange={setDescription} disabled={!workspaceId} />
     <TextAreaField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} disabled={!workspaceId} />
     <TextAreaField label="Approval rules" value={approvalRules} onChange={setApprovalRules} disabled={!workspaceId} />

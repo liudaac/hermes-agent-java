@@ -20,8 +20,8 @@ public class BusinessPortalFoundationDiagnostics {
         List<AdapterStatus> adapters = List.of(
             adapter("promptAssetResolver", facade.promptAssetResolver(), "prompt:// resolution and PromptContext projection"),
             adapter("capabilityValidator", facade.capabilityValidator(), "TeamBlueprint capability grounding report"),
-            adapter("teamBlueprintCompiler", facade.teamBlueprintCompiler(), "TeamBlueprintVersion -> Team / AgentRole topology"),
-            adapter("scenarioIntentAdapter", facade.scenarioIntentAdapter(), "ScenarioRecord -> IntentOrchestrator input/plan/execute"),
+            adapter("teamBlueprintCompiler", facade.teamBlueprintCompiler(), "TeamBlueprintVersion -> Team / AgentRuntimeProfile topology"),
+            adapter("scenarioIntentAdapter", facade.scenarioIntentAdapter(), "ScenarioRecord -> ScenarioOrchestrator input/plan/execute"),
             adapter("runProjectionAdapter", facade.runProjectionAdapter(), "IntentRun / AgentTrace -> BusinessRunRecord projection"),
             adapter("approvalAdapter", facade.approvalAdapter(), "ApprovalRequest / ApprovalResult -> BusinessApprovalRecord projection"),
             adapter("insightProjectionAdapter", facade.insightProjectionAdapter(), "AgentTrace / Eval / Evolution summary -> BusinessInsight projection"),
@@ -52,7 +52,7 @@ public class BusinessPortalFoundationDiagnostics {
         return List.of(
             "Future API/UI/generation code should enter foundation behavior through BusinessPortalFoundationFacade.",
             "Team blueprints must be grounded by FoundationCapabilityValidator before compile/apply.",
-            "Scenario execution must go through ScenarioIntentAdapter / IntentOrchestrator.",
+            "Scenario execution must go through ScenarioIntentAdapter / ScenarioOrchestrator.",
             "BusinessRunRecord must preserve technicalTraceRef when projecting foundation runs/traces.",
             "BusinessApprovalRecord must mirror ApprovalRequest / ApprovalResult instead of becoming an approval engine.",
             "Evolution proposals must go through SelfEvolutionEngine / ApprovalSystem / DelegatedTaskStore boundaries.",

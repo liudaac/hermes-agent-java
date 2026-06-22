@@ -87,6 +87,17 @@ public class BusinessRunService {
         if (scenarioId != null && !scenarioId.isBlank()) {
             scenarioService.requireScenario(workspaceId, scenarioId);
         }
+        // Resolve collaboration pattern and SLA from scenario if available
+        String collaborationPattern = null;
+        String slaName = null;
+        if (scenarioId != null && !scenarioId.isBlank()) {
+            var scenarioOpt = scenarioService.getScenario(workspaceId, scenarioId);
+            if (scenarioOpt.isPresent()) {
+                var sc = scenarioOpt.get();
+                collaborationPattern = sc.getCollaborationPattern() != null ? sc.getCollaborationPattern().name() : null;
+                slaName = sc.getSlaName();
+            }
+        }
         Instant now = Instant.now();
         BusinessRunRecord record = new BusinessRunRecord()
             .setRunId("run-" + UUID.randomUUID().toString().substring(0, 10))
@@ -104,6 +115,9 @@ public class BusinessRunService {
             .setNextSuggestion(nextSuggestion)
             .setStatus(normalizeStatus(status))
             .setTechnicalTraceRef(technicalTraceRef)
+            .setCollaborationPattern(collaborationPattern)
+            .setSlaName(slaName)
+            .setSlaStatus("healthy")
             .setSteps(normalizeSteps(steps))
             .setTokensUsed(tokensUsed)
             .setEstimatedCost(estimatedCost)
@@ -139,6 +153,9 @@ public class BusinessRunService {
             .setTeamVersion(teamVersion)
             .setScenario(scenario.getName())
             .setScenarioId(scenarioId)
+            .setCollaborationPattern(scenario.getCollaborationPattern() != null ? scenario.getCollaborationPattern().name() : null)
+            .setSlaName(scenario.getSlaName())
+            .setSlaStatus("healthy")
             .setTaskTitle(scenario.getName() + " 试运行")
             .setTaskInput(taskInput)
             .setResultSummary("试运行完成。任务已按场景配置进入执行-验证-汇报流程。")

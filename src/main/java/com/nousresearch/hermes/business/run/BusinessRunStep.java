@@ -10,6 +10,11 @@ public class BusinessRunStep {
     private String title;
     private String summary;
     private String actor;
+    private String agentId;
+    private Double score;
+    private String matchedSkills;
+    private Boolean retry;
+    private String retryFrom;
     private String evidence;
     private String status = "COMPLETED";
     private Instant timestamp;
@@ -26,6 +31,16 @@ public class BusinessRunStep {
     public BusinessRunStep setSummary(String summary) { this.summary = summary; return this; }
     public String getActor() { return actor; }
     public BusinessRunStep setActor(String actor) { this.actor = actor; return this; }
+    public String getAgentId() { return agentId; }
+    public BusinessRunStep setAgentId(String agentId) { this.agentId = agentId; return this; }
+    public Double getScore() { return score; }
+    public BusinessRunStep setScore(Double score) { this.score = score; return this; }
+    public String getMatchedSkills() { return matchedSkills; }
+    public BusinessRunStep setMatchedSkills(String matchedSkills) { this.matchedSkills = matchedSkills; return this; }
+    public Boolean getRetry() { return retry; }
+    public BusinessRunStep setRetry(Boolean retry) { this.retry = retry; return this; }
+    public String getRetryFrom() { return retryFrom; }
+    public BusinessRunStep setRetryFrom(String retryFrom) { this.retryFrom = retryFrom; return this; }
     public String getEvidence() { return evidence; }
     public BusinessRunStep setEvidence(String evidence) { this.evidence = evidence; return this; }
     public String getStatus() { return status; }
@@ -41,6 +56,11 @@ public class BusinessRunStep {
         map.put("title", title);
         map.put("summary", summary);
         map.put("actor", actor);
+        map.put("agentId", agentId);
+        map.put("score", score);
+        map.put("matchedSkills", matchedSkills);
+        map.put("retry", retry);
+        map.put("retryFrom", retryFrom);
         map.put("evidence", evidence);
         map.put("status", status);
         map.put("timestamp", timestamp != null ? timestamp.toString() : null);

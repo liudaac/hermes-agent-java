@@ -90,7 +90,7 @@ public class TenantContext {
 
     // ======== AI原生组织：协作组件 ========
     // 租户内 Agent 角色注册表（agentId → Role）
-    private final ConcurrentHashMap<String, AgentRole> agentRoles = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AgentRuntimeProfile> agentRoles = new ConcurrentHashMap<>();
     // 租户级治理策略（token 预算、故障暂停等）
     private volatile GovernancePolicy governancePolicy;
     // Agent 间消息总线
@@ -106,9 +106,9 @@ public class TenantContext {
     // 人机交接协议
     private volatile HandoffProtocol handoffProtocol;
     // 团队管理器（同一租户内的 Agent 编组）
-    private volatile com.nousresearch.hermes.collaboration.TeamManager teamManager;
+    private volatile com.nousresearch.hermes.collaboration.TeamRuntimeRegistry teamManager;
     // 意图驱动的任务编排器（自我组织）
-    private volatile com.nousresearch.hermes.collaboration.IntentOrchestrator intentOrchestrator;
+    private volatile com.nousresearch.hermes.collaboration.ScenarioOrchestrator intentOrchestrator;
     // 模拟委派任务状态存储（advisory-only，不启动外部子进程/子 Agent）
     private volatile com.nousresearch.hermes.collaboration.DelegatedTaskStore delegatedTaskStore;
     // 组织可观测性（第五刀：全链路追踪）
@@ -479,7 +479,7 @@ public class TenantContext {
             Path path = agentRolesPath();
             Files.createDirectories(path.getParent());
             List<Map<String, Object>> rows = new ArrayList<>();
-            for (Map.Entry<String, AgentRole> entry : agentRoles.entrySet()) {
+            for (Map.Entry<String, AgentRuntimeProfile> entry : agentRoles.entrySet()) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("agent", entry.getKey());
                 row.put("role", entry.getValue().toMap());
@@ -503,7 +503,7 @@ public class TenantContext {
                 Object rawRole = row.get("role");
                 if (agentId == null || agentId.isBlank() || rawRole == null) continue;
                 Map<String, Object> roleMap = (Map<String, Object>) rawRole;
-                AgentRole role = agentRoleFromMap(roleMap);
+                AgentRuntimeProfile role = agentRoleFromMap(roleMap);
                 agentRoles.put(agentId, role);
             }
             logger.info("Tenant {}: loaded {} agent roles", tenantId, agentRoles.size());
@@ -513,15 +513,15 @@ public class TenantContext {
     }
 
     @SuppressWarnings("unchecked")
-    private static AgentRole agentRoleFromMap(Map<String, Object> m) {
+    private static AgentRuntimeProfile agentRoleFromMap(Map<String, Object> m) {
         String name = String.valueOf(m.getOrDefault("name", "agent"));
         String description = String.valueOf(m.getOrDefault("description", ""));
-        AgentRole.Level level = AgentRole.Level.MID;
+        AgentRuntimeProfile.Level level = AgentRuntimeProfile.Level.MID;
         try {
             Object rawLevel = m.get("level");
-            if (rawLevel != null) level = AgentRole.Level.valueOf(String.valueOf(rawLevel));
+            if (rawLevel != null) level = AgentRuntimeProfile.Level.valueOf(String.valueOf(rawLevel));
         } catch (Exception ignored) {}
-        AgentRole role = new AgentRole(name, description, level);
+        AgentRuntimeProfile role = new AgentRuntimeProfile(name, description, level);
         for (Object skill : (List<Object>) m.getOrDefault("skills", Collections.emptyList())) role.addSkill(String.valueOf(skill));
         for (Object item : (List<Object>) m.getOrDefault("responsibilities", Collections.emptyList())) role.responsibilities(String.valueOf(item));
         Object reportsTo = m.get("reports_to");
@@ -870,14 +870,14 @@ public class TenantContext {
     // ======== AI原生组织：协作组件 getter ========
 
     /** 注册或更新 Agent 角色 */
-    public void registerAgentRole(String agentId, AgentRole role) {
+    public void registerAgentRole(String agentId, AgentRuntimeProfile role) {
         agentRoles.put(agentId, role);
         logger.info("Tenant {}: registered role '{}' for agent {}", tenantId, role.getRoleName(), agentId);
     }
 
     /** 删除 Agent 角色 */
-    public AgentRole unregisterAgentRole(String agentId) {
-        AgentRole removed = agentRoles.remove(agentId);
+    public AgentRuntimeProfile unregisterAgentRole(String agentId) {
+        AgentRuntimeProfile removed = agentRoles.remove(agentId);
         if (removed != null) {
             saveAgentRoles();
             logger.info("Tenant {}: unregistered role '{}' for agent {}", tenantId, removed.getRoleName(), agentId);
@@ -886,12 +886,12 @@ public class TenantContext {
     }
 
     /** 获取 Agent 角色 */
-    public AgentRole getAgentRole(String agentId) {
+    public AgentRuntimeProfile getAgentRole(String agentId) {
         return agentRoles.get(agentId);
     }
 
     /** 列出所有角色 */
-    public Map<String, AgentRole> listAgentRoles() {
+    public Map<String, AgentRuntimeProfile> listAgentRoles() {
         return new ConcurrentHashMap<>(agentRoles);
     }
 
@@ -987,11 +987,11 @@ public class TenantContext {
     }
 
     /** 获取团队管理器（同一租户内的 Agent 编组） */
-    public com.nousresearch.hermes.collaboration.TeamManager getTeamManager() {
+    public com.nousresearch.hermes.collaboration.TeamRuntimeRegistry getTeamManager() {
         if (teamManager == null) {
             synchronized (this) {
                 if (teamManager == null) {
-                    teamManager = new com.nousresearch.hermes.collaboration.TeamManager(tenantId);
+                    teamManager = new com.nousresearch.hermes.collaboration.TeamRuntimeRegistry(tenantId);
                 }
             }
         }
@@ -999,11 +999,11 @@ public class TenantContext {
     }
 
     /** 获取意图编排器（第四刀：Agent 自我组织） */
-    public com.nousresearch.hermes.collaboration.IntentOrchestrator getIntentOrchestrator() {
+    public com.nousresearch.hermes.collaboration.ScenarioOrchestrator getScenarioOrchestrator() {
         if (intentOrchestrator == null) {
             synchronized (this) {
                 if (intentOrchestrator == null) {
-                    intentOrchestrator = new com.nousresearch.hermes.collaboration.IntentOrchestrator(this);
+                    intentOrchestrator = new com.nousresearch.hermes.collaboration.ScenarioOrchestrator(this);
                 }
             }
         }

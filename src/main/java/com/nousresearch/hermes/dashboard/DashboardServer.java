@@ -23,7 +23,10 @@ import java.nio.file.Path;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.BusinessPortalDashboardIntegration;
+import com.nousresearch.hermes.workspace.BusinessPortalExtendedIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.nousresearch.hermes.blueprint.QuickTeamBuilderDashboardIntegration;
+import com.nousresearch.hermes.blueprint.QuickTeamBuilderService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.business.approval.BusinessApprovalDashboardIntegration;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
@@ -31,6 +34,7 @@ import com.nousresearch.hermes.business.run.BusinessRunDashboardIntegration;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.business.insight.BusinessInsightDashboardIntegration;
 import com.nousresearch.hermes.business.insight.BusinessInsightService;
+import com.nousresearch.hermes.scenario.PlanReflectionService;
 import com.nousresearch.hermes.scenario.ScenarioDashboardIntegration;
 import com.nousresearch.hermes.scenario.ScenarioService;
 import com.nousresearch.hermes.prompt.PromptAssetDashboardIntegration;
@@ -38,7 +42,7 @@ import com.nousresearch.hermes.prompt.PromptAssetService;
 import com.nousresearch.hermes.prompt.PromptAssetResolver;
 import com.nousresearch.hermes.evolution.EvolutionProposalDashboardIntegration;
 import com.nousresearch.hermes.evolution.EvolutionProposalService;
-import com.nousresearch.hermes.memory.ActiveMemoryService;
+import com.nousresearch.hermes.memory.BusinessMemoryNoteService;
 import com.nousresearch.hermes.policy.PolicyDashboardIntegration;
 import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.evalset.EvalSetService;
@@ -110,7 +114,6 @@ public class DashboardServer {
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     private final OrgControlCenterHandler orgControlCenterHandler;
-    private final OrgManagementHandler orgManagementHandler;
     private final OrgApiHandler orgApiHandler = new OrgApiHandler()
             .with("identity", new AgentIdentityManager())
             .with("handoff", new HandoffProtocol())
@@ -129,8 +132,9 @@ public class DashboardServer {
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
-    private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
     private final BusinessRunService businessRunService;
+    private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
+    private final QuickTeamBuilderService quickTeamBuilderService;
     private final BusinessInsightService businessInsightService;
     private final ScenarioService scenarioService;
     private final PromptAssetService promptAssetService;
@@ -138,8 +142,16 @@ public class DashboardServer {
     private final PolicyService policyService;
     private final com.nousresearch.hermes.evalset.EvalSetService evalSetService;
     private final com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
-    private final com.nousresearch.hermes.memory.ActiveMemoryService activeMemoryService;
+    private final com.nousresearch.hermes.memory.BusinessMemoryNoteService activeMemoryService;
     private final BusinessPortalFoundationFacade businessPortalFoundationFacade;
+    private final com.nousresearch.hermes.business.sla.SLAManager slaManager;
+    private final com.nousresearch.hermes.business.dlq.DeadLetterQueue deadLetterQueue;
+    private final com.nousresearch.hermes.business.analytics.ApprovalAnalytics approvalAnalytics;
+    private final com.nousresearch.hermes.business.humanintheloop.HumanOverrideService humanOverrideService;
+    private final com.nousresearch.hermes.business.workflow.BusinessWorkflowService workflowService;
+    private final com.nousresearch.hermes.connector.ConnectorRegistry connectorRegistry;
+    private final com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory ecommerceScenarioFactory;
+    private final com.nousresearch.hermes.business.event.BusinessEventBus businessEventBus;
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
     private Supplier<Map<String, Object>> orgStatsSupplier;
 
@@ -169,7 +181,6 @@ public class DashboardServer {
         // Wire AI-native org overview/control center to real tenant data
         this.orgOverviewHandler.setTenantManager(tenantManager);
         this.orgControlCenterHandler = new OrgControlCenterHandler(tenantManager);
-        this.orgManagementHandler = new OrgManagementHandler(tenantManager);
         this.envHandler = new EnvHandler();
         this.logsHandler = new LogsHandler();
         this.skillsHandler = new SkillsHandler();
@@ -193,7 +204,7 @@ public class DashboardServer {
         this.evolutionProposalService = new EvolutionProposalService(workspaceService, teamBlueprintService);
         this.policyService = new PolicyService(workspaceService, teamBlueprintService);
         this.scenarioService.setPolicyService(policyService, businessApprovalService);
-        this.scenarioService.setActiveMemoryService(new com.nousresearch.hermes.memory.ActiveMemoryService(workspaceService));
+        this.scenarioService.setBusinessMemoryNoteService(new com.nousresearch.hermes.memory.BusinessMemoryNoteService(workspaceService));
         // Wire tool-level approval coordinator into team runtime
         var toolApprovalCoordinator = new com.nousresearch.hermes.business.approval.ToolApprovalCoordinator(
             workspaceService, businessApprovalService);
@@ -203,12 +214,33 @@ public class DashboardServer {
         this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
         // Wire canary into scenario service for traffic-based version routing + metrics
         this.scenarioService.setCanaryReleaseService(canaryReleaseService);
-        this.activeMemoryService = new ActiveMemoryService(workspaceService);
+        this.scenarioService.setPlanReflectionService(
+            new PlanReflectionService(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())));
+        this.quickTeamBuilderService = new QuickTeamBuilderService(
+            new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()));
+        this.activeMemoryService = new BusinessMemoryNoteService(workspaceService);
         this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
             workspaceService,
             tenantManager,
             promptAssetService
         ).createFacade();
+        // Extended orchestration services
+        this.businessEventBus = new com.nousresearch.hermes.business.event.BusinessEventBus();
+        this.slaManager = new com.nousresearch.hermes.business.sla.SLAManager(businessRunService, businessApprovalService);
+        this.deadLetterQueue = new com.nousresearch.hermes.business.dlq.DeadLetterQueue();
+        this.approvalAnalytics = new com.nousresearch.hermes.business.analytics.ApprovalAnalytics(businessApprovalService);
+        this.humanOverrideService = new com.nousresearch.hermes.business.humanintheloop.HumanOverrideService(workspaceService, businessRunService);
+        this.workflowService = new com.nousresearch.hermes.business.workflow.BusinessWorkflowService(
+            new WorkflowEngine(java.nio.file.Paths.get(System.getProperty("user.home"), ".hermes", "workflows")),
+            scenarioService, workspaceService, businessRunService, slaManager);
+        this.connectorRegistry = new com.nousresearch.hermes.connector.ConnectorRegistry();
+        this.ecommerceScenarioFactory = new com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory(
+            workspaceService, scenarioService, teamBlueprintService);
+
+        // Wire event bus into services
+        this.slaManager.setEventBus(businessEventBus);
+        this.humanOverrideService.setEventBus(businessEventBus);
+        this.deadLetterQueue.setEventBus(businessEventBus);
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -468,9 +500,14 @@ public class DashboardServer {
         BusinessInsightDashboardIntegration.registerRoutes(app, businessInsightService);
         PolicyDashboardIntegration.registerRoutes(app, policyService);
         BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService, businessInsightService);
+        BusinessPortalExtendedIntegration.registerRoutes(app, workspaceService, slaManager, deadLetterQueue, approvalAnalytics, humanOverrideService, workflowService, connectorRegistry, ecommerceScenarioFactory);
+        QuickTeamBuilderDashboardIntegration.registerRoutes(app, quickTeamBuilderService, teamBlueprintService);
         com.nousresearch.hermes.evalset.EvalSetDashboardIntegration.registerRoutes(app, evalSetService);
         com.nousresearch.hermes.canary.CanaryReleaseDashboardIntegration.registerRoutes(app, canaryReleaseService);
-        com.nousresearch.hermes.memory.ActiveMemoryDashboardIntegration.registerRoutes(app, activeMemoryService);
+        com.nousresearch.hermes.memory.BusinessMemoryNoteDashboardIntegration.registerRoutes(app, activeMemoryService);
+        // Business orchestration real-time SSE stream
+        var businessEventSseHandler = new com.nousresearch.hermes.workspace.BusinessEventSSEHandler(businessEventBus);
+        app.sse("/api/v1/business/events/stream", businessEventSseHandler::handle);
         app.get("/api/v1/business/foundation/diagnostics", ctx -> ctx.status(200).json(Map.of(
             "ok", true,
             "diagnostics", businessPortalFoundationFacade.diagnostics().toMap()
@@ -618,7 +655,7 @@ public class DashboardServer {
                     ));
                     return;
                 }
-                var run = tenant.getIntentOrchestrator().getRun(intentRunId);
+                var run = tenant.getScenarioOrchestrator().getRun(intentRunId);
                 if (run == null) {
                     ctx.status(404).json(Map.of(
                         "ok", false,
@@ -781,14 +818,6 @@ public class DashboardServer {
         app.get("/api/org/compliance", orgApiHandler::complianceSummary);
 
         // --- Org Control Center API (五刀可视化聚合) ---
-        app.get("/api/org/manage/summary", orgManagementHandler::summary);
-        app.get("/api/org/manage/audit", orgManagementHandler::audit);
-        app.get("/api/org/manage/teams", orgManagementHandler::listTeams);
-        app.post("/api/org/manage/teams", orgManagementHandler::upsertTeam);
-        app.delete("/api/org/manage/teams/{tenantId}/{teamId}", orgManagementHandler::deleteTeam);
-        app.get("/api/org/manage/roles", orgManagementHandler::listRoles);
-        app.post("/api/org/manage/roles", orgManagementHandler::upsertRole);
-        app.delete("/api/org/manage/roles/{tenantId}/{agentId}", orgManagementHandler::deleteRole);
 
         app.get("/api/org/control/overview", orgControlCenterHandler::overview);
         app.get("/api/org/control/teams", orgControlCenterHandler::teams);

@@ -9,9 +9,9 @@ import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.business.run.BusinessRunStep;
 import com.nousresearch.hermes.business.run.RunEventBus;
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.config.Constants;
-import com.nousresearch.hermes.memory.ActiveMemoryService;
+import com.nousresearch.hermes.memory.BusinessMemoryNoteService;
 import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.workspace.WorkspaceService;
 import org.slf4j.Logger;
@@ -36,8 +36,9 @@ public class ScenarioService {
     private ScenarioIntentAdapter scenarioIntentAdapter;
     private PolicyService policyService;
     private BusinessApprovalService businessApprovalService;
-    private ActiveMemoryService activeMemoryService;
+    private BusinessMemoryNoteService activeMemoryService;
     private com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
+    private PlanReflectionService planReflectionService;
 
     public ScenarioService(WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
         this(new FileScenarioRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService, teamBlueprintService);
@@ -68,7 +69,7 @@ public class ScenarioService {
     }
 
     /** Wire active memory service for knowledge recall. */
-    public void setActiveMemoryService(ActiveMemoryService activeMemoryService) {
+    public void setBusinessMemoryNoteService(BusinessMemoryNoteService activeMemoryService) {
         this.activeMemoryService = activeMemoryService;
     }
 
@@ -78,6 +79,10 @@ public class ScenarioService {
         this.teamBlueprintRuntime.setCanaryReleaseService(canaryReleaseService);
     }
 
+    public void setPlanReflectionService(PlanReflectionService service) {
+        this.planReflectionService = service;
+    }
+
     /** Expose the underlying team blueprint runtime (for wiring tool-approval coordinator etc). */
     public TeamBlueprintRuntime getTeamBlueprintRuntime() {
         return this.teamBlueprintRuntime;
@@ -85,7 +90,9 @@ public class ScenarioService {
 
     public ScenarioRecord createScenario(String workspaceId, String scenarioId, String name, String description,
                                          String entryTeamId, List<String> successCriteria,
-                                         List<String> approvalRules, Map<String, Object> metadata) {
+                                         List<String> approvalRules, Map<String, Object> metadata,
+                                         com.nousresearch.hermes.collaboration.pattern.CollaborationPattern collaborationPattern,
+                                         String slaName) {
         workspaceService.requireWorkspace(workspaceId);
         validateId(scenarioId, "scenarioId");
         if (repository.exists(workspaceId, scenarioId)) {
@@ -104,6 +111,8 @@ public class ScenarioService {
             .setStatus("ACTIVE")
             .setSuccessCriteria(successCriteria)
             .setApprovalRules(approvalRules)
+            .setCollaborationPattern(collaborationPattern)
+            .setSlaName(slaName)
             .setMetadata(metadata)
             .setCreatedAt(now)
             .setUpdatedAt(now);
@@ -131,7 +140,7 @@ public class ScenarioService {
     }
 
     /**
-     * Execute a scenario through the IntentOrchestrator and project the result into a BusinessRunRecord.
+     * Execute a scenario through the ScenarioOrchestrator and project the result into a BusinessRunRecord.
      * Returns the business run story with real execution traces.
      *
      * <p>If policy service is wired and approval rules are triggered, creates an approval card
@@ -207,7 +216,7 @@ public class ScenarioService {
             }
         }
 
-        IntentOrchestrator.IntentRun intentRun = scenarioIntentAdapter.execute(scenario, userInput);
+        ScenarioOrchestrator.IntentRun intentRun = scenarioIntentAdapter.execute(scenario, userInput);
         BusinessRunProjectionAdapter projectionAdapter = new BusinessRunProjectionAdapter();
         BusinessRunRecord projection = projectionAdapter.fromIntentRun(
             workspaceId, scenarioId, scenario.getName(), intentRun);
@@ -256,7 +265,7 @@ public class ScenarioService {
      * Watch an IntentRun in the background and publish business run events as it progresses.
      * Polls every 200ms until the run reaches a terminal state.
      */
-    private void startRunWatcher(String workspaceId, String runId, IntentOrchestrator.IntentRun intentRun,
+    private void startRunWatcher(String workspaceId, String runId, ScenarioOrchestrator.IntentRun intentRun,
                                   BusinessRunService runService) {
         Thread t = new Thread(() -> {
             try {
@@ -264,15 +273,25 @@ public class ScenarioService {
                 int lastSuccessCount = 0;
                 int lastFailureCount = 0;
 
-                // Mark run as running
+                // Mark run as running + publish plan
                 runService.updateRunStatus(workspaceId, runId, BusinessRunService.RUNNING, "Run started");
+                List<String> planSteps = intentRun.assignments.stream()
+                    .map(a -> a.subtask() != null ? a.subtask() : "Task")
+                    .toList();
                 runService.getEventBus().publish(new RunEventBus.RunEvent(
                     runId, workspaceId, RunEventBus.EventType.RUN_STARTED,
-                    "Run started", Map.of("intent", intentRun.intent)));
+                    "Run started", Map.of(
+                        "intent", intentRun.intent,
+                        "planSteps", planSteps,
+                        "totalSteps", planSteps.size()
+                    )));
 
-                while (intentRun.status != IntentOrchestrator.RunStatus.COMPLETED &&
-                       intentRun.status != IntentOrchestrator.RunStatus.PARTIAL &&
-                       intentRun.status != IntentOrchestrator.RunStatus.FAILED) {
+                // Track completed steps for reflection
+                List<PlanReflectionService.CompletedStep> completedForReflect = new ArrayList<>();
+
+                while (intentRun.status != ScenarioOrchestrator.RunStatus.COMPLETED &&
+                       intentRun.status != ScenarioOrchestrator.RunStatus.PARTIAL &&
+                       intentRun.status != ScenarioOrchestrator.RunStatus.FAILED) {
                     try {
                         Thread.sleep(200);
                     } catch (InterruptedException e) {
@@ -303,12 +322,36 @@ public class ScenarioService {
                         for (int i = 0; i < intentRun.attempts.size(); i++) {
                             var attempt = intentRun.attempts.get(i);
                             if (intentRun.successes.containsKey(attempt.subtask())) {
+                                String result = intentRun.successes.get(attempt.subtask());
                                 BusinessRunStep step = new BusinessRunStep()
                                     .setStepId("attempt-" + (i + 1))
                                     .setTitle(attempt.subtask() != null ? attempt.subtask() : "Task " + (i + 1))
-                                    .setSummary(intentRun.successes.get(attempt.subtask()))
+                                    .setSummary(result)
                                     .setActor(attempt.roleName() != null && !attempt.roleName().isBlank() ? attempt.roleName() : attempt.agentId())
                                     .setStatus("COMPLETED");
+
+                                // --- Plan-Execute-Reflect: self-reflection ---
+                                if (planReflectionService != null) {
+                                    completedForReflect.add(new PlanReflectionService.CompletedStep(
+                                        attempt.subtask(), result));
+                                    var reflect = planReflectionService.reflect(
+                                        intentRun.intent,
+                                        planSteps,
+                                        new ArrayList<>(completedForReflect),
+                                        attempt.subtask(),
+                                        result
+                                    );
+                                    Map<String, Object> meta = new LinkedHashMap<>();
+                                    meta.put("reflection", reflect.narrative);
+                                    meta.put("aligned", reflect.aligned);
+                                    meta.put("confidence", reflect.confidence);
+                                    if (reflect.replan) {
+                                        meta.put("replan", true);
+                                        meta.put("suggestion", reflect.suggestion);
+                                    }
+                                    step.setMetadata(meta);
+                                }
+
                                 runService.getEventBus().publish(new RunEventBus.RunEvent(
                                     runId, workspaceId, RunEventBus.EventType.STEP_COMPLETED,
                                     attempt.subtask() + " completed", Map.of("step", step.toMap())));
@@ -402,7 +445,7 @@ public class ScenarioService {
      * Preserves non-attempt steps (assignments, traces, etc.) from the projection.
      */
     private void updateRunStepsFromIntent(BusinessRunService runService, String workspaceId,
-                                           String runId, IntentOrchestrator.IntentRun intentRun) {
+                                           String runId, ScenarioOrchestrator.IntentRun intentRun) {
         try {
             var run = runService.requireRun(workspaceId, runId);
             List<BusinessRunStep> existingSteps = new ArrayList<>(run.getSteps());

@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.blueprint;
 
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.policy.PolicyService;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -19,8 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>When a team blueprint is activated, this runtime component spins up
  * a {@link TenantAwareAIAgent} for each agent blueprint entry, wires up
- * the matching {@link AgentRole}, and registers each one on the TenantBus
- * so that the IntentOrchestrator can discover and delegate to them.</p>
+ * the matching {@link AgentRuntimeProfile}, and registers each one on the TenantBus
+ * so that the ScenarioOrchestrator can discover and delegate to them.</p>
  *
  * <p>Agent instances are cached per (workspaceId, teamId, version). When a
  * new version is activated, the old agents are unregistered before the new
@@ -213,17 +213,17 @@ public class TeamBlueprintRuntime {
 
     /**
      * Create a single agent instance from a blueprint record.
-     * Wires the AgentRole, registers on the bus.
+     * Wires the AgentRuntimeProfile, registers on the bus.
      */
     private TenantAwareAIAgent createAgentFromBlueprint(TenantContext tenantCtx, String workspaceId, String teamId, AgentBlueprintRecord blueprint) {
         String agentId = blueprint.getAgentId();
 
-        // Build the AgentRole from blueprint
-        AgentRole role = new AgentRole(
+        // Build the AgentRuntimeProfile from blueprint
+        AgentRuntimeProfile role = new AgentRuntimeProfile(
             blueprint.getDisplayName() != null && !blueprint.getDisplayName().isBlank()
                 ? blueprint.getDisplayName() : agentId,
             blueprint.getResponsibility() != null ? blueprint.getResponsibility() : "",
-            AgentRole.Level.MID
+            AgentRuntimeProfile.Level.MID
         );
 
         if (blueprint.getResponsibility() != null && !blueprint.getResponsibility().isBlank()) {

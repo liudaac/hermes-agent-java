@@ -1,5 +1,7 @@
 package com.nousresearch.hermes.scenario;
 
+import com.nousresearch.hermes.collaboration.pattern.CollaborationPattern;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -16,6 +18,8 @@ public class ScenarioRecord {
     private String status = "ACTIVE";
     private List<String> successCriteria = new ArrayList<>();
     private List<String> approvalRules = new ArrayList<>();
+    private CollaborationPattern collaborationPattern = CollaborationPattern.SEQUENTIAL;
+    private String slaName;
     private Map<String, Object> metadata = new LinkedHashMap<>();
     private Instant createdAt;
     private Instant updatedAt;
@@ -39,6 +43,10 @@ public class ScenarioRecord {
     public ScenarioRecord setSuccessCriteria(List<String> successCriteria) { this.successCriteria = successCriteria != null ? successCriteria : new ArrayList<>(); return this; }
     public List<String> getApprovalRules() { return approvalRules; }
     public ScenarioRecord setApprovalRules(List<String> approvalRules) { this.approvalRules = approvalRules != null ? approvalRules : new ArrayList<>(); return this; }
+    public CollaborationPattern getCollaborationPattern() { return collaborationPattern; }
+    public ScenarioRecord setCollaborationPattern(CollaborationPattern collaborationPattern) { this.collaborationPattern = collaborationPattern != null ? collaborationPattern : CollaborationPattern.SEQUENTIAL; return this; }
+    public String getSlaName() { return slaName; }
+    public ScenarioRecord setSlaName(String slaName) { this.slaName = slaName; return this; }
     public Map<String, Object> getMetadata() { return metadata; }
     public ScenarioRecord setMetadata(Map<String, Object> metadata) { this.metadata = metadata != null ? metadata : new LinkedHashMap<>(); return this; }
     public Instant getCreatedAt() { return createdAt; }

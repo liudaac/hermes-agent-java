@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Foundation input projection from a Business Portal Scenario to IntentOrchestrator. */
+/** Foundation input projection from a Business Portal Scenario to ScenarioOrchestrator. */
 public record ScenarioIntentRequest(
     String workspaceId,
     String scenarioId,

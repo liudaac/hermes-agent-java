@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * FIXED: Tenant-aware tool dispatcher that routes all tool calls through tenant sandbox.
@@ -53,6 +54,9 @@ public class TenantAwareToolDispatcher {
     // AI原生组织：结构化协商引擎
     private Negotiator negotiator;
     
+    // 工具调用预演与解释层
+    private ToolCallPrelude toolCallPrelude;
+    
     public TenantAwareToolDispatcher(TenantContext tenantContext, ToolRegistry globalRegistry) {
         this.tenantContext = tenantContext;
         this.globalRegistry = globalRegistry;
@@ -68,6 +72,10 @@ public class TenantAwareToolDispatcher {
     
     public void setNegotiator(Negotiator negotiator) {
         this.negotiator = negotiator;
+    }
+    
+    public void setToolCallPrelude(ToolCallPrelude prelude) {
+        this.toolCallPrelude = prelude;
     }
     
     public String dispatch(String toolName, Map<String, Object> args) {
@@ -93,7 +101,41 @@ public class TenantAwareToolDispatcher {
 
         var permission = tenantContext.getToolRegistry().checkPermission(toolName, safeArgs);
         if (!permission.isAllowed()) {
-            return ToolRegistry.toolError(permission.getReason());
+            return ToolRegistry.toolError(ToolCallPrelude.gracefulReject(
+                permission.getReason(),
+                "Check your agent's allowed_tools list or request reassignment to an agent with the appropriate permissions."
+            ));
+        }
+
+        // --- Tool call prelude: explainability + dry-run + reject ---
+        if (toolCallPrelude != null) {
+            var preludeCtx = new ToolCallPrelude.ExecutionContext(
+                null, // taskDescription — filled by caller if available
+                null, // currentSubtask
+                null  // agentRole
+            );
+            var prelude = toolCallPrelude.analyze(toolName, safeArgs, preludeCtx, Set.of());
+
+            if (prelude.isRejected()) {
+                String result = ToolRegistry.toolError(ToolCallPrelude.gracefulReject(
+                    prelude.rejectReason,
+                    "This action is outside the agent's scope. Consider delegating to another agent or requesting human assistance."
+                ));
+                tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, result);
+                // Record explanation to observability if available
+                recordPreludeToTrace(toolName, prelude, true);
+                return result;
+            }
+
+            // Record explanation to trace
+            recordPreludeToTrace(toolName, prelude, false);
+
+            // Log warnings
+            if (!prelude.warnings.isEmpty()) {
+                for (String w : prelude.warnings) {
+                    logger.warn("Tool prelude warning for {}: {}", toolName, w);
+                }
+            }
         }
 
         // Compute tool entry once for both approval and negotiation
@@ -716,7 +758,7 @@ public class TenantAwareToolDispatcher {
         }
 
         try {
-            var orchestrator = tenantContext.getIntentOrchestrator();
+            var orchestrator = tenantContext.getScenarioOrchestrator();
 
             if ("plan".equalsIgnoreCase(mode)) {
                 var plan = orchestrator.plan(intent, preferredTeamId, allowDelegation, contextSignals);
@@ -784,7 +826,7 @@ public class TenantAwareToolDispatcher {
         }
 
         try {
-            var run = tenantContext.getIntentOrchestrator().getRun(runId);
+            var run = tenantContext.getScenarioOrchestrator().getRun(runId);
             if (run == null) {
                 return ToolRegistry.toolError("No run found with id: " + runId);
             }
@@ -1020,5 +1062,33 @@ public class TenantAwareToolDispatcher {
     private HookEngine getHookEngine() {
         PluginManager pm = PluginManager.getInstance();
         return pm != null ? pm.getHookEngineFacade() : null;
+    }
+
+    /**
+     * Record tool call prelude (intent explanation, warnings, rejection) to observability.
+     */
+    private void recordPreludeToTrace(String toolName, ToolCallPrelude.Result prelude, boolean rejected) {
+        try {
+            var obs = tenantContext.getObservability();
+            if (obs != null) {
+                var trace = obs.startTrace("tool-prelude", tenantContext.getTenantId(), toolName);
+                if (prelude.explanation != null) {
+                    trace.meta("intent", prelude.explanation);
+                }
+                if (prelude.dryRunRecommended) {
+                    trace.meta("dry_run", true);
+                }
+                if (prelude.preview != null) {
+                    trace.meta("preview", prelude.preview);
+                }
+                if (!prelude.warnings.isEmpty()) {
+                    trace.meta("warnings", String.join("; ", prelude.warnings));
+                }
+                trace.meta("rejected", rejected);
+                trace.end(rejected ? com.nousresearch.hermes.org.observe.AgentTrace.Status.FAILED : com.nousresearch.hermes.org.observe.AgentTrace.Status.SUCCESS);
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to record prelude trace: {}", e.getMessage());
+        }
     }
 }

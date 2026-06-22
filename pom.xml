@@ -252,7 +252,7 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.nousresearch.hermes.HermesAgent</mainClass>
+                                    <mainClass>com.nousresearch.hermes.HermesAgentV2</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>

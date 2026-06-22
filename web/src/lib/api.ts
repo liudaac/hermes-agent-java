@@ -264,6 +264,42 @@ export const api = {
     qs.set("limit", String(limit));
     return fetchJSON<BusinessRunsResponse>(`/api/v1/business/runs?${qs.toString()}`);
   },
+  getBusinessRun: (workspaceId: string, runId: string) =>
+    fetchJSON<{ ok: boolean; run: BusinessRunRecord }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/runs/${encodeURIComponent(runId)}`),
+  streamBusinessRun: (workspaceId: string, runId: string, onEvent: (event: string, data: Record<string, unknown>) => void, onError?: (err: Event) => void): EventSource => {
+    const es = new EventSource(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/runs/${encodeURIComponent(runId)}/stream`);
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data) as Record<string, unknown>;
+        onEvent(e.lastEventId || "message", data);
+      } catch {
+        onEvent(e.lastEventId || "message", { raw: e.data });
+      }
+    };
+    es.addEventListener("run.state", (e: MessageEvent) => {
+      try { onEvent("run.state", JSON.parse(e.data)); } catch { onEvent("run.state", { raw: e.data }); }
+    });
+    es.addEventListener("run.started", (e: MessageEvent) => {
+      try { onEvent("run.started", JSON.parse(e.data)); } catch { onEvent("run.started", { raw: e.data }); }
+    });
+    es.addEventListener("step.started", (e: MessageEvent) => {
+      try { onEvent("step.started", JSON.parse(e.data)); } catch { onEvent("step.started", { raw: e.data }); }
+    });
+    es.addEventListener("step.completed", (e: MessageEvent) => {
+      try { onEvent("step.completed", JSON.parse(e.data)); } catch { onEvent("step.completed", { raw: e.data }); }
+    });
+    es.addEventListener("step.failed", (e: MessageEvent) => {
+      try { onEvent("step.failed", JSON.parse(e.data)); } catch { onEvent("step.failed", { raw: e.data }); }
+    });
+    es.addEventListener("run.completed", (e: MessageEvent) => {
+      try { onEvent("run.completed", JSON.parse(e.data)); } catch { onEvent("run.completed", { raw: e.data }); }
+    });
+    es.addEventListener("run.failed", (e: MessageEvent) => {
+      try { onEvent("run.failed", JSON.parse(e.data)); } catch { onEvent("run.failed", { raw: e.data }); }
+    });
+    if (onError) es.onerror = onError;
+    return es;
+  },
   getBusinessApprovals: (workspaceId?: string, status = "ALL") => {
     const qs = new URLSearchParams();
     if (workspaceId) qs.set("workspaceId", workspaceId);
@@ -340,6 +376,26 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    }),
+
+  // Quick Team Builder
+  quickTeamDraft: (workspaceId: string, description: string) =>
+    fetchJSON<{ ok: boolean; draft: QuickTeamDraft }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/quick-draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description }),
+    }),
+  quickTeamRefine: (workspaceId: string, description: string, previousDraft: string, answers: string[]) =>
+    fetchJSON<{ ok: boolean; draft: QuickTeamDraft }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/quick-refine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description, previousDraft, answers }),
+    }),
+  quickTeamPublish: (workspaceId: string, draft: QuickTeamDraft) =>
+    fetchJSON<{ ok: boolean; teamId: string; team: BusinessTeamCard }>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/teams/quick-publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft }),
     }),
 
   createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
@@ -708,6 +764,80 @@ export const api = {
       reader.releaseLock();
     }
   },
+
+  // Extended Orchestration APIs
+  getSLATemplates: () =>
+    fetchJSON<SLATemplatesResponse>("/api/v1/business/sla/templates"),
+
+  getDLQ: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<DLQResponse>(`/api/v1/business/dlq${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
+  retryDLQItem: (itemId: string) =>
+    fetchJSON<{ ok: boolean; itemId: string; status: string }>(`/api/v1/business/dlq/${encodeURIComponent(itemId)}/retry`, { method: "POST" }),
+
+  resolveDLQItem: (itemId: string) =>
+    fetchJSON<{ ok: boolean; itemId: string; status: string }>(`/api/v1/business/dlq/${encodeURIComponent(itemId)}/resolve`, { method: "POST" }),
+
+  getApprovalAnalytics: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<ApprovalAnalyticsResponse>(`/api/v1/business/approval-analytics${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
+  getTakeovers: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<{ ok: boolean; takeovers: TakeoverSession[] }>(`/api/v1/business/takeovers${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
+  requestTakeover: (workspaceId: string, runId: string, operatorId: string) =>
+    fetchJSON<{ ok: boolean; takeover: TakeoverSession }>("/api/v1/business/takeovers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId, runId, operatorId }),
+    }),
+
+  confirmTakeover: (takeoverId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/takeovers/${encodeURIComponent(takeoverId)}/confirm`, { method: "POST" }),
+
+  releaseTakeover: (takeoverId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/takeovers/${encodeURIComponent(takeoverId)}/release`, { method: "POST" }),
+
+  getWorkflows: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<{ ok: boolean; workflows: unknown[] }>(`/api/v1/business/workflows${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+
+  getWorkflowStatus: (workflowId: string) =>
+    fetchJSON<WorkflowStatusResponse>(`/api/v1/business/workflows/${encodeURIComponent(workflowId)}`),
+
+  approveWorkflowCheckpoint: (workflowId: string, decision: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/workflows/${encodeURIComponent(workflowId)}/checkpoint`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }),
+
+  getConnectors: () =>
+    fetchJSON<ConnectorsResponse>("/api/v1/business/connectors"),
+
+  executeConnector: (connectorName: string, operation: string, params: Record<string, unknown>) =>
+    fetchJSON<{ ok: boolean; result: Record<string, unknown> }>(`/api/v1/business/connectors/${encodeURIComponent(connectorName)}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation, params }),
+    }),
+
+  seedEcommerceVertical: (workspaceId: string) =>
+    fetchJSON<VerticalSeedResponse>("/api/v1/business/verticals/ecommerce/seed", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId }),
+    }),
 };
 
 export interface CompareRunParticipant {
@@ -1308,6 +1438,11 @@ export interface BusinessRunStep {
   title?: string;
   summary?: string;
   actor?: string;
+  agentId?: string;
+  score?: number;
+  matchedSkills?: string;
+  retry?: boolean;
+  retryFrom?: string;
   evidence?: string;
   status?: string;
   timestamp?: string;
@@ -1320,6 +1455,9 @@ export interface BusinessRunRecord {
   teamId?: string;
   scenario?: string;
   scenarioId?: string;
+  collaborationPattern?: string;
+  slaName?: string;
+  slaStatus?: string;
   taskTitle: string;
   taskInput?: string;
   resultSummary: string;
@@ -1510,6 +1648,8 @@ export interface BusinessScenarioRecord {
   status?: string;
   successCriteria?: string[];
   approvalRules?: string[];
+  collaborationPattern?: string;
+  slaName?: string;
   metadata?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
@@ -1529,6 +1669,8 @@ export interface CreateBusinessScenarioPayload {
   entryTeamId?: string;
   successCriteria?: string[];
   approvalRules?: string[];
+  collaborationPattern?: string;
+  slaName?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -1575,4 +1717,177 @@ export interface CreateBusinessPromptAssetResponse {
   assetId: string;
   promptAsset: BusinessPromptAssetRecord;
   message?: string;
+}
+
+
+export interface QuickTeamDraft {
+  teamId: string;
+  teamName: string;
+  description: string;
+  scenario: string;
+  scenarioId: string;
+  operatingManual: string;
+  approvalThreshold: string;
+  tone: string;
+  agents: {
+    agentId: string;
+    displayName: string;
+    responsibility: string;
+    allowedTools: string[];
+    approvalRules: string[];
+    knowledgeRefs: string[];
+  }[];
+  suggestedConnectors: string[];
+  questions: string[];
+  rawJson: string;
+}
+
+// ── Extended Orchestration API Types ──────────────────────────────────
+
+export interface SLATemplate {
+  name: string;
+  warnThresholdMs: number;
+  breachThresholdMs: number;
+  escalationTarget: string;
+  actionOnBreach: string;
+}
+
+export interface SLATemplatesResponse {
+  ok: boolean;
+  templates: Record<string, SLATemplate>;
+}
+
+export interface DLQItem {
+  itemId: string;
+  runId: string;
+  workspaceId: string;
+  teamId?: string;
+  scenarioId?: string;
+  taskTitle: string;
+  reason: string;
+  enqueuedAt: string;
+  retryCount: number;
+  newRunId?: string;
+  status: string;
+}
+
+export interface DLQResponse {
+  ok: boolean;
+  workspaceId?: string;
+  items: DLQItem[];
+  stats: { total: number; pending: number; retried: number; resolved: number };
+}
+
+export interface ApprovalAnalyticsSummary {
+  avgResolutionTimeMinutes: number;
+  approvalRate: number;
+  rejectionReasons: Record<string, number>;
+  topBottlenecks: { approvalId: string; title: string; riskLevel: string; pendingMinutes: number; createdAt: string }[];
+  pendingCount: number;
+  totalCount: number;
+}
+
+export interface ApprovalAnalyticsResponse {
+  ok: boolean;
+  workspaceId?: string;
+  summary: ApprovalAnalyticsSummary;
+}
+
+export interface TakeoverSession {
+  takeoverId: string;
+  workspaceId: string;
+  runId: string;
+  operatorId: string;
+  teamId: string;
+  startedAt: string;
+  status: string;
+  endedAt?: string;
+}
+
+export interface WorkflowStatusResponse {
+  ok: boolean;
+  status: {
+    found: boolean;
+    workflowId: string;
+    name: string;
+    status: string;
+    progress: number;
+    currentStep: string | null;
+    stepsTotal: number;
+    stepsCompleted: number;
+    waitingForHuman: boolean;
+    createdAt: string;
+  };
+}
+
+export interface ConnectorInfo {
+  name: string;
+  label: string;
+  description: string;
+  healthy: boolean;
+}
+
+export interface ConnectorsResponse {
+  ok: boolean;
+  connectors: ConnectorInfo[];
+  health: { total: number; healthy: number; unhealthy: number; details: unknown[] };
+}
+
+export interface VerticalSeedResponse {
+  ok: boolean;
+  workspaceId: string;
+  scenarios: { teamId: string; scenarioId: string; scenarioType: string }[];
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────
+
+export interface BusinessEvent {
+  type: string;
+  entityId: string;
+  workspaceId: string;
+  data: Record<string, unknown>;
+}
+
+export function openBusinessEventStream(
+  onEvent: (event: BusinessEvent) => void,
+  onError?: (err: Event) => void,
+): EventSource {
+  const es = new EventSource("/api/v1/business/events/stream");
+  es.addEventListener("connected", (e: MessageEvent) => {
+    try { onEvent({ type: "connected", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("WORKFLOW_STATUS", (e: MessageEvent) => {
+    try { onEvent({ type: "WORKFLOW_STATUS", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("WORKFLOW_CHECKPOINT", (e: MessageEvent) => {
+    try { onEvent({ type: "WORKFLOW_CHECKPOINT", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("SLA_WARN", (e: MessageEvent) => {
+    try { onEvent({ type: "SLA_WARN", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("SLA_BREACH", (e: MessageEvent) => {
+    try { onEvent({ type: "SLA_BREACH", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("DLQ_ENQUEUE", (e: MessageEvent) => {
+    try { onEvent({ type: "DLQ_ENQUEUE", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("DLQ_STATUS_CHANGE", (e: MessageEvent) => {
+    try { onEvent({ type: "DLQ_STATUS_CHANGE", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("TAKEOVER_REQUESTED", (e: MessageEvent) => {
+    try { onEvent({ type: "TAKEOVER_REQUESTED", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("TAKEOVER_CONFIRMED", (e: MessageEvent) => {
+    try { onEvent({ type: "TAKEOVER_CONFIRMED", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("TAKEOVER_RELEASED", (e: MessageEvent) => {
+    try { onEvent({ type: "TAKEOVER_RELEASED", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  es.addEventListener("RUN_STATUS", (e: MessageEvent) => {
+    try { onEvent({ type: "RUN_STATUS", entityId: "", workspaceId: "", data: JSON.parse(e.data) }); } catch {}
+  });
+  if (onError) {
+    es.onerror = onError;
+  }
+  return es;
 }

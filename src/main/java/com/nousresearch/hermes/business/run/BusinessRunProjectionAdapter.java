@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.business.run;
 
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.org.observe.AgentTrace;
 
 import java.time.Instant;
@@ -20,12 +20,12 @@ import java.util.Objects;
 public class BusinessRunProjectionAdapter {
 
     public BusinessRunRecord fromIntentRun(String workspaceId, String scenarioId, String scenarioName,
-                                           IntentOrchestrator.IntentRun run) {
+                                           ScenarioOrchestrator.IntentRun run) {
         return fromIntentRun(workspaceId, scenarioId, scenarioName, run, List.of());
     }
 
     public BusinessRunRecord fromIntentRun(String workspaceId, String scenarioId, String scenarioName,
-                                           IntentOrchestrator.IntentRun run, List<AgentTrace> traces) {
+                                           ScenarioOrchestrator.IntentRun run, List<AgentTrace> traces) {
         Objects.requireNonNull(run, "run");
         Instant createdAt = instant(run.startedAt);
         Instant updatedAt = run.completedAt > 0 ? instant(run.completedAt) : Instant.now();
@@ -38,7 +38,7 @@ public class BusinessRunProjectionAdapter {
                 .setStepId("intent-plan")
                 .setTitle("Intent accepted by Hermes foundation")
                 .setSummary(run.intent)
-                .setActor("IntentOrchestrator")
+                .setActor("ScenarioOrchestrator")
                 .setEvidence("intent://" + run.runId)
                 .setStatus(mapStatus(run.status))
                 .setTimestamp(createdAt)
@@ -66,6 +66,7 @@ public class BusinessRunProjectionAdapter {
         metadata.put("parentRunId", run.parentRunId);
         metadata.put("currentSubtask", run.currentSubtask);
         metadata.put("foundationStatus", run.status.name());
+        metadata.put("collaborationPattern", run.collaborationPattern != null ? run.collaborationPattern.name() : "SEQUENTIAL");
         if (traces != null && !traces.isEmpty()) {
             metadata.put("traceIds", traces.stream().map(AgentTrace::getTraceId).toList());
         }
@@ -76,6 +77,7 @@ public class BusinessRunProjectionAdapter {
             .setTeamId(run.preferredTeamId)
             .setScenario(scenarioName)
             .setScenarioId(scenarioId)
+            .setCollaborationPattern(run.collaborationPattern != null ? run.collaborationPattern.name() : "SEQUENTIAL")
             .setTaskTitle(titleFromIntent(run.intent))
             .setTaskInput(run.intent)
             .setResultSummary(resultSummary(run))
@@ -120,15 +122,18 @@ public class BusinessRunProjectionAdapter {
         );
     }
 
-    private List<BusinessRunStep> assignmentSteps(IntentOrchestrator.IntentRun run) {
+    private List<BusinessRunStep> assignmentSteps(ScenarioOrchestrator.IntentRun run) {
         List<BusinessRunStep> steps = new ArrayList<>();
         int index = 1;
-        for (IntentOrchestrator.SubtaskAssignment assignment : run.assignments()) {
+        for (ScenarioOrchestrator.SubtaskAssignment assignment : run.assignments()) {
             steps.add(new BusinessRunStep()
                 .setStepId("assignment-" + index++)
                 .setTitle("Assigned subtask")
                 .setSummary(assignment.subtask())
                 .setActor(nonBlank(assignment.agentId(), "unassigned"))
+                .setAgentId(assignment.agentId())
+                .setScore(assignment.score())
+                .setMatchedSkills(assignment.matchedSkills() != null ? String.join(", ", assignment.matchedSkills()) : null)
                 .setEvidence("role=" + nonBlank(assignment.roleName(), "unknown") + ", score=" + assignment.score())
                 .setStatus(statusForAssignment(run, assignment.subtask()))
                 .setTimestamp(instant(run.startedAt))
@@ -143,15 +148,18 @@ public class BusinessRunProjectionAdapter {
         return steps;
     }
 
-    private List<BusinessRunStep> attemptSteps(IntentOrchestrator.IntentRun run) {
+    private List<BusinessRunStep> attemptSteps(ScenarioOrchestrator.IntentRun run) {
         List<BusinessRunStep> steps = new ArrayList<>();
         int index = 1;
-        for (IntentOrchestrator.IntentAttempt attempt : run.attempts()) {
+        for (ScenarioOrchestrator.IntentAttempt attempt : run.attempts()) {
             steps.add(new BusinessRunStep()
                 .setStepId("attempt-" + index++)
                 .setTitle(attempt.success() ? "Foundation attempt succeeded" : "Foundation attempt failed")
                 .setSummary(attempt.subtask())
                 .setActor(nonBlank(attempt.agentId(), "unassigned"))
+                .setAgentId(attempt.agentId())
+                .setRetry(attempt.reassigned())
+                .setRetryFrom(attempt.reassigned() ? attempt.reassignedFrom() : null)
                 .setEvidence(attempt.success() ? "trace=" + nonBlank(attempt.traceId(), "none") : nonBlank(attempt.error(), "attempt failed"))
                 .setStatus(attempt.success() ? BusinessRunService.COMPLETED : BusinessRunService.FAILED)
                 .setTimestamp(instant(attempt.timestamp()))
@@ -193,13 +201,13 @@ public class BusinessRunProjectionAdapter {
         return steps;
     }
 
-    private String statusForAssignment(IntentOrchestrator.IntentRun run, String subtask) {
+    private String statusForAssignment(ScenarioOrchestrator.IntentRun run, String subtask) {
         if (run.failures().containsKey(subtask)) return BusinessRunService.FAILED;
         if (run.successes().containsKey(subtask)) return BusinessRunService.COMPLETED;
         return mapStatus(run.status);
     }
 
-    private String mapStatus(IntentOrchestrator.RunStatus status) {
+    private String mapStatus(ScenarioOrchestrator.RunStatus status) {
         if (status == null) return BusinessRunService.RUNNING;
         return switch (status) {
             case COMPLETED -> BusinessRunService.COMPLETED;
@@ -216,7 +224,7 @@ public class BusinessRunProjectionAdapter {
         };
     }
 
-    private String resultSummary(IntentOrchestrator.IntentRun run) {
+    private String resultSummary(ScenarioOrchestrator.IntentRun run) {
         return switch (run.status) {
             case COMPLETED -> "Hermes foundation completed the intent run with " + run.successes().size() + " successful subtask(s).";
             case FAILED -> "Hermes foundation failed the intent run with " + run.failures().size() + " failed subtask(s).";
@@ -226,7 +234,7 @@ public class BusinessRunProjectionAdapter {
         };
     }
 
-    private String conclusionReason(IntentOrchestrator.IntentRun run) {
+    private String conclusionReason(ScenarioOrchestrator.IntentRun run) {
         if (!run.failures().isEmpty()) {
             return "Failures: " + run.failures();
         }
@@ -236,23 +244,23 @@ public class BusinessRunProjectionAdapter {
         return "Foundation run status: " + run.status;
     }
 
-    private String systemAction(IntentOrchestrator.IntentRun run) {
+    private String systemAction(ScenarioOrchestrator.IntentRun run) {
         return switch (run.status) {
             case COMPLETED -> "No immediate system action required.";
-            case FAILED, PARTIAL, INTERRUPTED -> "Review failed subtasks and consider replay or reroute through IntentOrchestrator.";
+            case FAILED, PARTIAL, INTERRUPTED -> "Review failed subtasks and consider replay or reroute through ScenarioOrchestrator.";
             case RUNNING, PENDING -> "Wait for foundation run completion.";
         };
     }
 
-    private String riskJudgement(IntentOrchestrator.IntentRun run) {
+    private String riskJudgement(ScenarioOrchestrator.IntentRun run) {
         if (!run.failures().isEmpty()) return "Needs operator review because foundation failures are present.";
         if (run.delegationDecision != null && run.delegationDecision.recommended()) return "Delegation was recommended by foundation policy.";
         return "No additional business risk surfaced by projection.";
     }
 
-    private String nextSuggestion(IntentOrchestrator.IntentRun run) {
-        if (!run.failures().isEmpty()) return "Use IntentOrchestrator.replayFailures or reroute failed subtasks.";
-        if (run.status == IntentOrchestrator.RunStatus.RUNNING || run.status == IntentOrchestrator.RunStatus.PENDING) return "Refresh after foundation run completes.";
+    private String nextSuggestion(ScenarioOrchestrator.IntentRun run) {
+        if (!run.failures().isEmpty()) return "Use ScenarioOrchestrator.replayFailures or reroute failed subtasks.";
+        if (run.status == ScenarioOrchestrator.RunStatus.RUNNING || run.status == ScenarioOrchestrator.RunStatus.PENDING) return "Refresh after foundation run completes.";
         return "Use this projection for business review; keep foundation trace refs for audit.";
     }
 

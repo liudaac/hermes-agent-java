@@ -40,7 +40,9 @@ import {
   RunsAndApprovalsSection,
   TeamsSection,
   TodayAndAttentionSection,
+  OrchestrationHubSection,
 } from "@/components/business/BusinessPortalSections";
+import QuickTeamBuilder from "@/components/business/QuickTeamBuilder";
 import { BusinessCreationPanel, CreateApprovalCardForm, CreatePromptAssetForm, CreateRunStoryForm, CreateScenarioForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
@@ -248,6 +250,8 @@ export default function BusinessPortalPage() {
         </div>
       </div>
 
+      <QuickTeamBuilder workspaceId={workspaceId} onTeamCreated={load} />
+
       <BusinessCreationPanel
         workspaceCount={summary?.workspaceCount ?? 0}
         teamCount={summary?.teamCount ?? 0}
@@ -280,6 +284,8 @@ export default function BusinessPortalPage() {
         <MetricCard title="Pending approvals" value={summary?.pendingApprovals} icon={ClipboardCheck} />
         <MetricCard title="Open insights" value={summary?.openInsights} icon={Lightbulb} />
       </section>
+
+      <OrchestrationHubSection />
 
       <TodayAndAttentionSection home={home} />
       <section className="grid gap-4 xl:grid-cols-2">

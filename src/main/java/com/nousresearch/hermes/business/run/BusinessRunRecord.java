@@ -24,6 +24,9 @@ public class BusinessRunRecord {
     private String status = "COMPLETED";
     private String approvalId;
     private String technicalTraceRef;
+    private String collaborationPattern;
+    private String slaName;
+    private String slaStatus;
     private List<BusinessRunStep> steps = new ArrayList<>();
     private long tokensUsed;
     private double estimatedCost;
@@ -67,6 +70,12 @@ public class BusinessRunRecord {
     public BusinessRunRecord setApprovalId(String approvalId) { this.approvalId = approvalId; return this; }
     public String getTechnicalTraceRef() { return technicalTraceRef; }
     public BusinessRunRecord setTechnicalTraceRef(String technicalTraceRef) { this.technicalTraceRef = technicalTraceRef; return this; }
+    public String getCollaborationPattern() { return collaborationPattern; }
+    public BusinessRunRecord setCollaborationPattern(String collaborationPattern) { this.collaborationPattern = collaborationPattern; return this; }
+    public String getSlaName() { return slaName; }
+    public BusinessRunRecord setSlaName(String slaName) { this.slaName = slaName; return this; }
+    public String getSlaStatus() { return slaStatus; }
+    public BusinessRunRecord setSlaStatus(String slaStatus) { this.slaStatus = slaStatus; return this; }
     public List<BusinessRunStep> getSteps() { return steps; }
     public BusinessRunRecord setSteps(List<BusinessRunStep> steps) { this.steps = steps != null ? steps : new ArrayList<>(); return this; }
     public long getTokensUsed() { return tokensUsed; }

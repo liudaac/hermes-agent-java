@@ -22,12 +22,15 @@ import {
   Code,
   Eye,
   Monitor,
-  Network,
   Users,
   Bot,
   Layout,
   ArrowLeftRight,
   BriefcaseBusiness,
+  GitBranch,
+  Timer,
+  AlertOctagon,
+  Hand,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -43,9 +46,13 @@ const SkillsPage = lazy(() => import("@/pages/SkillsPage"));
 const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
 const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const OrgPage = lazy(() => import("@/pages/OrgPage"));
-const OrgManagePage = lazy(() => import("@/pages/OrgManagePage"));
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
 const BusinessPortalStandalonePage = lazy(() => import("@/pages/BusinessPortalStandalonePage"));
+const RunDetailPage = lazy(() => import("@/pages/RunDetailPage"));
+const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
+const SLAPage = lazy(() => import("@/pages/SLAPage"));
+const DLQPage = lazy(() => import("@/pages/DLQPage"));
+const HumanInTheLoopPage = lazy(() => import("@/pages/HumanInTheLoopPage"));
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 const PlaygroundPage = lazy(() => import("@/pages/PlaygroundPage"));
@@ -86,10 +93,13 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
   { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
   { path: "/org", labelKey: "orgOverview", label: "Org Overview", icon: Layout },
-  { path: "/org-manage", labelKey: "orgManage", label: "Org Manage", icon: Network },
   { path: "/org-control", labelKey: "orgControl", label: "Org Control", icon: Monitor },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
+  { path: "/workflows", label: "Workflows", icon: GitBranch },
+  { path: "/sla", label: "SLA", icon: Timer },
+  { path: "/dlq", label: "DLQ", icon: AlertOctagon },
+  { path: "/hitl", label: "Human Loop", icon: Hand },
 ];
 
 // Plugins can reference any of these by name in their manifest — keeps bundle
@@ -119,6 +129,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Bot,
   ArrowLeftRight,
   BriefcaseBusiness,
+  GitBranch,
+  Timer,
+  AlertOctagon,
+  Hand,
 };
 
 function resolveIcon(
@@ -276,12 +290,17 @@ export default function App() {
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/business" element={<Navigate to="/business-portal" replace />} />
           <Route path="/business-portal" element={<BusinessPortalStandalonePage />} />
+          <Route path="/runs/:workspaceId/:runId" element={<RunDetailPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 
           <Route path="/org" element={<OrgPage />} />
-          <Route path="/org-manage" element={<OrgManagePage />} />
+          <Route path="/org-manage" element={<Navigate to="/business-portal" replace />} />
           <Route path="/org-control" element={<OrgControlCenterPage />} />
+          <Route path="/workflows" element={<WorkflowPage />} />
+          <Route path="/sla" element={<SLAPage />} />
+          <Route path="/dlq" element={<DLQPage />} />
+          <Route path="/hitl" element={<HumanInTheLoopPage />} />
           {plugins.map(({ manifest, component: PluginComponent }) => (
             <Route
               key={manifest.name}

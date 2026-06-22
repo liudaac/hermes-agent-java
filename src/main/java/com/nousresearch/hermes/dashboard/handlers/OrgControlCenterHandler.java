@@ -52,7 +52,7 @@ public class OrgControlCenterHandler {
         for (TenantContext t : tenants) {
             int tenantTeams = t.getTeamManager().teamCount();
             int tenantMembers = t.getTeamManager().listTeams().stream().mapToInt(team -> team.size()).sum();
-            int tenantRuns = t.getIntentOrchestrator().listRuns().size();
+            int tenantRuns = t.getScenarioOrchestrator().listRuns().size();
             int tenantTraces = t.getObservability().getAllRecentTraces(1000).size();
             int tenantAnomalies = t.getObservability().getRecentAnomalies(1000).size();
             long tenantFailures = t.getEvolutionEngine().getTotalFailures();
@@ -133,7 +133,7 @@ public class OrgControlCenterHandler {
         List<Map<String, Object>> allRows = new ArrayList<>();
         for (TenantContext t : tenants()) {
             if (tenantFilter != null && !tenantFilter.isBlank() && !tenantFilter.equals(t.getTenantId())) continue;
-            for (var run : t.getIntentOrchestrator().listRuns()) {
+            for (var run : t.getScenarioOrchestrator().listRuns()) {
                 Map<String, Object> row = new LinkedHashMap<>(run.toMap());
                 row.put("tenant_id", t.getTenantId());
                 allRows.add(row);
@@ -163,7 +163,7 @@ public class OrgControlCenterHandler {
         String reason = stringOrDefault(body.get("reason"), "");
         assertAllowed(tenant, actor, ControlActionPolicy.Action.REPLAY_INTENT, reason, Map.of("runId", ctx.pathParam("runId")));
         String parentRunId = ctx.pathParam("runId");
-        var run = tenant.getIntentOrchestrator().replayFailures(parentRunId);
+        var run = tenant.getScenarioOrchestrator().replayFailures(parentRunId);
         tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REPLAYED, Map.of(
             "tenantId", tenant.getTenantId(),
             "actor", actor,
@@ -195,7 +195,7 @@ public class OrgControlCenterHandler {
             "targetAgent", targetAgent != null ? targetAgent : ""
         ));
         String parentRunId = ctx.pathParam("runId");
-        var run = tenant.getIntentOrchestrator().reroute(parentRunId, subtask, targetAgent);
+        var run = tenant.getScenarioOrchestrator().reroute(parentRunId, subtask, targetAgent);
         tenant.getAuditLogger().log(AuditEvent.CONTROL_INTENT_REROUTED, Map.of(
             "tenantId", tenant.getTenantId(),
             "actor", actor,
@@ -608,7 +608,7 @@ public class OrgControlCenterHandler {
         return list.stream().filter(x -> x != null && !String.valueOf(x).isBlank()).map(String::valueOf).toList();
     }
 
-    private static void applyOverrideTtl(com.nousresearch.hermes.collaboration.AgentRole role, Map<String, Object> body) {
+    private static void applyOverrideTtl(com.nousresearch.hermes.collaboration.AgentRuntimeProfile role, Map<String, Object> body) {
         long ttlMs = parseLong(body.get("ttl_ms"), 0L);
         Object expiresAt = body.get("expires_at");
         if (expiresAt != null) {

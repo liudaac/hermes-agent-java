@@ -44,10 +44,10 @@ public final class DelegationPolicy {
         if (preferredTeamId != null && !preferredTeamId.isBlank()) return preferredTeamId;
         if (tenantContext == null) return null;
         try {
-            List<Team> teams = tenantContext.getTeamManager().listTeams();
+            List<TeamRuntime> teams = tenantContext.getTeamManager().listTeams();
             return teams.stream()
-                .max(Comparator.comparingInt(Team::size).thenComparing(Team::getLastActivity))
-                .map(Team::getTeamId)
+                .max(Comparator.comparingInt(TeamRuntime::size).thenComparing(TeamRuntime::getLastActivity))
+                .map(TeamRuntime::getTeamId)
                 .orElse(null);
         } catch (Exception ignored) {
             return null;

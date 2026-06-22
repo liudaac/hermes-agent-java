@@ -39,7 +39,7 @@ public class TrajectoryCollector {
     
     // Processing components
     private final TrajectoryCompressor compressor = new TrajectoryCompressor();
-    private final InsightExtractor extractor = new InsightExtractor();
+    private final com.nousresearch.hermes.learning.InsightExtractor extractor = new com.nousresearch.hermes.learning.InsightExtractor();
     
     // Background processing queue
     private final BlockingQueue<TrajectoryEntry> pendingTrajectories = new LinkedBlockingQueue<>();

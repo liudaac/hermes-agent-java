@@ -16,7 +16,7 @@ import com.nousresearch.hermes.business.insight.BusinessInsightRecord;
 import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
 import com.nousresearch.hermes.collaboration.DelegatedTask;
 import com.nousresearch.hermes.collaboration.DelegatedTaskEnvelope;
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.evolution.EvolutionProposalAdapter;
 import com.nousresearch.hermes.evolution.EvolutionProposalRecord;
 import com.nousresearch.hermes.org.evolution.FailureCase;
@@ -91,21 +91,21 @@ public class BusinessPortalFoundationFacade {
         return scenarioIntentAdapter.toIntentRequest(scenario, userInput);
     }
 
-    public IntentOrchestrator.IntentPlan planScenarioIntent(ScenarioRecord scenario, String userInput) {
+    public ScenarioOrchestrator.IntentPlan planScenarioIntent(ScenarioRecord scenario, String userInput) {
         return scenarioIntentAdapter.plan(scenario, userInput);
     }
 
-    public IntentOrchestrator.IntentRun executeScenarioIntent(ScenarioRecord scenario, String userInput) {
+    public ScenarioOrchestrator.IntentRun executeScenarioIntent(ScenarioRecord scenario, String userInput) {
         return scenarioIntentAdapter.execute(scenario, userInput);
     }
 
     public BusinessRunRecord projectIntentRun(String workspaceId, String scenarioId, String scenarioName,
-                                              IntentOrchestrator.IntentRun run) {
+                                              ScenarioOrchestrator.IntentRun run) {
         return runProjectionAdapter.fromIntentRun(workspaceId, scenarioId, scenarioName, run);
     }
 
     public BusinessRunRecord projectIntentRun(String workspaceId, String scenarioId, String scenarioName,
-                                              IntentOrchestrator.IntentRun run, List<AgentTrace> traces) {
+                                              ScenarioOrchestrator.IntentRun run, List<AgentTrace> traces) {
         return runProjectionAdapter.fromIntentRun(workspaceId, scenarioId, scenarioName, run, traces);
     }
 

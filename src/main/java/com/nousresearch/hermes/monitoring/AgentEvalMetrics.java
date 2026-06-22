@@ -43,7 +43,7 @@ public class AgentEvalMetrics {
     private final AtomicInteger toolCallsSuccess = new AtomicInteger();
     private final AtomicLong toolLatencySumMs = new AtomicLong();
 
-    // --- Memory Quality (from MemoryCardIntegrator / MemoryRetriever) ---
+    // --- Memory Quality (from PromptContextBuilder / MemoryRetriever) ---
     private final AtomicInteger memoryQueries = new AtomicInteger();
     private final AtomicInteger memoryHits = new AtomicInteger();       // card had >0 entries
     private final AtomicLong memoryCardCharsSum = new AtomicLong();

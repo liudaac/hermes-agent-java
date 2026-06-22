@@ -46,7 +46,7 @@ public class BusinessSafetyValveAdapter {
         ApprovalRequest request = new ApprovalRequest(
             ApprovalSystem.ApprovalType.CODE_EXECUTION,
             operation,
-            "Replay business run via foundation IntentOrchestrator. Foundation ref: " + nonBlank(run.getTechnicalTraceRef(), "(none)"),
+            "Replay business run via foundation ScenarioOrchestrator. Foundation ref: " + nonBlank(run.getTechnicalTraceRef(), "(none)"),
             false
         );
         BusinessApprovalRecord card = approvalAdapter.fromApprovalRequest(run.getWorkspaceId(), run.getTeamId(), request);

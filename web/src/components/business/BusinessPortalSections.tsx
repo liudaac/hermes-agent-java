@@ -1,9 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Pencil,
+  GitBranch,
+  Timer,
+  AlertOctagon,
+  Hand,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -284,8 +289,12 @@ export function RunsAndApprovalsSection({
 }
 
 function RunRow({ run }: { run: BusinessRunRecord }) {
+  const navigate = useNavigate();
   return (
-    <div className="rounded-sm border border-border/70 p-3">
+    <div
+      className="rounded-sm border border-border/70 p-3 cursor-pointer hover:border-border transition-colors"
+      onClick={() => navigate(`/runs/${run.workspaceId}/${run.runId}`)}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-expanded text-sm tracking-[0.08em]">{run.taskTitle || run.runId}</div>
         <Badge variant={statusVariant(run.status)}>{run.status || "UNKNOWN"}</Badge>
@@ -603,6 +612,8 @@ export function ScenariosSection({
               <p className="mt-2 text-sm normal-case text-muted-foreground">{scenario.description || "No description."}</p>
               <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
                 {scenario.scenarioId} · entry team {scenario.entryTeamId || "-"}
+                {scenario.collaborationPattern ? ` · pattern: ${scenario.collaborationPattern}` : ""}
+                {scenario.slaName ? ` · SLA: ${scenario.slaName}` : ""}
               </div>
               {onExecute && workspaceId ? (
                 <div className="mt-3 flex flex-col gap-2">
@@ -646,4 +657,64 @@ export function PromptAssetsSection({ promptAssets }: { promptAssets: BusinessPr
       </div>
     ))}
   </CardContent></Card>;
+}
+
+// ── Orchestration Hub ─────────────────────────────────────────────────
+
+interface HubCardDef {
+  id: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  path: string;
+  badge?: string;
+  badgeVariant?: "success" | "warning" | "destructive" | "outline";
+}
+
+const HUB_CARDS: HubCardDef[] = [
+  { id: "workflows", label: "Workflows", description: "Visual pipeline execution and human checkpoints", icon: GitBranch, path: "/workflows" },
+  { id: "sla", label: "SLA Monitor", description: "Service-level agreement tracking and alerts", icon: Timer, path: "/sla" },
+  { id: "dlq", label: "Dead Letter Queue", description: "Failed runs awaiting retry or resolution", icon: AlertOctagon, path: "/dlq", badge: "DLQ", badgeVariant: "warning" },
+  { id: "hitl", label: "Human-in-the-Loop", description: "Real-time agent takeover and collaboration", icon: Hand, path: "/hitl" },
+];
+
+export function OrchestrationHubSection() {
+  const navigate = useNavigate();
+  return (
+    <section>
+      <div className="mb-3 flex items-center gap-2 text-xs tracking-[0.15em] opacity-60">
+        <GitBranch className="h-3.5 w-3.5" /> Orchestration Hub
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {HUB_CARDS.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card
+              key={card.id}
+              className="cursor-pointer transition-colors hover:border-midground/40"
+              onClick={() => navigate(card.path)}
+            >
+              <CardContent className="flex items-start justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 shrink-0 opacity-70" />
+                    <span className="font-expanded text-xs tracking-[0.1em]">{card.label}</span>
+                    {card.badge ? (
+                      <Badge variant={card.badgeVariant ?? "outline"} className="text-[0.55rem]">
+                        {card.badge}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1.5 text-xs normal-case text-muted-foreground leading-relaxed">
+                    {card.description}
+                  </p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 opacity-40 mt-0.5" />
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </section>
+  );
 }

@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.agent;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.GovernancePolicy;
 import com.nousresearch.hermes.collaboration.OrgHealthChecker;
 import com.nousresearch.hermes.config.HermesConfig;
@@ -54,12 +54,12 @@ public class TenantAwareAIAgent {
 
     // 租户隔离的子组件
     private final com.nousresearch.hermes.memory.MemoryManager memoryManager;
-    private com.nousresearch.hermes.memory.MemoryCardIntegrator memoryCardIntegrator;
+    private com.nousresearch.hermes.memory.PromptContextBuilder memoryCardIntegrator;
     private boolean smartMemoryCardEnabled;
     private com.nousresearch.hermes.trajectory.TrajectoryCollector trajectoryCollector;
-    private com.nousresearch.hermes.learning.KnowledgeExtractor knowledgeExtractor;
+    private com.nousresearch.hermes.learning.LearningPipeline learningPipeline;
     private ReflectionEngine reflectionEngine;
-    private com.nousresearch.hermes.learning.CuriosityEngine curiosityEngine;
+    
     private ConfidenceCalibrator confidenceCalibrator;
     private com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
     private CognitiveTraceCollector cognitiveTraceCollector;
@@ -67,11 +67,11 @@ public class TenantAwareAIAgent {
 
     // ======== AI原生组织：协作组件 ========
     private final String agentId;
-    private final AgentRole agentRole;
+    private final AgentRuntimeProfile agentRole;
     private final GovernancePolicy governancePolicy;
     private OrgHealthChecker orgHealthChecker;
     private com.nousresearch.hermes.org.evolution.SelfEvolutionEngine evolutionEngine;
-    private com.nousresearch.hermes.collaboration.Team team;
+    private com.nousresearch.hermes.collaboration.TeamRuntime team;
     private com.nousresearch.hermes.org.observe.AgentTrace currentTrace;
     private double lastTaskScore = 0.0;
 
@@ -153,10 +153,10 @@ public class TenantAwareAIAgent {
     /**
      * Create an agent from a blueprint definition with an explicit agentId and role.
      * Used by TeamBlueprintRuntime to spin up team members with stable IDs
-     * that the IntentOrchestrator can route to.
+     * that the ScenarioOrchestrator can route to.
      */
     public static TenantAwareAIAgent forBlueprint(TenantContext context, String agentId,
-                                                  AgentRole role, String sessionId, HermesConfig config) {
+                                                  AgentRuntimeProfile role, String sessionId, HermesConfig config) {
         return new TenantAwareAIAgent(context, agentId, role, sessionId, config);
     }
 
@@ -196,7 +196,7 @@ public class TenantAwareAIAgent {
      * of generating a random ID and default role. Used by TeamBlueprintRuntime.
      */
     private TenantAwareAIAgent(TenantContext context, String explicitAgentId,
-                                AgentRole explicitRole, String explicitSessionId,
+                                AgentRuntimeProfile explicitRole, String explicitSessionId,
                                 HermesConfig config) {
         this(context, explicitAgentId, explicitRole, explicitSessionId, config, true);
     }
@@ -206,7 +206,7 @@ public class TenantAwareAIAgent {
      * @param registerOnBus if true, registers the agent on the TenantBus for team collaboration
      */
     private TenantAwareAIAgent(TenantContext context, String explicitAgentId,
-                                AgentRole explicitRole, String explicitSessionId,
+                                AgentRuntimeProfile explicitRole, String explicitSessionId,
                                 HermesConfig config, boolean registerOnBus) {
         if (context == null) {
             throw new IllegalArgumentException("TenantContext is required");
@@ -218,11 +218,14 @@ public class TenantAwareAIAgent {
         this.tenantContext = context;
         this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
         toolDispatcher.setNegotiator(tenantContext.getNegotiator());
+        // Wire tool call prelude for explainability + dry-run + graceful reject
+        this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
+            new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig())));
 
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
-        initMemoryCardIntegrator();
+        initPromptContextBuilder();
         this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
             com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants")
                 .resolve(tenantId).resolve("state"));
@@ -243,7 +246,7 @@ public class TenantAwareAIAgent {
             context.registerAgentRole(this.agentId, explicitRole);
             this.agentRole = explicitRole;
         } else {
-            AgentRole existingRole = context.getAgentRole(this.agentId);
+            AgentRuntimeProfile existingRole = context.getAgentRole(this.agentId);
             if (existingRole != null) {
                 this.agentRole = existingRole;
             } else {
@@ -300,13 +303,16 @@ public class TenantAwareAIAgent {
         if (tenantContext != null) {
             toolDispatcher.setNegotiator(tenantContext.getNegotiator());
         }
+        // Wire tool call prelude for explainability + dry-run + graceful reject
+        this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
+            new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig())));
         }
 
         // 初始化核心组件
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
-        initMemoryCardIntegrator();
+        initPromptContextBuilder();
         this.toolPerformanceTracker = new com.nousresearch.hermes.tools.ToolPerformanceTracker(
             com.nousresearch.hermes.config.Constants.getHermesHome().resolve("tenants").resolve(tenantId).resolve("state"));
         this.cognitiveTraceCollector = new CognitiveTraceCollector(
@@ -318,7 +324,7 @@ public class TenantAwareAIAgent {
         // ======== AI原生组织：绑定角色与治理策略 ========
         this.agentId = "agent_" + UUID.randomUUID().toString().substring(0, 8);
         if (this.tenantContext != null) {
-            AgentRole existingRole = this.tenantContext.getAgentRole(this.agentId);
+            AgentRuntimeProfile existingRole = this.tenantContext.getAgentRole(this.agentId);
             if (existingRole != null) {
                 this.agentRole = existingRole;
             } else {
@@ -462,9 +468,9 @@ public class TenantAwareAIAgent {
         }
 
         // 提取知识
-        if (knowledgeExtractor != null && completed) {
+        if (learningPipeline != null && completed) {
             try {
-                var result = knowledgeExtractor.onSessionEnd(sessionId, conversationHistory);
+                var result = learningPipeline.onSessionEnd(sessionId, conversationHistory);
                 logger.info("Extracted {} insights from session", result.getInsights().size());
                 if (evalMetrics != null) evalMetrics.recordKnowledgeExtraction(result.getInsights().size());
             } catch (Exception e) {
@@ -488,9 +494,9 @@ public class TenantAwareAIAgent {
         }
 
         // 主动学习：识别弱话题并补充知识
-        if (curiosityEngine != null && completed) {
+        if (learningPipeline != null && completed) {
             try {
-                int stored = curiosityEngine.run();
+                int stored = learningPipeline.runCuriosityScan();
                 if (stored > 0) {
                     logger.info("Curiosity engine stored {} new findings", stored);
                 if (evalMetrics != null) evalMetrics.recordCuriosityRun(stored);
@@ -1290,12 +1296,12 @@ public class TenantAwareAIAgent {
     // ======== AI原生组织：第三刀——Team-Aware Methods ========
 
     /** Get the team this agent belongs to. */
-    public com.nousresearch.hermes.collaboration.Team getTeam() {
+    public com.nousresearch.hermes.collaboration.TeamRuntime getTeam() {
         return team;
     }
 
     /** Set the team this agent belongs to (also adds agent to team). */
-    public void setTeam(com.nousresearch.hermes.collaboration.Team team) {
+    public void setTeam(com.nousresearch.hermes.collaboration.TeamRuntime team) {
         this.team = team;
         if (team != null) {
             team.addMember(agentId);
@@ -1429,7 +1435,7 @@ public class TenantAwareAIAgent {
 
     // ==================== Helper Methods ====================
 
-    private void initMemoryCardIntegrator() {
+    private void initPromptContextBuilder() {
         com.nousresearch.hermes.config.ConfigManager cfg =
             com.nousresearch.hermes.config.ConfigManager.getInstance();
         this.smartMemoryCardEnabled = cfg.getBoolean("memory.smart_card.enabled", true);
@@ -1437,7 +1443,7 @@ public class TenantAwareAIAgent {
             int topK = cfg.getInt("memory.smart_card.top_k", 6);
             boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
             this.memoryCardIntegrator =
-                new com.nousresearch.hermes.memory.MemoryCardIntegrator(memoryManager, topK, alwaysProfile);
+                new com.nousresearch.hermes.memory.PromptContextBuilder(memoryManager, topK, alwaysProfile);
         }
     }
 
@@ -1446,11 +1452,11 @@ public class TenantAwareAIAgent {
         var skillManager = tenantContext != null
             ? new com.nousresearch.hermes.skills.SkillManager()
             : new com.nousresearch.hermes.skills.SkillManager();
-        this.knowledgeExtractor = new com.nousresearch.hermes.learning.KnowledgeExtractor(
-            memoryManager, skillManager);
+        this.learningPipeline = new com.nousresearch.hermes.learning.LearningPipeline(
+            memoryManager, skillManager, modelClient, trajectoryCollector);
         this.reflectionEngine = new ReflectionEngine(modelClient, memoryManager);
-        this.curiosityEngine = new com.nousresearch.hermes.learning.CuriosityEngine(
-            modelClient, memoryManager, trajectoryCollector);
+        // migrated into LearningPipeline
+            // migrated into LearningPipeline
         this.confidenceCalibrator = new ConfidenceCalibrator();
 
         try {
@@ -1850,14 +1856,14 @@ public class TenantAwareAIAgent {
     // ======== AI原生组织：角色与治理 ========
 
     public String getAgentId() { return agentId; }
-    public AgentRole getAgentRole() { return agentRole; }
+    public AgentRuntimeProfile getAgentRole() { return agentRole; }
     public GovernancePolicy getGovernancePolicy() { return governancePolicy; }
 
     /** 基于 config 构建默认角色 */
-    private AgentRole buildDefaultRole() {
+    private AgentRuntimeProfile buildDefaultRole() {
         String roleName = "General Assistant";
         String roleDesc = "Default general-purpose agent";
-        AgentRole role = new AgentRole(roleName, roleDesc, AgentRole.Level.MID);
+        AgentRuntimeProfile role = new AgentRuntimeProfile(roleName, roleDesc, AgentRuntimeProfile.Level.MID);
         role.allowedTools("read", "write", "exec", "web_search", "web_fetch",
             "memory", "skills", "session");
         role.reportsTo("human_operator");

@@ -111,7 +111,6 @@ public class KnowledgeExtractor {
      * @deprecated Use {@link #onSessionEnd(String, List)} which now does
      * structured extraction under the hood.
      */
-    @Deprecated
     public List<String> extractInsights(List<ModelMessage> messages) {
         String transcript = formatConversation(messages);
         Optional<ExtractedKnowledge> opt = callStructuredExtraction(transcript);

@@ -12,7 +12,8 @@ import com.nousresearch.hermes.memory.MemoryManager;
 import com.nousresearch.hermes.tools.ToolInitializer;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.trajectory.TrajectoryCollector;
-import com.nousresearch.hermes.learning.KnowledgeExtractor;
+import com.nousresearch.hermes.learning.LearningPipeline;
+// import com.nousresearch.hermes.learning.KnowledgeExtractor;  -- migrated to LearningPipeline
 import com.nousresearch.hermes.skills.SkillManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,12 +37,12 @@ public class AIAgent {
     private final ToolRegistry toolRegistry;
     private final IterationBudget iterationBudget;
     private MemoryManager memoryManager;  // Non-final for sharing with review agents
-    private com.nousresearch.hermes.memory.MemoryCardIntegrator memoryCardIntegrator;
+    private com.nousresearch.hermes.memory.PromptContextBuilder memoryCardIntegrator;
     private SessionScratchpad sessionScratchpad;
     private final boolean smartMemoryCardEnabled;
     private final com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
     private CognitiveTraceCollector cognitiveTraceCollector;
-    private com.nousresearch.hermes.learning.CuriosityEngine curiosityEngine;
+    private LearningPipeline learningPipeline;
     private ConfidenceCalibrator confidenceCalibrator;
     private final com.nousresearch.hermes.monitoring.AgentEvalMetrics evalMetrics;
     private final List<ModelMessage> conversationHistory;
@@ -57,7 +58,7 @@ public class AIAgent {
 
     // Learning components
     private TrajectoryCollector trajectoryCollector;
-    private KnowledgeExtractor knowledgeExtractor;
+    
     private ReflectionEngine reflectionEngine;
     private SkillManager skillManager;
     private String pendingSkillCandidate;
@@ -131,7 +132,7 @@ public class AIAgent {
         if (smartMemoryCardEnabled) {
             int topK = cfg.getInt("memory.smart_card.top_k", 6);
             boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
-            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.MemoryCardIntegrator(
+            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.PromptContextBuilder(
                 memoryManager, topK, alwaysProfile);
         }
 
@@ -175,7 +176,7 @@ public class AIAgent {
         if (smartMemoryCardEnabled) {
             int topK = cfg.getInt("memory.smart_card.top_k", 6);
             boolean alwaysProfile = cfg.getBoolean("memory.smart_card.always_include_profile", true);
-            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.MemoryCardIntegrator(
+            this.memoryCardIntegrator = new com.nousresearch.hermes.memory.PromptContextBuilder(
                 memoryManager, topK, alwaysProfile);
         }
 
@@ -215,10 +216,10 @@ public class AIAgent {
     private void initializeLearningComponents() {
         this.trajectoryCollector = new TrajectoryCollector();
         this.skillManager = new SkillManager();
-        this.knowledgeExtractor = new KnowledgeExtractor(memoryManager, skillManager);
+        this.learningPipeline = new LearningPipeline(memoryManager, skillManager, modelClient, trajectoryCollector);
         this.reflectionEngine = new ReflectionEngine(modelClient, memoryManager);
-        this.curiosityEngine = new com.nousresearch.hermes.learning.CuriosityEngine(
-            modelClient, memoryManager, trajectoryCollector);
+        // curiosityEngine now inside LearningPipeline
+            // migrated to LearningPipeline
         this.confidenceCalibrator = new ConfidenceCalibrator();
         this.sessionScratchpad = new SessionScratchpad();
 
@@ -1259,10 +1260,10 @@ public class AIAgent {
         }
 
         // Extract knowledge from session
-        if (knowledgeExtractor != null && completed) {
+        if (learningPipeline != null && completed) {
             try {
-                KnowledgeExtractor.ExtractionResult result =
-                    knowledgeExtractor.onSessionEnd(sessionId, conversationHistory);
+                var result =
+                    learningPipeline.onSessionEnd(sessionId, conversationHistory);
 
                 if (!result.getInsights().isEmpty()) {
                     logger.info("Extracted {} insights from session", result.getInsights().size());
@@ -1307,9 +1308,9 @@ public class AIAgent {
         }
 
         // Curiosity-driven learning: proactively research weak topics
-        if (curiosityEngine != null && completed) {
+        if (learningPipeline != null && completed) {
             try {
-                int stored = curiosityEngine.run();
+                int stored = learningPipeline.runCuriosityScan();
                 if (stored > 0) {
                     logger.info("Curiosity engine stored {} new findings", stored);
                 }
@@ -1350,8 +1351,9 @@ public class AIAgent {
     /**
      * Get the knowledge extractor for external access.
      */
-    public KnowledgeExtractor getKnowledgeExtractor() {
-        return knowledgeExtractor;
+    public LearningPipeline getLearningPipeline() {
+        return learningPipeline;
+
     }
 
     /**

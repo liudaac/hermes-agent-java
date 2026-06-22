@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.org.identity;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import org.slf4j.Logger;
 import com.nousresearch.hermes.org.OrgUtils;
 import org.slf4j.LoggerFactory;
@@ -47,7 +47,7 @@ public class AgentIdentityManager {
      * @param role agent's organizational role
      * @return the newly created identity
      */
-    public AgentIdentity provision(String agentId, String displayName, AgentRole role) {
+    public AgentIdentity provision(String agentId, String displayName, AgentRuntimeProfile role) {
         if (identities.containsKey(agentId)) {
             throw new IllegalArgumentException("Agent identity already exists: " + agentId);
         }

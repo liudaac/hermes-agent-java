@@ -51,6 +51,13 @@ public final class ScenarioDashboardIntegration {
             scenarioId = body.getString("id");
         }
         try {
+            String collaborationPatternStr = body.getString("collaborationPattern");
+            com.nousresearch.hermes.collaboration.pattern.CollaborationPattern pattern = null;
+            if (collaborationPatternStr != null && !collaborationPatternStr.isBlank()) {
+                try {
+                    pattern = com.nousresearch.hermes.collaboration.pattern.CollaborationPattern.valueOf(collaborationPatternStr);
+                } catch (Exception ignored) {}
+            }
             ScenarioRecord record = service.createScenario(
                 workspaceId,
                 scenarioId,
@@ -59,7 +66,9 @@ public final class ScenarioDashboardIntegration {
                 body.getString("entryTeamId"),
                 parseStringList(body.getJSONArray("successCriteria")),
                 parseStringList(body.getJSONArray("approvalRules")),
-                WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
+                WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata")),
+                pattern,
+                body.getString("slaName")
             );
             ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "scenarioId", record.getScenarioId(), "scenario", record, "message", "Scenario created"));
         } catch (WorkspaceService.WorkspaceNotFoundException | TeamBlueprintService.TeamBlueprintNotFoundException e) {

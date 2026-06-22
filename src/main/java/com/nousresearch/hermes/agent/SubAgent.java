@@ -132,8 +132,8 @@ public class SubAgent implements Callable<SubAgentResult> {
             java.util.List<String> insights = new java.util.ArrayList<>();
             java.util.List<String> memories = new java.util.ArrayList<>();
             try {
-                com.nousresearch.hermes.trajectory.InsightExtractor extractor = 
-                    new com.nousresearch.hermes.trajectory.InsightExtractor();
+                com.nousresearch.hermes.learning.InsightExtractor extractor = 
+                    new com.nousresearch.hermes.learning.InsightExtractor();
                 var entry = new com.nousresearch.hermes.trajectory.TrajectoryEntry();
                 entry.setConversations(new java.util.ArrayList<>(conversationHistory));
                 entry.setCompleted(completed);

@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.scenario;
 
-import com.nousresearch.hermes.collaboration.IntentOrchestrator;
+import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceRecord;
@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Adapter from Business Portal Scenario records to IntentOrchestrator inputs.
+ * Adapter from Business Portal Scenario records to ScenarioOrchestrator inputs.
  *
  * <p>Scenario remains a business framing object. Planning, decomposition,
  * teammate selection, delegation and execution stay owned by the Hermes
@@ -44,11 +44,11 @@ public class ScenarioIntentAdapter {
         );
     }
 
-    /** Plan through IntentOrchestrator. This does not execute work. */
-    public IntentOrchestrator.IntentPlan plan(ScenarioRecord scenario, String userInput) {
+    /** Plan through ScenarioOrchestrator. This does not execute work. */
+    public ScenarioOrchestrator.IntentPlan plan(ScenarioRecord scenario, String userInput) {
         ScenarioIntentRequest request = toIntentRequest(scenario, userInput);
         TenantContext tenant = requireTenant(request.workspaceId());
-        return tenant.getIntentOrchestrator().plan(
+        return tenant.getScenarioOrchestrator().plan(
             request.intent(),
             request.preferredTeamId(),
             request.allowDelegation(),
@@ -56,11 +56,11 @@ public class ScenarioIntentAdapter {
         );
     }
 
-    /** Execute through IntentOrchestrator. This returns the foundation IntentRun. */
-    public IntentOrchestrator.IntentRun execute(ScenarioRecord scenario, String userInput) {
+    /** Execute through ScenarioOrchestrator. This returns the foundation IntentRun. */
+    public ScenarioOrchestrator.IntentRun execute(ScenarioRecord scenario, String userInput) {
         ScenarioIntentRequest request = toIntentRequest(scenario, userInput);
         TenantContext tenant = requireTenant(request.workspaceId());
-        return tenant.getIntentOrchestrator().execute(
+        return tenant.getScenarioOrchestrator().execute(
             request.intent(),
             request.preferredTeamId(),
             request.allowDelegation(),

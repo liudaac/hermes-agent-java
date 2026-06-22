@@ -1,8 +1,8 @@
 package com.nousresearch.hermes.blueprint;
 
 import com.nousresearch.hermes.approval.ToolRisk;
-import com.nousresearch.hermes.collaboration.AgentRole;
-import com.nousresearch.hermes.collaboration.Team;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
+import com.nousresearch.hermes.collaboration.TeamRuntime;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceRecord;
@@ -18,7 +18,7 @@ import java.util.Optional;
  * foundation objects.
  *
  * <p>This is an adapter, not a new runtime. It maps design-time records to
- * {@link Team}, {@link AgentRole} and tenant collaboration state owned by
+ * {@link Team}, {@link AgentRuntimeProfile} and tenant collaboration state owned by
  * {@link TenantContext}. It refuses to apply when foundation validation has
  * errors.</p>
  */
@@ -84,7 +84,7 @@ public class TeamBlueprintCompiler {
         String teamId = requireNonBlank(teamBlueprint.getTeamId(), "teamId");
         String teamName = nonBlank(teamBlueprint.getName(), teamId);
         String mission = compileMission(teamBlueprint, version);
-        Team team = tenant.getTeamManager().createTeam(teamId, teamName, mission, "business-portal");
+        TeamRuntime team = tenant.getTeamManager().createTeam(teamId, teamName, mission, "business-portal");
         team.putState("business_blueprint_version", version.getVersion());
         team.putState("business_workspace_id", workspaceId);
         team.putState("business_scenario_id", teamBlueprint.getScenarioId());
@@ -98,7 +98,7 @@ public class TeamBlueprintCompiler {
                 result.warning("Skipped blank agent blueprint at index " + i);
                 continue;
             }
-            AgentRole role = toAgentRole(agent, i, version);
+            AgentRuntimeProfile role = toAgentRole(agent, i, version);
             tenant.registerAgentRole(agent.getAgentId(), role);
             team.addMember(agent.getAgentId());
             result.addRegisteredAgent(agent.getAgentId()).addTeamMember(agent.getAgentId());
@@ -121,9 +121,9 @@ public class TeamBlueprintCompiler {
             .setApplied(true);
     }
 
-    private AgentRole toAgentRole(AgentBlueprintRecord agent, int index, TeamBlueprintVersion version) {
-        AgentRole.Level level = index == 0 ? AgentRole.Level.LEAD : AgentRole.Level.MID;
-        AgentRole role = new AgentRole(
+    private AgentRuntimeProfile toAgentRole(AgentBlueprintRecord agent, int index, TeamBlueprintVersion version) {
+        AgentRuntimeProfile.Level level = index == 0 ? AgentRuntimeProfile.Level.LEAD : AgentRuntimeProfile.Level.MID;
+        AgentRuntimeProfile role = new AgentRuntimeProfile(
             nonBlank(agent.getDisplayName(), agent.getAgentId()),
             nonBlank(agent.getResponsibility(), "Business blueprint role " + agent.getAgentId()),
             level

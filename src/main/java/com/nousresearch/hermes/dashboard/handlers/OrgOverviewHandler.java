@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.nousresearch.hermes.collaboration.AgentRole;
+import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.GovernancePolicy;
 import com.nousresearch.hermes.collaboration.OrgHealthChecker;
 import com.nousresearch.hermes.tenant.core.TenantContext;
@@ -73,7 +73,7 @@ public class OrgOverviewHandler {
             
             if (tenantManager != null) {
                 for (TenantContext tc : tenantManager.getAllTenants().values()) {
-                    for (Map.Entry<String, AgentRole> entry : tc.listAgentRoles().entrySet()) {
+                    for (Map.Entry<String, AgentRuntimeProfile> entry : tc.listAgentRoles().entrySet()) {
                         agents.add(buildAgentInfo(tc, entry.getKey(), entry.getValue()));
                     }
                 }
@@ -170,7 +170,7 @@ public class OrgOverviewHandler {
         return agg;
     }
     
-    private Map<String, Object> buildAgentInfo(TenantContext tc, String agentId, AgentRole role) {
+    private Map<String, Object> buildAgentInfo(TenantContext tc, String agentId, AgentRuntimeProfile role) {
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("agent_id", agentId);
         info.put("tenant_id", tc.getTenantId());
