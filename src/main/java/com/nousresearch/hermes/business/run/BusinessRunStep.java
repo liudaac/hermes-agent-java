@@ -4,7 +4,18 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** One business-readable step in a run story. */
+/**
+ * 业务运行步骤 — 运行记录中的一个原子执行单元。
+ *
+ * <p>每个步骤描述一个 Agent（或系统）完成的动作，包含：
+ * <ul>
+ *   <li>actor / agentId: 执行者标识</li>
+ *   <li>score / matchedSkills: Agent 匹配分数和技能（用于调试和优化）</li>
+ *   <li>retry / retryFrom: 重试标记和来源（展示故障转移路径）</li>
+ *   <li>evidence: 执行证据（如 traceId、错误信息）</li>
+ *   <li>metadata: 扩展字段（reflection、confidence 等）</li>
+ * </ul>
+ */
 public class BusinessRunStep {
     private String stepId;
     private String title;

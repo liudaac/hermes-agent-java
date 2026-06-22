@@ -6,7 +6,18 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Business-facing run record with story-style trace. */
+/**
+ * 业务运行记录 — 面向 B 端用户的一次完整业务执行实例。
+ *
+ * <p>与底层 IntentRun 不同，BusinessRunRecord 是人类可读的：
+ * 包含任务标题、输入、结果摘要、结论理由、风险判断、下一步建议等字段。
+ * 所有字段都设计为可直接展示在 Business Portal 前端。</p>
+ * <p>新增编排字段：
+ * <ul>
+ *   <li>collaborationPattern: 本次运行使用的协作模式</li>
+ *   <li>slaName / slaStatus: 绑定的 SLA 及其健康状态</li>
+ * </ul>
+ */
 public class BusinessRunRecord {
     private String runId;
     private String workspaceId;

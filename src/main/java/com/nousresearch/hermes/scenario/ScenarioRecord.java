@@ -8,7 +8,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Business scenario that connects a business goal to an entry team blueprint. */
+/** 业务场景 — 将业务目标与入口团队蓝图关联的可复用配置。
+ *
+ * <p>新增编排字段：
+ * <ul>
+ *   <li>collaborationPattern: 多 Agent 协作模式（默认 SEQUENTIAL）</li>
+ *   <li>slaName: 绑定的 SLA 策略名称</li>
+ * </ul>
+ * <p>运行时会根据这些字段自动设置 BusinessRunRecord 的对应属性。</p>
+ */
 public class ScenarioRecord {
     private String workspaceId;
     private String scenarioId;

@@ -225,6 +225,10 @@ public class ScenarioOrchestrator {
         return run;
     }
 
+    /**
+     * 根据协作模式分发执行策略。
+     * 每种模式对应一种线程调度和结果聚合方式。
+     */
     private void executeByPattern(IntentRun run, List<SubtaskAssignment> assignments, CollaborationPattern pattern) {
         switch (pattern) {
             case PARALLEL -> executeParallel(run, assignments);
@@ -237,6 +241,7 @@ public class ScenarioOrchestrator {
         saveRuns();
     }
 
+    /** 顺序执行：A → B → C，每步等待前一步完成。最稳定但最慢。 */
     private void executeSequential(IntentRun run, List<SubtaskAssignment> assignments) {
         for (SubtaskAssignment a : assignments) {
             run.setStatus(RunStatus.RUNNING);
@@ -255,6 +260,7 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /** 并行执行：所有子任务同时启动，CountDownLatch 等待全部完成。适合无依赖的查询类任务。 */
     private void executeParallel(IntentRun run, List<SubtaskAssignment> assignments) {
         run.setStatus(RunStatus.RUNNING);
         CountDownLatch latch = new CountDownLatch(assignments.size());
@@ -285,6 +291,9 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /** 评审模式：第一个 Agent 生成 → 第二个 Agent 复核 → 人工确认。
+     * 适合高风险任务（如退款审批、大额订单处理）。
+     */
     private void executeReview(IntentRun run, List<SubtaskAssignment> assignments) {
         if (assignments.isEmpty()) {
             run.setStatus(RunStatus.COMPLETED);
@@ -322,6 +331,9 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /** 竞争模式：多个 Agent 同时解决同一问题，按 capability score 择优。
+     * 适合创意生成、方案对比等场景。
+     */
     private void executeCompetitive(IntentRun run, List<SubtaskAssignment> assignments) {
         run.setStatus(RunStatus.RUNNING);
         // All agents solve the same problem; best result wins
@@ -367,6 +379,9 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().size() < assignments.size() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /** 主从模式：第一个 Agent（Master）规划 → 其余 Agent（Worker）并行执行。
+     * 适合复杂任务分解和并行子任务执行。
+     */
     private void executeMasterWorker(IntentRun run, List<SubtaskAssignment> assignments) {
         if (assignments.isEmpty()) {
             run.setStatus(RunStatus.COMPLETED);
@@ -417,6 +432,9 @@ public class ScenarioOrchestrator {
         run.setStatus(run.failures().isEmpty() ? RunStatus.COMPLETED : RunStatus.PARTIAL);
     }
 
+    /** 流水线：数据流经 Agent 链，每一步的输出作为下一步的输入。
+     * 适合数据转换链（清洗→提取→预测→格式化）。
+     */
     private void executePipeline(IntentRun run, List<SubtaskAssignment> assignments) {
         Object previousOutput = null;
         for (SubtaskAssignment a : assignments) {
