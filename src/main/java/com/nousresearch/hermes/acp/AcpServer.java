@@ -22,7 +22,7 @@ import com.nousresearch.hermes.acp.session.*;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
-import com.nousresearch.hermes.org.tools.ToolRegistry;
+import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceService;
