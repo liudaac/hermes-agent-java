@@ -10,19 +10,20 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Intent-aware task decomposer.
+ * 意图感知任务分解器 — 将用户意图拆解为可分配给不同 Agent 的子任务。
  *
- * <p>Replaces the heuristic comma-split with structured decomposition:
+ * <p>三级降级策略，确保分解可靠性：
  * <ul>
- *   <li><b>LLM-based</b>: uses the model client to intelligently break down complex intents</li>
- *   <li><b>Template-based</b>: matches against known business scenario templates</li>
- *   <li><b>Heuristic fallback</b>: original comma/and/then splitting</li>
+ *   <li><b>模板匹配</b>（最快）：针对已知业务场景（订单处理、客服、库存等）直接命中预设步骤</li>
+ *   <li><b>LLM 分解</b>（最智能）：调用模型客户端，根据可用 Agent 角色智能拆解复杂意图</li>
+ *   <li><b>启发式降级</b>（保底）：按逗号/and/then 等关键词做简单切分</li>
  * </ul>
  */
 public class IntentDecomposer {
     private static final Logger logger = LoggerFactory.getLogger(IntentDecomposer.class);
 
     private final ModelClient modelClient;
+    /** 内置业务场景模板库，key 为模板名称 */
     private final Map<String, ScenarioTemplate> templates = new LinkedHashMap<>();
 
     public IntentDecomposer() {
@@ -31,27 +32,27 @@ public class IntentDecomposer {
 
     public IntentDecomposer(ModelClient modelClient) {
         this.modelClient = modelClient;
-        seedDefaultTemplates();
+        seedDefaultTemplates(); // 注入电商物流默认模板
     }
 
     /**
-     * Decompose an intent into structured subtask plans.
+     * 将用户意图分解为结构化子任务计划。
      *
-     * @param intent          the user intent
-     * @param pattern         preferred collaboration pattern (may influence decomposition)
-     * @param availableRoles  agent roles available for matching
-     * @return list of subtask plans with suggested assignees
+     * @param intent          用户原始意图文本
+     * @param pattern         期望的协作模式（可能影响分解策略）
+     * @param availableRoles  当前租户下可用的 Agent 角色
+     * @return 子任务计划列表，每个计划携带建议的 Agent 分配
      */
     public List<SubtaskPlan> decompose(String intent, CollaborationPattern pattern,
                                         Map<String, AgentRuntimeProfile> availableRoles) {
-        // 1. Try template match first (fastest, most reliable for known patterns)
+        // 1. 模板匹配优先 — 已知场景直接命中，零成本
         List<SubtaskPlan> templateMatch = matchTemplate(intent, pattern, availableRoles);
         if (!templateMatch.isEmpty()) {
             logger.debug("Intent matched template: {} subtasks", templateMatch.size());
             return templateMatch;
         }
 
-        // 2. Try LLM-based decomposition if client available
+        // 2. LLM 智能分解 — 复杂意图或未知场景时调用模型
         if (modelClient != null) {
             try {
                 List<SubtaskPlan> llmPlans = decomposeWithLLM(intent, pattern, availableRoles);
@@ -63,7 +64,7 @@ public class IntentDecomposer {
             }
         }
 
-        // 3. Heuristic fallback
+        // 3. 启发式降级 — 保底策略，按关键词简单切分
         return decomposeHeuristic(intent, pattern, availableRoles);
     }
 

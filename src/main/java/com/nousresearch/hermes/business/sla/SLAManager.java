@@ -12,13 +12,13 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 /**
- * SLA (Service Level Agreement) manager for business runs.
+ * SLA（服务级别协议）管理器 — 监控业务运行的时效性并自动处理违约。
  *
- * <p>Attaches to BusinessRunRecords and monitors execution against defined thresholds:
+ * <p>电商物流场景对时效敏感，SLAManager 为每个 BusinessRun 附加时间监控：
  * <ul>
- *   <li>Warn threshold: notify when approaching limit</li>
- *   <li>Breach threshold: escalate when limit exceeded</li>
- *   <li>Auto-actions: retry, escalate, or cancel on breach</li>
+ *   <li>预警阈值：接近时限时发送告警（如客服响应 4 分钟）</li>
+ *   <li>违约阈值：超限时自动执行预设动作（重试/升级/取消）</li>
+ *   <li>事件推送：通过 BusinessEventBus 实时通知前端 SSE 客户端</li>
  * </ul>
  */
 public class SLAManager {
@@ -26,15 +26,17 @@ public class SLAManager {
 
     private final BusinessRunService runService;
     private final BusinessApprovalService approvalService;
+    /** 定时调度线程池，专门用于 SLA 检查 */
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(
         4, r -> {
             Thread t = new Thread(r, "sla-monitor");
-            t.setDaemon(true);
+            t.setDaemon(true); // 守护线程，不阻止 JVM 退出
             return t;
         });
 
-    /** Active SLA monitors keyed by runId */
+    /** 当前活跃的 SLA 监控器，key 为 runId */
     private final ConcurrentHashMap<String, SLAMonitor> activeMonitors = new ConcurrentHashMap<>();
+    /** 业务事件总线，用于推送 SLA 告警/违约事件到 SSE 客户端 */
     private volatile BusinessEventBus eventBus;
 
     public SLAManager(BusinessRunService runService, BusinessApprovalService approvalService) {
@@ -47,11 +49,18 @@ public class SLAManager {
     }
 
     /**
-     * Attach an SLA definition to a run.
+     * 为一次业务运行附加 SLA 监控。
      *
-     * @param runId    the business run id
-     * @param sla      the SLA definition
-     * @param context  additional context for escalation (workspaceId, teamId, etc.)
+     * <p>调度两个定时任务：
+     * <ul>
+     *   <li>warn 检查：到达 warnThresholdMs 时触发预警</li>
+     *   <li>breach 检查：到达 breachThresholdMs 时触发违约处理</li>
+     * </ul>
+     * 若运行提前完成（COMPLETED/FAILED/NEEDS_APPROVAL），定时器自动取消。
+     *
+     * @param runId    业务运行 ID
+     * @param sla      SLA 定义（阈值 + 违约动作）
+     * @param context  额外上下文（workspaceId、teamId 等，用于升级和事件推送）
      */
     public void attachSLA(String runId, SLADefinition sla, Map<String, String> context) {
         if (sla == null || runId == null) return;
@@ -86,7 +95,7 @@ public class SLAManager {
     }
 
     /**
-     * Detach SLA monitoring from a run (e.g., when run completes).
+     * 从运行中移除 SLA 监控（例如运行完成时调用）。
      */
     public void detachSLA(String runId) {
         SLAMonitor monitor = activeMonitors.remove(runId);
@@ -97,7 +106,7 @@ public class SLAManager {
     }
 
     /**
-     * Detach all monitors. Call on shutdown.
+     * 关闭所有监控器。应用关闭时调用。
      */
     public void shutdown() {
         for (SLAMonitor monitor : activeMonitors.values()) {
@@ -107,8 +116,12 @@ public class SLAManager {
         scheduler.shutdown();
     }
 
-    // ---- Checks ----
+    // ---- 定时检查逻辑 ----
 
+    /**
+     * 预警检查 — 到达 warnThresholdMs 时触发。
+     * 若运行已结束则直接清理；否则通过事件总线推送预警。
+     */
     private void checkWarn(String runId, SLADefinition sla, Map<String, String> context) {
         try {
             BusinessRunRecord run = runService.requireRun(context.get("workspaceId"), runId);
@@ -119,7 +132,7 @@ public class SLAManager {
 
             logger.warn("SLA warn threshold reached for run {}: {}ms elapsed", runId, sla.getWarnThresholdMs());
 
-            // Publish warn event
+            // 推送预警事件，前端 SSE 可实时收到并显示黄色警告
             if (eventBus != null) {
                 eventBus.slaWarn(context.get("workspaceId"), runId, sla.getName(),
                     sla.getWarnThresholdMs(), sla.getBreachThresholdMs());
@@ -149,6 +162,7 @@ public class SLAManager {
             logger.error("SLA BREACHED for run {}: {}ms exceeded, action={}",
                 runId, sla.getBreachThresholdMs(), sla.getActionOnBreach());
 
+            // 推送违约事件，前端 SSE 收到后自动刷新并显示红色告警
             if (eventBus != null) {
                 eventBus.slaBreach(context.get("workspaceId"), runId, sla.getName(), sla.getActionOnBreach());
             }
@@ -157,10 +171,10 @@ public class SLAManager {
                 case "auto_retry" -> autoRetry(run, sla, context);
                 case "escalate" -> escalate(run, sla, context);
                 case "cancel" -> cancel(run, context);
-                default -> escalate(run, sla, context); // default: escalate
+                default -> escalate(run, sla, context); // 默认动作：升级
             }
 
-            // Publish breach event
+            // 标记运行失败
             runService.updateRunStatus(workspaceId, runId, BusinessRunService.FAILED,
                 "SLA breached: exceeded " + sla.getBreachThresholdMs() + "ms limit");
 
@@ -171,12 +185,11 @@ public class SLAManager {
         }
     }
 
-    // ---- Actions ----
+    // ---- 违约动作 ----
 
+    /** 自动重试：触发新运行（实际实现中会重新执行 Scenario） */
     private void autoRetry(BusinessRunRecord run, SLADefinition sla, Map<String, String> context) {
         logger.info("Auto-retrying run {} due to SLA breach", run.getRunId());
-        // Create a new run with same parameters
-        // In practice, this would trigger the scenario again
         runService.publishEvent(new com.nousresearch.hermes.business.run.RunEventBus.RunEvent(
             run.getRunId(), context.get("workspaceId"), com.nousresearch.hermes.business.run.RunEventBus.EventType.RUN_FAILED,
             "Auto-retry triggered by SLA breach",
@@ -184,6 +197,7 @@ public class SLAManager {
         ));
     }
 
+    /** 升级：创建审批单，通知 escalationTarget（如 ops-manager） */
     private void escalate(BusinessRunRecord run, SLADefinition sla, Map<String, String> context) {
         String escalationTarget = sla.getEscalationTarget();
         if (escalationTarget == null || escalationTarget.isBlank()) {
@@ -207,20 +221,26 @@ public class SLAManager {
         logger.info("SLA breach escalated for run {} to {}", run.getRunId(), escalationTarget);
     }
 
+    /** 取消运行 */
     private void cancel(BusinessRunRecord run, Map<String, String> context) {
         logger.info("Cancelling run {} due to SLA breach", run.getRunId());
         runService.updateRunStatus(context.get("workspaceId"), run.getRunId(), BusinessRunService.FAILED,
             "Cancelled due to SLA breach");
     }
 
+    /** 判断运行是否已结束（无需继续监控） */
     private boolean isTerminal(BusinessRunRecord run) {
         return BusinessRunService.COMPLETED.equals(run.getStatus())
             || BusinessRunService.FAILED.equals(run.getStatus())
             || BusinessRunService.NEEDS_APPROVAL.equals(run.getStatus());
     }
 
-    // ---- Inner classes ----
+    // ---- 内部类：SLA 监控器 ----
 
+    /**
+     * 单个运行的 SLA 监控状态，持有 warn/breach 两个定时 Future。
+     * 运行结束或 SLA 被移除时调用 cancel() 取消定时器。
+     */
     private static class SLAMonitor {
         final String runId;
         final SLADefinition sla;

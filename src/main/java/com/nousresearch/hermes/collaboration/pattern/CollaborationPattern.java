@@ -1,46 +1,49 @@
 package com.nousresearch.hermes.collaboration.pattern;
 
 /**
- * Multi-agent collaboration patterns for business scenarios.
+ * 多智能体协作模式枚举。
  *
- * <p>Each pattern defines how subtasks are distributed and coordinated among
- * team members. Patterns can be specified per-scenario and override the
- * default sequential execution.</p>
+ * <p>定义了业务场景中子任务如何在团队成员之间分配和协调。
+ * 每种模式可在 Scenario 级别指定，覆盖默认的串行执行。</p>
  */
 public enum CollaborationPattern {
     /**
-     * Sequential chain: A → B → C. Each step waits for the previous.
-     * Default fallback when no pattern is specified.
+     * 顺序链：A → B → C，每步等待前一步完成。
+     * 未指定模式时的默认回退策略。
+     * 适用场景：订单处理（验证→支付→发货→通知）
      */
     SEQUENTIAL,
 
     /**
-     * Parallel fan-out: all subtasks execute simultaneously.
-     * Results are merged when all complete.
+     * 并行扇出：所有子任务同时执行，全部完成后合并结果。
+     * 适用场景：同时查询库存、物流、支付状态
      */
     PARALLEL,
 
     /**
-     * Review mode: Agent A generates output → Agent B reviews → human confirms.
-     * Quality gate for high-stakes tasks.
+     * 评审模式：Agent A 生成输出 → Agent B 复核 → 人工确认。
+     * 高风险任务的质量门禁。
+     * 适用场景：客服回复生成、退款审批
      */
     REVIEW,
 
     /**
-     * Competitive mode: N agents solve the same task independently.
-     * Best result is selected by a judge agent or scoring function.
+     * 竞争模式：N 个 Agent 独立解决同一任务，择优采用。
+     * 由评分函数或评审 Agent 选择最佳结果。
+     * 适用场景：方案生成、创意写作
      */
     COMPETITIVE,
 
     /**
-     * Master-Worker: Lead agent decomposes task, workers execute in parallel,
-     * lead aggregates results.
+     * 主从模式：主管 Agent 拆解任务，Worker 并行执行，主管聚合结果。
+     * 适用场景：复杂报告生成、数据分析
      */
     MASTER_WORKER,
 
     /**
-     * Pipeline: data flows through a chain of agents, each transforming output.
-     * Like sequential but with explicit data handoff semantics.
+     * 流水线：数据流经 Agent 链，每个 Agent 转换输出并传递给下一个。
+     * 类似顺序模式，但有显式的数据交接语义。
+     * 适用场景：数据清洗→特征提取→模型预测→结果格式化
      */
     PIPELINE
 }

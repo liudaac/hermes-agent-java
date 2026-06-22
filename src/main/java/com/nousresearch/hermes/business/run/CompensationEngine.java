@@ -8,16 +8,18 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Compensation framework for failed business runs.
+ * 补偿事务引擎 — 用于回滚失败业务运行的副作用。
  *
- * <p>Allows registration of compensator functions per action type.
- * When a run fails, registered compensators are invoked to undo side effects.</p>
+ * <p>Saga 模式的核心组件：每个操作类型注册一个 Compensator，
+ * 当运行失败时按步骤逆序调用补偿器， undo 已产生的副作用。</p>
+ * <p>补偿失败时，运行会被送入死信队列（DLQ）等待人工处理。</p>
  */
 public class CompensationEngine {
     private static final Logger logger = LoggerFactory.getLogger(CompensationEngine.class);
 
     private final BusinessRunService runService;
     private final DeadLetterQueue deadLetterQueue;
+    /** actionType → Compensator 映射，例如 "payment" → PaymentRefundCompensator */
     private final Map<String, Compensator> compensators = new ConcurrentHashMap<>();
 
     public CompensationEngine(BusinessRunService runService, DeadLetterQueue deadLetterQueue) {
@@ -26,7 +28,7 @@ public class CompensationEngine {
     }
 
     /**
-     * Register a compensator for an action type.
+     * 注册补偿器。每个 actionType 只能有一个补偿器，后注册覆盖先注册。
      */
     public void register(String actionType, Compensator compensator) {
         compensators.put(actionType, compensator);
@@ -34,7 +36,8 @@ public class CompensationEngine {
     }
 
     /**
-     * Compensate a failed run by invoking compensators for each failed step.
+     * 执行补偿：遍历运行的所有失败步骤，为每个步骤调用对应的补偿器。
+     * 全部补偿成功则标记为 COMPENSATED；部分失败则送入 DLQ。
      */
     public void compensate(String workspaceId, String runId) {
         try {

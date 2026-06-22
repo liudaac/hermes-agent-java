@@ -11,7 +11,15 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Analytics engine for approval efficiency and bottleneck detection.
+ * 审批分析引擎 — 检测审批效率瓶颈，辅助业务优化。
+ *
+ * <p>B端场景（如电商退款、大额订单审批）需要快速识别：
+ * <ul>
+ *   <li>平均审批耗时 — 是否存在审批积压</li>
+ *   <li>通过率 — 审批策略是否过严或过松</li>
+ *   <li>驳回原因分布 — 高频问题在哪里</li>
+ *   <li>当前瓶颈 — 哪些审批单等待时间最长</li>
+ * </ul>
  */
 public class ApprovalAnalytics {
     private static final Logger logger = LoggerFactory.getLogger(ApprovalAnalytics.class);
@@ -23,7 +31,8 @@ public class ApprovalAnalytics {
     }
 
     /**
-     * Average time from creation to resolution (in minutes).
+     * 平均审批耗时（分钟）— 从创建到最终决议的时间。
+     * 过滤掉未完成的审批单，只统计已决议的。
      */
     public double getAverageResolutionTimeMinutes(String workspaceId) {
         List<BusinessApprovalRecord> resolved = approvalService.listApprovals(workspaceId, "ALL").stream()
@@ -42,9 +51,7 @@ public class ApprovalAnalytics {
         return Math.round(totalMinutes / resolved.size() * 10.0) / 10.0;
     }
 
-    /**
-     * Percentage of approvals that were approved (vs rejected).
-     */
+    /** 审批通过率（approve / (approve + reject)） */
     public double getApprovalRate(String workspaceId) {
         List<BusinessApprovalRecord> all = approvalService.listApprovals(workspaceId, "ALL");
         long approved = all.stream().filter(a -> BusinessApprovalService.APPROVED.equals(a.getStatus())).count();
@@ -66,9 +73,7 @@ public class ApprovalAnalytics {
             ));
     }
 
-    /**
-     * Identify approval bottlenecks (longest pending times).
-     */
+    /** 识别审批瓶颈 — 按等待时间降序排列当前待审批的单据 */
     public List<ApprovalBottleneck> getBottlenecks(String workspaceId, int limit) {
         return approvalService.listApprovals(workspaceId, BusinessApprovalService.PENDING).stream()
             .filter(a -> a.getCreatedAt() != null)
@@ -87,9 +92,7 @@ public class ApprovalAnalytics {
             .collect(Collectors.toList());
     }
 
-    /**
-     * Full dashboard summary.
-     */
+    /** 完整看板摘要 — 供前端一次性拉取所有指标 */
     public Map<String, Object> getSummary(String workspaceId) {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("avgResolutionTimeMinutes", getAverageResolutionTimeMinutes(workspaceId));
@@ -101,6 +104,7 @@ public class ApprovalAnalytics {
         return summary;
     }
 
+    /** 将驳回原因文本归类到标准类别，用于聚合统计 */
     private String categorizeReason(String reason) {
         if (reason == null) return "Unknown";
         String lower = reason.toLowerCase();
@@ -111,6 +115,7 @@ public class ApprovalAnalytics {
         return "Other";
     }
 
+    /** 瓶颈记录 — 标识一个长时间未审批的单据 */
     public record ApprovalBottleneck(
         String approvalId,
         String title,

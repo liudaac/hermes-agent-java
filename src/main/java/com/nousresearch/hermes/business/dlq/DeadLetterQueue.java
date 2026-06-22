@@ -18,10 +18,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * Dead Letter Queue for failed business runs.
+ * 死信队列（DLQ）— 捕获永久性失败的业务运行，提供人工审查和重试接口。
  *
- * <p>Captures runs that failed permanently (including after retries and SLA breaches)
- * and provides a management interface for manual inspection and retry.</p>
+ * <p>什么情况下会进入 DLQ：
+ * <ul>
+ *   <li>多次重试后仍然失败</li>
+ *   <li>SLA 违约且补偿失败</li>
+ *   <li>无可用的补偿器（Compensator）</li>
+ * </ul>
+ * <p>持久化到 <code>~/.hermes/business/dead-letter-queue</code>，以 JSON 文件形式存储。</p>
  */
 public class DeadLetterQueue {
     private static final Logger logger = LoggerFactory.getLogger(DeadLetterQueue.class);
@@ -29,9 +34,9 @@ public class DeadLetterQueue {
         .registerModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    private final Path queueDir;
+    private final Path queueDir; // 持久化目录
     private final ConcurrentHashMap<String, DeadLetterItem> items = new ConcurrentHashMap<>();
-    private volatile BusinessEventBus eventBus;
+    private volatile BusinessEventBus eventBus; // 用于推送 DLQ 事件到前端
 
     public DeadLetterQueue() {
         this(Constants.getHermesHome().resolve("business/dead-letter-queue"));
@@ -44,7 +49,7 @@ public class DeadLetterQueue {
         } catch (IOException e) {
             logger.error("Failed to create DLQ directory", e);
         }
-        loadPersisted();
+        loadPersisted(); // 启动时加载已持久化的死信项
     }
 
     public void setEventBus(BusinessEventBus eventBus) {

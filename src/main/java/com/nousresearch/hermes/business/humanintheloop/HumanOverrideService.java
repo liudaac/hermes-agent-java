@@ -13,23 +13,26 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Human-in-the-loop override service.
+ * 人机协同（Human-in-the-Loop）服务 — 支持运营人员实时介入 Agent 执行过程。
  *
- * <p>Allows human operators to:
+ * <p>三种介入方式：
  * <ul>
- *   <li>Request real-time takeover of an active agent session</li>
- *   <li>Pause agent execution and provide manual input</li>
- *   <li>Annotate/correct agent outputs for feedback loop</li>
+ *   <li><b>实时接管</b>：运营人员可随时接管正在运行的 Agent 会话</li>
+ *   <li><b>暂停等待输入</b>：Agent 主动暂停，等待人工输入后继续</li>
+ *   <li><b>反馈标注</b>：人工纠正 Agent 输出，数据回流用于改进模型</li>
  * </ul>
+ * <p>所有状态变更通过 BusinessEventBus 推送到 SSE 客户端，前端实时刷新。</p>
  */
 public class HumanOverrideService {
     private static final Logger logger = LoggerFactory.getLogger(HumanOverrideService.class);
 
     private final WorkspaceService workspaceService;
     private final BusinessRunService runService;
+    /** 当前活跃的接管会话，key 为 takeoverId */
     private final ConcurrentHashMap<String, TakeoverSession> activeTakeovers = new ConcurrentHashMap<>();
+    /** 等待人工输入的 CompletableFuture，key 为 runId */
     private final ConcurrentHashMap<String, CompletableFuture<String>> pendingHumanInputs = new ConcurrentHashMap<>();
-    private volatile BusinessEventBus eventBus;
+    private volatile BusinessEventBus eventBus; // 用于推送接管事件到 SSE
 
     public HumanOverrideService(WorkspaceService workspaceService, BusinessRunService runService) {
         this.workspaceService = workspaceService;

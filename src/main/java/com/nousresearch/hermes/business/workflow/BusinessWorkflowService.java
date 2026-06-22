@@ -16,15 +16,17 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * Bridges Business Portal scenarios with the foundation WorkflowEngine.
+ * 业务工作流服务 — 将 Business Portal 的 Scenario 与底层 WorkflowEngine 打通。
  *
- * <p>Converts ScenarioRecords into Workflow instances with:
+ * <p>核心能力：
  * <ul>
- *   <li>DAG step dependency resolution</li>
- *   <li>Automatic SLA attachment</li>
- *   <li>Agent routing per step</li>
- *   <li>Human checkpoint integration</li>
+ *   <li>Scenario → Workflow 自动转换</li>
+ *   <li>DAG 步骤依赖解析</li>
+ *   <li>自动 SLA 挂载</li>
+ *   <li>每步 Agent 路由</li>
+ *   <li>人工检查点（Human Checkpoint）集成</li>
  * </ul>
+ * <p>工作流启动后，前端通过 SSE 实时接收状态变更，人工可在检查点审批/拒绝。</p>
  */
 public class BusinessWorkflowService {
     private static final Logger logger = LoggerFactory.getLogger(BusinessWorkflowService.class);
@@ -46,7 +48,8 @@ public class BusinessWorkflowService {
     }
 
     /**
-     * Create a workflow from a scenario definition.
+     * 根据 Scenario 定义创建 Workflow 实例。
+     * 自动构建 classify → validate → execute → quality_check → notify 的标准流程。
      */
     public Workflow createWorkflowFromScenario(String workspaceId, String scenarioId, String userInput) {
         ScenarioRecord scenario = scenarioService.requireScenario(workspaceId, scenarioId);
@@ -98,7 +101,7 @@ public class BusinessWorkflowService {
             Map.of("workflowId", workflow.getId())
         );
 
-        // Attach SLA if provided
+        // 若提供了 SLA 定义，则挂载到本次运行
         if (sla != null) {
             slaManager.attachSLA(run.getRunId(), sla, Map.of(
                 "workspaceId", workspaceId,
@@ -110,17 +113,13 @@ public class BusinessWorkflowService {
         return run.getRunId();
     }
 
-    /**
-     * Approve a human checkpoint in a workflow.
-     */
+    /** 审批工作流中的人工检查点（Human Checkpoint） */
     public void approveCheckpoint(String workflowId, String decision) {
         workflowEngine.resume(workflowId, decision);
         logger.info("Workflow {} resumed with decision: {}", workflowId, decision);
     }
 
-    /**
-     * Get workflow status mapped to business-friendly format.
-     */
+    /** 获取工作流状态，转换为业务友好的格式 */
     public Map<String, Object> getWorkflowStatus(String workflowId) {
         Optional<Workflow> wf = workflowEngine.getWorkflow(workflowId);
         if (wf.isEmpty()) {
@@ -152,12 +151,20 @@ public class BusinessWorkflowService {
             .toList();
     }
 
-    // ---- Step builders ----
+    // ---- 步骤构建器：将 Scenario 转换为标准 5 步工作流 ----
 
+    /**
+     * 根据 Scenario 定义构建标准工作流步骤：
+     * 1. classify — Agent 分类意图
+     * 2. validate — 人工检查点（高风险时暂停等待审批）
+     * 3. execute — 通过入口团队执行场景
+     * 4. quality_check — 质量审核（若场景定义了成功标准）
+     * 5. notify — 通知完成
+     */
     private List<WorkflowStep> buildStepsFromScenario(ScenarioRecord scenario, String userInput) {
         List<WorkflowStep> steps = new ArrayList<>();
 
-        // Step 1: Intent classification
+        // Step 1: 意图分类
         steps.add(new WorkflowStep.Builder("classify", WorkflowStep.Type.SUB_AGENT)
             .target(scenario.getEntryTeamId())
             .param("task", "classify_intent")
@@ -165,14 +172,14 @@ public class BusinessWorkflowService {
             .timeout(30_000)
             .build());
 
-        // Step 2: Validation checkpoint (human approval for high-risk)
+        // Step 2: 验证检查点（高风险场景需人工审批）
         steps.add(new WorkflowStep.Builder("validate", WorkflowStep.Type.HUMAN_CHECKPOINT)
             .target("business-operator")
             .humanCheckpoint("Review the classified intent and confirm execution", "approve", "reject", "modify")
             .timeout(300_000)
             .build());
 
-        // Step 3: Execute via entry team
+        // Step 3: 通过入口团队执行
         steps.add(new WorkflowStep.Builder("execute", WorkflowStep.Type.SUB_AGENT)
             .target(scenario.getEntryTeamId())
             .param("task", "execute_scenario")
@@ -182,7 +189,7 @@ public class BusinessWorkflowService {
             .retry(2, 5_000, true)
             .build());
 
-        // Step 4: Quality review (if scenario has success criteria)
+        // Step 4: 质量审核（若场景定义了成功标准）
         if (scenario.getSuccessCriteria() != null && !scenario.getSuccessCriteria().isEmpty()) {
             steps.add(new WorkflowStep.Builder("quality_check", WorkflowStep.Type.SUB_AGENT)
                 .target(scenario.getEntryTeamId())
@@ -193,7 +200,7 @@ public class BusinessWorkflowService {
                 .build());
         }
 
-        // Step 5: Notify completion
+        // Step 5: 完成通知
         steps.add(new WorkflowStep.Builder("notify", WorkflowStep.Type.TOOL_CALL)
             .target("notification")
             .param("message", "Scenario " + scenario.getName() + " completed")

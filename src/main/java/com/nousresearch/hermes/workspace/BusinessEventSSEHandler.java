@@ -10,24 +10,36 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * SSE handler for business orchestration events.
+ * SSE（Server-Sent Events）处理器 — 将业务事件总线的事件推送到前端浏览器。
  *
- * <p>Exposes a single SSE stream at <code>/api/v1/business/events/stream</code>
- * that pushes real-time updates from SLA, Workflow, DLQ and HITL systems.</p>
+ * <p>端点：<code>/api/v1/business/events/stream</code></p>
+ * <p>生命周期：
+ * <ol>
+ *   <li>前端建立 EventSource 连接</li>
+ *   <li>本类注册为 BusinessEventBus 订阅者</li>
+ *   <li>任何模块发布事件时，通过 sendEvent 推送到浏览器</li>
+ *   <li>前端断开时自动取消订阅，防止内存泄漏</li>
+ * </ol>
  */
 public class BusinessEventSSEHandler {
     private static final Logger logger = LoggerFactory.getLogger(BusinessEventSSEHandler.class);
 
     private final BusinessEventBus eventBus;
+    /** 维护 SSE 客户端与事件监听器的映射，断开时清理 */
     private final ConcurrentHashMap<SseClient, Consumer<BusinessEventBus.BusinessEvent>> clientMap = new ConcurrentHashMap<>();
 
     public BusinessEventSSEHandler(BusinessEventBus eventBus) {
         this.eventBus = eventBus;
     }
 
+    /**
+     * 处理新的 SSE 连接。
+     * @param client Javalin SSE 客户端实例
+     */
     public void handle(SseClient client) {
         logger.info("SSE client connected: {}", client.hashCode());
 
+        // 为每个客户端创建一个独立的事件监听器
         Consumer<BusinessEventBus.BusinessEvent> listener = event -> {
             try {
                 String json = buildEventJson(event);

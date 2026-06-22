@@ -13,11 +13,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Pre-built vertical scenario factory for e-commerce and logistics.
+ * 电商物流垂直场景工厂 — 预置标准业务场景，加速 B 端用户 onboarding。
  *
- * <p>Creates standard scenarios, team blueprints, and prompt assets for
- * common e-commerce operations. Designed to accelerate onboarding of
- * business users in retail, logistics, and supply chain domains.</p>
+ * <p>提供 4 套开箱即用的场景 + 团队蓝图：
+ * <ul>
+ *   <li>订单处理（Order Processing）</li>
+ *   <li>客户服务（Customer Service）</li>
+ *   <li>库存预警（Inventory Alert）</li>
+ *   <li>物流追踪（Logistics Tracking）</li>
+ * </ul>
+ * <p>每个场景自动创建：TeamBlueprint + Scenario + 标准 Prompt + SLA 绑定。</p>
  */
 public class EcommerceScenarioFactory {
     private static final Logger logger = LoggerFactory.getLogger(EcommerceScenarioFactory.class);
@@ -35,7 +40,8 @@ public class EcommerceScenarioFactory {
     }
 
     /**
-     * Create a complete order processing scenario with team and workflow.
+     * 创建完整的订单处理场景，包含团队蓝图和标准工作流。
+     * 步骤：验证 → 库存检查 → 支付 → 履约协调 → 通知
      */
     public VerticalScenarioSetup createOrderProcessingScenario(String workspaceId) {
         workspaceService.requireWorkspace(workspaceId);
@@ -77,7 +83,8 @@ public class EcommerceScenarioFactory {
     }
 
     /**
-     * Create a customer service scenario.
+     * 创建客户服务场景。
+     * 团队：分类 → 历史检索 → 方案起草 → 合规复核
      */
     public VerticalScenarioSetup createCustomerServiceScenario(String workspaceId) {
         workspaceService.requireWorkspace(workspaceId);
@@ -115,7 +122,8 @@ public class EcommerceScenarioFactory {
     }
 
     /**
-     * Create an inventory alert scenario.
+     * 创建库存预警场景。
+     * 团队：库存分析 → 需求预测 → 采购单生成 → 供应商通知
      */
     public VerticalScenarioSetup createInventoryAlertScenario(String workspaceId) {
         workspaceService.requireWorkspace(workspaceId);
@@ -153,7 +161,8 @@ public class EcommerceScenarioFactory {
     }
 
     /**
-     * Create a logistics tracking scenario.
+     * 创建物流追踪场景。
+     * 团队：运单跟踪 → 异常检测 → 客户通知 → 承运商升级
      */
     public VerticalScenarioSetup createLogisticsTrackingScenario(String workspaceId) {
         workspaceService.requireWorkspace(workspaceId);
@@ -191,7 +200,8 @@ public class EcommerceScenarioFactory {
     }
 
     /**
-     * Seed all standard e-commerce scenarios into a workspace.
+     * 一键播种所有标准电商场景到指定 Workspace。
+     * 适合新租户首次初始化。
      */
     public List<VerticalScenarioSetup> seedAll(String workspaceId) {
         return List.of(
@@ -202,8 +212,7 @@ public class EcommerceScenarioFactory {
         );
     }
 
-    // ---- Helpers ----
-
+    // ---- Helper: 快速创建 AgentBlueprintRecord ----
     private AgentBlueprintRecord agent(String id, String name, String responsibility) {
         return new AgentBlueprintRecord()
             .setAgentId(id)
@@ -213,6 +222,7 @@ public class EcommerceScenarioFactory {
             .setAllowedSkills(List.of());
     }
 
+    // ---- 各场景运营手册（作为系统提示注入） ----
     private String getOrderProcessingManual() {
         return """
             # Order Processing Operating Manual
@@ -261,5 +271,6 @@ public class EcommerceScenarioFactory {
             """;
     }
 
+    /** 垂直场景创建结果 — 包含 teamId、scenarioId 和场景类型 */
     public record VerticalScenarioSetup(String teamId, String scenarioId, String scenarioType) {}
 }
