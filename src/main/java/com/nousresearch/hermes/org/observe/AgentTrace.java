@@ -115,18 +115,30 @@ public class AgentTrace {
     }
 
     // ---- getters ----
+    /** 获取TraceId。 */
     public String getTraceId() { return traceId; }
+    /** 获取AgentId。 */
     public String getAgentId() { return agentId; }
+    /** 获取SessionId。 */
     public String getSessionId() { return sessionId; }
+    /** 获取TaskDescription。 */
     public String getTaskDescription() { return taskDescription; }
+    /** 获取StartTime。 */
     public Instant getStartTime() { return startTime; }
+    /** 获取EndTime。 */
     public Instant getEndTime() { return endTime; }
+    /** 获取Status。 */
     public Status getStatus() { return status; }
+    /** 获取ErrorCount。 */
     public int getErrorCount() { return errorCount; }
+    /** 获取TotalTokens。 */
     public long getTotalTokens() { return totalTokens; }
+    /** 获取EstimatedCost。 */
     public double getEstimatedCost() { return estimatedCost; }
     public int stepCount() { return steps.size(); }
+    /** 获取Steps。 */
     public List<Step> getSteps() { return List.copyOf(steps); }
+    /** 获取Metadata。 */
     public Map<String, Object> getMetadata() { return Collections.unmodifiableMap(metadata); }
 
     /** A single step in an agent's reasoning trace. */

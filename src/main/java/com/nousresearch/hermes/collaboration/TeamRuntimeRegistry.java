@@ -31,6 +31,7 @@ public class TeamRuntimeRegistry {
         this.tenantId = tenantId;
     }
 
+    /** 创建Team。 */
     public TeamRuntime createTeam(String teamId, String name, String mission, String createdBy) {
         if (teams.containsKey(teamId)) {
             logger.warn("Team {} already exists in tenant {}", teamId, tenantId);
@@ -42,6 +43,7 @@ public class TeamRuntimeRegistry {
         return team;
     }
 
+    /** 删除Team。 */
     public boolean deleteTeam(String teamId) {
         TeamRuntime removed = teams.remove(teamId);
         if (removed != null) {
@@ -51,10 +53,12 @@ public class TeamRuntimeRegistry {
         return false;
     }
 
+    /** 获取Team。 */
     public TeamRuntime getTeam(String teamId) {
         return teams.get(teamId);
     }
 
+    /** 列出Teams。 */
     public List<TeamRuntime> listTeams() {
         return new ArrayList<>(teams.values());
     }

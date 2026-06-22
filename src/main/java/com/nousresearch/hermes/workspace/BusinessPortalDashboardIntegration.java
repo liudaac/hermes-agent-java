@@ -26,6 +26,7 @@ public final class BusinessPortalDashboardIntegration {
     private BusinessPortalDashboardIntegration() {
     }
 
+    /** 注册 Dashboard 路由。 */
     public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService, BusinessRunService runService, BusinessInsightService insightService) {
         logger.info("Registering Business Portal shell routes");
         app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService, insightService));

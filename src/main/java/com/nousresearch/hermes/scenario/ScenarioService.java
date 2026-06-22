@@ -26,28 +26,74 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Business service for scenarios. */
+/**
+ * 场景服务 — 管理业务场景的完整生命周期，包括创建、查询、执行和运行时监控。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li>创建/查询业务场景，关联入口团队和成功标准</li>
+ *   <li>通过 ScenarioOrchestrator 执行场景，投影为 BusinessRunRecord</li>
+ *   <li>审批门控 — 执行前检查策略规则，触发人工审批</li>
+ *   <li>Canary 灰度 — 支持多版本团队运行时的流量路由</li>
+ *   <li>Active Memory — 执行时召回相关知识注入元数据</li>
+ *   <li>Plan-Execute-Reflect — 每步完成后自反思并决定是否 replan</li>
+ *   <li>后台 watcher — 200ms 轮询 IntentRun 状态，实时推送 SSE 事件</li>
+ * </ul>
+ */
 public class ScenarioService {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
+
+    /** 场景持久化仓库 */
     private final FileScenarioRepository repository;
+    /** 工作空间服务 — 校验 workspace 存在性 */
     private final WorkspaceService workspaceService;
+    /** 团队蓝图服务 — 查询团队配置 */
     private final TeamBlueprintService teamBlueprintService;
+    /** 团队蓝图运行时 — 管理 Agent 实例生命周期 */
     private final TeamBlueprintRuntime teamBlueprintRuntime;
+
+    // ---- 可选 wiring（打破循环依赖） ----
+    /** 场景意图适配器 — 将场景映射为 IntentRun */
     private ScenarioIntentAdapter scenarioIntentAdapter;
+    /** 策略服务 — 审批规则检查 */
     private PolicyService policyService;
+    /** 审批服务 — 创建审批卡片 */
     private BusinessApprovalService businessApprovalService;
+    /** 主动记忆服务 — 执行时召回知识 */
     private BusinessMemoryNoteService activeMemoryService;
+    /** Canary 发布服务 — 版本路由和指标采集 */
     private com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
+    /** 计划反思服务 — 每步自反思 */
     private PlanReflectionService planReflectionService;
 
+    /**
+     * 默认构造函数 — 使用 ~/.hermes/business/workspaces 作为持久化根目录。
+     *
+     * @param workspaceService     工作空间服务
+     * @param teamBlueprintService 团队蓝图服务
+     */
     public ScenarioService(WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
         this(new FileScenarioRepository(Constants.getHermesHome().resolve("business/workspaces")), workspaceService, teamBlueprintService);
     }
 
+    /**
+     * 指定持久化根目录的构造函数。
+     *
+     * @param workspacesRoot       场景存储的根目录
+     * @param workspaceService     工作空间服务
+     * @param teamBlueprintService 团队蓝图服务
+     */
     public ScenarioService(Path workspacesRoot, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
         this(new FileScenarioRepository(workspacesRoot), workspaceService, teamBlueprintService);
     }
 
+    /**
+     * 完整构造函数，便于测试注入 Repository。
+     *
+     * @param repository           场景持久化仓库
+     * @param workspaceService     工作空间服务
+     * @param teamBlueprintService 团队蓝图服务
+     */
     public ScenarioService(FileScenarioRepository repository, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {
         this.repository = repository;
         this.workspaceService = workspaceService;
@@ -79,6 +125,7 @@ public class ScenarioService {
         this.teamBlueprintRuntime.setCanaryReleaseService(canaryReleaseService);
     }
 
+    /** 注入计划反思服务 — 用于执行过程中每步完成后自反思。 */
     public void setPlanReflectionService(PlanReflectionService service) {
         this.planReflectionService = service;
     }
@@ -88,6 +135,7 @@ public class ScenarioService {
         return this.teamBlueprintRuntime;
     }
 
+    /** 创建业务场景 — 将业务目标与入口团队关联。 */
     public ScenarioRecord createScenario(String workspaceId, String scenarioId, String name, String description,
                                          String entryTeamId, List<String> successCriteria,
                                          List<String> approvalRules, Map<String, Object> metadata,
@@ -120,33 +168,54 @@ public class ScenarioService {
         return record;
     }
 
+    /** 列出工作空间下的所有场景。 */
     public List<ScenarioRecord> listScenarios(String workspaceId) {
         workspaceService.requireWorkspace(workspaceId);
         return repository.list(workspaceId);
     }
 
+    /**
+     * 按 ID 查询场景。
+     *
+     * @param workspaceId 工作空间 ID
+     * @param scenarioId  场景 ID
+     * @return 场景记录（可能为空）
+     */
     public Optional<ScenarioRecord> getScenario(String workspaceId, String scenarioId) {
         return repository.findById(workspaceId, scenarioId);
     }
 
+    /** 获取场景，不存在时抛出异常。 */
     public ScenarioRecord requireScenario(String workspaceId, String scenarioId) {
         workspaceService.requireWorkspace(workspaceId);
         return getScenario(workspaceId, scenarioId).orElseThrow(() -> new ScenarioNotFoundException(workspaceId, scenarioId));
     }
 
+    /**
+     * 执行场景 — 标准入口，不跳过审批门控。
+     *
+     * @param workspaceId 工作空间 ID
+     * @param scenarioId  场景 ID
+     * @param userInput   用户输入
+     * @param runService  运行服务 — 用于持久化投影结果
+     * @return 投影后的运行记录
+     */
     public BusinessRunRecord executeScenario(String workspaceId, String scenarioId, String userInput,
                                                BusinessRunService runService) {
         return executeScenario(workspaceId, scenarioId, userInput, runService, false);
     }
 
     /**
-     * Execute a scenario through the ScenarioOrchestrator and project the result into a BusinessRunRecord.
-     * Returns the business run story with real execution traces.
+     * 执行场景 — 通过 ScenarioOrchestrator 执行并投影为 BusinessRunRecord。
+     * <p>如果 policy service 已接入且触发了审批规则，会创建审批卡片并抛出
+     * {@link ApprovalRequiredException}，而不是直接执行。</p>
      *
-     * <p>If policy service is wired and approval rules are triggered, creates an approval card
-     * and throws {@link ApprovalRequiredException} instead of executing.</p>
-     *
-     * @param skipApprovalCheck if true, bypasses the approval gate (used for resume-execution after approval)
+     * @param workspaceId       工作空间 ID
+     * @param scenarioId        场景 ID
+     * @param userInput         用户输入
+     * @param runService        运行服务
+     * @param skipApprovalCheck 为 true 时跳过审批门控（用于审批通过后恢复执行）
+     * @return 投影后的运行记录
      */
     public BusinessRunRecord executeScenario(String workspaceId, String scenarioId, String userInput,
                                                BusinessRunService runService, boolean skipApprovalCheck) {
@@ -524,10 +593,13 @@ public class ScenarioService {
             this.approvalId = approvalId;
             this.runId = runId;
         }
+        /** 获取ApprovalId。 */
         public String getApprovalId() { return approvalId; }
+        /** 获取RunId。 */
         public String getRunId() { return runId; }
     }
 
+    /** 校验 ID 格式 — 2-64 位，仅允许字母、数字、点、下划线、横线。 */
     private static void validateId(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " is required");
@@ -537,10 +609,12 @@ public class ScenarioService {
         }
     }
 
+    /** 场景已存在异常 — 创建时重复调用抛出。 */
     public static class ScenarioAlreadyExistsException extends RuntimeException {
         public ScenarioAlreadyExistsException(String workspaceId, String scenarioId) { super("Scenario already exists: " + workspaceId + "/" + scenarioId); }
     }
 
+    /** 场景不存在异常 — 用于统一 404 语义。 */
     public static class ScenarioNotFoundException extends RuntimeException {
         public ScenarioNotFoundException(String workspaceId, String scenarioId) { super("Scenario not found: " + workspaceId + "/" + scenarioId); }
     }

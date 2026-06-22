@@ -81,15 +81,18 @@ public class Workflow {
     public void setCurrentStep(int index) { this.currentStepIndex = index; touch(); }
     public void putContext(String key, Object value) { context.put(key, value); }
     @SuppressWarnings("unchecked")
+    /** 获取Context。 */
     public <T> T getContext(String key) { return (T) context.get(key); }
 
     // ---- progress ----
 
+    /** 获取CurrentStep。 */
     public WorkflowStep getCurrentStep() {
         if (currentStepIndex < 0 || currentStepIndex >= steps.size()) return null;
         return steps.get(currentStepIndex);
     }
 
+    /** 获取Progress。 */
     public double getProgress() {
         if (steps.isEmpty()) return 1.0;
         return (double) results.size() / steps.size();
@@ -123,6 +126,7 @@ public class Workflow {
 
     // ---- serialization ----
 
+    /** 转Map。 */
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", id);
@@ -146,21 +150,36 @@ public class Workflow {
 
     // ---- getters ----
 
+    /** 获取Id。 */
     public String getId() { return id; }
+    /** 获取Name。 */
     public String getName() { return name; }
+    /** 获取Description。 */
     public String getDescription() { return description; }
+    /** 获取Owner。 */
     public String getOwner() { return owner; }
+    /** 获取TenantId。 */
     public String getTenantId() { return tenantId; }
+    /** 获取Status。 */
     public Status getStatus() { return status; }
+    /** 获取Steps。 */
     public List<WorkflowStep> getSteps() { return steps; }
+    /** 获取Results。 */
     public Map<String, StepResult> getResults() { return Collections.unmodifiableMap(results); }
     public boolean isSagaMode() { return sagaMode; }
+    /** 获取CurrentStepIndex。 */
     public int getCurrentStepIndex() { return currentStepIndex; }
+    /** 获取CreatedAt。 */
     public Instant getCreatedAt() { return createdAt; }
+    /** 获取UpdatedAt。 */
     public Instant getUpdatedAt() { return updatedAt; }
+    /** 获取CompletedAt。 */
     public Instant getCompletedAt() { return completedAt; }
+    /** 获取ErrorMessage。 */
     public String getErrorMessage() { return errorMessage; }
+    /** 获取Meta。 */
     public Map<String, Object> getMeta() { return Collections.unmodifiableMap(meta); }
+    /** 获取Context。 */
     public Map<String, Object> getContext() { return Collections.unmodifiableMap(context); }
 
     public Workflow meta(String key, Object value) { meta.put(key, value); return this; }

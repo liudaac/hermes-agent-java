@@ -265,6 +265,7 @@ public class TenantBus {
         }
     }
 
+    /** 获取TenantId。 */
     public String getTenantId() { return tenantId; }
     
     /**

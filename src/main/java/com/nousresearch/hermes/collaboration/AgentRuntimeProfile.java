@@ -63,7 +63,9 @@ public class AgentRuntimeProfile {
     public AgentRuntimeProfile maxConsecutiveFailures(int n) { this.maxConsecutiveFailures = n; return this; }
     
     // Dynamic metric updates
+    /** 更新Metric。 */
     public void updateMetric(String key, Object value) { metrics.put(key, value); }
+    /** 移除Metric。 */
     public void removeMetric(String key) { metrics.remove(key); }
     public void addSkill(String skill) { skills.add(skill); }
 
@@ -71,22 +73,39 @@ public class AgentRuntimeProfile {
     public AgentRuntimeProfile deprioritize(double penalty) { updateMetric("manual_penalty", penalty); return this; }
     
     // Getters
+    /** 获取RoleName。 */
     public String getRoleName() { return roleName; }
+    /** 获取Description。 */
     public String getDescription() { return description; }
+    /** 获取Level。 */
     public Level getLevel() { return level; }
+    /** 获取Skills。 */
     public Set<String> getSkills() { return Collections.unmodifiableSet(skills); }
+    /** 获取Responsibilities。 */
     public Set<String> getResponsibilities() { return Collections.unmodifiableSet(responsibilities); }
+    /** 获取ReportsTo。 */
     public String getReportsTo() { return reportsTo; }
+    /** 获取Collaborators。 */
     public Set<String> getCollaborators() { return Collections.unmodifiableSet(collaborators); }
+    /** 获取Manages。 */
     public Set<String> getManages() { return Collections.unmodifiableSet(manages); }
+    /** 获取AllowedTools。 */
     public Set<String> getAllowedTools() { return Collections.unmodifiableSet(allowedTools); }
+    /** 获取DeniedTools。 */
     public Set<String> getDeniedTools() { return Collections.unmodifiableSet(deniedTools); }
+    /** 获取ToolApprovalRules。 */
     public Set<String> getToolApprovalRules() { return Collections.unmodifiableSet(toolApprovalRules); }
+    /** 获取RestrictedPaths。 */
     public Set<String> getRestrictedPaths() { return Collections.unmodifiableSet(restrictedPaths); }
+    /** 获取MaxAutoRisk。 */
     public ToolRisk getMaxAutoRisk() { return maxAutoRisk; }
+    /** 获取Kpis。 */
     public Map<String, Double> getKpis() { return Collections.unmodifiableMap(kpis); }
+    /** 获取MinTaskScore。 */
     public double getMinTaskScore() { return minTaskScore; }
+    /** 获取MaxConsecutiveFailures。 */
     public int getMaxConsecutiveFailures() { return maxConsecutiveFailures; }
+    /** 获取Metrics。 */
     public Map<String, Object> getMetrics() { return Collections.unmodifiableMap(metrics); }
     
     /** Check if this role can auto-approve an operation of given risk. */

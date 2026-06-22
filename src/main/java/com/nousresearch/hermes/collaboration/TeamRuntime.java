@@ -70,6 +70,7 @@ public class TeamRuntime {
         return added;
     }
 
+    /** 移除Member。 */
     public boolean removeMember(String agentId) {
         boolean removed = memberIds.remove(agentId);
         if (removed) {
@@ -86,6 +87,7 @@ public class TeamRuntime {
         return memberIds.contains(agentId);
     }
 
+    /** 获取MemberIds。 */
     public Set<String> getMemberIds() {
         return Collections.unmodifiableSet(memberIds);
     }
@@ -104,6 +106,7 @@ public class TeamRuntime {
         }
     }
 
+    /** 获取Lead。 */
     public String getLead() {
         return leadAgentId;
     }
@@ -115,16 +118,19 @@ public class TeamRuntime {
         recordActivity("state_updated", null, "State key: " + key);
     }
 
+    /** 获取State。 */
     public Object getState(String key) {
         return sharedState.get(key);
     }
 
+    /** 获取State。 */
     public Map<String, Object> getState() {
         return Collections.unmodifiableMap(sharedState);
     }
 
     // ======== Activity Log ========
 
+    /** 获取RecentActivity。 */
     public synchronized List<TeamActivity> getRecentActivity(int limit) {
         List<TeamActivity> out = new ArrayList<>(recentActivity);
         Collections.reverse(out);
@@ -170,6 +176,7 @@ public class TeamRuntime {
         return sb.toString();
     }
 
+    /** 转换为 Map 表示。 */
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("team_id", teamId);
@@ -187,12 +194,19 @@ public class TeamRuntime {
 
     // ======== Getters ========
 
+    /** 获取TeamId。 */
     public String getTeamId() { return teamId; }
+    /** 获取Name。 */
     public String getName() { return name; }
+    /** 获取Mission。 */
     public String getMission() { return mission; }
+    /** 获取TenantId。 */
     public String getTenantId() { return tenantId; }
+    /** 获取CreatedBy。 */
     public String getCreatedBy() { return createdBy; }
+    /** 获取CreatedAt。 */
     public Instant getCreatedAt() { return createdAt; }
+    /** 获取LastActivity。 */
     public Instant getLastActivity() { return lastActivity; }
 
     public record TeamActivity(String type, String actor, String detail, Instant timestamp) {}

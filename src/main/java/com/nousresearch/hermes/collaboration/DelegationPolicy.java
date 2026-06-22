@@ -15,6 +15,7 @@ public final class DelegationPolicy {
 
     private DelegationPolicy() {}
 
+    /** 评估是否需要委派。 */
     public static DelegationDecision evaluate(boolean allowDelegation, ContextPressureReport report, TenantContext tenantContext, String preferredTeamId) {
         ContextPressureReport safeReport = report != null ? report : ContextPressureReport.none();
         if (!allowDelegation) {

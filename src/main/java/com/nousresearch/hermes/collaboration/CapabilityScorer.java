@@ -21,10 +21,12 @@ public class CapabilityScorer {
 
     private CapabilityScorer() {}
 
+    /** 计算 Agent 对子任务的匹配分数。 */
     public static CapabilityScore score(String subtask, String agentId, AgentRuntimeProfile role, TenantContext ctx) {
         return score(subtask, agentId, role, ctx, null);
     }
 
+    /** 计算 Agent 对子任务的匹配分数。 */
     public static CapabilityScore score(String subtask, String agentId, AgentRuntimeProfile role, TenantContext ctx, String preferredTeamId) {
         String lower = subtask == null ? "" : subtask.toLowerCase();
         String[] tokens = lower.split("\\W+");

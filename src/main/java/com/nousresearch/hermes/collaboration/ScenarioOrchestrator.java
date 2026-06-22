@@ -616,6 +616,7 @@ public class ScenarioOrchestrator {
         return normalized.length() > 48 ? normalized.substring(0, 48) : normalized;
     }
 
+    /** 获取运行状态。 */
     public IntentRun getRun(String runId) {
         return runs.get(runId);
     }

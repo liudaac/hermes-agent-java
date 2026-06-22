@@ -13,13 +13,36 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** Generates lightweight business insights from existing Business Portal data. */
+/**
+ * 业务洞察服务 — 从 Business Portal 的运行记录、审批记录中生成轻量级洞察。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li>汇总 workspace 级别的运行、审批、团队数量等核心指标</li>
+ *   <li>分析运行模式：失败聚类、场景表现、版本对比、近期趋势</li>
+ *   <li>分析审批模式：自动触发热点识别</li>
+ *   <li>生成可执行的下一步建议</li>
+ * </ul>
+ * <p>洞察基于已有数据，不触发外部调用，计算成本可控。</p>
+ */
 public class BusinessInsightService {
+    /** 工作空间服务 — 用于获取 workspace 列表和校验存在性 */
     private final WorkspaceService workspaceService;
+    /** 团队蓝图服务 — 用于统计团队数量 */
     private final TeamBlueprintService teamBlueprintService;
+    /** 运行服务 — 用于查询运行记录 */
     private final BusinessRunService runService;
+    /** 审批服务 — 用于查询待审批记录 */
     private final BusinessApprovalService approvalService;
 
+    /**
+     * 构造函数。
+     *
+     * @param workspaceService     工作空间服务
+     * @param teamBlueprintService 团队蓝图服务
+     * @param runService           运行服务
+     * @param approvalService      审批服务
+     */
     public BusinessInsightService(WorkspaceService workspaceService,
                                   TeamBlueprintService teamBlueprintService,
                                   BusinessRunService runService,
@@ -30,10 +53,23 @@ public class BusinessInsightService {
         this.approvalService = approvalService;
     }
 
+    /**
+     * 生成指定 workspace 的洞察汇总。
+     *
+     * @param workspaceId 工作空间 ID（为空时汇总所有 workspace）
+     * @return 洞察汇总对象
+     */
     public BusinessInsightSummary summarize(String workspaceId) {
         return summarize(workspaceId, null);
     }
 
+    /**
+     * 生成指定 workspace + 场景 的洞察汇总。
+     *
+     * @param workspaceId 工作空间 ID（为空时汇总所有 workspace）
+     * @param scenarioId  场景 ID（可为空，不为空时仅统计该场景相关运行）
+     * @return 洞察汇总对象
+     */
     public BusinessInsightSummary summarize(String workspaceId, String scenarioId) {
         Instant now = Instant.now();
         List<WorkspaceRecord> workspaces = workspaceId == null || workspaceId.isBlank()
@@ -73,6 +109,7 @@ public class BusinessInsightService {
         return summary;
     }
 
+    /** 为工作空间生成洞察建议 — 基于运行历史和当前状态。 */
     private List<BusinessInsightRecord> generateInsights(BusinessInsightSummary summary, List<BusinessRunRecord> runs, List<BusinessApprovalRecord> pendingApprovals, Instant now) {
         List<BusinessInsightRecord> insights = new ArrayList<>();
         Map<String, Object> metrics = summary.metricsMap();
@@ -146,6 +183,7 @@ public class BusinessInsightService {
         return insights;
     }
 
+    /** 根据汇总指标生成下一步建议动作列表。 */
     private List<Map<String, Object>> generateNextActions(BusinessInsightSummary summary) {
         List<Map<String, Object>> actions = new ArrayList<>();
         if (summary.getWorkspaceCount() == 0) actions.add(action("create-workspace", "创建业务空间", "初始化 Business Portal 数据基础"));
@@ -298,6 +336,22 @@ public class BusinessInsightService {
         return insights;
     }
 
+    /**
+     * 构造单条洞察记录 — 统一封装洞察的各维度信息。
+     *
+     * @param id               洞察唯一标识
+     * @param workspaceId      工作空间 ID
+     * @param title            洞察标题
+     * @param finding          发现的事实描述
+     * @param possibleCause    可能的原因分析
+     * @param recommendation   建议措施
+     * @param expectedBenefit  预期收益
+     * @param suggestedAction  建议动作代码（供前端路由）
+     * @param severity         严重级别：INFO / MEDIUM / HIGH
+     * @param metrics          相关指标数据
+     * @param now              生成时间
+     * @return 洞察记录
+     */
     private BusinessInsightRecord insight(String id, String workspaceId, String title, String finding,
                                           String possibleCause, String recommendation, String expectedBenefit,
                                           String suggestedAction, String severity, Map<String, Object> metrics, Instant now) {
@@ -315,6 +369,7 @@ public class BusinessInsightService {
             .setGeneratedAt(now);
     }
 
+    /** 构造下一步建议动作条目。 */
     private Map<String, Object> action(String id, String title, String description) {
         Map<String, Object> action = new LinkedHashMap<>();
         action.put("id", id);

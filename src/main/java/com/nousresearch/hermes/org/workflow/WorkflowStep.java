@@ -80,23 +80,39 @@ public class WorkflowStep {
 
     // ---- getters ----
 
+    /** 获取Name。 */
     public String getName() { return name; }
+    /** 获取Type。 */
     public Type getType() { return type; }
+    /** 获取Description。 */
     public String getDescription() { return description; }
+    /** 获取Target。 */
     public String getTarget() { return target; }
+    /** 获取Parameters。 */
     public Map<String, Object> getParameters() { return parameters; }
+    /** 获取DependsOn。 */
     public Set<String> getDependsOn() { return dependsOn; }
+    /** 获取DecisionPrompt。 */
     public String getDecisionPrompt() { return decisionPrompt; }
+    /** 获取DecisionOptions。 */
     public List<String> getDecisionOptions() { return decisionOptions; }
+    /** 获取ConditionExpression。 */
     public String getConditionExpression() { return conditionExpression; }
+    /** 获取CompensationTarget。 */
     public String getCompensationTarget() { return compensationTarget; }
+    /** 获取CompensationParameters。 */
     public Map<String, Object> getCompensationParameters() { return compensationParameters; }
+    /** 获取MaxRetries。 */
     public int getMaxRetries() { return maxRetries; }
+    /** 获取RetryDelayMs。 */
     public long getRetryDelayMs() { return retryDelayMs; }
     public boolean isRetryOnError() { return retryOnError; }
+    /** 获取TimeoutMs。 */
     public long getTimeoutMs() { return timeoutMs; }
+    /** 获取Priority。 */
     public int getPriority() { return priority; }
 
+    /** 转换为 Map 表示。 */
     public Map<String, Object> toMap() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", name);
@@ -153,6 +169,7 @@ public class WorkflowStep {
             return this;
         }
 
+        /** 执行补偿。 */
         public Builder compensate(String target, Map<String, Object> params) {
             this.hasCompensation = true;
             this.compensationTarget = target;
@@ -168,6 +185,7 @@ public class WorkflowStep {
         public Builder timeout(long ms) { this.timeoutMs = ms; return this; }
         public Builder priority(int p) { this.priority = p; return this; }
 
+        /** 构建。 */
         public WorkflowStep build() { return new WorkflowStep(this); }
     }
 

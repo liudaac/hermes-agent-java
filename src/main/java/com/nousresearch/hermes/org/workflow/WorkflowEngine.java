@@ -133,6 +133,7 @@ public class WorkflowEngine implements AutoCloseable {
         logger.info("Workflow resumed: {} with decision: {}", workflowId, humanDecision);
     }
 
+    /** 启动服务。 */
     public synchronized void start() {
         if (running) return;
         running = true;
@@ -320,10 +321,12 @@ public class WorkflowEngine implements AutoCloseable {
 
     // ---- queries ----
 
+    /** 获取Workflow。 */
     public Optional<Workflow> getWorkflow(String id) {
         return Optional.ofNullable(workflows.get(id));
     }
 
+    /** 列出Active。 */
     public List<Workflow> listActive() {
         return workflows.values().stream()
             .filter(w -> !w.isTerminal())

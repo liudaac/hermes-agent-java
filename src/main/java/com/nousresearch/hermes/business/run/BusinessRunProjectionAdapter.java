@@ -19,11 +19,13 @@ import java.util.Objects;
  */
 public class BusinessRunProjectionAdapter {
 
+    /** 将底层 IntentRun 投影为业务运行记录。 */
     public BusinessRunRecord fromIntentRun(String workspaceId, String scenarioId, String scenarioName,
                                            ScenarioOrchestrator.IntentRun run) {
         return fromIntentRun(workspaceId, scenarioId, scenarioName, run, List.of());
     }
 
+    /** 将底层 IntentRun 投影为业务运行记录。 */
     public BusinessRunRecord fromIntentRun(String workspaceId, String scenarioId, String scenarioName,
                                            ScenarioOrchestrator.IntentRun run, List<AgentTrace> traces) {
         Objects.requireNonNull(run, "run");
