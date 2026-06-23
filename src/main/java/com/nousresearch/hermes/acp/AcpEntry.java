@@ -34,14 +34,14 @@ public class AcpEntry {
     
     /**
      * Start the ACP server.
+     * @deprecated Use {@link com.nousresearch.hermes.acp.integration.AcpIntegration#start} with full dependencies instead.
      */
+    @Deprecated
     public void start() {
         logger.info("Starting ACP server on port {}", port);
-        
-        server = new AcpServer(port);
-        server.start();
-        
-        logger.info("ACP server started successfully");
+        throw new UnsupportedOperationException(
+            "AcpEntry.start() is deprecated. Use AcpIntegration.start() with full service dependencies instead."
+        );
     }
     
     /**
@@ -130,24 +130,11 @@ public class AcpEntry {
     
     /**
      * Main entry point.
+     * @deprecated Use Main.java with AcpIntegration instead.
      */
+    @Deprecated
     public static void main(String[] args) {
-        int port = 8080;
-        
-        if (args.length > 0) {
-            try {
-                port = Integer.parseInt(args[0]);
-            } catch (NumberFormatException e) {
-                logger.error("Invalid port number: {}", args[0]);
-                System.exit(1);
-            }
-        }
-        
-        AcpEntry entry = new AcpEntry(port);
-        
-        // Add shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread(entry::stop));
-        
-        entry.start();
+        logger.error("AcpEntry.main() is deprecated. Use Main.java with AcpIntegration.start() instead.");
+        System.exit(1);
     }
 }

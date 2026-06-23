@@ -172,6 +172,45 @@ public class ToolRegistry {
     }
     
     /**
+     * List tools for a tenant (ACP integration).
+     */
+    public List<Map<String, Object>> listTools(String tenantId) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ToolEntry entry : tools.values()) {
+            Map<String, Object> tool = new HashMap<>();
+            tool.put("name", entry.getName());
+            tool.put("toolset", entry.getToolset());
+            tool.put("description", entry.getDescription());
+            tool.put("schema", entry.getSchema());
+            result.add(tool);
+        }
+        return result;
+    }
+
+    /**
+     * Call a tool with tenant context (ACP integration).
+     */
+    public Object callTool(String name, Map<String, Object> params,
+                           com.nousresearch.hermes.tenant.core.TenantContext tenantContext) {
+        ToolEntry entry = tools.get(name);
+        if (entry == null) {
+            throw new IllegalArgumentException("Unknown tool: " + name);
+        }
+        try {
+            String result = entry.getHandler().apply(params);
+            // Try to parse as JSON object, fallback to raw string
+            try {
+                return mapper.readValue(result, Object.class);
+            } catch (Exception e) {
+                return result;
+            }
+        } catch (Exception e) {
+            logger.error("Tool {} call error: {}", name, e.getMessage(), e);
+            throw new RuntimeException("Tool execution failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Get all registered tool names.
      */
     public List<String> getAllToolNames() {

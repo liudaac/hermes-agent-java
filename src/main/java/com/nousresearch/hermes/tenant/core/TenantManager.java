@@ -569,6 +569,31 @@ public class TenantManager {
         Map<String, Object> metadata
     ) {}
     
+    // ============ ACP 兼容方法 ============
+
+    /**
+     * 根据 workspaceId 解析租户上下文（ACP 集成用）
+     */
+    public TenantContext resolveForWorkspace(String workspaceId) {
+        TenantContext context = getOrLoadTenant(workspaceId);
+        if (context == null) {
+            // 自动创建租户
+            TenantProvisioningRequest request = new TenantProvisioningRequest(
+                workspaceId,
+                "acp"
+            );
+            context = createTenant(request);
+        }
+        return context;
+    }
+
+    /**
+     * 获取默认租户上下文（ACP 集成用）
+     */
+    public TenantContext getDefaultContext() {
+        return getOrCreateTenant("default", new TenantProvisioningRequest("default", "system"));
+    }
+
     // ============ 异常类 ============
     
     public static class TenantAlreadyExistsException extends RuntimeException {

@@ -18,7 +18,8 @@ package com.nousresearch.hermes.acp;
 import com.nousresearch.hermes.acp.integration.*;
 import com.nousresearch.hermes.acp.protocol.*;
 import com.nousresearch.hermes.acp.security.*;
-import com.nousresearch.hermes.acp.session.*;
+import com.nousresearch.hermes.acp.session.AcpSession;
+import com.nousresearch.hermes.acp.session.AcpSessionFactory;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
@@ -89,7 +90,7 @@ public class AcpServer {
         // HTTP REST API — 状态查询、会话管理
         app.get("/acp/v1/health", ctx -> ctx.json(Map.of("status", "ok", "sessions", sessions.size())));
         app.get("/acp/v1/sessions", ctx -> ctx.json(Map.of(
-            "sessions", sessions.values().stream().map(AcpSession::toSummary).toList()
+            "sessions", sessions.values().stream().map(com.nousresearch.hermes.acp.session.AcpSession::toSummary).toList()
         )));
         app.post("/acp/v1/sessions/{sessionId}/close", ctx -> {
             AcpSession session = sessions.remove(ctx.pathParam("sessionId"));
@@ -121,7 +122,7 @@ public class AcpServer {
 
     private void configureWebSocket(WsConfig ws) {
         ws.onConnect(ctx -> {
-            String sessionId = ctx.getSessionId();
+            String sessionId = ctx.sessionId();
             // 从 query param 提取租户信息
             String workspaceId = ctx.queryParam("workspaceId");
             String apiKey = ctx.queryParam("apiKey");
@@ -132,16 +133,16 @@ public class AcpServer {
         });
 
         ws.onMessage(ctx -> {
-            AcpSession session = sessions.get(ctx.getSessionId());
+            AcpSession session = sessions.get(ctx.sessionId());
             if (session != null) {
                 session.onMessage(ctx.message());
             }
         });
 
         ws.onClose(ctx -> {
-            AcpSession session = sessions.remove(ctx.getSessionId());
+            AcpSession session = sessions.remove(ctx.sessionId());
             if (session != null) session.close();
-            logger.info("ACP session closed: {}", ctx.getSessionId());
+            logger.info("ACP session closed: {}", ctx.sessionId());
         });
     }
 

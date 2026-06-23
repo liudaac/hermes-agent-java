@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.acp;
 
+import com.nousresearch.hermes.acp.session.AcpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

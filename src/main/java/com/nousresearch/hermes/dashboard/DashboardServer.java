@@ -278,7 +278,7 @@ public class DashboardServer {
         this.deadLetterQueue.setEventBus(businessEventBus);
 
         // ---- ACP 集成：初始化 Agent Collaboration Protocol 服务器 ----
-        this.acpIntegration = new AcpIntegration();
+        com.nousresearch.hermes.acp.integration.AcpIntegration acpIntegration = new com.nousresearch.hermes.acp.integration.AcpIntegration();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }

@@ -253,4 +253,16 @@ public class AcpSession {
     public String getSessionId() { return sessionId; }
     public String getWorkspaceId() { return workspaceId; }
     public boolean isClosed() { return closed; }
+    public boolean isActive() { return !closed; }
+
+    public void broadcastEvent(String eventType, Object data) {
+        if (wsContext.session.isOpen()) {
+            wsContext.send(com.alibaba.fastjson2.JSON.toJSONString(Map.of(
+                "type", eventType,
+                "data", data,
+                "session_id", sessionId,
+                "timestamp", System.currentTimeMillis()
+            )));
+        }
+    }
 }
