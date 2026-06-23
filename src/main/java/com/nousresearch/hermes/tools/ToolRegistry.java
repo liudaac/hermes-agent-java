@@ -189,7 +189,13 @@ public class ToolRegistry {
 
     /**
      * Call a tool with tenant context (ACP integration).
+     *
+     * @deprecated This bypasses tenant permission checks, quota tracking, approval gates,
+     * and audit logging. Prefer {@link TenantAwareToolDispatcher#dispatch(String, Map)}
+     * which goes through the full tenant-isolated execution chain.
+     * Only retained for backwards compatibility; ACP now routes through TenantAwareToolDispatcher.
      */
+    @Deprecated
     public Object callTool(String name, Map<String, Object> params,
                            com.nousresearch.hermes.tenant.core.TenantContext tenantContext) {
         ToolEntry entry = tools.get(name);

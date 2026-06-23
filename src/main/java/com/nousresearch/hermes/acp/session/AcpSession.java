@@ -21,10 +21,12 @@ import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.business.run.BusinessRunStep;
 import com.nousresearch.hermes.collaboration.ScenarioOrchestrator;
+import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
 import com.nousresearch.hermes.tools.ToolRegistry;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.websocket.WsContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,11 +46,13 @@ public class AcpSession {
 
     // 依赖服务
     private final ToolRegistry toolRegistry;
+    private final TenantAwareToolDispatcher toolDispatcher;
     private final BusinessApprovalService approvalService;
     private final BusinessRunService runService;
     private final WorkspaceService workspaceService;
     private final ScenarioOrchestrator scenarioOrchestrator;
     private final AcpPermissionChecker permissionChecker;
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // 会话状态
     private volatile boolean closed = false;
@@ -70,6 +74,7 @@ public class AcpSession {
         this.workspaceId = workspaceId;
         this.tenantContext = tenantContext;
         this.toolRegistry = toolRegistry;
+        this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, toolRegistry);
         this.approvalService = approvalService;
         this.runService = runService;
         this.workspaceService = workspaceService;
@@ -158,8 +163,21 @@ public class AcpSession {
                 var run = scenarioOrchestrator.execute(intent, scenarioId);
                 result = run.toMap();
             } else {
-                // 普通工具调用 — 通过 ToolRegistry
-                result = toolRegistry.callTool(toolName, params, tenantContext);
+                // 普通工具调用 — 通过 TenantAwareToolDispatcher
+                // 正统调用链：权限检查 → 配额 → 审批 → 协商 → 执行 → 审计
+                String resultJson = toolDispatcher.dispatch(toolName, params);
+                // 尝试解析为对象，失败则保留原始 JSON 字符串
+                try {
+                    result = MAPPER.readValue(resultJson, Object.class);
+                } catch (Exception parseEx) {
+                    result = resultJson;
+                }
+
+                // 检查 dispatcher 返回的错误对象（被权限/配额/审批拒绝时）
+                if (result instanceof Map<?, ?> resultMap && resultMap.containsKey("error")) {
+                    recordRun(request, result, "DENIED", String.valueOf(resultMap.get("error")));
+                    return AcpResponse.error(request.getId(), String.valueOf(resultMap.get("error")));
+                }
             }
 
             // 记录运行（生成 BusinessRunRecord 用于审计）
