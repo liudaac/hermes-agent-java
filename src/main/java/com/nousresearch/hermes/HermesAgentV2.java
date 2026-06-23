@@ -1,6 +1,6 @@
 package com.nousresearch.hermes;
 
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.config.ConfigManager;

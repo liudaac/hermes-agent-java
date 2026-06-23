@@ -2,7 +2,7 @@ package com.nousresearch.hermes.gateway;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.compare.TenantComparisonOrchestrator;
 import com.nousresearch.hermes.compare.TenantComparisonRun;
 import com.nousresearch.hermes.config.HermesConfig;
@@ -312,7 +312,7 @@ public class GatewayServer {
                 message.sender(), message.content().substring(0, Math.min(50, message.content().length())));
             
             // Create agent and process
-            AIAgent agent = new AIAgent(config);
+            TenantAwareAIAgent agent = new TenantAwareAIAgent(config);
             String response = agent.processMessage(message.content());
             
             // Send response back
@@ -337,7 +337,7 @@ public class GatewayServer {
             String sessionId = body.getString("session_id");
             
             // Process chat message through AI agent
-            AIAgent agent = new AIAgent(config);
+            TenantAwareAIAgent agent = new TenantAwareAIAgent(config);
             String response = agent.processMessage(message);
             
             ctx.json(Map.of(
@@ -370,7 +370,7 @@ public class GatewayServer {
         
         try {
             // Process with streaming callback
-            AIAgent agent = new AIAgent(config, sessionId);
+            TenantAwareAIAgent agent = new TenantAwareAIAgent(config, sessionId);
             
             agent.processMessageStream(message, chunk -> {
                 sendSseEvent(ctx, "delta", Map.of("content", chunk));
@@ -622,7 +622,7 @@ public class GatewayServer {
             "timestamp", System.currentTimeMillis() - 60000,
             "level", "DEBUG",
             "message", "Processing message",
-            "source", "AIAgent"
+            "source", "TenantAwareAIAgent"
         ));
         ctx.json(logs);
     }

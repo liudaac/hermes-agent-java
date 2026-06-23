@@ -198,7 +198,7 @@ public class DiscordAdapter implements com.nousresearch.hermes.gateway.PlatformA
     }
     
     @Override
-    public void setAgent(com.nousresearch.hermes.agent.AIAgent agent) {
+    public void setAgent(com.nousresearch.hermes.agent.TenantAwareAIAgent agent) {
         // Agent is set externally
     }
 }

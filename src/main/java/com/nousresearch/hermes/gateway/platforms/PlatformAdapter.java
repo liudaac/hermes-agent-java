@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.gateway.platforms;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.gateway.IncomingMessage;
 
 /**
@@ -69,5 +69,5 @@ public interface PlatformAdapter extends com.nousresearch.hermes.gateway.Platfor
      * Set the legacy agent for handling messages. Tenant-aware gateway paths
      * should not call this; it remains for standalone lifecycle adapters.
      */
-    void setAgent(AIAgent agent);
+    void setAgent(TenantAwareAIAgent agent);
 }

@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 
 /**
- * Runs dashboard cron jobs by invoking the local {@link AIAgent}.
+ * Runs dashboard cron jobs by invoking the local {@link TenantAwareAIAgent}.
  *
  * <p>The job's prompt is sent as a one-shot user message. We give every run a
  * stable session id of the form {@code cron-<jobId>-<timestamp>} so the resulting
@@ -24,13 +24,13 @@ public class AgentCronRunner implements CronJobExecutor.JobRunner {
     private static final Logger logger = LoggerFactory.getLogger(AgentCronRunner.class);
 
     private final HermesConfig config;
-    private final BiFunction<HermesConfig, String, AIAgent> agentFactory;
+    private final BiFunction<HermesConfig, String, TenantAwareAIAgent> agentFactory;
 
     public AgentCronRunner(HermesConfig config) {
-        this(config, AIAgent::new);
+        this(config, TenantAwareAIAgent::new);
     }
 
-    AgentCronRunner(HermesConfig config, BiFunction<HermesConfig, String, AIAgent> agentFactory) {
+    AgentCronRunner(HermesConfig config, BiFunction<HermesConfig, String, TenantAwareAIAgent> agentFactory) {
         this.config = Objects.requireNonNull(config, "config");
         this.agentFactory = Objects.requireNonNull(agentFactory, "agentFactory");
     }
@@ -49,9 +49,9 @@ public class AgentCronRunner implements CronJobExecutor.JobRunner {
         }
 
         String sessionId = "cron-" + safeJobId(job.id) + "-" + System.currentTimeMillis();
-        logger.info("Running dashboard cron job {} via AIAgent session {}", job.id, sessionId);
+        logger.info("Running dashboard cron job {} via TenantAwareAIAgent session {}", job.id, sessionId);
 
-        AIAgent agent = agentFactory.apply(config, sessionId);
+        TenantAwareAIAgent agent = agentFactory.apply(config, sessionId);
         String response = agent.processMessage(job.prompt);
         return response != null ? response : "";
     }

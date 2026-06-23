@@ -216,7 +216,7 @@ public class TelegramAdapter implements com.nousresearch.hermes.gateway.Platform
     }
     
     @Override
-    public void setAgent(com.nousresearch.hermes.agent.AIAgent agent) {
+    public void setAgent(com.nousresearch.hermes.agent.TenantAwareAIAgent agent) {
         // Agent is set externally
     }
 }

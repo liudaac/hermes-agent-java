@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,9 +11,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class AgentCronRunnerTest {
 
     @Test
-    @DisplayName("Local cron jobs should invoke the AIAgent processMessage")
+    @DisplayName("Local cron jobs should invoke the TenantAwareAIAgent processMessage")
     void localRunInvokesAgent() throws Exception {
-        AIAgent agent = Mockito.mock(AIAgent.class);
+        TenantAwareAIAgent agent = Mockito.mock(TenantAwareAIAgent.class);
         Mockito.when(agent.processMessage("Say hi")).thenReturn("hello");
 
         HermesConfig config = Mockito.mock(HermesConfig.class);

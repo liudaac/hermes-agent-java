@@ -3,7 +3,7 @@ package com.nousresearch.hermes.gateway.platforms.qqbot;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -35,7 +35,7 @@ public class QQBotAdapter implements PlatformAdapter {
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     
     private final OkHttpClient httpClient;
-    private AIAgent agent;
+    private TenantAwareAIAgent agent;
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -119,7 +119,7 @@ public class QQBotAdapter implements PlatformAdapter {
     }
     
     @Override
-    public void setAgent(AIAgent agent) {
+    public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
     }
     

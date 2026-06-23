@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.gateway.platforms;
 
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.gateway.IncomingMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class PlatformAdapterBridgeTest {
         }
 
         @Override
-        public void setAgent(AIAgent agent) {
+        public void setAgent(TenantAwareAIAgent agent) {
             // no-op
         }
     }

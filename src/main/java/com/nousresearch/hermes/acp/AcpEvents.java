@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 /**
  * ACP Events handling.
  * Mirrors Python acp_adapter/events.py
- * Bridges AIAgent events to ACP notifications.
+ * Bridges TenantAwareAIAgent events to ACP notifications.
  */
 public class AcpEvents {
     private static final Logger logger = LoggerFactory.getLogger(AcpEvents.class);
@@ -66,14 +66,14 @@ public class AcpEvents {
     }
     
     /**
-     * Create a tool progress callback for AIAgent.
+     * Create a tool progress callback for TenantAwareAIAgent.
      */
     public ToolProgressCallback createToolProgressCallback(String sessionId) {
         return new ToolProgressCallback(sessionId, this);
     }
     
     /**
-     * Create a message callback for AIAgent.
+     * Create a message callback for TenantAwareAIAgent.
      */
     public MessageCallback createMessageCallback(String sessionId) {
         return new MessageCallback(sessionId, this);

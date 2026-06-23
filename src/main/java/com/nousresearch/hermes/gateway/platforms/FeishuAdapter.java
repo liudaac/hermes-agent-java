@@ -2,7 +2,7 @@ package com.nousresearch.hermes.gateway.platforms;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -27,7 +27,7 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     
     private final HermesConfig config;
     private final OkHttpClient httpClient;
-    private AIAgent agent;
+    private TenantAwareAIAgent agent;
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -118,7 +118,7 @@ public class FeishuAdapter implements PlatformAdapter, com.nousresearch.hermes.g
     }
     
     @Override
-    public void setAgent(AIAgent agent) {
+    public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
     }
     

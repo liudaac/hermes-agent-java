@@ -2,7 +2,7 @@ package com.nousresearch.hermes.gateway.platforms.feishu;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.agent.AIAgent;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.gateway.IncomingMessage;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
@@ -28,7 +28,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     private static final long DEFAULT_MAX_TIMESTAMP_SKEW_MS = 5 * 60 * 1000L;
     
     private final OkHttpClient httpClient;
-    private AIAgent agent;
+    private TenantAwareAIAgent agent;
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -84,7 +84,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     }
     
     @Override
-    public void setAgent(AIAgent agent) {
+    public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
     }
     
