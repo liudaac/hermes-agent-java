@@ -1,0 +1,105 @@
+template_id: x-ecommerce-return
+name: "[旗舰] 电商退货 · 跨域闭环"
+category: cross-domain
+status: STABLE
+industry_tag: 跨域旗舰
+icon: package
+color: blue
+
+summary: 客户发起退货 → 物流改派 → 财务退款 → 数据沉淀，端到端 24 小时闭环
+description: |
+  电商体验的"试金石"——退货流程。
+  物流客服接单、异常处置员驱动退回、应收会计完成退款核销、
+  管理会计把退货成本归到正确科目。
+  端到端可追溯，让退货从用户痛点变成留存触点。
+
+metrics:
+  - label: 退货闭环
+    value: "5d → 24h"
+  - label: 退款准确率
+    value: "100%"
+  - label: 客户挽回率
+    value: "+38%"
+
+involved_agents:
+  - template_id: logistics-csr
+    role_in_scenario: 客户对接
+  - template_id: logistics-exception-handler
+    role_in_scenario: 退回派单
+  - template_id: logistics-tracking-agent
+    role_in_scenario: 退回轨迹监控
+  - template_id: finance-ar-specialist
+    role_in_scenario: 退款核销
+  - template_id: finance-fpa-analyst
+    role_in_scenario: 成本归属
+  - template_id: hr-employee-care
+    role_in_scenario: 客户关怀联动
+
+clone_blueprint:
+  team:
+    name: 电商退货 · 跨域团队
+    description: 物流 + 财务 + 客服 端到端
+  prompt_assets:
+    - asset_id: return-policy
+      name: 退货政策
+      purpose: 各类目退货的标准与例外
+      content: |
+        ## 标准类目
+        - 服饰：7 天无理由
+        - 数码：7 天无理由（未拆封）
+        - 食品：到货 24h 内问题件
+        ## 退货流程
+        - 客户发起 → 系统验证资格 → 生成退货单
+        - 退货单 → 异常处置员派回 → 物流改派
+        - 收到货 → 验收 → 退款 → 归档
+        ## 高风险情形
+        - 跨境退货
+        - 大额（>5000）
+        - 重复退货客户
+    - asset_id: refund-rules
+      name: 退款规则
+      purpose: 退款时机与方式
+      content: |
+        ## 即时退（信任客户）
+        - VIP 客户 + 标准类目
+        - 单笔 < 200
+        ## 验收后退
+        - 默认
+        ## 拒绝退款
+        - 已使用 / 已损坏
+        - 超期
+        - 跨境特殊品
+  scenario:
+    name: 电商退货跨域闭环
+    description: 物流 + 财务 + 客服 三方联动
+    collaboration_pattern: SEQUENTIAL
+    success_criteria:
+      - 退货 24h 内闭环
+      - 退款准确率 100%
+      - 客诉升级率 < 5%
+
+workflow_timeline:
+  - t: T+0
+    actor: 物流客服
+    action: 客户发起退货
+  - t: T+0+5min
+    actor: 物流客服
+    action: 验证资格 → 生成退货单
+  - t: T+0+10min
+    actor: 异常处置员
+    action: 接手退回派单 → 改派回程
+  - t: T+1h
+    actor: 轨迹追踪员
+    action: 监控退回轨迹
+  - t: T+2d
+    actor: 异常处置员
+    action: 收到货 → 验收
+  - t: T+2d+1h
+    actor: 应收会计
+    action: 退款核销
+  - t: T+2d+2h
+    actor: 物流客服
+    action: 推送退款完成 + 关怀
+  - t: T+3d
+    actor: FP&A
+    action: 退货成本归属到月报

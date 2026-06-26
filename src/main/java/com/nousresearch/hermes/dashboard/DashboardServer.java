@@ -552,6 +552,8 @@ public class DashboardServer {
         QuickTeamBuilderDashboardIntegration.registerRoutes(app, quickTeamBuilderService, teamBlueprintService);
         com.nousresearch.hermes.business.template.BusinessTemplateDashboardIntegration.registerRoutes(
             app, businessTemplateService, templateCloneService);
+        com.nousresearch.hermes.business.template.BusinessRiskPolicyDashboardIntegration.registerRoutes(
+            app, businessTemplateService);
         com.nousresearch.hermes.evalset.EvalSetDashboardIntegration.registerRoutes(app, evalSetService);
         com.nousresearch.hermes.canary.CanaryReleaseDashboardIntegration.registerRoutes(app, canaryReleaseService);
         com.nousresearch.hermes.memory.BusinessMemoryNoteDashboardIntegration.registerRoutes(app, activeMemoryService);

@@ -1,0 +1,78 @@
+template_id: logistics-bigday-dispatch
+name: 大促日批量发货
+category: logistics
+status: STABLE
+industry_tag: 物流
+icon: zap
+color: blue
+
+summary: 大促当日 1000+ 订单 30 分钟全部发出，错发率 < 0.1%
+description: |
+  双 11 / 618 / 黑五的发货噩梦交给数字员工。
+  调度员按仓 + 承运商规则秒级分单，
+  轨迹追踪员持续监控异常，分析师事后复盘。
+
+metrics:
+  - label: 发货吞吐
+    value: "1000+/30min"
+  - label: 错发率
+    value: "< 0.1%"
+  - label: 成本优化
+    value: "↓ 15%"
+
+involved_agents:
+  - template_id: logistics-shipment-dispatcher
+    role_in_scenario: 主调度
+  - template_id: logistics-tracking-agent
+    role_in_scenario: 同步监控
+  - template_id: logistics-analyst
+    role_in_scenario: 事后复盘
+
+clone_blueprint:
+  team:
+    name: 大促发货团队
+    description: 调度 + 监控 + 复盘
+  prompt_assets:
+    - asset_id: bigday-rules
+      name: 大促分单规则
+      purpose: 仓 + 承运商 + 加急规则
+      content: |
+        ## 仓库分配
+        - 华东 → 北京仓
+        - 华南 → 广州仓
+        - 中西 → 成都仓
+        ## 承运商优先级
+        - 高时效（次日达）：顺丰
+        - 性价比：京东 / 中通
+        - 海外：UPS / DHL
+        ## 加急规则
+        - 高价值（>1000）：顺丰特快
+        - VIP 客户：默认次日达
+  scenario:
+    name: 大促日批量发货
+    description: 高并发发货 + 实时监控
+    collaboration_pattern: PARALLEL
+    success_criteria:
+      - 30min 内完成 80% 发货
+      - 错发率 < 0.5%
+      - 异常订单 100% 阻断
+
+workflow_timeline:
+  - t: T-1d
+    actor: 运单调度员
+    action: 预热规则配置 / 演练
+  - t: T+0
+    actor: 运单调度员
+    action: 大促开始，订单池进入
+  - t: T+0+5min
+    actor: 运单调度员
+    action: 分单 + 出面单 + WMS 推送
+  - t: T+0+10min
+    actor: 轨迹追踪员
+    action: 已发订单进入轨迹监控
+  - t: T+0+30min
+    actor: 运单调度员
+    action: 第一批 80% 已发
+  - t: T+1
+    actor: 物流分析师
+    action: 复盘当日时效 / 异常 / 成本

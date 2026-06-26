@@ -432,6 +432,37 @@ export const api = {
       body: JSON.stringify(payload ?? {}),
     }),
 
+  // ── Business Risk Policy ─────────────────────────────────────────────
+  getBusinessRiskPolicySummary: (category?: string) =>
+    fetchJSON<import("@/lib/api").BusinessRiskPolicySummary>(
+      `/api/v1/business/risk-policy/summary${category ? `?category=${encodeURIComponent(category)}` : ""}`,
+    ),
+
+  // ── Evolution Proposals (Self-evolution) ─────────────────────────────
+  listEvolutionProposals: (workspaceId: string, status?: string) =>
+    fetchJSON<{ ok: boolean; proposals: EvolutionProposalRecord[]; total: number }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/evolution-proposals${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
+  getEvolutionProposal: (workspaceId: string, proposalId: string) =>
+    fetchJSON<{ ok: boolean; proposal: EvolutionProposalRecord }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/evolution-proposals/${encodeURIComponent(proposalId)}`,
+    ),
+  approveEvolutionProposal: (workspaceId: string, proposalId: string, payload: { actor?: string; reason?: string }) =>
+    fetchJSON<{ ok: boolean; proposal: EvolutionProposalRecord }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/evolution-proposals/${encodeURIComponent(proposalId)}/approve`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    ),
+  rejectEvolutionProposal: (workspaceId: string, proposalId: string, payload: { actor?: string; reason?: string }) =>
+    fetchJSON<{ ok: boolean; proposal: EvolutionProposalRecord }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/evolution-proposals/${encodeURIComponent(proposalId)}/reject`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    ),
+  applyEvolutionProposal: (workspaceId: string, proposalId: string, payload: { actor?: string }) =>
+    fetchJSON<{ ok: boolean; proposal: EvolutionProposalRecord }>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/evolution-proposals/${encodeURIComponent(proposalId)}/apply`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
+    ),
+
   createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
     fetchJSON<CreateBusinessApprovalResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals`, {
       method: "POST",
@@ -2068,4 +2099,57 @@ export interface ScenarioTemplateRecord {
   involvedAgents: ScenarioTemplateInvolvedAgent[];
   cloneBlueprint: ScenarioTemplateCloneBlueprint;
   workflowTimeline: ScenarioTemplateTimelineEntry[];
+}
+
+// ── Business Risk Policy ──────────────────────────────────────────────
+
+export interface BusinessRiskCategoryBucket {
+  category: string;
+  agents: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface BusinessRiskAction {
+  templateId: string;
+  agentName: string;
+  category: string;
+  action: string;
+}
+
+export interface BusinessRiskPolicySummary {
+  ok: boolean;
+  totals: {
+    agents: number;
+    high: number;
+    medium: number;
+    low: number;
+    coverage: string;
+  };
+  byCategory: BusinessRiskCategoryBucket[];
+  highRiskActions: BusinessRiskAction[];
+}
+
+// ── Evolution Proposal ───────────────────────────────────────────────
+
+export interface EvolutionProposalRecord {
+  workspaceId: string;
+  proposalId: string;
+  scenarioId?: string;
+  teamId?: string;
+  sourceInsightId?: string;
+  title?: string;
+  finding?: string;
+  proposedChange?: string;
+  expectedBenefit?: string;
+  status?: string;            // DRAFT | EVALUATED | AWAITING_APPROVAL | APPROVED | REJECTED | APPLIED
+  targetTeamId?: string;
+  targetDraftVersion?: number;
+  approvalId?: string;
+  evidence?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+  appliedAt?: string;
 }

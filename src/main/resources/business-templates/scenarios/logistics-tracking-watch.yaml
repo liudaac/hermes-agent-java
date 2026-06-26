@@ -1,0 +1,67 @@
+template_id: logistics-tracking-watch
+name: 轨迹监控与主动通知
+category: logistics
+status: STABLE
+industry_tag: 物流
+icon: map-pin
+color: blue
+
+summary: 48h 无更新自动预警，客户在发问前先收到主动通知
+description: |
+  让"包裹失联"成为历史。
+  轨迹追踪员持续巡查，识别停滞 / 延误 / 破损 / 退回，
+  客服在客户发问之前先一步主动通知 + 给补偿方案。
+
+metrics:
+  - label: 异常发现提前期
+    value: "+2d"
+  - label: 客户主动告知
+    value: "+88%"
+  - label: 客诉率
+    value: "↓ 40%"
+
+involved_agents:
+  - template_id: logistics-tracking-agent
+    role_in_scenario: 主监控
+  - template_id: logistics-csr
+    role_in_scenario: 主动通知
+  - template_id: logistics-exception-handler
+    role_in_scenario: 高严重度处置
+
+clone_blueprint:
+  team:
+    name: 轨迹守护团队
+  prompt_assets:
+    - asset_id: tracking-rules
+      name: 轨迹预警规则
+      purpose: 停滞 / 延误 / 破损识别阈值
+      content: |
+        ## 停滞预警
+        - 48h 无轨迹更新 → 黄色预警
+        - 72h → 橙色预警 + 客服主动通知
+        - 96h → 红色 + 异常处置介入
+        ## 延误识别
+        - 实际时效偏离预期 > 30% → 标记
+        - 偏离 > 100% → 升级
+        ## 破损 / 退回
+        - 轨迹关键字命中（破损/退回）→ 立即升级
+  scenario:
+    name: 轨迹监控与主动通知
+    collaboration_pattern: SEQUENTIAL
+    success_criteria:
+      - 48h 停滞 100% 识别
+      - 主动通知率 ≥ 80%
+
+workflow_timeline:
+  - t: T+0
+    actor: 轨迹追踪员
+    action: 定时拉取全量轨迹
+  - t: T+0+5min
+    actor: 轨迹追踪员
+    action: 识别异常 + 分类
+  - t: T+0+10min
+    actor: 物流客服
+    action: 主动通知客户 + ETA 更新
+  - t: T+0+30min
+    actor: 异常处置员
+    action: 高严重度（红色）介入

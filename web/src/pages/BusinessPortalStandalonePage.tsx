@@ -10,6 +10,7 @@ import {
   Layers,
   ShieldAlert,
   Home,
+  Lightbulb,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -142,6 +143,8 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
           <NavTab to="/business-portal/templates" label="场景模板" icon={Layers} />
           <NavTab to="/business-portal/workspaces" label="工作台" icon={BriefcaseBusiness} />
           <NavTab to="/business-portal/approvals" label="待审批" icon={ShieldAlert} />
+          <NavTab to="/business-portal/risk-policy" label="风险策略" icon={ShieldAlert} />
+          <NavTab to="/business-portal/evolution" label="自进化" icon={Lightbulb} />
         </div>
         {children ?? <BusinessPortalPage />}
       </main>
