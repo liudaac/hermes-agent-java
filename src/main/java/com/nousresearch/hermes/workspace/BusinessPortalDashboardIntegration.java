@@ -2,6 +2,7 @@ package com.nousresearch.hermes.workspace;
 
 import com.nousresearch.hermes.blueprint.TeamBlueprintRecord;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.run.BusinessRunRecord;
 import com.nousresearch.hermes.business.run.BusinessRunService;
 import com.nousresearch.hermes.business.insight.BusinessInsightService;
 import com.nousresearch.hermes.business.insight.BusinessInsightSummary;
@@ -11,10 +12,16 @@ import io.javalin.http.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Business Portal shell APIs for the five business-facing entries:
@@ -29,13 +36,13 @@ public final class BusinessPortalDashboardIntegration {
     /** 注册 Dashboard 路由。 */
     public static void registerRoutes(Javalin app, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessApprovalService approvalService, BusinessRunService runService, BusinessInsightService insightService) {
         logger.info("Registering Business Portal shell routes");
-        app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService, insightService));
+        app.get("/api/v1/business/home", ctx -> home(ctx, workspaceService, teamBlueprintService, insightService, runService));
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/runs", ctx -> runs(ctx, runService));
         app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
     }
 
-    static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessInsightService insightService) {
+    static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessInsightService insightService, BusinessRunService runService) {
         String workspaceId = ctx.queryParam("workspaceId");
         BusinessInsightSummary insightSummary = insightService.summarize(workspaceId);
         List<WorkspaceRecord> workspaces = workspaceId == null || workspaceId.isBlank()
@@ -94,7 +101,112 @@ public final class BusinessPortalDashboardIntegration {
         response.put("nextActions", insightSummary.getNextActions());
         response.put("workspaces", workspaces);
         response.put("emptyState", insightSummary.getWorkspaceCount() == 0 ? "还没有业务空间，请先创建一个业务空间。" : "");
+
+        // ── 7-day trend + response distribution ─────────────────────────
+        List<BusinessRunRecord> recent = runService.listRuns(workspaceId, null, null, null, 500);
+        response.put("trends", buildTrends(recent));
+        response.put("responseDistribution", buildResponseDistribution(recent));
+        response.put("recentRuns", recent.stream().limit(5).map(BusinessPortalDashboardIntegration::summarizeRun).toList());
+
         ctx.status(200).json(response);
+    }
+
+    private static Map<String, Object> buildTrends(List<BusinessRunRecord> runs) {
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDate today = LocalDate.now(zone);
+        TreeMap<LocalDate, int[]> buckets = new TreeMap<>();
+        for (int i = 6; i >= 0; i--) {
+            buckets.put(today.minusDays(i), new int[]{0, 0, 0}); // total, failed, completed
+        }
+        for (BusinessRunRecord run : runs) {
+            Instant ts = run.getCreatedAt();
+            if (ts == null) continue;
+            LocalDate day = ts.atZone(zone).toLocalDate();
+            int[] cell = buckets.get(day);
+            if (cell == null) continue;
+            cell[0]++;
+            String status = run.getStatus() == null ? "" : run.getStatus().toUpperCase(Locale.ROOT);
+            if (status.equals("FAILED") || status.equals("ERROR")) cell[1]++;
+            else if (status.equals("COMPLETED") || status.equals("SUCCESS")) cell[2]++;
+        }
+        List<Map<String, Object>> tasks = new ArrayList<>();
+        List<Map<String, Object>> failures = new ArrayList<>();
+        List<Map<String, Object>> completions = new ArrayList<>();
+        buckets.forEach((day, cell) -> {
+            tasks.add(Map.of("date", day.toString(), "value", cell[0]));
+            failures.add(Map.of("date", day.toString(), "value", cell[1]));
+            completions.add(Map.of("date", day.toString(), "value", cell[2]));
+        });
+        Map<String, Object> trends = new LinkedHashMap<>();
+        trends.put("tasks", tasks);
+        trends.put("failures", failures);
+        trends.put("completions", completions);
+        return trends;
+    }
+
+    private static Map<String, Object> buildResponseDistribution(List<BusinessRunRecord> runs) {
+        List<Long> durations = new ArrayList<>();
+        for (BusinessRunRecord run : runs) {
+            Instant created = run.getCreatedAt();
+            Instant updated = run.getUpdatedAt();
+            if (created == null || updated == null) continue;
+            long ms = ChronoUnit.MILLIS.between(created, updated);
+            if (ms <= 0 || ms > 24L * 60 * 60 * 1000) continue;
+            durations.add(ms);
+        }
+        durations.sort(Long::compare);
+
+        Map<String, Object> dist = new LinkedHashMap<>();
+        dist.put("sampleSize", durations.size());
+        if (durations.isEmpty()) {
+            dist.put("p50Ms", 0);
+            dist.put("p95Ms", 0);
+            dist.put("buckets", List.of());
+            return dist;
+        }
+        dist.put("p50Ms", percentile(durations, 0.5));
+        dist.put("p95Ms", percentile(durations, 0.95));
+
+        // 24 buckets covering 0..p95*1.2
+        long max = Math.max(1000L, (long) (percentile(durations, 0.95) * 1.2));
+        int buckets = 24;
+        long width = Math.max(1, max / buckets);
+        int[] hist = new int[buckets];
+        for (long d : durations) {
+            int idx = (int) Math.min(buckets - 1, d / width);
+            hist[idx]++;
+        }
+        List<Map<String, Object>> bucketList = new ArrayList<>(buckets);
+        for (int i = 0; i < buckets; i++) {
+            bucketList.add(Map.of(
+                "index", i,
+                "fromMs", i * width,
+                "toMs", (i + 1) * width,
+                "count", hist[i]));
+        }
+        dist.put("buckets", bucketList);
+        return dist;
+    }
+
+    private static long percentile(List<Long> sorted, double q) {
+        if (sorted.isEmpty()) return 0L;
+        int idx = (int) Math.min(sorted.size() - 1, Math.max(0, Math.round(q * (sorted.size() - 1))));
+        return sorted.get(idx);
+    }
+
+    private static Map<String, Object> summarizeRun(BusinessRunRecord run) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("runId", run.getRunId());
+        m.put("workspaceId", run.getWorkspaceId());
+        m.put("teamId", run.getTeamId());
+        m.put("status", run.getStatus());
+        m.put("scenario", run.getScenario());
+        m.put("scenarioId", run.getScenarioId());
+        m.put("taskTitle", run.getTaskTitle());
+        m.put("resultSummary", run.getResultSummary());
+        m.put("createdAt", run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
+        m.put("updatedAt", run.getUpdatedAt() != null ? run.getUpdatedAt().toString() : null);
+        return m;
     }
 
     static void teams(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService) {

@@ -1,0 +1,77 @@
+template_id: assets-procurement-receipt
+name: 资产采购入库
+category: assets
+status: STABLE
+industry_tag: 固定资产
+icon: package
+color: yellow
+
+summary: 采购到货 → 资产入库 + 财务三单匹配，端到端 30 分钟
+description: |
+  解决"发票入了账，资产没入库"的经典账实不符问题。
+  应付会计三单匹配的同时，资产管理员同步生成卡片并绑码，
+  FP&A 把资本性支出归属到正确科目。
+
+metrics:
+  - label: 端到端周期
+    value: "3d → 30min"
+  - label: 账实一致率
+    value: "100%"
+  - label: 漏入库
+    value: "↓ 95%"
+
+involved_agents:
+  - template_id: assets-asset-registrar
+    role_in_scenario: 入库与编码
+  - template_id: finance-ap-specialist
+    role_in_scenario: 三单匹配
+  - template_id: finance-fpa-analyst
+    role_in_scenario: 资本性支出归类
+  - template_id: assets-allocation-officer
+    role_in_scenario: 责任人确认领用
+
+clone_blueprint:
+  team:
+    name: 资产采购入库团队
+    description: 跨域 - 财务 + 固资 协同
+  prompt_assets:
+    - asset_id: capex-classification
+      name: 资本性支出归类规则
+      purpose: 决定哪些采购走资本性支出
+      content: |
+        ## 资本化条件
+        - 使用寿命 > 1 年
+        - 单价 > 5000
+        - 用于经营活动
+        ## 不资本化
+        - 维修费用
+        - 一次性消耗品
+        - 不构成实物形态
+  scenario:
+    name: 资产采购入库
+    description: 财务 + 固资 跨域协同
+    collaboration_pattern: SEQUENTIAL
+    success_criteria:
+      - 三单匹配率 100%
+      - 资产卡片 100% 创建
+      - 责任人 100% 确认
+
+workflow_timeline:
+  - t: T+0
+    actor: 应付会计
+    action: 接收发票 + PO + 入库单
+  - t: T+2min
+    actor: 应付会计
+    action: 三单匹配
+  - t: T+3min
+    actor: 资产管理员
+    action: 同步触发资产入库
+  - t: T+5min
+    actor: 资产管理员
+    action: 生成编码 + 二维码
+  - t: T+10min
+    actor: 领用调拨助理
+    action: 推送责任人接收
+  - t: T+20min
+    actor: FP&A
+    action: 资本性支出归类入账

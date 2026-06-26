@@ -327,7 +327,7 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
   );
 }
 
-function ApprovalRow({
+export function ApprovalRow({
   approval,
   onApprove,
   onReject,

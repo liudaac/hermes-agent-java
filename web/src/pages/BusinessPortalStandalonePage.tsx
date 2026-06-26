@@ -8,10 +8,13 @@ import {
   X,
   Sparkles,
   Layers,
+  ShieldAlert,
+  Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import BusinessPortalPage from "@/pages/BusinessPortalPage";
+import FloatingBusinessChat from "@/components/business/FloatingBusinessChat";
 
 /**
  * Business Portal Standalone — Independent portal page without Dashboard chrome.
@@ -134,12 +137,15 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
       {/* Main Content */}
       <main className="mx-auto max-w-[1400px] px-4 sm:px-6 pt-20 pb-12">
         <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-3">
-          <NavTab to="/business-portal" label="Overview" icon={BriefcaseBusiness} />
+          <NavTab to="/business-portal" label="首页" icon={Home} exact />
           <NavTab to="/business-portal/agents" label="数字员工" icon={Sparkles} />
           <NavTab to="/business-portal/templates" label="场景模板" icon={Layers} />
+          <NavTab to="/business-portal/workspaces" label="工作台" icon={BriefcaseBusiness} />
+          <NavTab to="/business-portal/approvals" label="待审批" icon={ShieldAlert} />
         </div>
         {children ?? <BusinessPortalPage />}
       </main>
+      <FloatingBusinessChat />
 
       {/* Minimal footer */}
       <footer className="border-t border-border bg-muted/30">
@@ -159,9 +165,10 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
   );
 }
 
-function NavTab({ to, label, icon: Icon }: { to: string; label: string; icon: typeof BriefcaseBusiness }) {
+function NavTab({ to, label, icon: Icon, exact }: { to: string; label: string; icon: typeof BriefcaseBusiness; exact?: boolean }) {
   const navigate = useNavigate();
-  const active = typeof window !== "undefined" && window.location.pathname === to;
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const active = exact ? path === to : path === to || path.startsWith(to + "/");
   return (
     <button
       onClick={() => navigate(to)}

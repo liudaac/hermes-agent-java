@@ -1,0 +1,82 @@
+template_id: assets-quarterly-inventory
+name: 季度盘点闭环
+category: assets
+status: STABLE
+industry_tag: 固定资产
+icon: scan-line
+color: yellow
+
+summary: 季度盘点从 2 周缩短到 3 天，差异 T+1 暴露
+description: |
+  覆盖盘点计划、扫码、差异、处置全流程。
+  盘点员按部门分批推任务，资产管理员同步卡片，
+  超阈值差异自动升级人审。
+
+metrics:
+  - label: 盘点周期
+    value: "2w → 3d"
+  - label: 账实一致率
+    value: "98%"
+  - label: 差异处置周期
+    value: "↓ 60%"
+
+involved_agents:
+  - template_id: assets-inventory-auditor
+    role_in_scenario: 盘点主导
+  - template_id: assets-asset-registrar
+    role_in_scenario: 卡片更新
+  - template_id: assets-depreciation-advisor
+    role_in_scenario: 处置 / 减值
+  - template_id: finance-gl-accountant
+    role_in_scenario: 凭证生成
+
+clone_blueprint:
+  team:
+    name: 资产盘点团队
+    description: 盘点 + 卡片 + 处置 + 凭证 端到端
+  prompt_assets:
+    - asset_id: inventory-policy
+      name: 盘点政策
+      purpose: 盘点节奏、差异阈值、责任人规则
+      content: |
+        ## 盘点节奏
+        - 季度全盘 + 月度抽盘
+        - Q1 / Q2 / Q3 / Q4 末月内完成
+        ## 差异阈值
+        - 单件盘亏 < 1k：自动登记
+        - 单件 1k-5k：调查工单
+        - 单件 > 5k：升级人审
+        ## 责任人
+        - 谁领用，谁负责
+        - 部门负责人协同确认
+  scenario:
+    name: 季度盘点闭环
+    description: 端到端固定资产盘点
+    collaboration_pattern: PARALLEL
+    success_criteria:
+      - 盘点完成率 ≥ 95%
+      - 差异 T+1 暴露
+      - 高风险盘亏 100% 人审
+
+workflow_timeline:
+  - t: D-7
+    actor: 盘点员
+    action: 生成盘点计划，按部门分批
+  - t: D0
+    actor: 盘点员
+    action: 推送扫码任务给各部门
+  - t: D+1 ~ D+3
+    actor: 盘点员
+    action: 并发扫码，实时汇总
+  - t: D+3
+    actor: 盘点员
+    action: 识别差异，超阈值升级
+  - t: D+4
+    actor: 资产管理员
+    action: 更新卡片信息
+  - t: D+5
+    actor: 折旧处置顾问
+    action: 处理盘亏 / 报废
+  - t: D+7
+    actor: 总账会计
+    action: 生成调整凭证

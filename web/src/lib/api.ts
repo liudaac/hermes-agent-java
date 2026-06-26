@@ -1414,6 +1414,44 @@ export interface BusinessInsightRecord {
   generatedAt?: string;
 }
 
+export interface BusinessHomeTrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface BusinessHomeTrends {
+  tasks: BusinessHomeTrendPoint[];
+  failures: BusinessHomeTrendPoint[];
+  completions: BusinessHomeTrendPoint[];
+}
+
+export interface BusinessHomeResponseBucket {
+  index: number;
+  fromMs: number;
+  toMs: number;
+  count: number;
+}
+
+export interface BusinessHomeResponseDistribution {
+  sampleSize: number;
+  p50Ms: number;
+  p95Ms: number;
+  buckets: BusinessHomeResponseBucket[];
+}
+
+export interface BusinessHomeRecentRun {
+  runId: string;
+  workspaceId?: string;
+  teamId?: string;
+  status?: string;
+  scenario?: string;
+  scenarioId?: string;
+  taskTitle?: string;
+  resultSummary?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface BusinessHomeResponse {
   ok: boolean;
   entry: string;
@@ -1433,6 +1471,9 @@ export interface BusinessHomeResponse {
   nextActions: BusinessAction[];
   workspaces: WorkspaceRecord[];
   emptyState?: string;
+  trends?: BusinessHomeTrends;
+  responseDistribution?: BusinessHomeResponseDistribution;
+  recentRuns?: BusinessHomeRecentRun[];
 }
 
 export interface WorkspaceRecord {

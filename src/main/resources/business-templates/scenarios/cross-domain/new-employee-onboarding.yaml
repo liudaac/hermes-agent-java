@@ -1,0 +1,126 @@
+template_id: x-new-employee-onboarding
+name: "[旗舰] 新员工入职 · 跨域闭环"
+category: cross-domain
+status: STABLE
+industry_tag: 跨域旗舰
+icon: user-plus
+color: orange
+
+summary: HR + 固资 + 财务三部门 30 分钟全自动落地，从 3 天压到半小时
+description: |
+  最能体现"团队"价值的旗舰场景。
+  HR 录入新员工信息后，自动触发：
+  - 入离调转专员：合同电签、培训计划、buddy 指派
+  - 资产管理员 / 领用调拨助理：电脑/工卡/账号准备
+  - 应付会计：押金 / 借支 / 工资开户
+
+  以往这是 3 个部门 3 天的折磨；现在是 1 个事件触发，30 分钟落地，每一步留痕可审计。
+
+metrics:
+  - label: 入职落地周期
+    value: "3d → 30min"
+  - label: 漏环节
+    value: "↓ 95%"
+  - label: 新员工 NPS
+    value: "9.3/10"
+  - label: 涉及部门
+    value: "3"
+
+involved_agents:
+  - template_id: hr-lifecycle-officer
+    role_in_scenario: 主流程驱动
+  - template_id: hr-employee-care
+    role_in_scenario: 入职关怀
+  - template_id: assets-asset-registrar
+    role_in_scenario: 资产准备
+  - template_id: assets-allocation-officer
+    role_in_scenario: 领用与责任人交接
+  - template_id: finance-ap-specialist
+    role_in_scenario: 押金 / 借支
+  - template_id: finance-gl-accountant
+    role_in_scenario: 工资开户与凭证
+
+clone_blueprint:
+  team:
+    name: 入职闭环 · 跨域团队
+    description: HR / 固资 / 财务 端到端协同
+  prompt_assets:
+    - asset_id: cross-onboarding-master
+      name: 跨域入职主流程
+      purpose: 三部门协同的关键节点与责任分工
+      content: |
+        # 跨域新员工入职闭环
+
+        ## 阶段 1：入职前（T-3 ~ T-1）
+        HR 入离调转专员驱动：
+        - 合同电签发起
+        - 培训计划生成
+        - Buddy 指派
+        固资管理员准备：
+        - 电脑 / 工卡 / 显示器
+        - 账号开通（IT 服务台）
+        财务应付准备：
+        - 工资开户
+        - 押金（如适用）
+
+        ## 阶段 2：入职日（D0）
+        - HR 接待 + 制度签署
+        - 固资领用调拨助理推送资产领用
+        - 财务确认开户成功
+
+        ## 阶段 3：第一周（D+1 ~ D+7）
+        - Buddy 跟进
+        - 试用期目标设定
+        - D+7 反馈会
+    - asset_id: cross-onboarding-checklist
+      name: 30 分钟入职清单
+      purpose: 三部门并行 30 分钟落地的关键 checkpoint
+      content: |
+        ## 30 分钟内完成
+        - [ ] 合同已电签
+        - [ ] 邮箱 / OA 账号已开通
+        - [ ] 电脑 / 工卡已分配
+        - [ ] 工资卡已开户
+        - [ ] Buddy 已确认
+        - [ ] 培训计划已推送
+        - [ ] 试用期目标已发起
+  scenario:
+    name: 新员工入职跨域闭环
+    description: HR + 固资 + 财务 三部门联动
+    collaboration_pattern: PARALLEL
+    success_criteria:
+      - 关键 7 项 30 分钟内完成
+      - 高风险动作（合同/薪酬）走审批
+      - 每个动作有完整责任链
+
+workflow_timeline:
+  - t: T-3d
+    actor: HR
+    action: 录入新员工基本信息（入口事件）
+  - t: T-3d
+    actor: 入离调转专员
+    action: 启动主流程，生成跨域任务包
+  - t: T-2d
+    actor: 入离调转专员
+    action: 触发合同电签
+  - t: T-2d
+    actor: 资产管理员
+    action: 并行 - 准备电脑 / 工卡 / 账号
+  - t: T-1d
+    actor: 应付会计
+    action: 并行 - 工资开户
+  - t: D0 + 0min
+    actor: 入离调转专员
+    action: 推送欢迎信，确认所有 checkpoint
+  - t: D0 + 10min
+    actor: 领用调拨助理
+    action: 资产领用确认 → 责任人交接
+  - t: D0 + 20min
+    actor: 入离调转专员
+    action: Buddy 介绍 + 培训计划下发
+  - t: D0 + 30min
+    actor: 员工关系助理
+    action: 推送 D0 关怀消息
+  - t: D+7
+    actor: 入离调转专员
+    action: 召开 D+7 反馈会，设定试用期目标
