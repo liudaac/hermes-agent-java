@@ -24,6 +24,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import RunStoryTimeline from "@/components/business/RunStoryTimeline";
 import {
   Card,
   CardContent,
@@ -305,7 +306,12 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
         {(run.tokensUsed ?? 0) > 0 && <span>🪙 {run.tokensUsed} tokens</span>}
         {(run.estimatedCost ?? 0) > 0 && <span>💰 ${(run.estimatedCost ?? 0).toFixed(4)}</span>}
       </div>
-      <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
+      {run.steps?.length ? (
+        <div className="mt-3 rounded-sm border border-border/60 p-3" onClick={(e) => e.stopPropagation()}>
+          <RunStoryTimeline steps={run.steps} />
+        </div>
+      ) : null}
+      <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case" onClick={(e) => e.stopPropagation()}>
         <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Run details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
           <DetailField label="Input" value={run.taskInput} />
@@ -314,7 +320,6 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
           <DetailField label="Risk judgement" value={run.riskJudgement} />
           <DetailField label="Next suggestion" value={run.nextSuggestion} />
           <DetailField label="Technical trace" value={run.technicalTraceRef} />
-          {run.steps?.length ? <JsonPreview label="Steps" value={run.steps} /> : null}
           {run.metrics ? <JsonPreview label="Metrics" value={run.metrics} /> : null}
         </div>
       </details>

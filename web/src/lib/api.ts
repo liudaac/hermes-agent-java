@@ -398,6 +398,40 @@ export const api = {
       body: JSON.stringify({ draft }),
     }),
 
+  // ── Business Templates (agent role + scenario catalog) ───────────────
+  listAgentTemplates: (category?: string) =>
+    fetchJSON<{ ok: boolean; count: number; items: AgentTemplateRecord[] }>(
+      `/api/v1/business/agent-templates${category ? `?category=${encodeURIComponent(category)}` : ""}`,
+    ),
+  getAgentTemplate: (templateId: string) =>
+    fetchJSON<{ ok: boolean; item: AgentTemplateRecord }>(
+      `/api/v1/business/agent-templates/${encodeURIComponent(templateId)}`,
+    ),
+  listScenarioTemplates: (category?: string) =>
+    fetchJSON<{ ok: boolean; count: number; items: ScenarioTemplateRecord[] }>(
+      `/api/v1/business/scenario-templates${category ? `?category=${encodeURIComponent(category)}` : ""}`,
+    ),
+  getScenarioTemplate: (templateId: string) =>
+    fetchJSON<{ ok: boolean; item: ScenarioTemplateRecord }>(
+      `/api/v1/business/scenario-templates/${encodeURIComponent(templateId)}`,
+    ),
+  cloneScenarioTemplate: (
+    templateId: string,
+    payload: { workspaceId?: string; workspaceName?: string; owner?: string },
+  ) =>
+    fetchJSON<{
+      ok: boolean;
+      workspaceId: string;
+      teamId: string;
+      scenarioId: string;
+      promptAssetIds: string[];
+      workspaceCreated: boolean;
+    }>(`/api/v1/business/scenario-templates/${encodeURIComponent(templateId)}/clone`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    }),
+
   createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
     fetchJSON<CreateBusinessApprovalResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals`, {
       method: "POST",
@@ -1890,4 +1924,107 @@ export function openBusinessEventStream(
     es.onerror = onError;
   }
   return es;
+}
+
+// ── Business Templates ────────────────────────────────────────────────
+
+export interface AgentTemplateMetric {
+  label: string;
+  value: string;
+  unit?: string;
+}
+
+export interface AgentTemplateWorkflowStep {
+  step: number;
+  actor: string;
+  action: string;
+  duration?: string;
+}
+
+export interface AgentTemplateRiskPolicy {
+  high: string[];
+  medium: string[];
+  low: string[];
+}
+
+export interface AgentTemplateHandoffTrigger {
+  condition: string;
+  target: string;
+}
+
+export interface AgentTemplateHandoffPolicy {
+  defaultTarget?: string;
+  triggers: AgentTemplateHandoffTrigger[];
+}
+
+export interface AgentTemplateRecord {
+  templateId: string;
+  name: string;
+  role: string;
+  category: string;
+  status: "STABLE" | "BETA" | "EXPERIMENTAL";
+  icon?: string;
+  color?: string;
+  mission?: string;
+  description?: string;
+  skills: string[];
+  metrics: AgentTemplateMetric[];
+  allowedTools: string[];
+  allowedSkills: string[];
+  instructions?: string;
+  handoffPolicy?: AgentTemplateHandoffPolicy;
+  riskPolicy: AgentTemplateRiskPolicy;
+  demoWorkflow: AgentTemplateWorkflowStep[];
+}
+
+export interface ScenarioTemplateInvolvedAgent {
+  templateId: string;
+  roleInScenario?: string;
+}
+
+export interface ScenarioTemplateTimelineEntry {
+  t: string;
+  actor: string;
+  action: string;
+}
+
+export interface ScenarioTemplatePromptAssetSpec {
+  assetId: string;
+  name: string;
+  purpose?: string;
+  content?: string;
+}
+
+export interface ScenarioTemplateTeamSpec {
+  name: string;
+  description?: string;
+}
+
+export interface ScenarioTemplateScenarioSpec {
+  name: string;
+  description?: string;
+  collaborationPattern?: string;
+  successCriteria: string[];
+}
+
+export interface ScenarioTemplateCloneBlueprint {
+  team?: ScenarioTemplateTeamSpec;
+  promptAssets: ScenarioTemplatePromptAssetSpec[];
+  scenario?: ScenarioTemplateScenarioSpec;
+}
+
+export interface ScenarioTemplateRecord {
+  templateId: string;
+  name: string;
+  category: string;
+  status: "STABLE" | "BETA" | "EXPERIMENTAL";
+  industryTag?: string;
+  icon?: string;
+  color?: string;
+  summary?: string;
+  description?: string;
+  metrics: AgentTemplateMetric[];
+  involvedAgents: ScenarioTemplateInvolvedAgent[];
+  cloneBlueprint: ScenarioTemplateCloneBlueprint;
+  workflowTimeline: ScenarioTemplateTimelineEntry[];
 }

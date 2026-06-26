@@ -1,0 +1,87 @@
+template_id: hr-campus-funnel
+name: 校招漏斗加速
+category: hr
+status: STABLE
+industry_tag: 人力资源
+icon: graduation-cap
+color: orange
+
+summary: 校招季 4 周内完成 1000+ 简历筛选与 200+ 面试排期
+description: |
+  覆盖宣讲 → 投递 → 简历筛选 → 笔试 → 面试 → Offer 全漏斗。
+  招聘官批量筛历、面试协调员智能排期、薪酬顾问出 Offer 建议。
+  适用于校招、批量补员、内部 IDP 招募等高并发场景。
+
+metrics:
+  - label: 简历处理量
+    value: "1000+/周"
+  - label: 面试排期时长
+    value: "↓ 75%"
+  - label: Offer 接受率
+    value: "+18%"
+
+involved_agents:
+  - template_id: hr-talent-sourcer
+    role_in_scenario: JD + 简历筛选（主角）
+  - template_id: hr-interview-coordinator
+    role_in_scenario: 面试排期 + 协调
+  - template_id: hr-compensation-advisor
+    role_in_scenario: Offer 测算
+  - template_id: hr-lifecycle-officer
+    role_in_scenario: 入职衔接
+
+clone_blueprint:
+  team:
+    name: 校招团队
+    description: 校招漏斗加速 - 招聘 / 面试 / 薪酬 / 入职 协同
+  prompt_assets:
+    - asset_id: campus-jd-template
+      name: 校招 JD 模板
+      purpose: 适合校园场景的 JD 写作规范
+      content: |
+        # {{position_name}}
+        ## 我们在找什么样的人
+        ## 你将参与
+        ## 我们能给你什么
+        ## 加分项
+        ## 流程：投递 → 笔试 → 2 轮面试 → Offer
+    - asset_id: screening-criteria
+      name: 简历评分规则
+      purpose: 多维评分标准
+      content: |
+        - 学校：985/211/海外 Top 100：5 分
+        - 专业匹配：3 分
+        - 项目经历：3 分
+        - 实习经历：3 分
+        - 课外活动 / 竞赛：2 分
+  scenario:
+    name: 校招漏斗加速
+    description: 1000+ 候选人高效推进
+    collaboration_pattern: PARALLEL_WITH_AGGREGATION
+    success_criteria:
+      - 简历筛选 24h 内完成
+      - 面试排期一次性成功率 ≥ 75%
+      - Offer 发出后 7 天内接受率 ≥ 60%
+
+workflow_timeline:
+  - t: W-1
+    actor: 招聘官
+    action: 撰写 JD，确认招聘画像
+  - t: W0
+    actor: 招聘官
+    action: 接收简历，批量筛选 + 评分
+  - t: W0+1d
+    actor: 招聘官
+    action: Top 30% 发起初筛对话
+  - t: W0+3d
+    actor: 面试协调员
+    action: 协调 3 位面试官的可用时段
+  - t: W0+5d
+    actor: 面试协调员
+    action: 面试结果汇总，候选人画像更新
+  - t: W1
+    actor: 薪酬顾问
+    action: 为通过候选人测算 Offer 方案
+  - t: W1+2d
+    actor: 入离调转专员
+    action: 接收已接受 Offer 的候选人，准备入职

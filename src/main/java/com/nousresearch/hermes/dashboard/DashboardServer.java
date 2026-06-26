@@ -146,6 +146,8 @@ public class DashboardServer {
     private final PromptAssetService promptAssetService;
     private final EvolutionProposalService evolutionProposalService;
     private final PolicyService policyService;
+    private final com.nousresearch.hermes.business.template.BusinessTemplateService businessTemplateService;
+    private final com.nousresearch.hermes.business.template.TemplateCloneService templateCloneService;
     private final com.nousresearch.hermes.evalset.EvalSetService evalSetService;
     private final com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
     private final com.nousresearch.hermes.memory.BusinessMemoryNoteService activeMemoryService;
@@ -253,6 +255,13 @@ public class DashboardServer {
             new PlanReflectionService(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())));
         this.quickTeamBuilderService = new QuickTeamBuilderService(
             new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()));
+        this.businessTemplateService = new com.nousresearch.hermes.business.template.BusinessTemplateService();
+        this.templateCloneService = new com.nousresearch.hermes.business.template.TemplateCloneService(
+            businessTemplateService,
+            workspaceService,
+            promptAssetService,
+            teamBlueprintService,
+            scenarioService);
         this.activeMemoryService = new BusinessMemoryNoteService(workspaceService);
         this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
             workspaceService,
@@ -541,6 +550,8 @@ public class DashboardServer {
         BusinessPortalDashboardIntegration.registerRoutes(app, workspaceService, teamBlueprintService, businessApprovalService, businessRunService, businessInsightService);
         BusinessPortalExtendedIntegration.registerRoutes(app, workspaceService, slaManager, deadLetterQueue, approvalAnalytics, humanOverrideService, workflowService, connectorRegistry, ecommerceScenarioFactory);
         QuickTeamBuilderDashboardIntegration.registerRoutes(app, quickTeamBuilderService, teamBlueprintService);
+        com.nousresearch.hermes.business.template.BusinessTemplateDashboardIntegration.registerRoutes(
+            app, businessTemplateService, templateCloneService);
         com.nousresearch.hermes.evalset.EvalSetDashboardIntegration.registerRoutes(app, evalSetService);
         com.nousresearch.hermes.canary.CanaryReleaseDashboardIntegration.registerRoutes(app, canaryReleaseService);
         com.nousresearch.hermes.memory.BusinessMemoryNoteDashboardIntegration.registerRoutes(app, activeMemoryService);

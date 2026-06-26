@@ -1,0 +1,100 @@
+template_id: hr-onboarding-7day
+name: 7 天入职闭环
+category: hr
+status: STABLE
+industry_tag: 人力资源
+icon: user-plus
+color: orange
+
+summary: 从合同电签到首日工作就绪，7 天端到端自动驱动入职
+description: |
+  覆盖入职前 / 入职日 / 第一周三阶段。
+  HR 录入基本信息后，由"入离调转专员"全程驱动，串联 IT、行政、薪酬、buddy，
+  在关键节点（合同/资产/培训/试用期目标）主动推进或升级人工。
+
+metrics:
+  - label: 入职周期
+    value: "3d → 30min"
+  - label: 错单率
+    value: "↓ 87%"
+  - label: 新员工 NPS
+    value: "9.2/10"
+
+involved_agents:
+  - template_id: hr-lifecycle-officer
+    role_in_scenario: 流程驱动（主角）
+  - template_id: hr-talent-sourcer
+    role_in_scenario: 候选人对接 / 交接
+  - template_id: hr-interview-coordinator
+    role_in_scenario: Offer 与入职衔接
+  - template_id: hr-employee-care
+    role_in_scenario: D+30 / D+90 关怀
+
+clone_blueprint:
+  team:
+    name: 入职闭环团队
+    description: 端到端驱动新员工 7 天入职流程
+  prompt_assets:
+    - asset_id: onboarding-checklist
+      name: 入职检查清单
+      purpose: 7 天必备事项与节点提醒模板
+      content: |
+        ## 入职前（T-3 ~ T-1）
+        - 合同电签发起
+        - IT 准备：账号、电脑、工卡
+        - 行政准备：工位、文具
+        - HR 准备：员工手册、培训计划
+        ## 入职日（D0）
+        - 接待 + 公司介绍
+        - 合同/制度签署
+        - 资产领用
+        - Buddy 指派
+        ## 第一周（D1 ~ D7）
+        - 部门内部介绍
+        - 业务培训
+        - 试用期目标设定（SMART）
+        - D+7 反馈会
+    - asset_id: onboarding-welcome-letter
+      name: 欢迎信模板
+      purpose: 入职第一天发给新员工的欢迎信
+      content: |
+        欢迎加入 {{company_name}}！
+        我们已经为你准备好了 {{workspace}} 和 {{buddy_name}} 作为你的伙伴……
+  scenario:
+    name: 7 天入职闭环
+    description: 端到端入职流程驱动
+    collaboration_pattern: SEQUENTIAL_WITH_FANOUT
+    success_criteria:
+      - 试用期目标 100% 设定
+      - 合同电签 D0 前完成
+      - 资产 D0 当日齐备
+      - D+7 反馈会 100% 召开
+
+workflow_timeline:
+  - t: T-3d
+    actor: HR
+    action: 录入新员工基本信息
+  - t: T-3d
+    actor: 入离调转专员
+    action: 启动入职流程，生成 7 天检查清单
+  - t: T-2d
+    actor: 入离调转专员
+    action: 触发合同电签
+  - t: T-1d
+    actor: 入离调转专员
+    action: 通知 IT 准备资产、HR 安排培训计划
+  - t: D0
+    actor: 入离调转专员
+    action: 推送欢迎信，确认资产领用、合同签署
+  - t: D+1
+    actor: 入离调转专员
+    action: Buddy 指派，部门内部介绍
+  - t: D+7
+    actor: 入离调转专员
+    action: 召集 D+7 反馈会，设定试用期目标
+  - t: D+30
+    actor: 员工关系助理
+    action: 第一次关怀回访
+  - t: D+90
+    actor: 入离调转专员
+    action: 试用期评估，发起转正流程

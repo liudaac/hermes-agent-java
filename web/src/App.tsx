@@ -48,6 +48,8 @@ const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const OrgPage = lazy(() => import("@/pages/OrgPage"));
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
 const BusinessPortalStandalonePage = lazy(() => import("@/pages/BusinessPortalStandalonePage"));
+const AgentMarketPage = lazy(() => import("@/pages/AgentMarketPage"));
+const TemplateGalleryPage = lazy(() => import("@/pages/TemplateGalleryPage"));
 const RunDetailPage = lazy(() => import("@/pages/RunDetailPage"));
 const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
 const SLAPage = lazy(() => import("@/pages/SLAPage"));
@@ -290,6 +292,8 @@ export default function App() {
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/business" element={<Navigate to="/business-portal" replace />} />
           <Route path="/business-portal" element={<BusinessPortalStandalonePage />} />
+          <Route path="/business-portal/agents" element={<BusinessPortalStandalonePage><AgentMarketPage /></BusinessPortalStandalonePage>} />
+          <Route path="/business-portal/templates" element={<BusinessPortalStandalonePage><TemplateGalleryPage /></BusinessPortalStandalonePage>} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetailPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />

@@ -1,0 +1,81 @@
+template_id: finance-expense-instant
+name: 报销秒审
+category: finance
+status: STABLE
+industry_tag: 财务
+icon: zap
+color: green
+
+summary: 员工提交报销单 → 10s 内出审批结果，自动通过率 68%
+description: |
+  让员工告别"催报销"，让财务告别"晚上对单"。
+  费控审单员 OCR + 政策匹配 + 发票查验 + 预算检查四件套，
+  符合规则自动通过，异常拦截附完整审计依据。
+
+metrics:
+  - label: 自动通过率
+    value: "68%"
+  - label: 审单耗时
+    value: "10s/单"
+  - label: 异常拦截准确率
+    value: "97%"
+
+involved_agents:
+  - template_id: finance-expense-auditor
+    role_in_scenario: 报销审核主角
+  - template_id: finance-ap-specialist
+    role_in_scenario: 通过后付款
+  - template_id: finance-gl-accountant
+    role_in_scenario: 凭证生成
+
+clone_blueprint:
+  team:
+    name: 报销自动审团队
+    description: 报销秒审 + 付款 + 凭证一体化
+  prompt_assets:
+    - asset_id: expense-policy-rules
+      name: 报销政策规则库
+      purpose: 各类报销的政策标准与拦截规则
+      content: |
+        ## 餐饮
+        - 工作餐：单次 ≤ 200/人
+        - 商务宴请：单次 ≤ 500/人，需注明客户
+        ## 差旅
+        - 机票：经济舱（CEO/CFO 例外）
+        - 酒店：一线 ≤ 600/晚，二线 ≤ 400/晚
+        - 打车：≤ 100/次
+        ## 培训
+        - 单次 ≤ 5000
+        - > 5000 需 HR 主管预审
+        ## 拦截规则
+        - 同一天同一商户重复 → 怀疑舞弊
+        - 跨期报销 > 90 天 → 拦截
+        - 发票真伪未通过 → 阻断
+  scenario:
+    name: 报销秒审
+    description: 自动 + 异常人审混合
+    collaboration_pattern: AUTO_APPROVE_WITH_FALLBACK
+    success_criteria:
+      - 自动通过率 ≥ 60%
+      - 平均审单时长 ≤ 30s
+      - 0 漏审
+
+workflow_timeline:
+  - t: T+0
+    actor: 员工
+    action: 提交报销单 + 发票照片
+  - t: T+3s
+    actor: 费控审单员
+    action: OCR 解析 + 发票真伪查验
+  - t: T+5s
+    actor: 费控审单员
+    action: 匹配报销政策 + 检查部门预算
+  - t: T+8s
+    actor: 费控审单员
+    action: 全部通过 → 自动审批；否则拦截
+  - t: T+10s
+    actor: 应付会计
+    action: 通过单生成付款审批包
+  - t: T+1d
+    actor: 总账会计
+    action: 凭证生成 + 入账
