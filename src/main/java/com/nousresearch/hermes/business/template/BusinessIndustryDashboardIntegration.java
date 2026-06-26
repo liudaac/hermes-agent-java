@@ -37,6 +37,8 @@ public final class BusinessIndustryDashboardIntegration {
                                       BusinessTemplateService templateService) {
         logger.info("Registering Industry Dashboard routes");
         app.get("/api/v1/business/industry-dashboard", ctx -> dashboard(ctx, runService, templateService));
+        app.get("/api/v1/business/industry-dashboard/runs",
+            ctx -> drillDownRuns(ctx, runService, templateService));
     }
 
     static void dashboard(Context ctx, BusinessRunService runService, BusinessTemplateService templateService) {
@@ -137,7 +139,6 @@ public final class BusinessIndustryDashboardIntegration {
     }
 
     private static String resolveCategory(BusinessRunRecord run, BusinessTemplateService templateService) {
-        // Prefer scenario.metadata.templateCategory; fallback to template lookup; default "general"
         Map<String, Object> metadata = run.getMetadata();
         if (metadata != null) {
             Object tc = metadata.get("templateCategory");
@@ -149,6 +150,45 @@ public final class BusinessIndustryDashboardIntegration {
             if (sc.isPresent() && sc.get().getCategory() != null) return sc.get().getCategory();
         }
         return "general";
+    }
+
+    /** GET /api/v1/business/industry-dashboard/runs?category=hr&status=COMPLETED&limit=50 */
+    static void drillDownRuns(Context ctx, BusinessRunService runService, BusinessTemplateService templateService) {
+        String category = lower(ctx.queryParam("category"));
+        String statusFilter = lower(ctx.queryParam("status"));
+        int limit = parseIntOrDefault(ctx.queryParam("limit"), 50);
+        List<BusinessRunRecord> all = runService.listRuns(null, null, null, null, 500);
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (BusinessRunRecord run : all) {
+            String runCategory = resolveCategory(run, templateService);
+            if (category != null && !category.isBlank() && !category.equalsIgnoreCase(runCategory)) continue;
+            if (statusFilter != null && !statusFilter.isBlank()
+                && (run.getStatus() == null || !run.getStatus().equalsIgnoreCase(statusFilter))) {
+                continue;
+            }
+            if (filtered.size() >= limit) break;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("runId", run.getRunId());
+            m.put("workspaceId", run.getWorkspaceId());
+            m.put("teamId", run.getTeamId());
+            m.put("status", run.getStatus());
+            m.put("category", runCategory);
+            m.put("scenario", run.getScenario());
+            m.put("scenarioId", run.getScenarioId());
+            m.put("taskTitle", run.getTaskTitle());
+            m.put("resultSummary", run.getResultSummary());
+            m.put("createdAt", run.getCreatedAt() != null ? run.getCreatedAt().toString() : null);
+            m.put("updatedAt", run.getUpdatedAt() != null ? run.getUpdatedAt().toString() : null);
+            filtered.add(m);
+        }
+        ctx.status(200).json(Map.of(
+            "ok", true,
+            "filter", Map.of(
+                "category", category == null ? "" : category,
+                "status", statusFilter == null ? "" : statusFilter,
+                "limit", limit),
+            "count", filtered.size(),
+            "items", filtered));
     }
 
     private static String lower(String v) {

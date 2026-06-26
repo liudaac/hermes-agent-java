@@ -492,6 +492,19 @@ export const api = {
     const qs = params.toString();
     return fetchJSON<IndustryDashboardResponse>(`/api/v1/business/industry-dashboard${qs ? `?${qs}` : ""}`);
   },
+  getIndustryDashboardRuns: (filter: { category?: string; status?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (filter.category) params.set("category", filter.category);
+    if (filter.status) params.set("status", filter.status);
+    if (filter.limit) params.set("limit", String(filter.limit));
+    const qs = params.toString();
+    return fetchJSON<{
+      ok: boolean;
+      filter: { category: string; status: string; limit: number };
+      count: number;
+      items: IndustryDrillDownRun[];
+    }>(`/api/v1/business/industry-dashboard/runs${qs ? `?${qs}` : ""}`);
+  },
 
   createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
     fetchJSON<CreateBusinessApprovalResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals`, {
@@ -2218,4 +2231,18 @@ export interface IndustryDashboardResponse {
   byCategory: IndustryCategoryRollup[];
   trend: IndustryTrendPoint[];
   topAgents: { agent: string; tasks: number }[];
+}
+
+export interface IndustryDrillDownRun {
+  runId: string;
+  workspaceId?: string;
+  teamId?: string;
+  status?: string;
+  category?: string;
+  scenario?: string;
+  scenarioId?: string;
+  taskTitle?: string;
+  resultSummary?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
