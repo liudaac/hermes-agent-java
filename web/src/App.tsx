@@ -54,6 +54,8 @@ const TemplateGalleryPage = lazy(() => import("@/pages/TemplateGalleryPage"));
 const ApprovalsPage = lazy(() => import("@/pages/ApprovalsPage"));
 const RiskPolicyPage = lazy(() => import("@/pages/RiskPolicyPage"));
 const EvolutionPanelPage = lazy(() => import("@/pages/EvolutionPanelPage"));
+const MyTemplatesPage = lazy(() => import("@/pages/MyTemplatesPage"));
+const IndustryDashboardPage = lazy(() => import("@/pages/IndustryDashboardPage"));
 const RunDetailPage = lazy(() => import("@/pages/RunDetailPage"));
 const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
 const SLAPage = lazy(() => import("@/pages/SLAPage"));
@@ -302,6 +304,8 @@ export default function App() {
           <Route path="/business-portal/approvals" element={<BusinessPortalStandalonePage><ApprovalsPage /></BusinessPortalStandalonePage>} />
           <Route path="/business-portal/risk-policy" element={<BusinessPortalStandalonePage><RiskPolicyPage /></BusinessPortalStandalonePage>} />
           <Route path="/business-portal/evolution" element={<BusinessPortalStandalonePage><EvolutionPanelPage /></BusinessPortalStandalonePage>} />
+          <Route path="/business-portal/my-templates" element={<BusinessPortalStandalonePage><MyTemplatesPage /></BusinessPortalStandalonePage>} />
+          <Route path="/business-portal/industry-dashboard" element={<BusinessPortalStandalonePage><IndustryDashboardPage /></BusinessPortalStandalonePage>} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetailPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />

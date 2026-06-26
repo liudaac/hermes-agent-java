@@ -38,6 +38,14 @@ public final class BusinessTemplateDashboardIntegration {
         app.post("/api/v1/business/scenario-templates/{templateId}/clone",
             ctx -> cloneScenario(ctx, cloneService));
         app.post("/api/v1/business/templates/reload", ctx -> reload(ctx, templateService));
+
+        // ── User templates (M4) ────────────────────────────────────────
+        UserTemplateRepository userRepo = new UserTemplateRepository(templateService);
+        app.get("/api/v1/business/user-templates", ctx -> listUserTemplates(ctx, userRepo));
+        app.post("/api/v1/business/user-templates/agents", ctx -> uploadUserAgent(ctx, userRepo));
+        app.post("/api/v1/business/user-templates/scenarios", ctx -> uploadUserScenario(ctx, userRepo));
+        app.delete("/api/v1/business/user-templates/{templateId}",
+            ctx -> deleteUserTemplate(ctx, userRepo));
     }
 
     static void listAgents(Context ctx, BusinessTemplateService service) {
@@ -114,5 +122,62 @@ public final class BusinessTemplateDashboardIntegration {
         String body = ctx.body();
         if (body == null || body.isBlank()) return new JSONObject();
         return JSON.parseObject(body);
+    }
+
+    // ─── User template handlers ──────────────────────────────────────────
+
+    static void listUserTemplates(Context ctx, UserTemplateRepository repo) {
+        ctx.status(200).json(Map.of(
+            "ok", true,
+            "root", repo.getRoot().toString(),
+            "items", repo.listUserTemplates()));
+    }
+
+    static void uploadUserAgent(Context ctx, UserTemplateRepository repo) {
+        JSONObject body = parseBody(ctx);
+        String yamlBody = body.getString("yaml");
+        String author = body.getString("author");
+        if (yamlBody == null || yamlBody.isBlank()) {
+            ctx.status(400).json(Map.of("ok", false, "error", "Missing yaml body"));
+            return;
+        }
+        try {
+            AgentTemplate t = repo.uploadAgent(yamlBody, author);
+            ctx.status(201).json(Map.of("ok", true, "templateId", t.getTemplateId(), "template", t.toMap()));
+        } catch (IllegalArgumentException e) {
+            ctx.status(400).json(Map.of("ok", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to upload user agent template", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage()));
+        }
+    }
+
+    static void uploadUserScenario(Context ctx, UserTemplateRepository repo) {
+        JSONObject body = parseBody(ctx);
+        String yamlBody = body.getString("yaml");
+        String author = body.getString("author");
+        if (yamlBody == null || yamlBody.isBlank()) {
+            ctx.status(400).json(Map.of("ok", false, "error", "Missing yaml body"));
+            return;
+        }
+        try {
+            ScenarioTemplate t = repo.uploadScenario(yamlBody, author);
+            ctx.status(201).json(Map.of("ok", true, "templateId", t.getTemplateId(), "template", t.toMap()));
+        } catch (IllegalArgumentException e) {
+            ctx.status(400).json(Map.of("ok", false, "error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to upload user scenario template", e);
+            ctx.status(500).json(Map.of("ok", false, "error", e.getMessage()));
+        }
+    }
+
+    static void deleteUserTemplate(Context ctx, UserTemplateRepository repo) {
+        String templateId = ctx.pathParam("templateId");
+        boolean removed = repo.deleteByTemplateId(templateId);
+        if (removed) {
+            ctx.status(200).json(Map.of("ok", true));
+        } else {
+            ctx.status(404).json(Map.of("ok", false, "error", "Template not found"));
+        }
     }
 }

@@ -463,6 +463,36 @@ export const api = {
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
     ),
 
+  // ── User Templates (M4) ──────────────────────────────────────────────
+  listUserTemplates: () =>
+    fetchJSON<{ ok: boolean; root: string; items: UserTemplateListItem[] }>(
+      `/api/v1/business/user-templates`,
+    ),
+  uploadUserAgentTemplate: (yamlBody: string, author?: string) =>
+    fetchJSON<{ ok: boolean; templateId: string; template: AgentTemplateRecord }>(
+      `/api/v1/business/user-templates/agents`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ yaml: yamlBody, author }) },
+    ),
+  uploadUserScenarioTemplate: (yamlBody: string, author?: string) =>
+    fetchJSON<{ ok: boolean; templateId: string; template: ScenarioTemplateRecord }>(
+      `/api/v1/business/user-templates/scenarios`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ yaml: yamlBody, author }) },
+    ),
+  deleteUserTemplate: (templateId: string) =>
+    fetchJSON<{ ok: boolean }>(
+      `/api/v1/business/user-templates/${encodeURIComponent(templateId)}`,
+      { method: "DELETE" },
+    ),
+
+  // ── Industry Dashboard (M4) ──────────────────────────────────────────
+  getIndustryDashboard: (category?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (limit) params.set("limit", String(limit));
+    const qs = params.toString();
+    return fetchJSON<IndustryDashboardResponse>(`/api/v1/business/industry-dashboard${qs ? `?${qs}` : ""}`);
+  },
+
   createBusinessApproval: (workspaceId: string, payload: CreateBusinessApprovalPayload) =>
     fetchJSON<CreateBusinessApprovalResponse>(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/approvals`, {
       method: "POST",
@@ -2152,4 +2182,40 @@ export interface EvolutionProposalRecord {
   createdAt?: string;
   updatedAt?: string;
   appliedAt?: string;
+}
+
+// ── User Templates (M4 external ecosystem) ────────────────────────────
+
+export interface UserTemplateListItem {
+  type: "agent" | "scenario";
+  templateId: string;
+  name: string;
+  category?: string;
+  path?: string;
+  meta?: { source?: string; author?: string; uploadedAt?: string };
+}
+
+// ── Industry Dashboard (M4) ───────────────────────────────────────────
+
+export interface IndustryCategoryRollup {
+  category: string;
+  total: number;
+  completed: number;
+  failed: number;
+  successRate: number;
+  avgLatencyMs: number;
+}
+
+export interface IndustryTrendPoint {
+  date: string;
+  tasks: number;
+  failures: number;
+}
+
+export interface IndustryDashboardResponse {
+  ok: boolean;
+  filter: { category: string; limit: number };
+  byCategory: IndustryCategoryRollup[];
+  trend: IndustryTrendPoint[];
+  topAgents: { agent: string; tasks: number }[];
 }
