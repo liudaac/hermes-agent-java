@@ -15,7 +15,6 @@ import {
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 import { ApprovalRow } from "@/components/business/BusinessPortalSections";

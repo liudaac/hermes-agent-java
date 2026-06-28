@@ -12,7 +12,6 @@ import {
   Loader2,
   Coins,
   GitBranch,
-  Timer,
   ShieldCheck,
   ShieldAlert,
   ShieldX,
@@ -479,7 +478,7 @@ function StepNode({
               )}
             </div>
             <p className="mt-0.5">{String((step.metadata as Record<string, unknown>).reflection ?? "")}</p>
-            {step.metadata.replan && step.metadata.suggestion && (
+            {Boolean(step.metadata.replan) && Boolean(step.metadata.suggestion) && (
               <p className="mt-1 text-[0.65rem] opacity-80">
                 Suggestion: {String((step.metadata as Record<string, unknown>).suggestion ?? "")}
               </p>

@@ -71,6 +71,25 @@ export default function WorkflowPage() {
     load();
   }, [load]);
 
+  const handleCheckpoint = useCallback(
+    async (workflowId: string, decision: "approve" | "reject") => {
+      try {
+        setActing(workflowId);
+        await api.approveWorkflowCheckpoint(workflowId, decision);
+        showToast(
+          decision === "approve" ? "Workflow approved" : "Workflow rejected",
+          "success",
+        );
+        await load();
+      } catch (e: any) {
+        showToast(e?.message || `Failed to ${decision} workflow`, "error");
+      } finally {
+        setActing(null);
+      }
+    },
+    [load, showToast],
+  );
+
   // SSE real-time refresh
   useSse({
     onEvent: (evt) => {

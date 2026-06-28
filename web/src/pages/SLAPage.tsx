@@ -4,6 +4,7 @@ import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/useToast";
 import { useSse } from "@/hooks/useSse";
 import { cn } from "@/lib/utils";
