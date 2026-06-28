@@ -38,12 +38,12 @@ export default function RiskPolicyPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-start md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-70">
             <ShieldAlert className="h-4 w-4" /> 风险策略
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">风险与审批边界总览</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">风险与审批边界总览</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             汇总所有数字员工角色的风险分级。高风险动作 100% 必须人审，中风险可配置策略，低风险自动通过。
           </p>

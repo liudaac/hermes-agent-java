@@ -70,12 +70,14 @@ export default function TemplateGalleryPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-start md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
-            <Layers className="h-4 w-4" /> 场景模板库
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal opacity-70 sm:tracking-[0.18em]">
+            <Layers className="h-3.5 w-3.5" /> 场景模板库
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">一键搭建行业级数字员工团队</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">
+            一键搭建<span className="bg-gradient-to-r from-foreground via-foreground/85 to-foreground/65 bg-clip-text text-transparent">行业级数字员工团队</span>
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             每个模板预置了团队蓝图、提示词资产、协作时间线和关键指标。
             选好模板 → 一键克隆 → 30 秒后在 Portal 中跑通第一个真实任务。
@@ -146,14 +148,15 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
   const Icon = iconFor(template.icon);
   const c = colorsFor(template.color);
   return (
-    <Card className="flex flex-col">
-      <CardHeader>
+    <article className="glass-card glass-card-interactive group relative flex flex-col overflow-hidden">
+      <div aria-hidden className={cn("pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-50 blur-3xl transition-opacity duration-300 group-hover:opacity-80", c.bg)} />
+      <CardHeader className="relative">
         <div className="flex items-start gap-3">
-          <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl ring-1 shrink-0", c.bg, c.ring)}>
+          <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ring-1 transition-transform duration-200 group-hover:scale-105", c.bg, c.ring)}>
             <Icon className={cn("h-6 w-6", c.text)} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
               <CardTitle className="truncate text-base">{template.name}</CardTitle>
               <Badge variant="outline" className="text-xs uppercase tracking-wider">
                 {template.industryTag ?? categoryLabel(template.category)}
@@ -165,16 +168,16 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-4">
+      <CardContent className="relative flex flex-1 flex-col gap-4">
         {template.metrics.length > 0 && (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
             {template.metrics.slice(0, 3).map((m) => (
-              <div key={m.label} className="rounded-md border border-border/60 p-2 text-center">
-                <div className={cn("text-sm font-mono font-semibold", c.text)}>
+              <div key={m.label} className="rounded-md border border-border/50 bg-background/40 px-1.5 py-1.5 text-center backdrop-blur-sm">
+                <div className={cn("metric-number text-sm font-semibold", c.text)}>
                   {m.value}
-                  {m.unit && <span className="text-xs opacity-60 ml-0.5">{m.unit}</span>}
+                  {m.unit && <span className="ml-0.5 text-[0.65rem] opacity-60">{m.unit}</span>}
                 </div>
-                <div className="mt-0.5 text-xs uppercase tracking-wider text-muted-foreground">{m.label}</div>
+                <div className="mt-0.5 truncate text-[0.65rem] uppercase tracking-wider text-muted-foreground">{m.label}</div>
               </div>
             ))}
           </div>
@@ -203,9 +206,9 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
             <ol className="space-y-1 text-xs">
               {template.workflowTimeline.slice(0, 4).map((step, i) => (
                 <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                  <code className="rounded bg-muted px-1 font-mono text-xs">{step.t}</code>
+                  <code className="rounded bg-foreground/5 px-1 font-mono text-xs">{step.t}</code>
                   <span className="font-medium text-foreground">{step.actor}</span>
-                  <span>→</span>
+                  <span className="opacity-50">→</span>
                   <span className="truncate">{step.action}</span>
                 </li>
               ))}
@@ -220,10 +223,10 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
           {cloning ? (
             <><RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" /> 克隆中…</>
           ) : (
-            <><Wand2 className="mr-1.5 h-3.5 w-3.5" /> 一键克隆到工作空间 <ArrowRight className="ml-1.5 h-3.5 w-3.5" /></>
+            <><Wand2 className="mr-1.5 h-3.5 w-3.5" /> 一键克隆到工作空间 <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></>
           )}
         </Button>
       </CardContent>
-    </Card>
+    </article>
   );
 }

@@ -113,12 +113,12 @@ export default function MyTemplatesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-start md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-70">
             <Sparkles className="h-4 w-4" /> 我的模板
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">外部模板贡献</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">外部模板贡献</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             把你公司里的角色模板、行业场景上传到 Hermes，全公司一起用。
             上传即可生效，所有人都能在「数字员工」和「场景模板」里看到。

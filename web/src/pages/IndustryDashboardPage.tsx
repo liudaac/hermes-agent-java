@@ -77,12 +77,12 @@ export default function IndustryDashboardPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-start md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-70">
             <BarChart3 className="h-4 w-4" /> 行业看板
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">分行业经营仪表盘</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">分行业经营仪表盘</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             按行业切换观察任务量、成功率、响应时长和 Top 数字员工，
             掌握每个领域的真实运营节奏。
