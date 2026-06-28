@@ -24,6 +24,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import RunStoryTimeline from "@/components/business/RunStoryTimeline";
 import {
   Card,
@@ -212,21 +213,33 @@ export function TeamsSection({
 
 function TeamRow({ team, onEdit }: { team: BusinessTeamCard; onEdit?: (team: BusinessTeamCard) => void }) {
   return (
-    <div className="rounded-sm border border-border/70 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{team.name || team.teamId}</div>
-        <div className="flex items-center gap-2">
+    <div className="card-hover rounded-md border border-border/70 bg-background/40 p-3 backdrop-blur-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-expanded truncate text-sm tracking-normal sm:tracking-[0.08em]">{team.name || team.teamId}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+            <span className="truncate">{team.scenario || "通用团队"}</span>
+            {team.activeVersion != null && (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="font-mono">v{fmt(team.activeVersion)}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge variant={statusVariant(team.status)} className="text-xs">{team.status || "UNKNOWN"}</Badge>
           {onEdit && (
-            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => onEdit(team)}>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={() => onEdit(team)}>
               <Pencil className="h-3 w-3" />
-              Edit
+              <span className="hidden sm:inline">Edit</span>
             </Button>
           )}
-          <Badge variant={statusVariant(team.status)}>{team.status || "UNKNOWN"}</Badge>
         </div>
       </div>
-      <div className="mt-2 text-xs normal-case text-muted-foreground">
-        {team.scenario || "No scenario"} · scenarioId {team.scenarioId || "-"} · v{fmt(team.activeVersion)} · {team.workspaceId}
+      <div className="mt-2 text-xs normal-case text-muted-foreground/70">
+        <span className="font-mono">{team.workspaceId}</span>
+        {team.scenarioId && <> · <span className="font-mono">{team.scenarioId}</span></>}
       </div>
     </div>
   );
@@ -291,20 +304,43 @@ export function RunsAndApprovalsSection({
 
 function RunRow({ run }: { run: BusinessRunRecord }) {
   const navigate = useNavigate();
+  const status = (run.status || "").toUpperCase();
+  const isLive = status === "RUNNING" || status === "PROCESSING" || status === "PENDING";
   return (
     <div
-      className="rounded-sm border border-border/70 p-3 cursor-pointer hover:border-border transition-colors"
+      className="card-hover group cursor-pointer rounded-md border border-border/70 bg-background/40 p-3 backdrop-blur-sm transition-colors"
       onClick={() => navigate(`/runs/${run.workspaceId}/${run.runId}`)}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{run.taskTitle || run.runId}</div>
-        <Badge variant={statusVariant(run.status)}>{run.status || "UNKNOWN"}</Badge>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {isLive && (
+            <span className="relative inline-flex h-2 w-2 shrink-0 rounded-full bg-orange-500">
+              <span className="status-pulse absolute inset-0 rounded-full text-orange-500" />
+            </span>
+          )}
+          <div className="font-expanded truncate text-sm tracking-normal sm:tracking-[0.08em]">
+            {run.taskTitle || run.runId}
+          </div>
+        </div>
+        <Badge variant={statusVariant(run.status)} className="text-xs">{run.status || "UNKNOWN"}</Badge>
       </div>
-      <p className="mt-2 text-sm normal-case text-muted-foreground">{run.resultSummary || "No result summary."}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">
-        <span>{run.teamId ?? "-"} · {timeLabel(run.createdAt)}</span>
-        {(run.tokensUsed ?? 0) > 0 && <span>🪙 {run.tokensUsed} tokens</span>}
-        {(run.estimatedCost ?? 0) > 0 && <span>💰 ${(run.estimatedCost ?? 0).toFixed(4)}</span>}
+      <p className="mt-2 line-clamp-2 text-sm normal-case text-muted-foreground sm:line-clamp-none">
+        {run.resultSummary || "No result summary."}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tracking-normal opacity-60 sm:tracking-[0.12em]">
+        <span className="truncate font-mono">{run.teamId ?? "-"}</span>
+        <span className="opacity-50">·</span>
+        <span>{timeLabel(run.createdAt)}</span>
+        {(run.tokensUsed ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-foreground/5 px-1.5 py-0.5">
+            <span className="text-amber-500">🪙</span> {run.tokensUsed}
+          </span>
+        )}
+        {(run.estimatedCost ?? 0) > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-foreground/5 px-1.5 py-0.5 font-mono">
+            ${(run.estimatedCost ?? 0).toFixed(4)}
+          </span>
+        )}
       </div>
       {run.steps?.length ? (
         <div className="mt-3 rounded-sm border border-border/60 p-3" onClick={(e) => e.stopPropagation()}>
@@ -367,18 +403,29 @@ export function ApprovalRow({
   };
 
   return (
-    <div className="rounded-sm border border-border/70 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{approval.title || approval.approvalId}</div>
-        <div className="flex gap-2">
-          <Badge variant={riskVariant(approval.riskLevel)}>{approval.riskLevel || "UNKNOWN"}</Badge>
-          <Badge variant={statusVariant(approval.status)}>{approval.status || "UNKNOWN"}</Badge>
+    <div className={cn(
+      "card-hover rounded-md border bg-background/40 p-3 backdrop-blur-sm",
+      requiresHighRiskConfirm
+        ? "border-rose-500/40"
+        : "border-border/70",
+    )}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-expanded truncate text-sm tracking-normal sm:tracking-[0.08em]">{approval.title || approval.approvalId}</div>
+          <div className="mt-1 text-xs tracking-normal opacity-60 sm:tracking-[0.12em]">
+            <span className="truncate font-mono">{approval.teamId ?? "-"}</span>
+            <span className="mx-1 opacity-50">·</span>
+            <span>{timeLabel(approval.createdAt)}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <Badge variant={riskVariant(approval.riskLevel)} className="text-xs">{approval.riskLevel || "UNKNOWN"}</Badge>
+          <Badge variant={statusVariant(approval.status)} className="text-xs">{approval.status || "UNKNOWN"}</Badge>
         </div>
       </div>
-      <p className="mt-2 text-sm normal-case text-muted-foreground">{approval.summary || "No summary."}</p>
-      <div className="mt-2 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">
-        {approval.teamId ?? "-"} · {timeLabel(approval.createdAt)}
-      </div>
+      <p className="mt-2 line-clamp-3 text-sm normal-case text-muted-foreground sm:line-clamp-none">
+        {approval.summary || "No summary."}
+      </p>
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
         <summary className="cursor-pointer font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">Approval details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
@@ -512,13 +559,15 @@ export function InsightsAndActionsSection({
 
 function InsightRow({ insight }: { insight: BusinessInsightRecord }) {
   return (
-    <div className="rounded-sm border border-border/70 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{insight.title || insight.insightId}</div>
-        <Badge variant={riskVariant(insight.severity)}>{insight.severity ?? "INFO"}</Badge>
+    <div className="card-hover rounded-md border border-border/70 bg-background/40 p-3 backdrop-blur-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="font-expanded min-w-0 flex-1 truncate text-sm tracking-normal sm:tracking-[0.08em]">{insight.title || insight.insightId}</div>
+        <Badge variant={riskVariant(insight.severity)} className="shrink-0 text-xs">{insight.severity ?? "INFO"}</Badge>
       </div>
-      <p className="mt-2 text-sm normal-case text-muted-foreground">{insight.finding || "No finding."}</p>
-      {insight.recommendation ? <p className="mt-2 text-sm normal-case">{insight.recommendation}</p> : null}
+      <p className="mt-2 line-clamp-3 text-sm normal-case text-muted-foreground sm:line-clamp-none">{insight.finding || "No finding."}</p>
+      {insight.recommendation ? (
+        <p className="mt-2 line-clamp-2 text-sm normal-case sm:line-clamp-none">{insight.recommendation}</p>
+      ) : null}
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
         <summary className="cursor-pointer font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">Insight details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
