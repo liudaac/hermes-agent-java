@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import MetricCardWithSparkline from "@/components/business/MetricCardWithSparkline";
 import ResponseDistribution from "@/components/business/ResponseDistribution";
+import LiveRunsTicker from "@/components/business/LiveRunsTicker";
 
 type BadgeVariant = "default" | "success" | "warning" | "destructive" | "outline" | "info" | "live";
 
@@ -64,6 +65,11 @@ export default function BusinessPortalHome() {
                     {risk.level === "HIGH" ? "需关注" : risk.level === "MEDIUM" ? "良好" : "优秀"}
                   </span>
                 </span>
+              </div>
+            )}
+            {summary && summary.workspaceCount > 0 && (
+              <div className="mt-2">
+                <LiveRunsTicker />
               </div>
             )}
           </div>
