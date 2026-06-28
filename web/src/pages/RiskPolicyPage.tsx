@@ -40,7 +40,7 @@ export default function RiskPolicyPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
             <ShieldAlert className="h-4 w-4" /> 风险策略
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">风险与审批边界总览</h1>
@@ -73,7 +73,7 @@ export default function RiskPolicyPage() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>分类风险分布</span>
-            <Badge variant="outline" className="text-[0.6rem]">{summary?.byCategory.length ?? 0} 类</Badge>
+            <Badge variant="outline" className="text-xs">{summary?.byCategory.length ?? 0} 类</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -103,7 +103,7 @@ export default function RiskPolicyPage() {
               <AlertTriangle className="h-4 w-4 text-rose-500" />
               高风险动作清单
             </span>
-            <Badge variant="destructive" className="text-[0.6rem] font-mono">
+            <Badge variant="destructive" className="text-xs font-mono">
               {summary?.highRiskActions.length ?? 0}
             </Badge>
           </CardTitle>
@@ -121,7 +121,7 @@ export default function RiskPolicyPage() {
                   <span className="text-rose-500 mt-0.5">●</span>
                   <div className="min-w-0 flex-1">
                     <p className="leading-snug">{a.action}</p>
-                    <p className="mt-0.5 text-[0.65rem] text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       <span className="font-mono">{a.templateId}</span>
                       <span className="mx-1.5 opacity-30">·</span>
                       <span>{a.agentName} ({categoryLabel(a.category)})</span>
@@ -157,7 +157,7 @@ function TotalCard({
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-center gap-2 text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           {Icon && <Icon className="h-3 w-3" />}
           <span>{label}</span>
         </div>
@@ -185,7 +185,7 @@ function CategoryRow({ bucket }: { bucket: BusinessRiskPolicySummary["byCategory
         <div className="bg-amber-500" style={{ width: `${medium}%` }} title={`中 ${bucket.medium}`} />
         <div className="bg-emerald-500" style={{ width: `${low}%` }} title={`低 ${bucket.low}`} />
       </div>
-      <div className="mt-1.5 flex items-center gap-3 text-[0.65rem] text-muted-foreground">
+      <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
         <span className="text-rose-500">🔴 {bucket.high}</span>
         <span className="text-amber-500">🟡 {bucket.medium}</span>
         <span className="text-emerald-500">🟢 {bucket.low}</span>

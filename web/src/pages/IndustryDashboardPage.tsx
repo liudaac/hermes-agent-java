@@ -79,7 +79,7 @@ export default function IndustryDashboardPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
             <BarChart3 className="h-4 w-4" /> 行业看板
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">分行业经营仪表盘</h1>
@@ -142,7 +142,7 @@ export default function IndustryDashboardPage() {
                       <div className="flex items-center gap-2">
                         <span className={cn("inline-flex h-2 w-2 rounded-full", c.bg)} />
                         <span className="font-medium">{categoryLabel(b.category)}</span>
-                        <Badge variant="outline" className="text-[0.6rem]">{b.total} 任务</Badge>
+                        <Badge variant="outline" className="text-xs">{b.total} 任务</Badge>
                         <ChevronRight className="h-3.5 w-3.5 opacity-30" />
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -187,12 +187,12 @@ export default function IndustryDashboardPage() {
                 const pct = (a.tasks / max) * 100;
                 return (
                   <div key={a.agent} className="flex items-center gap-3">
-                    <span className="w-6 text-center font-mono text-[0.65rem] text-muted-foreground">{i + 1}</span>
+                    <span className="w-6 text-center font-mono text-xs text-muted-foreground">{i + 1}</span>
                     <span className="w-40 truncate text-sm">{a.agent}</span>
                     <div className="flex-1 h-1.5 overflow-hidden rounded bg-muted">
                       <div className="h-full bg-sky-500" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="font-mono text-[0.65rem] text-muted-foreground">{a.tasks}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{a.tasks}</span>
                   </div>
                 );
               })}
@@ -208,7 +208,7 @@ export default function IndustryDashboardPage() {
             <header className="sticky top-0 z-10 border-b border-border bg-background/95 px-5 py-4 backdrop-blur">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[0.65rem] uppercase tracking-wider text-muted-foreground">下钻 · 运行明细</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">下钻 · 运行明细</p>
                   <h3 className="text-base font-semibold tracking-tight">
                     {drillFilter.category ? categoryLabel(drillFilter.category) : "全部"}
                     {drillFilter.status && (
@@ -234,16 +234,16 @@ export default function IndustryDashboardPage() {
                     onClick={() => r.workspaceId && navigate(`/runs/${r.workspaceId}/${r.runId}`)}
                     className="cursor-pointer rounded-md border border-border/60 p-2.5 hover:border-border transition-colors">
                     <div className="flex items-center justify-between gap-2">
-                      <Badge variant={runVariant(r.status)} className="text-[0.6rem] uppercase tracking-wider">
+                      <Badge variant={runVariant(r.status)} className="text-xs uppercase tracking-wider">
                         {r.status ?? "?"}
                       </Badge>
-                      <span className="font-mono text-[0.65rem] text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {r.createdAt ? new Date(r.createdAt).toLocaleString() : ""}
                       </span>
                     </div>
                     <p className="mt-1 truncate text-sm">{r.taskTitle ?? r.runId}</p>
                     {r.resultSummary && (
-                      <p className="truncate text-[0.7rem] text-muted-foreground">{r.resultSummary}</p>
+                      <p className="truncate text-xs text-muted-foreground">{r.resultSummary}</p>
                     )}
                   </div>
                 ))

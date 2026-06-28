@@ -44,12 +44,12 @@ export default function AgentRoleCard({ template, onClick, compact }: AgentRoleC
                 {template.name || template.templateId}
               </h3>
               {template.status === "BETA" && (
-                <Badge variant="outline" className="text-[0.6rem] uppercase tracking-wider">
+                <Badge variant="outline" className="text-xs uppercase tracking-wider">
                   Beta
                 </Badge>
               )}
               {template.status === "EXPERIMENTAL" && (
-                <Badge variant="warning" className="text-[0.6rem] uppercase tracking-wider">
+                <Badge variant="warning" className="text-xs uppercase tracking-wider">
                   Exp
                 </Badge>
               )}
@@ -72,7 +72,7 @@ export default function AgentRoleCard({ template, onClick, compact }: AgentRoleC
                 <span
                   key={skill}
                   className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium",
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
                     c.chip,
                   )}
                 >
@@ -80,7 +80,7 @@ export default function AgentRoleCard({ template, onClick, compact }: AgentRoleC
                 </span>
               ))}
               {moreSkills > 0 && (
-                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[0.65rem] text-muted-foreground">
+                <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                   +{moreSkills}
                 </span>
               )}
@@ -92,9 +92,9 @@ export default function AgentRoleCard({ template, onClick, compact }: AgentRoleC
                   <div key={metric.label} className="rounded-sm border border-border/60 p-1.5 text-center">
                     <div className={cn("font-mono text-xs font-semibold", c.text)}>
                       {metric.value}
-                      {metric.unit && <span className="text-[0.6rem] opacity-60 ml-0.5">{metric.unit}</span>}
+                      {metric.unit && <span className="text-xs opacity-60 ml-0.5">{metric.unit}</span>}
                     </div>
-                    <div className="text-[0.55rem] uppercase tracking-wider text-muted-foreground mt-0.5">
+                    <div className="text-xs uppercase tracking-wider text-muted-foreground mt-0.5">
                       {metric.label}
                     </div>
                   </div>

@@ -206,7 +206,7 @@ export default function BusinessPortalPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs tracking-normal sm:tracking-[0.18em] opacity-60">
             <BriefcaseBusiness className="h-4 w-4" /> Business Portal
           </div>
           <H2 className="mt-1">Business Command Center</H2>
@@ -222,7 +222,7 @@ export default function BusinessPortalPage() {
               setWorkspaceId(event.target.value);
               setScenarioId("");
             }}
-            className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-[0.12em]"
+            className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-normal sm:tracking-[0.12em]"
           >
             <option value="">All workspaces</option>
             {workspaceOptions.map((workspace) => (
@@ -235,7 +235,7 @@ export default function BusinessPortalPage() {
             value={scenarioId}
             onChange={(event) => setScenarioId(event.target.value)}
             disabled={!workspaceId || scenarios.length === 0}
-            className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-[0.12em]"
+            className="h-9 rounded-sm border border-border bg-background px-3 text-xs uppercase tracking-normal sm:tracking-[0.12em]"
           >
             <option value="">All scenarios</option>
             {scenarios.map((scenario) => (
@@ -267,7 +267,7 @@ export default function BusinessPortalPage() {
         <Card>
           <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="font-expanded text-sm tracking-[0.1em]">No business workspace yet</div>
+              <div className="font-expanded text-sm tracking-normal sm:tracking-[0.1em]">No business workspace yet</div>
               <p className="mt-1 text-sm normal-case text-muted-foreground">{home.emptyState}</p>
             </div>
             <Badge variant="info">use API examples or smoke script</Badge>
@@ -277,7 +277,7 @@ export default function BusinessPortalPage() {
 
       <DemoDataGuide workspaceId={workspaceId} />
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         <MetricCard title="Workspaces" value={summary?.workspaceCount} icon={BriefcaseBusiness} />
         <MetricCard title="Teams" value={summary?.teamCount} icon={Users} />
         <MetricCard title="Runs" value={summary?.runCount} icon={Route} />
@@ -288,7 +288,7 @@ export default function BusinessPortalPage() {
       <OrchestrationHubSection />
 
       <TodayAndAttentionSection home={home} />
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
         <ScenariosSection scenarios={scenarios} workspaceId={workspaceId} onExecute={executeScenario} executingId={executingId} />
         <PromptAssetsSection promptAssets={promptAssets} />
       </section>

@@ -122,7 +122,7 @@ export default function LiveRunsTicker({ workspaceId }: { workspaceId?: string }
       </span>
 
       {/* label */}
-      <span className="hidden font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground sm:inline">
+      <span className="hidden font-mono text-[10px] uppercase tracking-normal sm:tracking-[0.15em] text-muted-foreground sm:inline">
         {isLive ? "进行中" : "最近"}
       </span>
 

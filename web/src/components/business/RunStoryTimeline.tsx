@@ -44,7 +44,7 @@ export default function RunStoryTimeline({
 
   return (
     <div className={cn("space-y-0", className)}>
-      <div className="mb-2 flex items-center gap-2 text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
         <Users className="h-3 w-3" />
         <span>协作时间线 · {steps.length} 步</span>
       </div>
@@ -116,22 +116,22 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium tracking-tight">{actor}</span>
           {step.status && (
-            <Badge variant={visual.badge} className="text-[0.6rem] uppercase tracking-wider">
+            <Badge variant={visual.badge} className="text-xs uppercase tracking-wider">
               {step.status}
             </Badge>
           )}
           {step.retry && (
-            <Badge variant="warning" className="text-[0.6rem] uppercase tracking-wider">
+            <Badge variant="warning" className="text-xs uppercase tracking-wider">
               Retry
             </Badge>
           )}
           {typeof step.score === "number" && (
-            <span className="font-mono text-[0.65rem] text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               score {step.score.toFixed(2)}
             </span>
           )}
           {step.timestamp && (
-            <span className="font-mono text-[0.65rem] text-muted-foreground">
+            <span className="font-mono text-xs text-muted-foreground">
               {formatTime(step.timestamp)}
             </span>
           )}
@@ -149,7 +149,7 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
               .map((skill) => (
                 <span
                   key={skill}
-                  className="rounded bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground"
+                  className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                 >
                   {skill}
                 </span>
@@ -161,7 +161,7 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
             <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
               证据
             </summary>
-            <pre className="mt-1 overflow-x-auto rounded border border-border/60 bg-muted/30 p-2 font-mono text-[0.65rem] leading-relaxed">
+            <pre className="mt-1 overflow-x-auto rounded border border-border/60 bg-muted/30 p-2 font-mono text-xs leading-relaxed">
               {step.evidence}
             </pre>
           </details>

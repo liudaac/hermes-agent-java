@@ -64,7 +64,7 @@ export default function FloatingBusinessChat({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold tracking-tight">数字员工助理</p>
-                <p className="text-[0.65rem] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {workspaceId
                     ? `当前空间：${workspaceId}`
                     : "随时开口，把工作交给团队"}
@@ -74,7 +74,7 @@ export default function FloatingBusinessChat({
           </div>
 
           <div className="p-3 space-y-2">
-            <p className="text-[0.7rem] uppercase tracking-wider text-muted-foreground">快捷指令</p>
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">快捷指令</p>
             <div className="flex flex-col gap-1.5">
               {QUICK_PROMPTS.map((prompt) => (
                 <button

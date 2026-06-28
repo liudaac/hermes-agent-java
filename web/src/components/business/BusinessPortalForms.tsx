@@ -57,7 +57,7 @@ function TextAreaField({
 }) {
   return (
     <div className={`space-y-1 ${className}`}>
-      <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">{label}</label>
+      <label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">{label}</label>
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -92,7 +92,7 @@ export function BusinessCreationPanel({
   return (
     <section className="space-y-3 rounded-sm border border-border/70 p-3">
       <div>
-        <div className="font-expanded text-sm tracking-[0.1em]">Create business objects</div>
+        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.1em]">Create business objects</div>
         <p className="mt-1 text-sm normal-case text-muted-foreground">Use these focused forms to build the Business Portal loop step by step.</p>
       </div>
       <CreationStep title="1. Workspace" description="Create the business space." defaultOpen={workspaceCount === 0}>{workspaceForm}</CreationStep>
@@ -110,7 +110,7 @@ function CreationStep({ title, description, defaultOpen, children }: { title: st
     <details className="rounded-sm border border-border/60 p-3" open={defaultOpen}>
       <summary className="cursor-pointer">
         <div className="inline-flex flex-col gap-1 align-middle">
-          <span className="font-expanded text-xs uppercase tracking-[0.1em]">{title}</span>
+          <span className="font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">{title}</span>
           <span className="text-sm normal-case text-muted-foreground">{description}</span>
         </div>
       </summary>
@@ -143,9 +143,9 @@ export function CreateWorkspaceForm({ onCreate }: { onCreate: (payload: CreateBu
   return (
     <Card><CardHeader><CardTitle>Create Workspace</CardTitle><CardDescription>Create the first business space without leaving the Business Portal.</CardDescription></CardHeader><CardContent>
       <form className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={submit}>
-        <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Workspace ID</label><Input value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="customer-service-demo" required /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
-        <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Customer Service Demo" /></div>
-        <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Owner</label><Input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="ops" /></div>
+        <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Workspace ID</label><Input value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="customer-service-demo" required /><div className="text-xs normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
+        <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Customer Service Demo" /></div>
+        <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Owner</label><Input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="ops" /></div>
         <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
         <TextAreaField label="Description" value={description} onChange={setDescription} placeholder="Business workspace for after-sales scenarios" className="md:col-span-4" rows={2} />
         {error ? <div className="text-sm normal-case text-destructive md:col-span-4">{error}</div> : null}
@@ -206,14 +206,14 @@ export function CreateScenarioForm({ workspaceId, teams, onCreate }: { workspace
   };
 
   return <Card><CardHeader><CardTitle>Create Scenario</CardTitle><CardDescription>Create a reusable business scenario with orchestration settings.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario ID</label><Input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} disabled={!workspaceId} required /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Scenario ID</label><Input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} disabled={!workspaceId} required /><div className="text-xs normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
-    <div className="space-y-1 md:col-span-3"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Entry Team</label><select value={entryTeamId} onChange={(e) => setEntryTeamId(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm"><option value="">No entry team yet</option>{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
+    <div className="space-y-1 md:col-span-3"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Entry Team</label><select value={entryTeamId} onChange={(e) => setEntryTeamId(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm"><option value="">No entry team yet</option>{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
 
     {/* Orchestration settings */}
-    <div className="space-y-1 md:col-span-2"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Collaboration Pattern</label><select value={collaborationPattern} onChange={(e) => setCollaborationPattern(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{COLLABORATION_PATTERNS.map((p) => <option key={p.value} value={p.value}>{p.label} — {p.desc}</option>)}</select><div className="text-[0.65rem] normal-case text-muted-foreground">How agents coordinate when executing this scenario.</div></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">SLA Policy</label><select value={slaName} onChange={(e) => setSlaName(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{SLA_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
+    <div className="space-y-1 md:col-span-2"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Collaboration Pattern</label><select value={collaborationPattern} onChange={(e) => setCollaborationPattern(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{COLLABORATION_PATTERNS.map((p) => <option key={p.value} value={p.value}>{p.label} — {p.desc}</option>)}</select><div className="text-xs normal-case text-muted-foreground">How agents coordinate when executing this scenario.</div></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">SLA Policy</label><select value={slaName} onChange={(e) => setSlaName(e.target.value)} disabled={!workspaceId} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{SLA_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}</select></div>
 
     <TextAreaField label="Description" value={description} onChange={setDescription} disabled={!workspaceId} />
     <TextAreaField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} disabled={!workspaceId} />
@@ -238,8 +238,8 @@ export function CreatePromptAssetForm({ workspaceId, onCreate }: { workspaceId?:
     finally { setSaving(false); }
   };
   return <Card><CardHeader><CardTitle>Create Prompt Asset</CardTitle><CardDescription>Create a reusable prompt asset.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Asset ID</label><Input value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={!workspaceId} required /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Asset ID</label><Input value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={!workspaceId} required /><div className="text-xs normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
     <TextAreaField label="Purpose" value={purpose} onChange={setPurpose} disabled={!workspaceId} />
     <TextAreaField label="Content" value={content} onChange={setContent} disabled={!workspaceId} rows={5} />
@@ -269,12 +269,12 @@ export function CreateTeamBlueprintForm({ workspaceId, promptAssets, onCreate }:
     finally { setSaving(false); }
   };
   return <Card><CardHeader><CardTitle>Create Team Blueprint</CardTitle><CardDescription>Create a first versioned digital employee team for the selected workspace.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={submit}>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team ID</label><Input value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId} required /><div className="text-[0.65rem] normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario</label><Input value={scenario} onChange={(e) => setScenario(e.target.value)} disabled={!workspaceId} /></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Team ID</label><Input value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId} required /><div className="text-xs normal-case text-muted-foreground">{BUSINESS_ID_HELP}</div></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Name</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={!workspaceId} /></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Scenario</label><Input value={scenario} onChange={(e) => setScenario(e.target.value)} disabled={!workspaceId} /></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
-    <div className="space-y-1 md:col-span-4"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Scenario ID</label><Input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} disabled={!workspaceId} placeholder="after-sales-ticket" /></div>
-    <div className="space-y-1 md:col-span-4"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Prompt Assets</label><select multiple value={selectedPromptAssetIds} onChange={(e) => setSelectedPromptAssetIds(Array.from(e.target.selectedOptions).map((o) => o.value))} disabled={!workspaceId || promptAssets.length === 0} className="min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm">{promptAssets.map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.name || asset.assetId}</option>)}</select><div className="text-[0.65rem] normal-case text-muted-foreground">Optional: selected assets become prompt://assetId refs.</div></div>
+    <div className="space-y-1 md:col-span-4"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Scenario ID</label><Input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} disabled={!workspaceId} placeholder="after-sales-ticket" /></div>
+    <div className="space-y-1 md:col-span-4"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Prompt Assets</label><select multiple value={selectedPromptAssetIds} onChange={(e) => setSelectedPromptAssetIds(Array.from(e.target.selectedOptions).map((o) => o.value))} disabled={!workspaceId || promptAssets.length === 0} className="min-h-24 w-full rounded-sm border border-border bg-background px-3 py-2 text-sm">{promptAssets.map((asset) => <option key={asset.assetId} value={asset.assetId}>{asset.name || asset.assetId}</option>)}</select><div className="text-xs normal-case text-muted-foreground">Optional: selected assets become prompt://assetId refs.</div></div>
     <TextAreaField label="Description" value={description} onChange={setDescription} disabled={!workspaceId} className="md:col-span-4" />
     <TextAreaField label="Operating Manual" value={operatingManual} onChange={setOperatingManual} disabled={!workspaceId} className="md:col-span-4" />
     {error ? <div className="text-sm normal-case text-destructive md:col-span-4">{error}</div> : null}
@@ -299,8 +299,8 @@ export function CreateRunStoryForm({ workspaceId, teams, onCreate }: { workspace
     catch (err) { setError(String(err)); } finally { setSaving(false); }
   };
   return <Card><CardHeader><CardTitle>Create Run Story</CardTitle><CardDescription>Create a business-readable run record for the selected workspace and team.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team</label><select value={selectedTeamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId || teams.length === 0} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{teams.length === 0 ? <option value="">No teams</option> : null}{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Status</label><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}><option value="COMPLETED">COMPLETED</option><option value="NEEDS_APPROVAL">NEEDS_APPROVAL</option><option value="FAILED">FAILED</option><option value="RUNNING">RUNNING</option></select></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Team</label><select value={selectedTeamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId || teams.length === 0} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{teams.length === 0 ? <option value="">No teams</option> : null}{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Status</label><select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}><option value="COMPLETED">COMPLETED</option><option value="NEEDS_APPROVAL">NEEDS_APPROVAL</option><option value="FAILED">FAILED</option><option value="RUNNING">RUNNING</option></select></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
     <TextAreaField label="Task title" value={taskTitle} onChange={setTaskTitle} disabled={!workspaceId || teams.length === 0} />
     <TextAreaField label="Task input" value={taskInput} onChange={setTaskInput} disabled={!workspaceId || teams.length === 0} />
@@ -325,8 +325,8 @@ export function CreateApprovalCardForm({ workspaceId, teams, onCreate }: { works
   const canSubmit = Boolean(workspaceId) && Boolean(selectedTeamId) && title.trim().length > 0 && summary.trim().length > 0 && !saving;
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!workspaceId || !canSubmit) return; setSaving(true); setError(null); try { await onCreate(workspaceId, { teamId: selectedTeamId, title: title.trim(), summary: summary.trim(), riskLevel, reasonRequired: reasonRequired.trim() || undefined, recommendation: recommendation.trim() || undefined, approveEffect: approveEffect.trim() || undefined, rejectEffect: rejectEffect.trim() || undefined, evidence: { source: "business-portal-ui", teamId: selectedTeamId, riskLevel }, metadata: { source: "business-portal-ui" } }); } catch (err) { setError(String(err)); } finally { setSaving(false); } };
   return <Card><CardHeader><CardTitle>Create Approval Card</CardTitle><CardDescription>Create a mobile-first approval card for the selected workspace and team.</CardDescription></CardHeader><CardContent><form className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_auto]" onSubmit={submit}>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Team</label><select value={selectedTeamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId || teams.length === 0} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{teams.length === 0 ? <option value="">No teams</option> : null}{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
-    <div className="space-y-1"><label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">Risk level</label><select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Team</label><select value={selectedTeamId} onChange={(e) => setTeamId(e.target.value)} disabled={!workspaceId || teams.length === 0} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm">{teams.length === 0 ? <option value="">No teams</option> : null}{teams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name || team.teamId}</option>)}</select></div>
+    <div className="space-y-1"><label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">Risk level</label><select value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm" disabled={!workspaceId || teams.length === 0}><option value="LOW">LOW</option><option value="MEDIUM">MEDIUM</option><option value="HIGH">HIGH</option><option value="CRITICAL">CRITICAL</option></select></div>
     <div className="flex items-end"><Button type="submit" disabled={!canSubmit} className="w-full md:w-auto"><Plus className="mr-2 h-4 w-4" /> {saving ? "Creating..." : "Create"}</Button></div>
     <TextAreaField label="Title" value={title} onChange={setTitle} disabled={!workspaceId || teams.length === 0} />
     <TextAreaField label="Summary" value={summary} onChange={setSummary} disabled={!workspaceId || teams.length === 0} />

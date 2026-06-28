@@ -63,7 +63,7 @@ function Header({ sampleSize }: { sampleSize?: number }) {
         响应时长分布
       </div>
       {typeof sampleSize === "number" && (
-        <span className="font-mono text-[0.65rem] text-muted-foreground">
+        <span className="font-mono text-xs text-muted-foreground">
           n = {sampleSize}
         </span>
       )}
@@ -75,7 +75,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: "sky
   const toneClass = tone === "sky" ? "text-sky-500" : "text-amber-500";
   return (
     <div className="rounded-md border border-border/60 px-2 py-1.5">
-      <div className="text-[0.6rem] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={cn("font-mono text-sm font-semibold", toneClass)}>{value}</div>
     </div>
   );

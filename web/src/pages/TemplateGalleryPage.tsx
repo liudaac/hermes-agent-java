@@ -72,7 +72,7 @@ export default function TemplateGalleryPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
             <Layers className="h-4 w-4" /> 场景模板库
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">一键搭建行业级数字员工团队</h1>
@@ -155,7 +155,7 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className="truncate text-base">{template.name}</CardTitle>
-              <Badge variant="outline" className="text-[0.6rem] uppercase tracking-wider">
+              <Badge variant="outline" className="text-xs uppercase tracking-wider">
                 {template.industryTag ?? categoryLabel(template.category)}
               </Badge>
             </div>
@@ -172,9 +172,9 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
               <div key={m.label} className="rounded-md border border-border/60 p-2 text-center">
                 <div className={cn("text-sm font-mono font-semibold", c.text)}>
                   {m.value}
-                  {m.unit && <span className="text-[0.6rem] opacity-60 ml-0.5">{m.unit}</span>}
+                  {m.unit && <span className="text-xs opacity-60 ml-0.5">{m.unit}</span>}
                 </div>
-                <div className="mt-0.5 text-[0.55rem] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+                <div className="mt-0.5 text-xs uppercase tracking-wider text-muted-foreground">{m.label}</div>
               </div>
             ))}
           </div>
@@ -182,12 +182,12 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
 
         {template.involvedAgents.length > 0 && (
           <div>
-            <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
               <Users className="h-3 w-3" /> 涉及数字员工 · {template.involvedAgents.length}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {template.involvedAgents.map((a) => (
-                <span key={a.templateId} className={cn("rounded-full px-2 py-0.5 text-[0.65rem]", c.chip)}>
+                <span key={a.templateId} className={cn("rounded-full px-2 py-0.5 text-xs", c.chip)}>
                   {a.templateId}
                 </span>
               ))}
@@ -197,20 +197,20 @@ function ScenarioCard({ template, onClone, cloning }: { template: ScenarioTempla
 
         {template.workflowTimeline.length > 0 && (
           <div>
-            <p className="mb-1.5 flex items-center gap-1.5 text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
               <Clock className="h-3 w-3" /> 协作时间线 · {template.workflowTimeline.length} 步
             </p>
             <ol className="space-y-1 text-xs">
               {template.workflowTimeline.slice(0, 4).map((step, i) => (
                 <li key={i} className="flex items-start gap-2 text-muted-foreground">
-                  <code className="rounded bg-muted px-1 font-mono text-[0.65rem]">{step.t}</code>
+                  <code className="rounded bg-muted px-1 font-mono text-xs">{step.t}</code>
                   <span className="font-medium text-foreground">{step.actor}</span>
                   <span>→</span>
                   <span className="truncate">{step.action}</span>
                 </li>
               ))}
               {template.workflowTimeline.length > 4 && (
-                <li className="text-[0.65rem] text-muted-foreground/70">…还有 {template.workflowTimeline.length - 4} 步</li>
+                <li className="text-xs text-muted-foreground/70">…还有 {template.workflowTimeline.length - 4} 步</li>
               )}
             </ol>
           </div>

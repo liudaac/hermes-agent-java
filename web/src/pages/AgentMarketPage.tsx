@@ -82,14 +82,14 @@ export default function AgentMarketPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-start md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs tracking-[0.18em] opacity-60 uppercase">
-            <Sparkles className="h-4 w-4" />
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal opacity-70 sm:tracking-[0.18em]">
+            <Sparkles className="h-3.5 w-3.5" />
             数字员工市场
           </div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-            为你的业务挑选数字员工
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">
+            为你的业务<span className="bg-gradient-to-r from-foreground via-foreground/85 to-foreground/65 bg-clip-text text-transparent">挑选数字员工</span>
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             浏览 {templates.length} 位预置的数字员工角色，覆盖人力资源、财务、固资、物流等场景。
@@ -128,7 +128,7 @@ export default function AgentMarketPage() {
                 >
                   {f.label}
                   {count > 0 && (
-                    <span className={cn("text-[0.65rem] opacity-70 font-mono", active && "opacity-100")}>
+                    <span className={cn("text-xs opacity-70 font-mono", active && "opacity-100")}>
                       {count}
                     </span>
                   )}
@@ -165,7 +165,7 @@ export default function AgentMarketPage() {
                 <h2 className="text-sm font-semibold tracking-tight">
                   {CATEGORY_LABELS[cat] ?? cat}
                 </h2>
-                <Badge variant="outline" className="text-[0.6rem] font-mono">
+                <Badge variant="outline" className="text-xs font-mono">
                   {items.length}
                 </Badge>
               </div>

@@ -147,7 +147,7 @@ export default function FirstTimeOnboardingDrawer() {
           >
             <X className="h-4 w-4" />
           </button>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] text-muted-foreground">
             <PartyPopper className="h-4 w-4 text-orange-500" />
             欢迎加入
           </div>
@@ -221,7 +221,7 @@ function StepTeams({ teams, loading }: { teams: BusinessTeamCard[]; loading: boo
         <Users className="h-4 w-4 text-orange-500" />
         团队成员
         {teams.length > 0 && (
-          <Badge variant="outline" className="font-mono text-[0.6rem]">
+          <Badge variant="outline" className="font-mono text-xs">
             {teams.length} 支团队
           </Badge>
         )}
@@ -240,12 +240,12 @@ function StepTeams({ teams, loading }: { teams: BusinessTeamCard[]; loading: boo
               <Check className="mt-0.5 h-3.5 w-3.5 text-emerald-500" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium">{team.name || team.teamId}</div>
-                <div className="truncate text-[0.7rem] text-muted-foreground">
+                <div className="truncate text-xs text-muted-foreground">
                   {team.scenario ? `场景：${team.scenario}` : "通用团队"}
                   {typeof team.versionCount === "number" && ` · v${team.activeVersion}/${team.versionCount}`}
                 </div>
               </div>
-              <Badge variant={team.status === "ACTIVE" ? "success" : "outline"} className="text-[0.6rem]">
+              <Badge variant={team.status === "ACTIVE" ? "success" : "outline"} className="text-xs">
                 {team.status || "READY"}
               </Badge>
             </li>
@@ -277,7 +277,7 @@ function StepScenarios({
         <Layers className="h-4 w-4 text-orange-500" />
         场景剧本
         {scenarios.length > 0 && (
-          <Badge variant="outline" className="font-mono text-[0.6rem]">
+          <Badge variant="outline" className="font-mono text-xs">
             {scenarios.length} 个场景
           </Badge>
         )}
@@ -299,13 +299,13 @@ function StepScenarios({
                   {s.name || s.scenarioId}
                 </div>
                 {s.slaName && (
-                  <Badge variant="outline" className="text-[0.6rem]">
+                  <Badge variant="outline" className="text-xs">
                     {s.slaName}
                   </Badge>
                 )}
               </div>
               {s.description && (
-                <p className="mt-1 line-clamp-2 pl-5 text-[0.7rem] text-muted-foreground">
+                <p className="mt-1 line-clamp-2 pl-5 text-xs text-muted-foreground">
                   {s.description}
                 </p>
               )}

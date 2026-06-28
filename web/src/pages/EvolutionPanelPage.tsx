@@ -95,7 +95,7 @@ export default function EvolutionPanelPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
             <Sparkles className="h-4 w-4" /> 自进化中心
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">系统建议 → 人审 → 灰度</h1>
@@ -130,7 +130,7 @@ export default function EvolutionPanelPage() {
                   className={cn("rounded-full px-3 py-1 text-xs font-medium transition-colors",
                     active ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/80")}>
                   {s.label}
-                  {n > 0 && <span className="ml-1 opacity-60 font-mono text-[0.65rem]">{n}</span>}
+                  {n > 0 && <span className="ml-1 opacity-60 font-mono text-xs">{n}</span>}
                 </button>
               );
             })}
@@ -189,7 +189,7 @@ function ProposalCard({ proposal, busy, onApprove, onReject, onApply }: {
               {proposal.scenarioId ? <> · 场景 <code className="font-mono">{proposal.scenarioId}</code></> : null}
             </p>
           </div>
-          <Badge variant={variant} className="text-[0.6rem] uppercase tracking-wider">{s}</Badge>
+          <Badge variant={variant} className="text-xs uppercase tracking-wider">{s}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -221,7 +221,7 @@ function ProposalCard({ proposal, busy, onApprove, onReject, onApply }: {
 function Field({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 flex items-center gap-1.5 text-[0.65rem] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-1 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
         <Icon className="h-3 w-3" />
         {label}
       </div>

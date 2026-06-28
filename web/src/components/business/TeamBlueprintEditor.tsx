@@ -228,7 +228,7 @@ function AgentCard({
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">{agent.displayName || `Agent ${index + 1}`}</span>
             {agent.agentId && (
-              <Badge variant="outline" className="text-[0.65rem]">
+              <Badge variant="outline" className="text-xs">
                 {agent.agentId}
               </Badge>
             )}
@@ -303,7 +303,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">{label}</label>
+      <label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">{label}</label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -329,7 +329,7 @@ function TagField({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-[0.65rem] uppercase tracking-[0.14em] opacity-60">{label}</label>
+      <label className="text-xs uppercase tracking-normal sm:tracking-[0.14em] opacity-60">{label}</label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -337,7 +337,7 @@ function TagField({
         placeholder={placeholder}
         className="h-8 text-xs"
       />
-      <p className="text-[0.6rem] text-muted-foreground">Comma-separated</p>
+      <p className="text-xs text-muted-foreground">Comma-separated</p>
     </div>
   );
 }

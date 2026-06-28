@@ -80,7 +80,7 @@ export function MetricCard({
     <Card>
       <CardContent className="flex items-center justify-between gap-3 p-4">
         <div>
-          <div className="text-[0.7rem] tracking-[0.15em] opacity-60">{title}</div>
+          <div className="text-xs tracking-normal sm:tracking-[0.15em] opacity-60">{title}</div>
           <div className="mt-2 font-expanded text-2xl tracking-[0.05em]">{fmt(value)}</div>
         </div>
         <Icon className="h-7 w-7 opacity-50" />
@@ -92,7 +92,7 @@ export function MetricCard({
 export function MiniStat({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="rounded-sm border border-border/70 p-3">
-      <div className="text-[0.65rem] tracking-[0.15em] opacity-60">{label}</div>
+      <div className="text-xs tracking-normal sm:tracking-[0.15em] opacity-60">{label}</div>
       <div className="mt-1 font-expanded text-lg tracking-[0.06em]">{fmt(value)}</div>
     </div>
   );
@@ -106,7 +106,7 @@ export function ActionList({ actions, empty }: { actions: BusinessAction[]; empt
         <div key={action.id} className="flex items-start gap-3 rounded-sm border border-border/70 p-3">
           <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 opacity-60" />
           <div>
-            <div className="font-expanded text-xs tracking-[0.1em]">{action.title}</div>
+            <div className="font-expanded text-xs tracking-normal sm:tracking-[0.1em]">{action.title}</div>
             {action.description ? (
               <div className="mt-1 text-sm normal-case text-muted-foreground">{action.description}</div>
             ) : null}
@@ -135,7 +135,7 @@ export function EmptyLine({
 export function TodayAndAttentionSection({ home }: { home: BusinessHomeResponse | null }) {
   const today = home?.today ?? {};
   return (
-    <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr]">
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-3">
           <div>
@@ -177,7 +177,7 @@ export function TeamsSection({
   onEditTeam?: (team: BusinessTeamCard) => void;
 }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-3">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Card className="xl:col-span-2">
         <CardHeader>
           <CardTitle>Teams</CardTitle>
@@ -214,7 +214,7 @@ function TeamRow({ team, onEdit }: { team: BusinessTeamCard; onEdit?: (team: Bus
   return (
     <div className="rounded-sm border border-border/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-[0.08em]">{team.name || team.teamId}</div>
+        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{team.name || team.teamId}</div>
         <div className="flex items-center gap-2">
           {onEdit && (
             <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => onEdit(team)}>
@@ -248,7 +248,7 @@ export function RunsAndApprovalsSection({
   onResumeExecution?: (approval: BusinessApprovalRecord) => Promise<void>;
 }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-2">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Recent run stories</CardTitle>
@@ -297,11 +297,11 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
       onClick={() => navigate(`/runs/${run.workspaceId}/${run.runId}`)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-[0.08em]">{run.taskTitle || run.runId}</div>
+        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{run.taskTitle || run.runId}</div>
         <Badge variant={statusVariant(run.status)}>{run.status || "UNKNOWN"}</Badge>
       </div>
       <p className="mt-2 text-sm normal-case text-muted-foreground">{run.resultSummary || "No result summary."}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem] tracking-[0.12em] opacity-60">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">
         <span>{run.teamId ?? "-"} · {timeLabel(run.createdAt)}</span>
         {(run.tokensUsed ?? 0) > 0 && <span>🪙 {run.tokensUsed} tokens</span>}
         {(run.estimatedCost ?? 0) > 0 && <span>💰 ${(run.estimatedCost ?? 0).toFixed(4)}</span>}
@@ -312,7 +312,7 @@ function RunRow({ run }: { run: BusinessRunRecord }) {
         </div>
       ) : null}
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case" onClick={(e) => e.stopPropagation()}>
-        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Run details</summary>
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">Run details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
           <DetailField label="Input" value={run.taskInput} />
           <DetailField label="Conclusion reason" value={run.conclusionReason} />
@@ -369,18 +369,18 @@ export function ApprovalRow({
   return (
     <div className="rounded-sm border border-border/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-[0.08em]">{approval.title || approval.approvalId}</div>
+        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{approval.title || approval.approvalId}</div>
         <div className="flex gap-2">
           <Badge variant={riskVariant(approval.riskLevel)}>{approval.riskLevel || "UNKNOWN"}</Badge>
           <Badge variant={statusVariant(approval.status)}>{approval.status || "UNKNOWN"}</Badge>
         </div>
       </div>
       <p className="mt-2 text-sm normal-case text-muted-foreground">{approval.summary || "No summary."}</p>
-      <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
+      <div className="mt-2 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">
         {approval.teamId ?? "-"} · {timeLabel(approval.createdAt)}
       </div>
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
-        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Approval details</summary>
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">Approval details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
           <DetailField label="Why approval is required" value={approval.reasonRequired} />
           <DetailField label="If approved" value={approval.approveEffect} />
@@ -482,7 +482,7 @@ export function InsightsAndActionsSection({
   actions: BusinessAction[];
 }) {
   return (
-    <section className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1fr_0.8fr]">
       <Card>
         <CardHeader>
           <CardTitle>Insights</CardTitle>
@@ -514,13 +514,13 @@ function InsightRow({ insight }: { insight: BusinessInsightRecord }) {
   return (
     <div className="rounded-sm border border-border/70 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-expanded text-sm tracking-[0.08em]">{insight.title || insight.insightId}</div>
+        <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{insight.title || insight.insightId}</div>
         <Badge variant={riskVariant(insight.severity)}>{insight.severity ?? "INFO"}</Badge>
       </div>
       <p className="mt-2 text-sm normal-case text-muted-foreground">{insight.finding || "No finding."}</p>
       {insight.recommendation ? <p className="mt-2 text-sm normal-case">{insight.recommendation}</p> : null}
       <details className="mt-3 rounded-sm border border-border/60 p-3 text-sm normal-case">
-        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-[0.1em]">Insight details</summary>
+        <summary className="cursor-pointer font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em]">Insight details</summary>
         <div className="mt-3 space-y-2 text-muted-foreground">
           <DetailField label="Possible cause" value={insight.possibleCause} />
           <DetailField label="Expected benefit" value={insight.expectedBenefit} />
@@ -537,7 +537,7 @@ function DetailField({ label, value }: { label: string; value?: unknown }) {
   if (value === undefined || value === null || value === "") return null;
   return (
     <div>
-      <div className="font-expanded text-[0.65rem] uppercase tracking-[0.1em] text-foreground">{label}</div>
+      <div className="font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em] text-foreground">{label}</div>
       <div className="mt-0.5">{String(value)}</div>
     </div>
   );
@@ -545,12 +545,15 @@ function DetailField({ label, value }: { label: string; value?: unknown }) {
 
 function JsonPreview({ label, value }: { label: string; value: unknown }) {
   return (
-    <div>
-      <div className="font-expanded text-[0.65rem] uppercase tracking-[0.1em] text-foreground">{label}</div>
-      <pre className="mt-1 max-h-48 overflow-auto rounded-sm border border-border/60 bg-background/70 p-2 text-xs">
+    <details className="group rounded-md border border-border/60 bg-background/50">
+      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs uppercase tracking-normal text-foreground transition-colors hover:bg-background/70 sm:tracking-[0.1em]">
+        <span className="font-expanded">{label}</span>
+        <span className="font-mono text-xs text-muted-foreground transition-transform group-open:rotate-90">▸</span>
+      </summary>
+      <pre className="max-h-48 overflow-auto border-t border-border/50 bg-background/30 p-2 text-xs leading-relaxed">
         {JSON.stringify(value, null, 2)}
       </pre>
-    </div>
+    </details>
   );
 }
 
@@ -572,11 +575,11 @@ export function DemoDataGuide({ workspaceId }: { workspaceId?: string }) {
         </pre>
         <div className="grid gap-2 text-sm normal-case text-muted-foreground sm:grid-cols-2">
           <div className="rounded-sm border border-border/70 p-3">
-            <div className="font-expanded text-xs uppercase tracking-[0.1em] text-foreground">What it creates</div>
+            <div className="font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em] text-foreground">What it creates</div>
             <div className="mt-1">Workspace → Team Blueprint → Run Story → Approval → Insights</div>
           </div>
           <div className="rounded-sm border border-border/70 p-3">
-            <div className="font-expanded text-xs uppercase tracking-[0.1em] text-foreground">Why not a button?</div>
+            <div className="font-expanded text-xs uppercase tracking-normal sm:tracking-[0.1em] text-foreground">Why not a button?</div>
             <div className="mt-1">The dashboard shows the command instead of executing local scripts from the browser.</div>
           </div>
         </div>
@@ -611,11 +614,11 @@ export function ScenariosSection({
           scenarios.slice(0, 6).map((scenario) => (
             <div key={scenario.scenarioId} className="rounded-sm border border-border/70 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-expanded text-sm tracking-[0.08em]">{scenario.name || scenario.scenarioId}</div>
+                <div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{scenario.name || scenario.scenarioId}</div>
                 <Badge variant={statusVariant(scenario.status)}>{scenario.status || "UNKNOWN"}</Badge>
               </div>
               <p className="mt-2 text-sm normal-case text-muted-foreground">{scenario.description || "No description."}</p>
-              <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">
+              <div className="mt-2 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">
                 {scenario.scenarioId} · entry team {scenario.entryTeamId || "-"}
                 {scenario.collaborationPattern ? ` · pattern: ${scenario.collaborationPattern}` : ""}
                 {scenario.slaName ? ` · SLA: ${scenario.slaName}` : ""}
@@ -656,9 +659,9 @@ export function PromptAssetsSection({ promptAssets }: { promptAssets: BusinessPr
   return <Card><CardHeader><CardTitle>Prompt Assets</CardTitle><CardDescription>Workspace-scoped prompt assets referenced by Team Blueprints.</CardDescription></CardHeader><CardContent className="space-y-3">
     {promptAssets.length === 0 ? <EmptyLine text="No prompt assets yet." /> : promptAssets.slice(0, 6).map((asset) => (
       <div key={asset.assetId} className="rounded-sm border border-border/70 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-expanded text-sm tracking-[0.08em]">{asset.name || asset.assetId}</div><Badge variant={statusVariant(asset.status)}>{asset.status || "UNKNOWN"}</Badge></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-expanded text-sm tracking-normal sm:tracking-[0.08em]">{asset.name || asset.assetId}</div><Badge variant={statusVariant(asset.status)}>{asset.status || "UNKNOWN"}</Badge></div>
         <p className="mt-2 text-sm normal-case text-muted-foreground">{asset.purpose || "No purpose."}</p>
-        <div className="mt-2 text-[0.7rem] tracking-[0.12em] opacity-60">prompt://{asset.assetId} · v{asset.version}</div>
+        <div className="mt-2 text-xs tracking-normal sm:tracking-[0.12em] opacity-60">prompt://{asset.assetId} · v{asset.version}</div>
       </div>
     ))}
   </CardContent></Card>;
@@ -687,10 +690,10 @@ export function OrchestrationHubSection() {
   const navigate = useNavigate();
   return (
     <section>
-      <div className="mb-3 flex items-center gap-2 text-xs tracking-[0.15em] opacity-60">
+      <div className="mb-3 flex items-center gap-2 text-xs tracking-normal sm:tracking-[0.15em] opacity-60">
         <GitBranch className="h-3.5 w-3.5" /> Orchestration Hub
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-4">
         {HUB_CARDS.map((card) => {
           const Icon = card.icon;
           return (
@@ -703,9 +706,9 @@ export function OrchestrationHubSection() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Icon className="h-4 w-4 shrink-0 opacity-70" />
-                    <span className="font-expanded text-xs tracking-[0.1em]">{card.label}</span>
+                    <span className="font-expanded text-xs tracking-normal sm:tracking-[0.1em]">{card.label}</span>
                     {card.badge ? (
-                      <Badge variant={card.badgeVariant ?? "outline"} className="text-[0.55rem]">
+                      <Badge variant={card.badgeVariant ?? "outline"} className="text-xs">
                         {card.badge}
                       </Badge>
                     ) : null}

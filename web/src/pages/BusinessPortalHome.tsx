@@ -38,15 +38,20 @@ export default function BusinessPortalHome() {
 
   return (
     <div className="space-y-5">
-      <section className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-foreground/5 via-transparent to-foreground/10 px-5 py-6 md:px-7 md:py-8">
-        <div className="absolute right-0 top-0 hidden h-full w-1/3 bg-[radial-gradient(circle_at_top_right,oklch(0.78_0.16_70/0.18),transparent_70%)] md:block" />
+      <section className="aurora-bg relative overflow-hidden rounded-2xl border border-border/60 px-5 py-6 md:px-7 md:py-9">
         <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="max-w-xl">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
-              <Briefcase className="h-4 w-4" /> Business Portal · 首页
+            <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-70">
+              <Briefcase className="h-3.5 w-3.5" />
+              <span>Business Portal · 首页</span>
+              <span className="hidden h-1 w-1 rounded-full bg-current sm:inline-block" />
+              <span className="hidden sm:inline">数字员工总控室</span>
             </div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
-              你的数字员工团队，今天表现如何
+            <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight md:text-3xl lg:text-4xl">
+              你的数字员工团队，
+              <span className="bg-gradient-to-r from-foreground via-foreground/85 to-foreground/65 bg-clip-text text-transparent">
+                今天表现如何
+              </span>
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground md:text-base">
               {loading ? "加载中…" : summary && summary.workspaceCount > 0
@@ -54,10 +59,15 @@ export default function BusinessPortalHome() {
                 : "还没有数据。先到「场景模板」一键搭建一个团队。"}
             </p>
             {risk && summary && summary.workspaceCount > 0 && (
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/60 px-3 py-1 backdrop-blur">
-                <span className={cn("h-2 w-2 rounded-full",
-                  risk.level === "HIGH" ? "bg-rose-500 animate-pulse"
-                    : risk.level === "MEDIUM" ? "bg-amber-500" : "bg-emerald-500")} />
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-border/80 bg-background/55 px-3 py-1 backdrop-blur">
+                <span className={cn("relative h-2 w-2 rounded-full",
+                  risk.level === "HIGH" ? "bg-rose-500"
+                    : risk.level === "MEDIUM" ? "bg-amber-500" : "bg-emerald-500")}>
+                  {risk.level !== "LOW" && (
+                    <span className={cn("status-pulse absolute inset-0 rounded-full",
+                      risk.level === "HIGH" ? "text-rose-500" : "text-amber-500")} />
+                  )}
+                </span>
                 <span className="font-mono text-xs">
                   健康度：<span className={cn("ml-1 font-semibold",
                     risk.level === "HIGH" ? "text-rose-500"
@@ -83,7 +93,7 @@ export default function BusinessPortalHome() {
             <Button variant="outline" size="sm" onClick={() => navigate("/business-portal/approvals")}>
               <ShieldAlert className="mr-1.5 h-3.5 w-3.5" /> 待审批
               {(summary?.pendingApprovals ?? 0) > 0 && (
-                <Badge variant="warning" className="ml-1.5 px-1.5 py-0 text-[0.6rem] font-mono">
+                <Badge variant="warning" className="ml-1.5 px-1.5 py-0 text-xs font-mono">
                   {summary?.pendingApprovals}
                 </Badge>
               )}
@@ -136,16 +146,16 @@ export default function BusinessPortalHome() {
                 <div key={run.runId}
                   className="flex flex-col gap-1 rounded-md border border-border/60 p-2 hover:border-border cursor-pointer transition-colors md:flex-row md:items-center md:gap-3"
                   onClick={() => run.workspaceId && navigate(`/runs/${run.workspaceId}/${run.runId}`)}>
-                  <Badge variant={runStatusVariant(run.status)} className="self-start text-[0.6rem]">
+                  <Badge variant={runStatusVariant(run.status)} className="self-start text-xs">
                     {run.status ?? "?"}
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm">{run.taskTitle ?? run.runId}</div>
-                    <div className="truncate text-[0.7rem] text-muted-foreground">{run.resultSummary}</div>
+                    <div className="truncate text-xs text-muted-foreground">{run.resultSummary}</div>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-[0.65rem] text-muted-foreground">{run.teamId}</div>
-                    <div className="font-mono text-[0.65rem] text-muted-foreground">{formatTime(run.createdAt)}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{run.teamId}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{formatTime(run.createdAt)}</div>
                   </div>
                 </div>
               ))
@@ -169,7 +179,7 @@ function NeedsAttentionCard({ home, loading, onNavigate }: {
             <ShieldAlert className="h-3.5 w-3.5" /> 需要关注
           </div>
           {(home?.summary?.teamCount ?? 0) > 0 && (
-            <Badge variant="outline" className="font-mono text-[0.6rem]">
+            <Badge variant="outline" className="font-mono text-xs">
               <Users className="mr-1 h-3 w-3" /> {home?.summary?.teamCount} 团队
             </Badge>
           )}

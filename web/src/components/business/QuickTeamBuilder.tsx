@@ -177,13 +177,13 @@ export default function QuickTeamBuilder({ workspaceId, onTeamCreated }: QuickTe
               <div key={agent.agentId} className="rounded-md border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{agent.displayName}</span>
-                  <span className="text-[0.65rem] text-muted-foreground">{agent.agentId}</span>
+                  <span className="text-xs text-muted-foreground">{agent.agentId}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{agent.responsibility}</p>
                 {agent.allowedTools?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {agent.allowedTools.map((t) => (
-                      <Badge key={t} variant="outline" className="text-[0.6rem]">{t}</Badge>
+                      <Badge key={t} variant="outline" className="text-xs">{t}</Badge>
                     ))}
                   </div>
                 )}
@@ -200,7 +200,7 @@ export default function QuickTeamBuilder({ workspaceId, onTeamCreated }: QuickTe
             </h4>
             <div className="flex flex-wrap gap-2">
               {draft.suggestedConnectors.map((c) => (
-                <Badge key={c} variant="outline" className="text-[0.65rem]">{c}</Badge>
+                <Badge key={c} variant="outline" className="text-xs">{c}</Badge>
               ))}
             </div>
           </div>

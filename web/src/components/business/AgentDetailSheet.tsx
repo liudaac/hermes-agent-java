@@ -88,7 +88,7 @@ export default function AgentDetailSheet({ template, open, onClose }: AgentDetai
                       {m.value}
                       {m.unit && <span className="text-xs opacity-60 ml-0.5">{m.unit}</span>}
                     </div>
-                    <div className="mt-1 text-[0.6rem] uppercase tracking-wider text-muted-foreground">{m.label}</div>
+                    <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{m.label}</div>
                   </div>
                 ))}
               </div>
@@ -119,7 +119,7 @@ export default function AgentDetailSheet({ template, open, onClose }: AgentDetai
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{step.actor}</span>
                         {step.duration && (
-                          <Badge variant="outline" className="text-[0.6rem] font-mono">{step.duration}</Badge>
+                          <Badge variant="outline" className="text-xs font-mono">{step.duration}</Badge>
                         )}
                       </div>
                       <p className="mt-0.5 text-sm text-muted-foreground">{step.action}</p>
@@ -145,20 +145,20 @@ export default function AgentDetailSheet({ template, open, onClose }: AgentDetai
               <div className="grid gap-3 sm:grid-cols-2">
                 {t.allowedTools.length > 0 && (
                   <div>
-                    <p className="text-[0.65rem] uppercase tracking-wider text-muted-foreground mb-1.5">Tools</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Tools</p>
                     <div className="flex flex-wrap gap-1.5">
                       {t.allowedTools.map((x) => (
-                        <code key={x} className="rounded bg-muted px-1.5 py-0.5 text-[0.7rem] font-mono">{x}</code>
+                        <code key={x} className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{x}</code>
                       ))}
                     </div>
                   </div>
                 )}
                 {t.allowedSkills.length > 0 && (
                   <div>
-                    <p className="text-[0.65rem] uppercase tracking-wider text-muted-foreground mb-1.5">Skills</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1.5">Skills</p>
                     <div className="flex flex-wrap gap-1.5">
                       {t.allowedSkills.map((x) => (
-                        <code key={x} className="rounded bg-muted px-1.5 py-0.5 text-[0.7rem] font-mono">{x}</code>
+                        <code key={x} className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{x}</code>
                       ))}
                     </div>
                   </div>

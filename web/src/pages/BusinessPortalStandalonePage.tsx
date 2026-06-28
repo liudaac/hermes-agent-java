@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BriefcaseBusiness,
@@ -33,6 +33,8 @@ import FirstTimeOnboardingDrawer from "@/components/business/FirstTimeOnboarding
  */
 export default function BusinessPortalStandalonePage({ children }: { children?: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const path = location.pathname;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -74,7 +76,7 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
                 <h1 className="text-sm font-semibold leading-tight tracking-tight">
                   Business Portal
                 </h1>
-                <p className="text-[0.65rem] text-muted-foreground leading-tight">
+                <p className="text-xs text-muted-foreground leading-tight">
                   Agent Team Platform
                 </p>
               </div>
@@ -140,10 +142,11 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
         )}
       </header>
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-[1400px] px-4 sm:px-6 pt-20 pb-12">
+      <main className="mx-auto max-w-[1400px] px-4 pb-12 pt-20 sm:px-6">
         <NavBar />
-        {children ?? <BusinessPortalPage />}
+        <div key={path} className="page-transition-enter">
+          {children ?? <BusinessPortalPage />}
+        </div>
       </main>
       <FloatingBusinessChat />
       <FirstTimeOnboardingDrawer />

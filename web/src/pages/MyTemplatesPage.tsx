@@ -115,7 +115,7 @@ export default function MyTemplatesPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] opacity-60">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal sm:tracking-[0.18em] opacity-60">
             <Sparkles className="h-4 w-4" /> 我的模板
           </div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">外部模板贡献</h1>
@@ -123,7 +123,7 @@ export default function MyTemplatesPage() {
             把你公司里的角色模板、行业场景上传到 Hermes，全公司一起用。
             上传即可生效，所有人都能在「数字员工」和「场景模板」里看到。
           </p>
-          {root && <p className="mt-1 text-[0.65rem] font-mono text-muted-foreground/70">存储位置：{root}</p>}
+          {root && <p className="mt-1 text-xs font-mono text-muted-foreground/70">存储位置：{root}</p>}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate("/business-portal")}>
@@ -168,7 +168,7 @@ export default function MyTemplatesPage() {
           <textarea value={yamlBody} onChange={(e) => setYamlBody(e.target.value)}
             spellCheck={false} rows={12}
             className="w-full rounded-md border border-border bg-muted/30 px-3 py-2 font-mono text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-foreground" />
-          <p className="text-[0.65rem] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             提示：可参考 <code className="font-mono">resources/business-templates/SCHEMA.md</code> 中的字段规范。
             上传后会自动校验，缺字段或类型错误会被拒绝。
           </p>
@@ -181,7 +181,7 @@ export default function MyTemplatesPage() {
             <span className="flex items-center gap-2 text-base">
               <FileText className="h-4 w-4" /> 已上传的模板
             </span>
-            <Badge variant="outline" className="text-[0.6rem]">{items.length}</Badge>
+            <Badge variant="outline" className="text-xs">{items.length}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -193,12 +193,12 @@ export default function MyTemplatesPage() {
             <ul className="space-y-2">
               {items.map((it) => (
                 <li key={it.templateId} className="flex items-center gap-3 rounded-md border border-border/60 p-2.5">
-                  <Badge variant="outline" className="text-[0.6rem] uppercase tracking-wider">
+                  <Badge variant="outline" className="text-xs uppercase tracking-wider">
                     {it.type}
                   </Badge>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{it.name || it.templateId}</p>
-                    <p className="truncate text-[0.65rem] text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       <code className="font-mono">{it.templateId}</code>
                       {it.category && <> · {it.category}</>}
                       {it.meta?.author && <> · {it.meta.author}</>}
