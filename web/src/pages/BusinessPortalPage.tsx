@@ -6,6 +6,12 @@ import {
   RefreshCw,
   Route,
   Users,
+  Activity,
+  Layers,
+  Network,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
@@ -43,6 +49,7 @@ import {
   OrchestrationHubSection,
 } from "@/components/business/BusinessPortalSections";
 import QuickTeamBuilder from "@/components/business/QuickTeamBuilder";
+import SectionAccordion from "@/components/business/SectionAccordion";
 import { BusinessCreationPanel, CreateApprovalCardForm, CreatePromptAssetForm, CreateRunStoryForm, CreateScenarioForm, CreateTeamBlueprintForm, CreateWorkspaceForm } from "@/components/business/BusinessPortalForms";
 
 export default function BusinessPortalPage() {
@@ -204,12 +211,16 @@ export default function BusinessPortalPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="aurora-bg flex flex-col gap-3 rounded-2xl border border-border/60 px-5 py-5 md:flex-row md:items-end md:justify-between md:px-7 md:py-6">
         <div>
-          <div className="flex items-center gap-2 text-xs tracking-normal sm:tracking-[0.18em] opacity-60">
-            <BriefcaseBusiness className="h-4 w-4" /> Business Portal
+          <div className="flex items-center gap-2 text-xs uppercase tracking-normal opacity-70 sm:tracking-[0.18em]">
+            <BriefcaseBusiness className="h-3.5 w-3.5" /> Business Portal · 工作台
           </div>
-          <H2 className="mt-1">Business Command Center</H2>
+          <H2 className="mt-1">
+            <span className="bg-gradient-to-r from-foreground via-foreground/85 to-foreground/65 bg-clip-text text-transparent">
+              Business Command Center
+            </span>
+          </H2>
           <p className="mt-2 max-w-3xl text-sm normal-case tracking-normal text-muted-foreground">
             Business-facing cockpit for workspaces, digital employee teams, run stories, approvals and insights.
           </p>
@@ -277,60 +288,89 @@ export default function BusinessPortalPage() {
 
       <DemoDataGuide workspaceId={workspaceId} />
 
-      <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-        <MetricCard title="Workspaces" value={summary?.workspaceCount} icon={BriefcaseBusiness} />
-        <MetricCard title="Teams" value={summary?.teamCount} icon={Users} />
-        <MetricCard title="Runs" value={summary?.runCount} icon={Route} />
-        <MetricCard title="Pending approvals" value={summary?.pendingApprovals} icon={ClipboardCheck} />
-        <MetricCard title="Open insights" value={summary?.openInsights} icon={Lightbulb} />
-      </section>
+      <SectionAccordion
+        icon={Activity}
+        title="今日概览"
+        hint="工作空间健康度速览"
+        defaultOpen
+        bordered={false}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+          <MetricCard title="Workspaces" value={summary?.workspaceCount} icon={BriefcaseBusiness} />
+          <MetricCard title="Teams" value={summary?.teamCount} icon={Users} />
+          <MetricCard title="Runs" value={summary?.runCount} icon={Route} />
+          <MetricCard title="Pending approvals" value={summary?.pendingApprovals} icon={ClipboardCheck} />
+          <MetricCard title="Open insights" value={summary?.openInsights} icon={Lightbulb} />
+        </div>
+      </SectionAccordion>
 
-      <OrchestrationHubSection />
+      <SectionAccordion
+        icon={Network}
+        title="编排中枢"
+        hint="Orchestration / SLA / DLQ / HITL"
+        defaultOpen={false}
+      >
+        <OrchestrationHubSection />
+      </SectionAccordion>
 
-      <TodayAndAttentionSection home={home} />
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
-        <ScenariosSection scenarios={scenarios} workspaceId={workspaceId} onExecute={executeScenario} executingId={executingId} />
-        <PromptAssetsSection promptAssets={promptAssets} />
-      </section>
-      <TeamsSection teams={teams} home={home} onEditTeam={setEditingTeam} />
+      <SectionAccordion icon={Sparkles} title="今日 & 待办" defaultOpen>
+        <TodayAndAttentionSection home={home} />
+      </SectionAccordion>
 
-      {/* Team Blueprint Editor Drawer */}
+      <SectionAccordion icon={Layers} title="场景 & Prompt 资产" defaultOpen={false}>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-2">
+          <ScenariosSection scenarios={scenarios} workspaceId={workspaceId} onExecute={executeScenario} executingId={executingId} />
+          <PromptAssetsSection promptAssets={promptAssets} />
+        </div>
+      </SectionAccordion>
+
+      <SectionAccordion icon={Users} title="团队" defaultOpen={false}>
+        <TeamsSection teams={teams} home={home} onEditTeam={setEditingTeam} />
+      </SectionAccordion>
+
+      {/* Team Blueprint Editor Drawer (mobile bottom sheet / desktop right rail) */}
       {editingTeam && workspaceId && (
-        <div className="fixed inset-0 z-50 bg-black/50" onClick={() => setEditingTeam(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/55 backdrop-blur-sm sm:items-stretch sm:justify-end"
+          onClick={() => setEditingTeam(null)}
+        >
           <div
-            className="absolute right-0 top-0 h-full w-full max-w-2xl bg-background shadow-xl"
+            className="relative flex h-[90vh] w-full max-h-[90vh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:h-full sm:max-h-none sm:max-w-2xl sm:rounded-none sm:rounded-l-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold">Team Blueprint Editor</h2>
-                <Button variant="ghost" size="sm" onClick={() => setEditingTeam(null)}>
-                  Close
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <TeamBlueprintEditor
-                  workspaceId={workspaceId}
-                  team={editingTeam}
-                  onSaved={() => {
-                    load();
-                  }}
-                />
-              </div>
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">Team Blueprint Editor</h2>
+              <Button variant="ghost" size="sm" onClick={() => setEditingTeam(null)}>
+                Close
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <TeamBlueprintEditor
+                workspaceId={workspaceId}
+                team={editingTeam}
+                onSaved={() => {
+                  load();
+                }}
+              />
             </div>
           </div>
         </div>
       )}
 
-      <RunsAndApprovalsSection
-        runs={runs}
-        approvals={approvals}
-        onApproveApproval={approveApproval}
-        onRejectApproval={rejectApproval}
-        onRequestApprovalInfo={requestApprovalInfo}
-        onResumeExecution={resumeExecution}
-      />
-      <InsightsAndActionsSection insights={insights} actions={home?.nextActions ?? []} />
+      <SectionAccordion icon={ShieldCheck} title="Runs & 审批" defaultOpen>
+        <RunsAndApprovalsSection
+          runs={runs}
+          approvals={approvals}
+          onApproveApproval={approveApproval}
+          onRejectApproval={rejectApproval}
+          onRequestApprovalInfo={requestApprovalInfo}
+          onResumeExecution={resumeExecution}
+        />
+      </SectionAccordion>
+
+      <SectionAccordion icon={Wand2} title="洞察 & 推荐动作" defaultOpen={false}>
+        <InsightsAndActionsSection insights={insights} actions={home?.nextActions ?? []} />
+      </SectionAccordion>
     </div>
   );
 }
