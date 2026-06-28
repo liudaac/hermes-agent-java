@@ -21,8 +21,16 @@ interface RunStoryTimelineProps {
 
 /**
  * Business-facing visualization of a run's execution steps.
- * Replaces the raw-JSON dump with a colored timeline that reads like
- * a story: who did what, in what order, and with what result.
+ *
+ * The timeline reads like a story — who did what, in what order, with
+ * what result — instead of dumping raw JSON.
+ *
+ * Visual upgrades in Step E:
+ *  - Vertical connector is a gradient (emerald→sky→amber→rose by tone)
+ *    rather than a flat border line
+ *  - Dot wrappers use glass-card-style ring + tone-specific glow
+ *  - Running step pulses (status-pulse halo)
+ *  - Hover-to-emphasize a single step (subtle bg tint)
  */
 export default function RunStoryTimeline({
   steps,
@@ -42,6 +50,15 @@ export default function RunStoryTimeline({
   const visible = expanded ? steps : steps.slice(0, collapsedCount);
   const hidden = steps.length - visible.length;
 
+  // Build a tonal gradient stop list from the visible steps so the
+  // connector visually summarises run health at a glance.
+  const stops = visible.map((s, i) => {
+    const tone = toneColor(s.status);
+    const pct = visible.length === 1 ? 100 : (i / (visible.length - 1)) * 100;
+    return `${tone} ${pct}%`;
+  });
+  const gradient = `linear-gradient(180deg, ${stops.join(", ")})`;
+
   return (
     <div className={cn("space-y-0", className)}>
       <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
@@ -50,17 +67,26 @@ export default function RunStoryTimeline({
       </div>
 
       <ol className="relative space-y-1">
-        {/* connector line */}
-        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" aria-hidden />
+        {/* tonal gradient connector — sits behind the dots */}
+        <div
+          className="pointer-events-none absolute left-[15px] top-2 bottom-2 w-px"
+          style={{ background: gradient }}
+          aria-hidden
+        />
         {visible.map((step, i) => (
-          <TimelineStep key={step.stepId ?? `${i}`} step={step} index={i} />
+          <TimelineStep
+            key={step.stepId ?? `${i}`}
+            step={step}
+            index={i}
+            isLast={i === visible.length - 1}
+          />
         ))}
       </ol>
 
       {hidden > 0 && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronDown className="h-3.5 w-3.5" />
           展开 {hidden} 个步骤
@@ -69,7 +95,7 @@ export default function RunStoryTimeline({
       {expanded && steps.length > collapsedCount && (
         <button
           onClick={() => setExpanded(false)}
-          className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronUp className="h-3.5 w-3.5" />
           收起
@@ -82,38 +108,114 @@ export default function RunStoryTimeline({
 interface StatusVisual {
   icon: LucideIcon;
   className: string;
+  glow: string;
   badge: "success" | "warning" | "destructive" | "outline" | "info";
+  running: boolean;
 }
 
 function statusVisual(status?: string): StatusVisual {
   const s = (status ?? "").toUpperCase();
   if (["COMPLETED", "SUCCESS", "DONE", "OK"].includes(s)) {
-    return { icon: CheckCircle2, className: "text-emerald-500", badge: "success" };
+    return {
+      icon: CheckCircle2,
+      className: "text-emerald-500",
+      glow: "shadow-[0_0_0_4px_color-mix(in_srgb,oklch(0.74_0.14_142)_18%,transparent)]",
+      badge: "success",
+      running: false,
+    };
   }
   if (["RUNNING", "PROCESSING", "IN_PROGRESS"].includes(s)) {
-    return { icon: PlayCircle, className: "text-sky-500 animate-pulse", badge: "info" };
+    return {
+      icon: PlayCircle,
+      className: "text-sky-500",
+      glow: "shadow-[0_0_0_4px_color-mix(in_srgb,oklch(0.7_0.14_240)_22%,transparent)]",
+      badge: "info",
+      running: true,
+    };
   }
   if (["FAILED", "ERROR"].includes(s)) {
-    return { icon: AlertCircle, className: "text-rose-500", badge: "destructive" };
+    return {
+      icon: AlertCircle,
+      className: "text-rose-500",
+      glow: "shadow-[0_0_0_4px_color-mix(in_srgb,oklch(0.65_0.2_27)_22%,transparent)]",
+      badge: "destructive",
+      running: false,
+    };
   }
   if (["RETRY", "RETRIED", "PENDING"].includes(s)) {
-    return { icon: Clock, className: "text-amber-500", badge: "warning" };
+    return {
+      icon: Clock,
+      className: "text-amber-500",
+      glow: "shadow-[0_0_0_4px_color-mix(in_srgb,oklch(0.79_0.16_60)_22%,transparent)]",
+      badge: "warning",
+      running: false,
+    };
   }
-  return { icon: Clock, className: "text-muted-foreground", badge: "outline" };
+  return {
+    icon: Clock,
+    className: "text-muted-foreground",
+    glow: "",
+    badge: "outline",
+    running: false,
+  };
 }
 
-function TimelineStep({ step, index }: { step: BusinessRunStep; index: number }) {
+/** OKLCH tone color used for the connector gradient (matches statusVisual). */
+function toneColor(status?: string): string {
+  const s = (status ?? "").toUpperCase();
+  if (["COMPLETED", "SUCCESS", "DONE", "OK"].includes(s)) return "oklch(0.74 0.14 142)"; // emerald
+  if (["RUNNING", "PROCESSING", "IN_PROGRESS"].includes(s)) return "oklch(0.70 0.14 240)"; // sky
+  if (["FAILED", "ERROR"].includes(s)) return "oklch(0.65 0.20 27)"; // rose
+  if (["RETRY", "RETRIED", "PENDING"].includes(s)) return "oklch(0.79 0.16 60)"; // amber
+  return "color-mix(in srgb, currentColor 20%, transparent)";
+}
+
+function TimelineStep({
+  step,
+  index,
+  isLast,
+}: {
+  step: BusinessRunStep;
+  index: number;
+  isLast: boolean;
+}) {
   const visual = statusVisual(step.status);
   const Icon = visual.icon;
   const actor = step.actor ?? step.agentId ?? `Step ${index + 1}`;
   const action = step.title ?? step.summary ?? "—";
   return (
-    <li className="relative flex gap-3 pl-0">
-      <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background ring-1 ring-border">
-        <Icon className={cn("h-3.5 w-3.5", visual.className)} />
+    <li
+      className={cn(
+        "group relative flex gap-3 rounded-md pl-0 pr-1 transition-colors",
+        "hover:bg-foreground/[0.025]",
+        isLast && "pb-0.5",
+      )}
+    >
+      {/* Dot — glass-card style ring + tone glow */}
+      <div className="relative shrink-0">
+        <div
+          className={cn(
+            "relative z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background ring-1 ring-border/80 transition-all duration-200",
+            "group-hover:ring-foreground/40",
+            visual.glow,
+          )}
+        >
+          <Icon className={cn("h-3.5 w-3.5", visual.className)} />
+        </div>
+        {/* status-pulse for running steps */}
+        {visual.running && (
+          <span
+            aria-hidden
+            className={cn(
+              "status-pulse absolute inset-0 z-0 rounded-full",
+              visual.className,
+            )}
+          />
+        )}
       </div>
+
       <div className="min-w-0 flex-1 pb-3 pt-1">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium tracking-tight">{actor}</span>
           {step.status && (
             <Badge variant={visual.badge} className="text-xs uppercase tracking-wider">
@@ -126,19 +228,19 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
             </Badge>
           )}
           {typeof step.score === "number" && (
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="metric-number text-xs text-muted-foreground">
               score {step.score.toFixed(2)}
             </span>
           )}
           {step.timestamp && (
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="metric-number text-xs text-muted-foreground/80">
               {formatTime(step.timestamp)}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-sm text-muted-foreground leading-relaxed">{action}</p>
+        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{action}</p>
         {step.summary && step.title && step.summary !== step.title && (
-          <p className="mt-0.5 text-xs text-muted-foreground/80 leading-relaxed">{step.summary}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground/80">{step.summary}</p>
         )}
         {step.matchedSkills && (
           <div className="mt-1 flex flex-wrap gap-1">
@@ -149,7 +251,7 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
               .map((skill) => (
                 <span
                   key={skill}
-                  className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                  className="rounded-full bg-foreground/5 px-1.5 py-0.5 text-xs text-muted-foreground"
                 >
                   {skill}
                 </span>
@@ -158,10 +260,10 @@ function TimelineStep({ step, index }: { step: BusinessRunStep; index: number })
         )}
         {step.evidence && (
           <details className="mt-1.5 text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
               证据
             </summary>
-            <pre className="mt-1 overflow-x-auto rounded border border-border/60 bg-muted/30 p-2 font-mono text-xs leading-relaxed">
+            <pre className="mt-1 overflow-x-auto rounded-md border border-border/60 bg-background/50 p-2 font-mono text-xs leading-relaxed backdrop-blur-sm">
               {step.evidence}
             </pre>
           </details>
