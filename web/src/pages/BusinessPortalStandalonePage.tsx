@@ -13,6 +13,8 @@ import {
   Lightbulb,
   BarChart3,
   Upload,
+  MoreHorizontal,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -140,17 +142,7 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
 
       {/* Main Content */}
       <main className="mx-auto max-w-[1400px] px-4 sm:px-6 pt-20 pb-12">
-        <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-3">
-          <NavTab to="/business-portal" label="首页" icon={Home} exact />
-          <NavTab to="/business-portal/agents" label="数字员工" icon={Sparkles} />
-          <NavTab to="/business-portal/templates" label="场景模板" icon={Layers} />
-          <NavTab to="/business-portal/workspaces" label="工作台" icon={BriefcaseBusiness} />
-          <NavTab to="/business-portal/approvals" label="待审批" icon={ShieldAlert} />
-          <NavTab to="/business-portal/risk-policy" label="风险策略" icon={ShieldAlert} />
-          <NavTab to="/business-portal/evolution" label="自进化" icon={Lightbulb} />
-          <NavTab to="/business-portal/industry-dashboard" label="行业看板" icon={BarChart3} />
-          <NavTab to="/business-portal/my-templates" label="我的模板" icon={Upload} />
-        </div>
+        <NavBar />
         {children ?? <BusinessPortalPage />}
       </main>
       <FloatingBusinessChat />
@@ -174,13 +166,16 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
   );
 }
 
-function NavTab({ to, label, icon: Icon, exact }: { to: string; label: string; icon: typeof BriefcaseBusiness; exact?: boolean }) {
+function NavTab({ to, label, icon: Icon, exact, onClick }: { to: string; label: string; icon: LucideIcon; exact?: boolean; onClick?: () => void }) {
   const navigate = useNavigate();
   const path = typeof window !== "undefined" ? window.location.pathname : "";
   const active = exact ? path === to : path === to || path.startsWith(to + "/");
   return (
     <button
-      onClick={() => navigate(to)}
+      onClick={() => {
+        navigate(to);
+        onClick?.();
+      }}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
         active
@@ -190,6 +185,134 @@ function NavTab({ to, label, icon: Icon, exact }: { to: string; label: string; i
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
+    </button>
+  );
+}
+
+/* ---------- NavBar with primary + overflow "More" ---------- */
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  exact?: boolean;
+}
+
+// Order: 4 primary tabs (visible on narrow screens), then 5 secondary (collapsed
+// into "更多" on narrow / inlined on wide).
+const PRIMARY_NAV: NavItem[] = [
+  { to: "/business-portal", label: "首页", icon: Home, exact: true },
+  { to: "/business-portal/agents", label: "数字员工", icon: Sparkles },
+  { to: "/business-portal/templates", label: "场景模板", icon: Layers },
+  { to: "/business-portal/approvals", label: "待审批", icon: ShieldAlert },
+];
+
+const SECONDARY_NAV: NavItem[] = [
+  { to: "/business-portal/workspaces", label: "工作台", icon: BriefcaseBusiness },
+  { to: "/business-portal/risk-policy", label: "风险策略", icon: ShieldAlert },
+  { to: "/business-portal/evolution", label: "自进化", icon: Lightbulb },
+  { to: "/business-portal/industry-dashboard", label: "行业看板", icon: BarChart3 },
+  { to: "/business-portal/my-templates", label: "我的模板", icon: Upload },
+];
+
+function NavBar() {
+  const [overflowOpen, setOverflowOpen] = useState(false);
+
+  // Close overflow on route change.
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onClickAway = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target && target.closest("[data-portal-overflow]")) return;
+      setOverflowOpen(false);
+    };
+    document.addEventListener("mousedown", onClickAway);
+    return () => document.removeEventListener("mousedown", onClickAway);
+  }, [overflowOpen]);
+
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const overflowActive = SECONDARY_NAV.some(
+    (n) => path === n.to || path.startsWith(n.to + "/"),
+  );
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-3">
+      {/* Primary — always visible */}
+      {PRIMARY_NAV.map((n) => (
+        <NavTab key={n.to} to={n.to} label={n.label} icon={n.icon} exact={n.exact} />
+      ))}
+
+      {/* Secondary on wide screens (≥md): inline */}
+      <div className="hidden flex-wrap gap-2 md:contents">
+        {SECONDARY_NAV.map((n) => (
+          <NavTab key={n.to} to={n.to} label={n.label} icon={n.icon} />
+        ))}
+      </div>
+
+      {/* Secondary on narrow screens: collapsed into "更多" dropdown */}
+      <div className="relative md:hidden" data-portal-overflow>
+        <button
+          onClick={() => setOverflowOpen((o) => !o)}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+            overflowOpen || overflowActive
+              ? "bg-foreground text-background"
+              : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted",
+          )}
+          aria-haspopup="true"
+          aria-expanded={overflowOpen}
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+          更多
+        </button>
+        {overflowOpen && (
+          <div
+            data-portal-overflow
+            className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-md border border-border bg-background shadow-lg"
+          >
+            {SECONDARY_NAV.map((n) => (
+              <DropdownNavItem
+                key={n.to}
+                item={n}
+                onSelect={() => setOverflowOpen(false)}
+                currentPath={path}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DropdownNavItem({
+  item,
+  onSelect,
+  currentPath,
+}: {
+  item: NavItem;
+  onSelect: () => void;
+  currentPath: string;
+}) {
+  const navigate = useNavigate();
+  const active = currentPath === item.to || currentPath.startsWith(item.to + "/");
+  const Icon = item.icon;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigate(item.to);
+        onSelect();
+      }}
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
+        active
+          ? "bg-muted font-semibold text-foreground"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {item.label}
     </button>
   );
 }
