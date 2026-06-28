@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import BusinessPortalPage from "@/pages/BusinessPortalPage";
 import FloatingBusinessChat from "@/components/business/FloatingBusinessChat";
+import FirstTimeOnboardingDrawer from "@/components/business/FirstTimeOnboardingDrawer";
 
 /**
  * Business Portal Standalone — Independent portal page without Dashboard chrome.
@@ -153,6 +154,7 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
         {children ?? <BusinessPortalPage />}
       </main>
       <FloatingBusinessChat />
+      <FirstTimeOnboardingDrawer />
 
       {/* Minimal footer */}
       <footer className="border-t border-border bg-muted/30">

@@ -257,8 +257,14 @@ export default function IndustryDashboardPage() {
 }
 
 function catColor(cat: string): string {
-  return ({ hr: "orange", finance: "green", assets: "yellow", logistics: "blue", "cross-domain": "purple" }
-    as Record<string, string>)[cat] ?? "teal";
+  const map: Record<string, string> = {
+    hr: "orange",
+    finance: "green",
+    assets: "yellow",
+    logistics: "blue",
+    "cross-domain": "purple",
+  };
+  return map[cat] ?? "teal";
 }
 
 function formatMs(ms: number): string {
