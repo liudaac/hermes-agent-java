@@ -39,7 +39,12 @@ class BusinessPortalFoundationArchitectureTest {
         "src/main/java/com/nousresearch/hermes/business/run/BusinessRunProjectionAdapter.java",
         "src/main/java/com/nousresearch/hermes/business/insight/BusinessInsightProjectionAdapter.java",
         "src/main/java/com/nousresearch/hermes/business/insight/BusinessEvalRunProjectionAdapter.java",
-        "src/main/java/com/nousresearch/hermes/business/safetyvalve/BusinessSafetyValveAdapter.java"
+        "src/main/java/com/nousresearch/hermes/business/safetyvalve/BusinessSafetyValveAdapter.java",
+        // Boundary orchestrators: compose multiple foundation services to seed/clone
+        // scenarios. They live inside business/ but conceptually sit at the same
+        // adapter layer as the explicit *Adapter classes above.
+        "src/main/java/com/nousresearch/hermes/business/template/TemplateCloneService.java",
+        "src/main/java/com/nousresearch/hermes/business/vertical/ecommerce/EcommerceScenarioFactory.java"
     );
 
     @Test
