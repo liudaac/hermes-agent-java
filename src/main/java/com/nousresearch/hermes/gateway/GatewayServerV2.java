@@ -173,6 +173,11 @@ public class GatewayServerV2 {
         app.post("/api/chat", this::handleChat);
         app.post("/api/chat/stream", this::handleChatStream);
 
+        // S1-3: OpenAI 兼容 API
+        OpenAICompatHandler openaiHandler = new OpenAICompatHandler(config, tenantManager);
+        app.post("/v1/chat/completions", openaiHandler::handleChatCompletions);
+        app.get("/v1/models", openaiHandler::handleListModels);
+
         // Comparison API
         app.post("/api/compare/runs", this::handleCreateCompareRun);
         app.get("/api/compare/runs", this::handleListCompareRuns);

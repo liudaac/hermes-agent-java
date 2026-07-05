@@ -473,6 +473,173 @@ public class HermesConfig {
         return config.get(key);
     }
 
+    // ============ S1-1: Channel Override Support ============
+    // (S1-1 code above)
+
+    // ============ S1-3: Model Routes Support ============
+
+    /**
+     * S1-3: 从配置解析 model_routes 列表。
+     */
+    @SuppressWarnings("unchecked")
+    public List<ModelRoute> getModelRoutes() {
+        Object raw = config.get("model_routes");
+        if (!(raw instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        List<ModelRoute> routes = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) continue;
+            String alias = getStr(map, "alias");
+            String model = getStr(map, "model");
+            String provider = getStr(map, "provider");
+            String baseUrl = getStr(map, "base-url");
+            if (alias != null && model != null) {
+                routes.add(new ModelRoute(alias, model, provider, baseUrl));
+            }
+        }
+        return routes;
+    }
+
+    /**
+     * S1-3: 通过别名解析 ModelRoute。
+     * 优先级：session /model > model_routes alias > global default
+     *
+     * @param alias 请求中的 model 字段（可能是别名）
+     * @param sessionModelOverride 会话级 /model 覆盖
+     * @return 匹配的 ModelRoute，或 null（无匹配，用 global default）
+     */
+    public ModelRoute resolveModelRoute(String alias, String sessionModelOverride) {
+        // 1. session /model 最高优先
+        if (sessionModelOverride != null && !sessionModelOverride.isBlank()) {
+            // 如果 session override 本身是个别名，也尝试解析
+            for (ModelRoute route : getModelRoutes()) {
+                if (route.getAlias().equalsIgnoreCase(sessionModelOverride)) {
+                    return route;
+                }
+            }
+            // 不是别名，直接用 session override 的值作为 model
+            return new ModelRoute(sessionModelOverride, sessionModelOverride, null, null);
+        }
+        // 2. model_routes 别名查找
+        if (alias != null) {
+            for (ModelRoute route : getModelRoutes()) {
+                if (route.getAlias().equalsIgnoreCase(alias)) {
+                    return route;
+                }
+            }
+        }
+        // 3. 无匹配 → null（调用方用 global default）
+        return null;
+    }
+
+    // ============ S1-1: Channel Override (continued) ============
+
+    /**
+     * S1-1: 从配置解析 channel-overrides 列表。
+     *
+     * <p>配置格式（application-*.yaml）：</p>
+     * <pre>{@code
+     * channel-overrides:
+     *   - channel: feishu
+     *     channel-id: "ou_xxx"      # 可选
+     *     model: "doubao-pro-32k"
+     *     base-url: "https://ark.cn-beijing.volces.com/api/v3"
+     *     system-prompt-suffix: "你是一个飞书助手。"
+     * }</pre>
+     */
+    @SuppressWarnings("unchecked")
+    public List<ChannelOverride> getChannelOverrides() {
+        Object raw = config.get("channel-overrides");
+        if (!(raw instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        List<ChannelOverride> overrides = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) continue;
+            String channel = getStr(map, "channel");
+            String channelId = getStr(map, "channel-id");
+            String model = getStr(map, "model");
+            String baseUrl = getStr(map, "base-url");
+            String suffix = getStr(map, "system-prompt-suffix");
+            if (channel != null && model != null) {
+                overrides.add(new ChannelOverride(channel, channelId, model, baseUrl, suffix));
+            }
+        }
+        return overrides;
+    }
+
+    /**
+     * S1-1: 解析模型 — 4 层优先级。
+     *
+     * <p>优先级顺序（高 → 低）：</p>
+     * <ol>
+     *   <li>session /model 命令（modelOverride 字段）</li>
+     *   <li>channel override（匹配 channel + channelId）</li>
+     *   <li>tenant default（暂未实现，预留）</li>
+     *   <li>global default（config model.model）</li>
+     * </ol>
+     *
+     * @param channel 消息来源 channel（如 "feishu"），可为 null
+     * @param channelId 消息来源 channel ID，可为 null
+     * @param sessionModelOverride 会话级 /model 覆盖，可为 null
+     * @return 解析后的模型名
+     */
+    public String resolveModel(String channel, String channelId, String sessionModelOverride) {
+        // 1. session /model 最高优先
+        if (sessionModelOverride != null && !sessionModelOverride.isBlank()) {
+            return sessionModelOverride;
+        }
+        // 2. channel override
+        if (channel != null) {
+            for (ChannelOverride override : getChannelOverrides()) {
+                if (override.matches(channel, channelId)) {
+                    return override.getModel();
+                }
+            }
+        }
+        // 3. tenant default — 预留
+        // 4. global default
+        return getCurrentModel();
+    }
+
+    /**
+     * S1-1: 解析 base URL — 同样的 4 层优先级。
+     */
+    public String resolveBaseUrl(String channel, String channelId, String sessionModelOverride) {
+        // 1. session override
+        if (baseUrlOverride != null) return baseUrlOverride;
+        // 2. channel override
+        if (channel != null) {
+            for (ChannelOverride override : getChannelOverrides()) {
+                if (override.matches(channel, channelId) && override.getBaseUrl() != null) {
+                    return override.getBaseUrl();
+                }
+            }
+        }
+        // 3. global default
+        return getBaseUrl();
+    }
+
+    /**
+     * S1-1: 解析 system prompt suffix — channel override 提供。
+     */
+    public String resolveSystemPromptSuffix(String channel, String channelId) {
+        if (channel == null) return null;
+        for (ChannelOverride override : getChannelOverrides()) {
+            if (override.matches(channel, channelId)) {
+                return override.getSystemPromptSuffix();
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String getStr(Map<?, ?> map, String key) {
+        Object v = map.get(key);
+        return v != null ? v.toString() : null;
+    }
+
     // ============ ModelConfig Support for ModelClient ============
 
     /**

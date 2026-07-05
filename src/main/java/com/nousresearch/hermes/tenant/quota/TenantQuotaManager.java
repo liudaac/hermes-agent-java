@@ -31,12 +31,9 @@ public class TenantQuotaManager {
     
     private final Path quotaDir;
     private final TenantQuota quota;
-    
-    // 当前使用量
-    private final AtomicInteger dailyRequests = new AtomicInteger(0);
-    private final AtomicLong dailyTokens = new AtomicLong(0);
-    private final AtomicInteger activeAgents = new AtomicInteger(0);
-    private final AtomicLong storageUsage = new AtomicLong(0);
+
+    // S2-1: 配额存储抽象（本地内存或 Redis）
+    private final QuotaStore store;
     
     private volatile LocalDate currentDate = LocalDate.now();
     
@@ -50,13 +47,18 @@ public class TenantQuotaManager {
     private static final String HISTORY_DIR = "history";
     
     public TenantQuotaManager(Path tenantDir, TenantQuota quota) {
+        this(tenantDir, quota, QuotaStoreFactory.createLocal());
+    }
+
+    public TenantQuotaManager(Path tenantDir, TenantQuota quota, QuotaStore store) {
         this.quotaDir = tenantDir.resolve("state");
         this.quota = quota;
+        this.store = store;
         
         try {
             Files.createDirectories(quotaDir);
             Files.createDirectories(quotaDir.resolve(HISTORY_DIR));
-            loadUsage();
+            store.loadUsage();
         } catch (IOException e) {
             logger.error("Failed to create quota directory", e);
         }
@@ -72,23 +74,23 @@ public class TenantQuotaManager {
     public void checkRequestQuota() {
         checkAndResetDailyQuota();
         
-        if (dailyRequests.incrementAndGet() > quota.getMaxDailyRequests()) {
-            dailyRequests.decrementAndGet();
+        if (store.incrementAndGetDailyRequests() > quota.getMaxDailyRequests()) {
+            store.decrementDailyRequests();
             throw new QuotaExceededException("Daily request quota exceeded");
         }
         // 持久化
-        saveUsageAsync();
+        store.saveUsage();
     }
     
     public void checkTokenQuota(long tokens) {
         checkAndResetDailyQuota();
         
-        if (dailyTokens.addAndGet(tokens) > quota.getMaxDailyTokens()) {
-            dailyTokens.addAndGet(-tokens);
+        if (store.addAndGetDailyTokens(tokens) > quota.getMaxDailyTokens()) {
+            store.subtractDailyTokens(tokens);
             throw new QuotaExceededException("Daily token quota exceeded");
         }
         // 持久化
-        saveUsageAsync();
+        store.saveUsage();
     }
     
     public void checkConcurrentAgents(int count) {
@@ -98,8 +100,8 @@ public class TenantQuotaManager {
     }
     
     public void checkStorageQuota(long bytes) {
-        if (storageUsage.addAndGet(bytes) > quota.getMaxStorageBytes()) {
-            storageUsage.addAndGet(-bytes);
+        if (store.addAndGetStorageUsage(bytes) > quota.getMaxStorageBytes()) {
+            store.subtractStorageUsage(bytes);
             throw new QuotaExceededException("Storage quota exceeded");
         }
     }
@@ -117,23 +119,23 @@ public class TenantQuotaManager {
     // ============ 记录方法 ============
     
     public void recordAgentCreated() {
-        activeAgents.incrementAndGet();
-        saveUsageAsync();
+        store.incrementActiveAgents();
+        store.saveUsage();
     }
     
     public void recordAgentDestroyed() {
-        activeAgents.decrementAndGet();
-        saveUsageAsync();
+        store.decrementActiveAgents();
+        store.saveUsage();
     }
     
     public void recordStorageUsed(long bytes) {
-        storageUsage.addAndGet(bytes);
-        saveUsageAsync();
+        store.addAndGetStorageUsage(bytes);
+        store.saveUsage();
     }
     
     public void recordStorageFreed(long bytes) {
-        storageUsage.addAndGet(-bytes);
-        saveUsageAsync();
+        store.subtractStorageUsage(bytes);
+        store.saveUsage();
     }
     
     public TenantQuota getQuota() {
@@ -147,13 +149,13 @@ public class TenantQuotaManager {
     }
     
     public long getStorageUsage() {
-        return storageUsage.get();
+        return store.getStorageUsage();
     }
     
     public void checkToolCallQuota() {
         checkAndResetDailyQuota();
         
-        int currentCalls = dailyRequests.get();
+        long currentCalls = store.getDailyRequests();
         if (currentCalls >= quota.getMaxToolCallsPerSession()) {
             throw new QuotaExceededException("Tool call quota exceeded for this session");
         }
@@ -179,13 +181,13 @@ public class TenantQuotaManager {
     
     public QuotaUsage getUsage() {
         return new QuotaUsage(
-            dailyRequests.get(),
+            (int) store.getDailyRequests(),
             quota.getMaxDailyRequests(),
-            dailyTokens.get(),
+            store.getDailyTokens(),
             quota.getMaxDailyTokens(),
-            activeAgents.get(),
+            store.getActiveAgents(),
             quota.getMaxConcurrentAgents(),
-            storageUsage.get(),
+            store.getStorageUsage(),
             quota.getMaxStorageBytes()
         );
     }
@@ -211,22 +213,27 @@ public class TenantQuotaManager {
             LocalDate today = LocalDate.now();
             
             if (lastDate.equals(today)) {
-                // 同一天，恢复使用量
-                dailyRequests.set(snapshot.dailyRequests());
-                dailyTokens.set(snapshot.dailyTokens());
-                activeAgents.set(snapshot.activeAgents());
-                storageUsage.set(snapshot.storageUsage());
+                // 同一天，恢复使用量到 store
+                if (store instanceof LocalQuotaStore local) {
+                    local.loadFromSnapshot(
+                        snapshot.dailyRequests(),
+                        snapshot.dailyTokens(),
+                        snapshot.activeAgents(),
+                        snapshot.storageUsage()
+                    );
+                }
                 currentDate = lastDate;
                 
                 logger.info("Loaded today's usage: requests={}, tokens={}", 
-                    dailyRequests.get(), dailyTokens.get());
+                    store.getDailyRequests(), store.getDailyTokens());
             } else {
                 // 新的一天，保存昨天的使用量到历史，然后重置
                 saveToHistory(lastDate, snapshot);
                 
-                // 重置使用量
-                dailyRequests.set(0);
-                dailyTokens.set(0);
+                // 重置
+                if (store instanceof LocalQuotaStore local) {
+                    local.resetDaily();
+                }
                 currentDate = today;
                 
                 logger.info("New day detected, reset quota usage");
@@ -243,13 +250,17 @@ public class TenantQuotaManager {
     public void saveUsage() {
         QuotaUsageSnapshot snapshot = new QuotaUsageSnapshot(
             LocalDate.now(),
-            dailyRequests.get(),
-            dailyTokens.get(),
-            activeAgents.get(),
-            storageUsage.get(),
+            (int) store.getDailyRequests(),
+            store.getDailyTokens(),
+            store.getActiveAgents(),
+            store.getStorageUsage(),
             System.currentTimeMillis()
         );
         
+        // S2-1: 让 store 也保存（Redis store 实时写入，Local store no-op）
+        store.saveUsage();
+        
+        // 文件持久化（兼容单实例模式的历史数据）
         try {
             String json = mapper.writeValueAsString(snapshot);
             Path usageFile = quotaDir.resolve(USAGE_FILE);
@@ -344,17 +355,16 @@ public class TenantQuotaManager {
             // 保存昨天使用量到历史
             QuotaUsageSnapshot yesterday = new QuotaUsageSnapshot(
                 currentDate,
-                dailyRequests.get(),
-                dailyTokens.get(),
-                activeAgents.get(),
-                storageUsage.get(),
+                (int) store.getDailyRequests(),
+                store.getDailyTokens(),
+                store.getActiveAgents(),
+                store.getStorageUsage(),
                 System.currentTimeMillis()
             );
             saveToHistory(currentDate, yesterday);
             
-            // 重置
-            dailyRequests.set(0);
-            dailyTokens.set(0);
+            // 重置（store 自己处理重置逻辑）
+            store.checkAndResetDaily();
             currentDate = today;
             
             logger.info("Daily quota reset for new day: {}", today);

@@ -505,5 +505,15 @@ public class SkillManager {
         public int usageCount = 0;
         public String path;
         public String source;
+
+        // S5-1: 来源追溯 + 生命周期管理
+        /** Skill 来源（USER / AGENT / IMPORT / BUNDLED） */
+        public SkillProvenance provenance = SkillProvenance.USER;
+        /** 最近使用时间（用于 stale/archived 判断） */
+        public Instant lastUsedAt;
+        /** 是否被 pin（pinned skill 跳过所有生命周期转换） */
+        public boolean pinned = false;
+        /** 生命周期状态（active / stale / archived） */
+        public SkillLifecycleStatus lifecycleStatus = SkillLifecycleStatus.ACTIVE;
     }
 }

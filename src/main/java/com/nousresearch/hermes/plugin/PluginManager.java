@@ -189,13 +189,26 @@ public class PluginManager implements PluginManagerBackend {
         String key = manifest.getKey() != null && !manifest.getKey().isEmpty()
                 ? manifest.getKey() : manifest.getName();
         LoadedPlugin loaded = new LoadedPlugin(manifest);
-        logger.debug("Loading plugin '{}' (source={}, kind={}, path={})",
-                key, manifest.getSource(), manifest.getKind(), manifest.getPath());
+        
+        // S1-5: 确定 allowToolOverride
+        // Bundled 插件自动信任；其他插件需要 config 显式授权
+        if (manifest.getSource() == Source.BUNDLED) {
+            loaded.setAllowToolOverride(true);
+        } else {
+            loaded.setAllowToolOverride(isToolOverrideAllowed(key));
+        }
+        
+        logger.debug("Loading plugin '{}' (source={}, kind={}, path={}, allowToolOverride={})",
+                key, manifest.getSource(), manifest.getKind(), manifest.getPath(),
+                loaded.isAllowToolOverride());
 
         try {
             Plugin plugin = instantiatePlugin(manifest);
             PluginContextImpl ctx = new PluginContextImpl(manifest, this);
+            // S1-5: 设置当前加载的插件 key，供 ToolRegistryBridge consent 检查用
+            currentLoadingPluginKey = key;
             plugin.register(ctx);
+            currentLoadingPluginKey = null;
             loaded.setEnabled(true);
             loaded.setToolsRegistered(new ArrayList<>(pluginToolNames));
             loaded.setHooksRegistered(pluginHookTypes.getOrDefault(key, List.of()).stream()
@@ -395,6 +408,7 @@ public class PluginManager implements PluginManagerBackend {
 
     @Override
     public ToolRegistryBridge getToolRegistry() {
+        // S1-5: 捕获当前插件 key 用于 consent 检查
         return new ToolRegistryBridge() {
             @Override
             @SuppressWarnings("unchecked")
@@ -403,6 +417,23 @@ public class PluginManager implements PluginManagerBackend {
                                  String description, String emoji, boolean override) {
                 com.nousresearch.hermes.tools.ToolRegistry registry =
                         com.nousresearch.hermes.tools.ToolRegistry.getInstance();
+                
+                // S1-5: 如果是 override 且 tool 已存在，检查 consent
+                if (override && registry.getSchema(name) != null) {
+                    String currentPluginKey = currentLoadingPluginKey;
+                    LoadedPlugin currentPlugin = currentPluginKey != null ? plugins.get(currentPluginKey) : null;
+                    boolean allowed = currentPlugin != null && currentPlugin.isAllowToolOverride();
+                    
+                    if (!allowed) {
+                        logger.warn(
+                            "Plugin '{}' attempted to override built-in tool '{}' but allow_tool_override is not set; skipping. " +
+                            "To allow, set plugins.entries.{}.allow_tool_override=true in config or use --allow-tool-override flag.",
+                            currentPluginKey, name, currentPluginKey);
+                        return;
+                    }
+                    logger.info("Plugin '{}' overriding built-in tool '{}' (consent granted)", currentPluginKey, name);
+                }
+                
                 if (!override && registry.getSchema(name) != null) {
                     logger.warn("Tool '{}' already registered and override=false; skipping", name);
                     return;
@@ -422,6 +453,155 @@ public class PluginManager implements PluginManagerBackend {
                 logger.debug("Tool registered: {} (toolset={}, override={})", name, toolset, override);
             }
         };
+    }
+
+    /**
+     * S1-5: 检查插件是否被授权覆盖内置 tool。
+     *
+     * <p>检查顺序：</p>
+     * <ol>
+     *   <li>Bundled 插件 → 自动允许（信任列表）</li>
+     *   <li>Config: {@code plugins.entries.<key>.allow_tool_override: true}</li>
+     *   <li>否则 → 拒绝</li>
+     * </ol>
+     *
+     * @param pluginKey 插件 key
+     * @return true 如果允许覆盖
+     */
+    public boolean isToolOverrideAllowed(String pluginKey) {
+        if (pluginKey == null || pluginKey.isEmpty()) {
+            return false;
+        }
+
+        // Bundled plugins are trusted
+        LoadedPlugin plugin = plugins.get(pluginKey);
+        if (plugin != null && plugin.getManifest().getSource() == Source.BUNDLED) {
+            return true;
+        }
+
+        // Check config: plugins.entries.<key>.allow_tool_override
+        try {
+            Object pluginsCfg = config.getConfigValue("plugins");
+            if (pluginsCfg instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> pluginsMap = (Map<String, Object>) pluginsCfg;
+                Object entries = pluginsMap.get("entries");
+                if (entries instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> entriesMap = (Map<String, Object>) entries;
+                    Object entry = entriesMap.get(pluginKey);
+                    if (entry instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> entryMap = (Map<String, Object>) entry;
+                        Object allow = entryMap.get("allow_tool_override");
+                        if (Boolean.TRUE.equals(allow)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return false;
+    }
+
+    /** S1-5: 当前正在加载的插件 key（用于 ToolRegistryBridge consent 检查） */
+    private volatile String currentLoadingPluginKey;
+
+    /**
+     * S1-5: 启用插件，支持 tool_override consent 提示。
+     *
+     * <p>此方法供 CLI（{@code hermes plugins enable <name>}）和 Portal 调用。
+     * 启用时会检测插件是否尝试覆盖内置 tool，如果是则根据参数决定是否允许。</p>
+     *
+     * @param pluginKey 插件 key
+     * @param allowToolOverride 是否允许覆盖内置 tool（对应 CLI --allow-tool-override / --no-allow-tool-override）
+     * @param interactive 是否交互模式（true=CLI 提示，false=非交互直接按 allowToolOverride 决定）
+     * @return 启用结果
+     */
+    public EnableResult enablePlugin(String pluginKey, boolean allowToolOverride, boolean interactive) {
+        LoadedPlugin plugin = plugins.get(pluginKey);
+        if (plugin == null) {
+            return EnableResult.notFound(pluginKey);
+        }
+
+        // Bundled 插件跳过 consent（信任列表）
+        if (plugin.getManifest().getSource() == Source.BUNDLED) {
+            plugin.setAllowToolOverride(true);
+            plugin.setEnabled(true);
+            return EnableResult.ok(pluginKey, "Bundled plugin, auto-allowed");
+        }
+
+        // 非交互模式：直接按 flag 决定
+        if (!interactive) {
+            plugin.setAllowToolOverride(allowToolOverride);
+            plugin.setEnabled(true);
+            return EnableResult.ok(pluginKey, allowToolOverride ? "Enabled with tool override" : "Enabled without tool override");
+        }
+
+        // 交互模式：如果插件提供了 tools，提示用户
+        if (!plugin.getManifest().getProvidesTools().isEmpty()) {
+            // 检查是否有冲突
+            boolean hasConflict = checkToolConflicts(pluginKey, plugin);
+            if (hasConflict) {
+                // CLI 交互提示（通过 System.in 读取）
+                boolean userConsent = promptToolOverrideConsent(pluginKey, plugin);
+                plugin.setAllowToolOverride(userConsent);
+                plugin.setEnabled(true);
+                return EnableResult.ok(pluginKey, userConsent ? "Enabled with tool override (user consent)" : "Enabled without tool override (user denied)");
+            }
+        }
+
+        plugin.setAllowToolOverride(allowToolOverride);
+        plugin.setEnabled(true);
+        return EnableResult.ok(pluginKey, "Enabled");
+    }
+
+    /**
+     * S1-5: 检查插件提供的 tools 是否与已注册的内置 tool 冲突。
+     */
+    private boolean checkToolConflicts(String pluginKey, LoadedPlugin plugin) {
+        com.nousresearch.hermes.tools.ToolRegistry registry =
+                com.nousresearch.hermes.tools.ToolRegistry.getInstance();
+        for (String toolName : plugin.getManifest().getProvidesTools()) {
+            if (registry.getSchema(toolName) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * S1-5: CLI 交互提示，询问用户是否允许 tool override。
+     * 默认 deny（安全优先）。
+     */
+    private boolean promptToolOverrideConsent(String pluginKey, LoadedPlugin plugin) {
+        System.out.println("\n╔════════════════════════════════════════════════════════════╗");
+        System.out.println("║  TOOL OVERRIDE CONSENT REQUIRED                            ║");
+        System.out.println("╠════════════════════════════════════════════════════════════╣");
+        System.out.println("║  Plugin: " + pluginKey);
+        System.out.println("║  This plugin attempts to override built-in tool(s):");
+        for (String tool : plugin.getManifest().getProvidesTools()) {
+            System.out.println("║    - " + tool);
+        }
+        System.out.println("║");
+        System.out.println("║  Allowing this could change agent behavior.");
+        System.out.println("║  [y] yes  - Allow tool override");
+        System.out.println("║  [n] no   - Deny tool override (default)");
+        System.out.println("╚════════════════════════════════════════════════════════════╝");
+        System.out.print("Your choice (default: n): ");
+
+        try {
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(System.in));
+            String input = reader.readLine();
+            if (input == null) return false;
+            String choice = input.trim().toLowerCase();
+            return choice.equals("y") || choice.equals("yes");
+        } catch (Exception e) {
+            logger.error("Error reading consent input: {}", e.getMessage());
+            return false;
+        }
     }
 
     @Override
@@ -546,5 +726,36 @@ public class PluginManager implements PluginManagerBackend {
 
     public Map<String, Map<String, Object>> getAuxiliaryTasks() {
         return Map.copyOf(auxTasks);
+    }
+
+    // ------------------------------------------------------------------
+    // S1-5: EnableResult
+    // ------------------------------------------------------------------
+
+    /**
+     * S1-5: 启用插件的结果。
+     */
+    public static class EnableResult {
+        private final String pluginKey;
+        private final boolean success;
+        private final String message;
+
+        private EnableResult(String pluginKey, boolean success, String message) {
+            this.pluginKey = pluginKey;
+            this.success = success;
+            this.message = message;
+        }
+
+        public static EnableResult ok(String key, String msg) {
+            return new EnableResult(key, true, msg);
+        }
+
+        public static EnableResult notFound(String key) {
+            return new EnableResult(key, false, "Plugin not found: " + key);
+        }
+
+        public String getPluginKey() { return pluginKey; }
+        public boolean isSuccess() { return success; }
+        public String getMessage() { return message; }
     }
 }

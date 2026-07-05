@@ -887,6 +887,46 @@ public class DashboardServer {
         app.post("/api/org/control/intents/{tenantId}/{runId}/reroute", orgControlCenterHandler::rerouteIntent);
         app.post("/api/org/control/agents/{tenantId}/{agentId}/override", orgControlCenterHandler::agentOverride);
         app.get("/api/org/control/traces", orgControlCenterHandler::traces);
+        // S3-3: 单条 trace 详情 endpoint（全链路可回放）
+        app.get("/api/traces/{traceId}", ctx -> {
+            String traceId = ctx.pathParam("traceId");
+            // 遍历所有租户查找 trace
+            for (var tenantEntry : tenantManager.getAllTenants().entrySet()) {
+                var opt = tenantEntry.getValue().getObservability().getTrace(traceId);
+                if (opt.isPresent()) {
+                    var trace = opt.get();
+                    java.util.Map<String, Object> resp = new java.util.LinkedHashMap<>();
+                    resp.put("ok", true);
+                    resp.put("traceId", trace.getTraceId());
+                    resp.put("agentId", trace.getAgentId());
+                    resp.put("sessionId", trace.getSessionId());
+                    resp.put("task", trace.getTaskDescription() != null ? trace.getTaskDescription() : "");
+                    resp.put("status", trace.getStatus() != null ? trace.getStatus().toString() : "UNKNOWN");
+                    resp.put("startTime", trace.getStartTime() != null ? trace.getStartTime().toString() : "");
+                    resp.put("endTime", trace.getEndTime() != null ? trace.getEndTime().toString() : "");
+                    resp.put("totalTokens", trace.getTotalTokens());
+                    resp.put("estimatedCost", trace.getEstimatedCost());
+                    resp.put("errorCount", trace.getErrorCount());
+                    resp.put("timeline", trace.toTimeline());
+                    resp.put("steps", trace.getSteps() != null
+                        ? trace.getSteps().stream().map(s -> {
+                            java.util.Map<String, Object> stepMap = new java.util.LinkedHashMap<>();
+                            stepMap.put("type", s.type() != null ? s.type().toString() : "UNKNOWN");
+                            stepMap.put("content", s.content() != null ? s.content() : "");
+                            stepMap.put("tokens", s.tokens());
+                            stepMap.put("durationMs", s.durationMs());
+                            stepMap.put("toolUsed", s.toolName() != null ? s.toolName() : "");
+                            stepMap.put("confidence", s.confidence());
+                            return stepMap;
+                        }).toList()
+                        : java.util.List.of()
+                    );
+                    ctx.status(200).json(resp);
+                    return;
+                }
+            }
+            ctx.status(404).json(java.util.Map.of("ok", false, "error", "Trace not found: " + traceId));
+        });
         app.get("/api/org/control/evolution", orgControlCenterHandler::evolution);
         app.get("/api/org/control/anomalies", orgControlCenterHandler::anomalies);
         app.get("/api/org/control/audit", orgControlCenterHandler::audit);

@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 /**
  * JSON 格式的会话序列化器
@@ -81,7 +82,9 @@ public class JsonSessionSerializer implements SessionSerializer {
         
         try {
             String json = new String(bytes, StandardCharsets.UTF_8);
-            return objectMapper.readValue(json, SessionData.class);
+            SessionData data = objectMapper.readValue(json, SessionData.class);
+            // S1-2: 反序列化后 sanitize，拒绝加载 api_key 等敏感字段
+            return sanitizeSessionData(data);
             
         } catch (IOException e) {
             logger.error("Failed to deserialize session: {}", e.getMessage());
@@ -132,5 +135,105 @@ public class JsonSessionSerializer implements SessionSerializer {
      */
     public static SessionSerializer prettyPrinted() {
         return new JsonSessionSerializer(true, false);
+    }
+
+    // ============ S1-2: Model Override 安全存取 ============
+
+    /**
+     * S1-2: 敏感字段黑名单 — 绝不允许从持久化数据中加载。
+     */
+    private static final java.util.Set<String> FORBIDDEN_OVERRIDE_KEYS = java.util.Set.of(
+        "api_key", "apikey", "api-key",
+        "secret", "password", "token",
+        "authorization", "auth_token"
+    );
+
+    /**
+     * S1-2: 反序列化后对 SessionData 做 sanitize。
+     *
+     * <p>检查 metadata.model_override，如果包含 api_key 等敏感字段，
+     * 移除这些字段后重建 SessionData。如果 model_override 本身为空则跳过。</p>
+     *
+     * @param data 原始反序列化的 SessionData
+     * @return sanitize 后的 SessionData
+     */
+    SessionData sanitizeSessionData(SessionData data) {
+        if (data == null) return null;
+        if (data.metadata() == null || data.metadata().isEmpty()) return data;
+
+        Object overrideRaw = data.metadata().get("model_override");
+        if (!(overrideRaw instanceof Map<?, ?>)) return data;
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> overrideMap = new java.util.LinkedHashMap<>(
+            (Map<String, Object>) overrideRaw);
+
+        // 移除敏感字段
+        boolean hadForbidden = false;
+        for (String key : FORBIDDEN_OVERRIDE_KEYS) {
+            if (overrideMap.containsKey(key)) {
+                logger.warn("S1-2: Stripped forbidden field '{}' from model_override in session {}",
+                    key, data.sessionId());
+                overrideMap.remove(key);
+                hadForbidden = true;
+            }
+        }
+
+        if (!hadForbidden) return data; // 无需重建
+
+        // 重建 metadata
+        Map<String, Object> newMetadata = new java.util.LinkedHashMap<>(data.metadata());
+        newMetadata.put("model_override", overrideMap);
+
+        return new SessionData(
+            data.sessionId(), data.tenantId(), data.nodeId(),
+            data.createdAt(), data.lastActivity(), newMetadata,
+            data.active(), data.messages()
+        );
+    }
+
+    /**
+     * S1-2: 从 SessionData 提取 ModelOverride（已 sanitize）。
+     */
+    public static ModelOverride getModelOverride(SessionData data) {
+        if (data == null || data.metadata() == null) return null;
+        Object raw = data.metadata().get("model_override");
+        if (!(raw instanceof Map<?, ?> map)) return null;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> overrideMap = (Map<String, Object>) map;
+        // 再次 sanitize（防御性）
+        for (String key : FORBIDDEN_OVERRIDE_KEYS) {
+            overrideMap.remove(key);
+        }
+        return ModelOverride.fromMap(overrideMap);
+    }
+
+    /**
+     * S1-2: 将 ModelOverride 写入 SessionData.metadata。
+     * 返回新的 SessionData（record 不可变）。
+     */
+    public static SessionData setModelOverride(SessionData data, ModelOverride override) {
+        if (data == null) return null;
+        Map<String, Object> newMetadata = new java.util.LinkedHashMap<>(
+            data.metadata() != null ? data.metadata() : Map.of());
+
+        if (override != null) {
+            newMetadata.put("model_override", override.toMap());
+        } else {
+            newMetadata.remove("model_override");
+        }
+
+        return new SessionData(
+            data.sessionId(), data.tenantId(), data.nodeId(),
+            data.createdAt(), data.lastActivity(), newMetadata,
+            data.active(), data.messages()
+        );
+    }
+
+    /**
+     * S1-2: 清除 SessionData 中的 ModelOverride（对应 /new 重置）。
+     */
+    public static SessionData clearModelOverride(SessionData data) {
+        return setModelOverride(data, null);
     }
 }

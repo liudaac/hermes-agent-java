@@ -20,8 +20,23 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - 速率限制（每秒请求数）
  * - 请求/响应大小限制
  * - 完整的审计日志
+ * - SSRF 防护：手动重定向跟随，每个跳点都过 isUrlAllowed()
+ *
+ * <p>S1-4b 补丁（对齐 Python 原版 commit 500c2b1e4）：
+ * 不再使用 HttpClient.Redirect.NORMAL 自动跟随重定向，
+ * 因为自动跟随时 isUrlAllowed() 只检查初始 URL，
+ * 攻击者可用白名单 URL 发起请求 + 302 到内网地址绕过白名单。
+ * 改为 Redirect.NEVER + 手动解析 Location 头 + urljoin 解析 + 逐跳安全检查。</p>
  */
 public class RestrictedHttpClient {
+
+    /** 最大重定向跳数（对齐 Python httpx 默认值） */
+    private static final int MAX_REDIRECTS = 5;
+
+    /** 重定向状态码 */
+    private static final java.util.Set<Integer> REDIRECT_STATUS_CODES = java.util.Set.of(
+        301, 302, 303, 307, 308
+    );
 
     private final String tenantId;
     private final NetworkPolicy policy;
@@ -40,9 +55,10 @@ public class RestrictedHttpClient {
         this.policy = policy != null ? policy : NetworkPolicy.defaultPolicy();
         this.rateLimiter = new RateLimiter(this.policy.getMaxRequestsPerSecond());
         
+        // S1-4b: 始终用 NEVER，手动处理重定向以确保每个跳点都过安全检查
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(this.policy.getConnectTimeoutSeconds()))
-            .followRedirects(this.policy.isFollowRedirects() ? HttpClient.Redirect.NORMAL : HttpClient.Redirect.NEVER)
+            .followRedirects(HttpClient.Redirect.NEVER)
             .build();
     }
 
@@ -131,37 +147,93 @@ public class RestrictedHttpClient {
 
     /**
      * 执行 HTTP 请求（核心方法）
+     * 
+     * S1-4b: 手动处理重定向，每个跳点都过 isUrlAllowed() 安全检查。
      */
     private HttpResponse<String> execute(HttpRequest request) throws NetworkSandboxException {
-        String url = request.uri().toString();
+        URI currentUri = request.uri();
+        String method = request.method();
+        int redirectCount = 0;
 
-        // 1. 检查 URL 是否允许
-        if (!isUrlAllowed(url)) {
-            blockedCount.incrementAndGet();
-            logBlockedRequest(url, "URL not in whitelist");
-            throw new NetworkSandboxException("URL not allowed: " + url);
-        }
+        while (true) {
+            String url = currentUri.toString();
 
-        // 2. 检查速率限制
-        if (!rateLimiter.tryAcquire()) {
-            blockedCount.incrementAndGet();
-            logBlockedRequest(url, "Rate limit exceeded");
-            throw new NetworkSandboxException("Rate limit exceeded for tenant: " + tenantId);
-        }
+            // 1. 检查 URL 是否允许（每个跳点都检查）
+            if (!isUrlAllowed(url)) {
+                blockedCount.incrementAndGet();
+                logBlockedRequest(url, "URL not in whitelist");
+                throw new NetworkSandboxException("URL not allowed: " + url);
+            }
 
-        // 3. 更新统计
-        requestCount.incrementAndGet();
-        String host = request.uri().getHost();
-        hostRequestCount.computeIfAbsent(host, k -> new AtomicInteger(0)).incrementAndGet();
+            // 2. 检查速率限制
+            if (!rateLimiter.tryAcquire()) {
+                blockedCount.incrementAndGet();
+                logBlockedRequest(url, "Rate limit exceeded");
+                throw new NetworkSandboxException("Rate limit exceeded for tenant: " + tenantId);
+            }
 
-        // 4. 记录审计日志
-        logRequest(request);
+            // 3. 更新统计
+            requestCount.incrementAndGet();
+            String host = currentUri.getHost();
+            hostRequestCount.computeIfAbsent(host, k -> new AtomicInteger(0)).incrementAndGet();
 
-        // 5. 执行请求
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            // 4. 记录审计日志
+            logRequest(method, url);
 
-            // 6. 检查响应大小
+            // 5. 构建请求（重定向时可能需要改变 URI）
+            HttpRequest currentRequest = buildRequest(method, currentUri, request);
+
+            // 6. 执行请求
+            HttpResponse<String> response;
+            try {
+                response = httpClient.send(currentRequest, HttpResponse.BodyHandlers.ofString());
+            } catch (IOException e) {
+                throw new NetworkSandboxException("Network error: " + e.getMessage(), e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new NetworkSandboxException("Request interrupted", e);
+            }
+
+            // 7. S1-4b: 检查是否为重定向，手动处理
+            if (REDIRECT_STATUS_CODES.contains(response.statusCode()) && policy.isFollowRedirects()) {
+                if (redirectCount >= MAX_REDIRECTS) {
+                    blockedCount.incrementAndGet();
+                    logBlockedRequest(url, "Max redirects exceeded");
+                    throw new NetworkSandboxException("Max redirects (" + MAX_REDIRECTS + ") exceeded");
+                }
+
+                // 从 Location 头解析重定向目标（对齐 Python redirect_target_from_response）
+                String locationHeader = response.headers().firstValue("Location").orElse(null);
+                if (locationHeader == null || locationHeader.isBlank()) {
+                    // 有重定向状态码但没有 Location 头，直接返回响应
+                    logResponse(method, url, response);
+                    return response;
+                }
+
+                // 解析下一跳 URL（等价于 Python urljoin）
+                URI redirectUri = resolveRedirect(currentUri, locationHeader);
+
+                // 协议安全检查：只允许 http/https 重定向
+                String redirectScheme = redirectUri.getScheme();
+                if (redirectScheme == null || 
+                    (!redirectScheme.equalsIgnoreCase("http") && !redirectScheme.equalsIgnoreCase("https"))) {
+                    blockedCount.incrementAndGet();
+                    logBlockedRequest(redirectUri.toString(), "Redirect to non-HTTP protocol");
+                    throw new NetworkSandboxException(
+                        "Redirect to non-HTTP protocol blocked: " + redirectUri);
+                }
+
+                // 303 See Other → 改为 GET（对齐 HTTP 规范）
+                if (response.statusCode() == 303) {
+                    method = "GET";
+                }
+
+                redirectCount++;
+                currentUri = redirectUri;
+                continue; // 跳回循环顶部，对新 URL 再过一遍安全检查
+            }
+
+            // 8. 检查响应大小
             String body = response.body();
             if (body != null && body.length() > policy.getMaxResponseBodySize()) {
                 throw new NetworkSandboxException(
@@ -169,17 +241,111 @@ public class RestrictedHttpClient {
                 );
             }
 
-            // 7. 记录响应
-            logResponse(request, response);
+            // 9. 记录响应
+            logResponse(method, url, response);
 
             return response;
-
-        } catch (IOException e) {
-            throw new NetworkSandboxException("Network error: " + e.getMessage(), e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new NetworkSandboxException("Request interrupted", e);
         }
+    }
+
+    /**
+     * 解析重定向目标 URI（等价于 Python urljoin）。
+     *
+     * <p>处理三种 Location 头格式：
+     * <ul>
+     *   <li>绝对 URL：{@code https://evil.com/path} → 直接用</li>
+     *   <li>协议相对：{@code //evil.com/path} → 继承原协议</li>
+     *   <li>相对路径：{@code /path} 或 {@code path} → 用 URI.resolve() 解析</li>
+     * </ul>
+     *
+     * @param baseUri 原始请求的 URI
+     * @param locationHeader Location 头的值
+     * @return 解析后的重定向目标 URI
+     */
+    static URI resolveRedirect(URI baseUri, String locationHeader) {
+        String location = locationHeader.trim();
+
+        // 协议相对 URL: //host/path → 继承原协议
+        if (location.startsWith("//")) {
+            String scheme = baseUri.getScheme();
+            return URI.create(scheme + ":" + location);
+        }
+
+        // 尝试直接解析为 URI（覆盖绝对 URL 和相对路径）
+        try {
+            URI locationUri = URI.create(location);
+
+            // 如果是绝对 URI（有 scheme），直接用
+            if (locationUri.getScheme() != null) {
+                return locationUri;
+            }
+
+            // 相对路径：用 resolve 解析
+            return baseUri.resolve(locationUri);
+        } catch (IllegalArgumentException e) {
+            // URI.create 解析失败，尝试用字符串拼接
+            String baseUrl = baseUri.toString();
+            // 去掉 query/fragment 部分
+            int qIdx = baseUrl.indexOf('?');
+            if (qIdx >= 0) baseUrl = baseUrl.substring(0, qIdx);
+            int fIdx = baseUrl.indexOf('#');
+            if (fIdx >= 0) baseUrl = baseUrl.substring(0, fIdx);
+
+            // 如果 Location 以 / 开头，替换路径
+            if (location.startsWith("/")) {
+                // 找到 host 部分的结束位置
+                int schemeEnd = baseUrl.indexOf("://");
+                if (schemeEnd >= 0) {
+                    int pathStart = baseUrl.indexOf('/', schemeEnd + 3);
+                    if (pathStart >= 0) {
+                        return URI.create(baseUrl.substring(0, pathStart) + location);
+                    } else {
+                        return URI.create(baseUrl + location);
+                    }
+                }
+            }
+
+            // 其他情况，直接 resolve
+            return baseUri.resolve(location);
+        }
+    }
+
+    /**
+     * 根据方法 + URI 构建请求（重定向时需要重建请求）
+     */
+    private HttpRequest buildRequest(String method, URI uri, HttpRequest originalRequest) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(uri)
+            .timeout(Duration.ofSeconds(policy.getRequestTimeoutSeconds()));
+
+        // 复制原始请求的 header（除了 Host，由 HttpClient 自动设置）
+        originalRequest.headers().map().forEach((key, values) -> {
+            if (!key.equalsIgnoreCase("Host")) {
+                for (String value : values) {
+                    builder.header(key, value);
+                }
+            }
+        });
+
+        switch (method) {
+            case "GET":
+                builder.GET();
+                break;
+            case "POST":
+                // POST 重定向时通常不发 body（除了 307/308），这里简化处理
+                builder.POST(HttpRequest.BodyPublishers.noBody());
+                break;
+            case "PUT":
+                builder.PUT(HttpRequest.BodyPublishers.noBody());
+                break;
+            case "DELETE":
+                builder.DELETE();
+                break;
+            default:
+                builder.GET();
+        }
+
+        return builder.build();
     }
 
     /**
@@ -220,12 +386,12 @@ public class RestrictedHttpClient {
     /**
      * 记录请求审计日志
      */
-    private void logRequest(HttpRequest request) {
+    private void logRequest(String method, String url) {
         if (context.getAuditLogger() != null) {
             context.getAuditLogger().logNetworkRequest(
                 tenantId,
-                request.method(),
-                request.uri().toString()
+                method,
+                url
             );
         }
     }
@@ -233,11 +399,11 @@ public class RestrictedHttpClient {
     /**
      * 记录响应审计日志
      */
-    private void logResponse(HttpRequest request, HttpResponse<String> response) {
+    private void logResponse(String method, String url, HttpResponse<String> response) {
         if (context.getAuditLogger() != null) {
             context.getAuditLogger().logNetworkResponse(
                 tenantId,
-                request.uri().toString(),
+                url,
                 response.statusCode()
             );
         }

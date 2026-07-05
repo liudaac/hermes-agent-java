@@ -16,6 +16,12 @@ public class LoadedPlugin {
     private List<String> toolsRegistered;
     private List<String> hooksRegistered;
     private List<String> commandsRegistered;
+    /**
+     * S1-5: Whether this plugin is allowed to override built-in tools.
+     * Set via plugins.entries.&lt;key&gt;.allow_tool_override in config,
+     * or via CLI --allow-tool-override flag, or auto-true for bundled plugins.
+     */
+    private boolean allowToolOverride;
 
     public LoadedPlugin(PluginManifest manifest) {
         this.manifest = manifest;
@@ -23,6 +29,7 @@ public class LoadedPlugin {
         this.toolsRegistered = Collections.emptyList();
         this.hooksRegistered = Collections.emptyList();
         this.commandsRegistered = Collections.emptyList();
+        this.allowToolOverride = false;
     }
 
     public LoadedPlugin(PluginManifest manifest, boolean enabled, String error) {
@@ -32,6 +39,7 @@ public class LoadedPlugin {
         this.toolsRegistered = Collections.emptyList();
         this.hooksRegistered = Collections.emptyList();
         this.commandsRegistered = Collections.emptyList();
+        this.allowToolOverride = false;
     }
 
     public PluginManifest getManifest() { return manifest; }
@@ -45,4 +53,6 @@ public class LoadedPlugin {
     public void setHooksRegistered(List<String> hooksRegistered) { this.hooksRegistered = hooksRegistered; }
     public List<String> getCommandsRegistered() { return commandsRegistered; }
     public void setCommandsRegistered(List<String> commandsRegistered) { this.commandsRegistered = commandsRegistered; }
+    public boolean isAllowToolOverride() { return allowToolOverride; }
+    public void setAllowToolOverride(boolean allowToolOverride) { this.allowToolOverride = allowToolOverride; }
 }

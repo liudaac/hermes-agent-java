@@ -26,12 +26,21 @@ public class ToolApprovalCoordinator {
     private final WorkspaceService workspaceService;
     private final BusinessApprovalService approvalService;
 
-    /** approvalId → ToolApprovalContext */
+    /** approvalId → ToolApprovalContext（本地，不可序列化的 agent 引用） */
     private final Map<String, ToolApprovalContext> pendingApprovals = new ConcurrentHashMap<>();
 
+    /** S2-1 #3: 分布式审批存储（跨实例路由） */
+    private final ApprovalStore approvalStore;
+
     public ToolApprovalCoordinator(WorkspaceService workspaceService, BusinessApprovalService approvalService) {
+        this(workspaceService, approvalService, new LocalApprovalStore());
+    }
+
+    public ToolApprovalCoordinator(WorkspaceService workspaceService, BusinessApprovalService approvalService,
+                                    ApprovalStore approvalStore) {
         this.workspaceService = workspaceService;
         this.approvalService = approvalService;
+        this.approvalStore = approvalStore;
     }
 
     /**
@@ -80,6 +89,16 @@ public class ToolApprovalCoordinator {
         );
         pendingApprovals.put(approval.getApprovalId(), ctx);
 
+        // S2-1 #3: 存储到分布式审批存储，让其他节点也能找到
+        approvalStore.storePending(approval.getApprovalId(), getLocalNodeId(),
+            "tool-approval", toolName);
+        approvalStore.subscribe(approval.getApprovalId(), (approved, reasonStr) -> {
+            // Pub/Sub 回调：收到审批结果时自动 resume
+            logger.info("Approval result received via store: id={}, approved={}",
+                approval.getApprovalId(), approved);
+            resumeToolApproval(approval.getApprovalId(), approved, reasonStr);
+        });
+
         approval.addTimelineEntry("CREATED", "agent",
             "Agent " + agentId + " 申请工具调用审批: " + toolName,
             Map.of("toolName", toolName, "matchedRule", matchedRule != null ? matchedRule : ""));
@@ -94,14 +113,36 @@ public class ToolApprovalCoordinator {
     /**
      * Resume agent execution after a tool approval decision.
      *
+     * <p>S2-1 #3: 支持跨实例。如果审批在本节点发起 → 直接 resume。
+     * 如果在远程节点发起 → 通过 ApprovalStore 通知远程节点。</p>
+     *
      * @return result from agent.resumeToolApproval(), or null if context not found
      */
     public String resumeToolApproval(String approvalId, boolean approved, String reason) {
-        ToolApprovalContext ctx = pendingApprovals.remove(approvalId);
-        if (ctx == null) {
-            logger.warn("Tool approval context not found for {}", approvalId);
-            return null;
+        // 先检查本地
+        ToolApprovalContext ctx = pendingApprovals.get(approvalId);
+        if (ctx != null) {
+            // 本地审批：直接 resume
+            return doResume(approvalId, ctx, approved, reason);
         }
+
+        // S2-1 #3: 本地没有 → 检查分布式存储
+        String targetNode = approvalStore.resolveNode(approvalId);
+        if (targetNode != null) {
+            // 远程审批：通过 Pub/Sub 通知目标节点
+            logger.info("Approval {} is on remote node {}, publishing result", approvalId, targetNode);
+            approvalStore.publishResult(approvalId, approved, reason);
+            return "[Approval forwarded to node " + targetNode + "]";
+        }
+
+        logger.warn("Tool approval context not found for {} (local or remote)", approvalId);
+        return null;
+    }
+
+    private String doResume(String approvalId, ToolApprovalContext ctx, boolean approved, String reason) {
+        pendingApprovals.remove(approvalId);
+        approvalStore.unsubscribe(approvalId);
+        approvalStore.complete(approvalId);
 
         try {
             String result = ctx.agent.resumeToolApproval(ctx.toolCallId, approved, reason);
@@ -109,7 +150,6 @@ public class ToolApprovalCoordinator {
                 approvalId, approved ? "approved" : "rejected", ctx.agentId);
             return result;
         } catch (TenantAwareAIAgent.ToolApprovalRequiredException nextApproval) {
-            // Another tool needed approval after resume — already tracked via callback
             logger.info("Tool approval {} resumed but next tool '{}' needs approval",
                 approvalId, nextApproval.getToolName());
             return "[Next tool approval pending: " + nextApproval.getToolName() + "]";
@@ -117,6 +157,13 @@ public class ToolApprovalCoordinator {
             logger.error("Failed to resume tool approval {}: {}", approvalId, e.getMessage(), e);
             return "[Resume failed: " + e.getMessage() + "]";
         }
+    }
+
+    /**
+     * S2-1 #3: 获取本地节点 ID（简化实现，生产环境应从配置注入）。
+     */
+    private String getLocalNodeId() {
+        return System.getProperty("hermes.node.id", "local");
     }
 
     /** Get context for a pending tool approval (for diagnostic purposes). */
