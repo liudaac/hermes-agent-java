@@ -10,6 +10,8 @@ import {
 import { BUILTIN_THEMES, defaultTheme } from "./presets";
 import type { DashboardTheme, ThemeLayer, ThemePalette } from "./types";
 import { api } from "@/lib/api";
+import { SPACE_THEMES, themeForSpace } from "./space-themes";
+import type { SpaceName } from "@/lib/routing/spaces";
 
 /** LocalStorage key — pre-applied before the React tree mounts to avoid
  *  a visible flash of the default palette on theme-overridden installs. */
@@ -48,6 +50,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return "default";
     return window.localStorage.getItem(STORAGE_KEY) ?? "default";
   });
+  const [userOverride, setUserOverride] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    // userOverride is the theme the user explicitly picked via ThemeSwitcher.
+    // If unset, the active space's default theme is used.
+    return window.localStorage.getItem("hermes-dashboard-theme-override");
+  });
   const [availableThemes, setAvailableThemes] = useState<
     Array<{ description: string; label: string; name: string }>
   >(() =>
@@ -85,7 +93,34 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const next = BUILTIN_THEMES[name] ? name : "default";
     setThemeName(next);
     window.localStorage.setItem(STORAGE_KEY, next);
+    // Mark this as a user override — the active space will no longer
+    // auto-switch the theme.
+    setUserOverride(next);
+    window.localStorage.setItem("hermes-dashboard-theme-override", next);
     api.setTheme(next).catch(() => {});
+  }, []);
+
+  /**
+   * Switch the theme to the default for a given space, but only if the
+   * user hasn't explicitly overridden the theme. Called from
+   * SpaceThemeBridge whenever the user enters a new space.
+   */
+  const syncSpaceDefault = useCallback(
+    (space: SpaceName) => {
+      if (userOverride) return; // user has an override; respect it
+      const targetName = SPACE_THEMES[space];
+      if (BUILTIN_THEMES[targetName] && targetName !== themeName) {
+        setThemeName(targetName);
+        window.localStorage.setItem(STORAGE_KEY, targetName);
+        api.setTheme(targetName).catch(() => {});
+      }
+    },
+    [userOverride, themeName],
+  );
+
+  const clearOverride = useCallback(() => {
+    setUserOverride(null);
+    window.localStorage.removeItem("hermes-dashboard-theme-override");
   }, []);
 
   const value = useMemo<ThemeContextValue>(
@@ -94,11 +129,31 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       themeName,
       availableThemes,
       setTheme,
+      syncSpaceDefault,
+      clearOverride,
+      hasUserOverride: !!userOverride,
     }),
-    [themeName, availableThemes, setTheme],
+    [themeName, availableThemes, setTheme, syncSpaceDefault, clearOverride, userOverride],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+/**
+ * Bridge component — call inside App to keep the active theme in sync
+ * with the active space. The user's explicit override (if any) wins.
+ */
+export function SpaceThemeBridge({ activeSpace }: { activeSpace: SpaceName }) {
+  const { syncSpaceDefault } = useTheme();
+  useEffect(() => {
+    syncSpaceDefault(activeSpace);
+  }, [activeSpace, syncSpaceDefault]);
+  return null;
+}
+
+/** Convenience — get the default theme for a space (without touching state). */
+export function useSpaceDefaultTheme(space: SpaceName): DashboardTheme {
+  return themeForSpace(space);
 }
 
 export function useTheme(): ThemeContextValue {
@@ -114,11 +169,17 @@ const ThemeContext = createContext<ThemeContextValue>({
     description: t.description,
   })),
   setTheme: () => {},
+  syncSpaceDefault: () => {},
+  clearOverride: () => {},
+  hasUserOverride: false,
 });
 
 interface ThemeContextValue {
   availableThemes: Array<{ description: string; label: string; name: string }>;
+  clearOverride: () => void;
+  hasUserOverride: boolean;
   setTheme: (name: string) => void;
+  syncSpaceDefault: (space: SpaceName) => void;
   theme: DashboardTheme;
   themeName: string;
 }
