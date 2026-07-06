@@ -29,9 +29,20 @@ public class LearningGraphRenderer {
     private static final double AGE_NEW_INK = 0.95;
     private static final double AGE_MID = 0.52;
 
-    // Glyphs
-    private static final String SKILL_GLYPH = "●";
-    private static final String MEMORY_GLYPH = "◆";
+    // Glyphs — with ASCII fallbacks for non-UTF-8 terminals
+    private static final String SKILL_GLYPH = isUtf8Terminal() ? "●" : "*";
+    private static final String MEMORY_GLYPH = isUtf8Terminal() ? "◆" : "+";
+    private static final String BAR_CHAR = isUtf8Terminal() ? "━" : "=";
+    private static final String SPARK_CHAR = isUtf8Terminal() ? "·" : ".";
+    private static final String STAR_CHAR = isUtf8Terminal() ? "✦" : "*";
+    private static final String PEAK_CHAR = isUtf8Terminal() ? "☄" : "^";
+
+    private static boolean isUtf8Terminal() {
+        String encoding = System.getenv("LANG");
+        if (encoding == null) encoding = System.getenv("LC_ALL");
+        if (encoding == null) encoding = System.getProperty("file.encoding");
+        return encoding != null && encoding.toLowerCase().contains("utf");
+    }
 
     // ── Public API ────────────────────────────────────────────────────────
 
@@ -83,14 +94,14 @@ public class LearningGraphRenderer {
 
             if (bucket.skills > 0) {
                 sb.append(SKILL_GLYPH);
-                sb.append("━".repeat(Math.max(0, skillLen - 1)));
+                sb.append(BAR_CHAR.repeat(Math.max(0, skillLen - 1)));
             }
             if (bucket.memories > 0) {
                 if (memoryLen == 1) {
                     sb.append(MEMORY_GLYPH);
                 } else {
                     sb.append(MEMORY_GLYPH);
-                    sb.append("━".repeat(Math.max(0, memoryLen - 2)));
+                    sb.append(BAR_CHAR.repeat(Math.max(0, memoryLen - 2)));
                     sb.append(MEMORY_GLYPH);
                 }
             }
@@ -105,7 +116,7 @@ public class LearningGraphRenderer {
             }
 
             if (bucket.total == maxTotal && maxTotal > 1) {
-                sb.append("  ☄ peak");
+                sb.append("  " + PEAK_CHAR + " peak");
             }
             sb.append("\n");
         }
@@ -235,9 +246,9 @@ public class LearningGraphRenderer {
         int last = 0;
         for (int p : points) {
             for (int x = Math.min(last, p); x <= Math.max(last, p); x++) {
-                if (x >= 0 && x < width && cells[x] == ' ') cells[x] = '·';
+                if (x >= 0 && x < width && cells[x] == ' ') cells[x] = SPARK_CHAR.charAt(0);
             }
-            if (p >= 0 && p < width) cells[p] = '✦';
+            if (p >= 0 && p < width) cells[p] = STAR_CHAR.charAt(0);
             last = p;
         }
 

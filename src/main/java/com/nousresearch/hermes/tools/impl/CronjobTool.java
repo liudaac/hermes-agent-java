@@ -17,13 +17,25 @@ public class CronjobTool {
     private static final Logger logger = LoggerFactory.getLogger(CronjobTool.class);
     private final ScheduledExecutorService scheduler;
     private final Map<String, ScheduledJob> jobs;
-    
+
+    /** Singleton instance — set when the tool is registered. */
+    private static volatile CronjobTool instance;
+
     public CronjobTool() {
         this.scheduler = Executors.newScheduledThreadPool(4);
         this.jobs = new ConcurrentHashMap<>();
     }
+
+    /**
+     * Get the singleton instance, or null if not yet registered.
+     * Used by CuratorJob to rewrite cron skill references without reflection.
+     */
+    public static CronjobTool getInstance() {
+        return instance;
+    }
     
     public void register(ToolRegistry registry) {
+        instance = this; // Set singleton for CuratorJob access
         registry.register(new ToolEntry.Builder()
             .name("cronjob_add")
             .toolset("cronjob")

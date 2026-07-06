@@ -105,7 +105,8 @@ public class HermesAgentV2 {
 
         // Register journey command
         com.nousresearch.hermes.skills.LearningGraphService graphService = new com.nousresearch.hermes.skills.LearningGraphService();
-        com.nousresearch.hermes.skills.JourneyCommandRegistrar.register(pluginManager, sm, graphService);
+        com.nousresearch.hermes.memory.MemoryManager journeyMemoryManager = new com.nousresearch.hermes.memory.MemoryManager();
+        com.nousresearch.hermes.skills.JourneyCommandRegistrar.register(pluginManager, sm, graphService, journeyMemoryManager);
         logger.info("Journey slash command registered (/journey)");
 
         if (tenantMode) {

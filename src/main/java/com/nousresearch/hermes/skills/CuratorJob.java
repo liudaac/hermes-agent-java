@@ -479,39 +479,21 @@ public class CuratorJob {
 
     /**
      * Best-effort: update a cron job in CronjobTool's in-memory store.
+     * Uses the static singleton — no reflection needed.
      */
     private boolean updateCronJobInMemory(String jobName, String newCommand) {
         try {
-            // Access the CronjobTool instance through reflection on ToolRegistry
-            // This is a pragmatic approach — the alternative is a full DI refactor
-            var toolRegistry = com.nousresearch.hermes.tools.ToolRegistry.getInstance();
-            // Try to find a CronjobTool instance that was registered
-            for (var field : toolRegistry.getClass().getDeclaredFields()) {
-                if (java.util.Collection.class.isAssignableFrom(field.getType())) {
-                    field.setAccessible(true);
-                    Object value = field.get(toolRegistry);
-                    if (value instanceof java.util.Collection<?> coll) {
-                        for (var item : coll) {
-                            // Check if item is a ToolEntry that wraps CronjobTool
-                            if (item != null) {
-                                for (var innerField : item.getClass().getDeclaredFields()) {
-                                    if (innerField.getType().getName().contains("CronjobTool")) {
-                                        innerField.setAccessible(true);
-                                        Object cronTool = innerField.get(item);
-                                        if (cronTool instanceof com.nousresearch.hermes.tools.impl.CronjobTool ct) {
-                                            return ct.updateJobCommand(jobName, newCommand);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            com.nousresearch.hermes.tools.impl.CronjobTool cronTool =
+                com.nousresearch.hermes.tools.impl.CronjobTool.getInstance();
+            if (cronTool == null) {
+                logger.debug("CronjobTool not registered — skipping in-memory cron rewrite");
+                return false;
             }
+            return cronTool.updateJobCommand(jobName, newCommand);
         } catch (Exception e) {
             logger.debug("Could not update in-memory cron job: {}", e.getMessage());
+            return false;
         }
-        return false;
     }
 
     // =========================================================================

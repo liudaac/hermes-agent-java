@@ -543,19 +543,22 @@ public class DashboardServer {
         // Learning Graph node mutations — inspect/delete/edit/pin
         app.get("/api/learning/node/{id}", ctx -> {
             var sm = new com.nousresearch.hermes.skills.SkillManager();
-            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            var mm = new com.nousresearch.hermes.memory.MemoryManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm, mm);
             String nodeId = ctx.pathParam("id");
             ctx.json(mutations.nodeDetail(nodeId));
         });
         app.delete("/api/learning/node/{id}", ctx -> {
             var sm = new com.nousresearch.hermes.skills.SkillManager();
-            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            var mm = new com.nousresearch.hermes.memory.MemoryManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm, mm);
             String nodeId = ctx.pathParam("id");
             ctx.json(mutations.deleteNode(nodeId));
         });
         app.put("/api/learning/node/{id}", ctx -> {
             var sm = new com.nousresearch.hermes.skills.SkillManager();
-            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            var mm = new com.nousresearch.hermes.memory.MemoryManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm, mm);
             String nodeId = ctx.pathParam("id");
             String content = ctx.body();
             ctx.json(mutations.editNode(nodeId, content));

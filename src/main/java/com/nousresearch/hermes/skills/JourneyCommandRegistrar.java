@@ -22,19 +22,27 @@ public class JourneyCommandRegistrar {
 
     private static SkillManager skillManager;
     private static LearningGraphService graphService;
+    private static com.nousresearch.hermes.memory.MemoryManager memoryManager;
 
     public static void register(PluginManager pluginManager, SkillManager sm,
                                   LearningGraphService graph) {
+        register(pluginManager, sm, graph, null);
+    }
+
+    public static void register(PluginManager pluginManager, SkillManager sm,
+                                  LearningGraphService graph,
+                                  com.nousresearch.hermes.memory.MemoryManager mm) {
         skillManager = sm;
         graphService = graph;
+        memoryManager = mm;
         pluginManager.trackSlashCommand(
             "journey",
             JourneyCommandRegistrar::handleJourney,
             "View your learning timeline — skills and memories mapped over time",
-            "[--json] [--limit N]",
+            "[--json] [--limit N] | delete <id> | edit <id> <content> | pin/unpin <id>",
             "hermes-core"
         );
-        logger.info("Registered /journey slash command");
+        logger.info("Registered /journey slash command" + (mm != null ? " (with memory support)" : ""));
     }
 
     private static Object handleJourney(String input) {
@@ -89,7 +97,7 @@ public class JourneyCommandRegistrar {
     }
 
     private static Object handleMutation(String action, String args) {
-        LearningGraphMutations mutations = new LearningGraphMutations(skillManager);
+        LearningGraphMutations mutations = new LearningGraphMutations(skillManager, memoryManager);
         String[] parts = args.split("\\s+", 2);
         String nodeId = parts.length > 0 ? parts[0] : "";
 
