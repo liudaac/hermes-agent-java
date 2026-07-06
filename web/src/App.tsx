@@ -1,5 +1,7 @@
-import { lazy, Suspense, useMemo } from "react";
-import { Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { lazy, Suspense, useEffect, useMemo } from "react";
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { migrateOldPath, rememberSpace, SPACE_PATHS } from "@/lib/routing/spaces";
+import { RootRedirect } from "@/lib/routing/Redirects";
 import {
   Activity,
   BarChart3,
@@ -185,6 +187,25 @@ function buildNavItems(
 export default function App() {
   const { t } = useI18n();
   const { plugins } = usePlugins();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Redirect legacy top-level paths to their space-scoped equivalents
+  // (e.g. /status → /ops, /business-portal/teams → /portal/teams).
+  // Skips paths that are already under /portal, /ops, or /noc.
+  useEffect(() => {
+    const target = migrateOldPath(location.pathname);
+    if (target && target !== location.pathname) {
+      navigate(target, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  // Persist the active space whenever the user enters one.
+  useEffect(() => {
+    if (location.pathname.startsWith(SPACE_PATHS.portal)) rememberSpace("portal");
+    else if (location.pathname.startsWith(SPACE_PATHS.ops)) rememberSpace("ops");
+    else if (location.pathname.startsWith(SPACE_PATHS.noc)) rememberSpace("noc");
+  }, [location.pathname]);
 
   const navItems = useMemo(
     () => buildNavItems(BUILTIN_NAV, plugins),
@@ -287,7 +308,39 @@ export default function App() {
       <main className="relative z-2 mx-auto w-full max-w-[1600px] flex-1 px-3 sm:px-6 pt-16 sm:pt-20 pb-4 sm:pb-8">
         <Suspense fallback={<PageLoading />}>
           <Routes>
-          <Route path="/" element={<StatusPage />} />
+          <Route path="/" element={<RootRedirect />} />
+          {/* ── Three-space refactor: /portal /ops /noc ─────────────── */}
+          <Route path="/portal" element={<BusinessPortalStandalonePage><BusinessPortalHome /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/workspaces" element={<BusinessPortalStandalonePage />} />
+          <Route path="/portal/agents" element={<BusinessPortalStandalonePage><AgentMarketPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/templates" element={<BusinessPortalStandalonePage><TemplateGalleryPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/approvals" element={<BusinessPortalStandalonePage><ApprovalsPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/risk-policy" element={<BusinessPortalStandalonePage><RiskPolicyPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/evolution" element={<BusinessPortalStandalonePage><EvolutionPanelPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/my-templates" element={<BusinessPortalStandalonePage><MyTemplatesPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/industry-dashboard" element={<BusinessPortalStandalonePage><IndustryDashboardPage /></BusinessPortalStandalonePage>} />
+          <Route path="/portal/runs/:workspaceId/:runId" element={<RunDetailPage />} />
+
+          <Route path="/ops" element={<StatusPage />} />
+          <Route path="/ops/playground" element={<PlaygroundPage />} />
+          <Route path="/ops/compare" element={<ComparePage />} />
+          <Route path="/ops/sessions" element={<SessionsPage />} />
+          <Route path="/ops/analytics" element={<AnalyticsPage />} />
+          <Route path="/ops/logs" element={<LogsPage />} />
+          <Route path="/ops/cron" element={<CronPage />} />
+          <Route path="/ops/skills" element={<SkillsPage />} />
+          <Route path="/ops/tools" element={<ToolsPage />} />
+          <Route path="/ops/tenants" element={<TenantsPage />} />
+          <Route path="/ops/config" element={<ConfigPage />} />
+          <Route path="/ops/env" element={<EnvPage />} />
+          <Route path="/ops/org" element={<OrgPage />} />
+
+          <Route path="/noc" element={<OrgControlCenterPage />} />
+          <Route path="/noc/traces/:traceId" element={<TraceDetailPage />} />
+          <Route path="/noc/workflows" element={<WorkflowPage />} />
+          <Route path="/noc/sla" element={<SLAPage />} />
+          <Route path="/noc/dlq" element={<DLQPage />} />
+          <Route path="/noc/hitl" element={<HumanInTheLoopPage />} />
           <Route path="/playground" element={<PlaygroundPage />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/sessions" element={<SessionsPage />} />
