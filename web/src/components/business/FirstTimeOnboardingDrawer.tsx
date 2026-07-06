@@ -114,7 +114,7 @@ export default function FirstTimeOnboardingDrawer() {
       if (runId) {
         navigate(`/runs/${workspaceId}/${runId}`);
       } else {
-        navigate(`/business-portal`);
+        navigate(`/portal`);
       }
     } catch {
       // fall back: just send to playground with the workspace context
@@ -200,7 +200,7 @@ export default function FirstTimeOnboardingDrawer() {
                 {executing ? "启动中…" : "跑第一笔任务"}
               </Button>
             ) : (
-              <Button size="sm" onClick={() => goTo(`/business-portal/templates`)}>
+              <Button size="sm" onClick={() => goTo(`/portal/templates`)}>
                 <Layers className="mr-1 h-3.5 w-3.5" />
                 先去挑模板
               </Button>

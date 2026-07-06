@@ -292,17 +292,11 @@ export default function App() {
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
           <Route path="/business" element={<Navigate to="/portal" replace />} />
-          <Route path="/business-portal" element={<BusinessPortalStandalonePage><BusinessPortalHome /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/workspaces" element={<BusinessPortalStandalonePage />} />
-          <Route path="/business-portal/agents" element={<BusinessPortalStandalonePage><AgentMarketPage /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/templates" element={<BusinessPortalStandalonePage><TemplateGalleryPage /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/approvals" element={<BusinessPortalStandalonePage><ApprovalsPage /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/risk-policy" element={<BusinessPortalStandalonePage><RiskPolicyPage /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/evolution" element={<BusinessPortalStandalonePage><EvolutionPanelPage /></BusinessPortalStandalonePage>} />
+          {/* /business-portal/* — all redirect to /portal/* via migrateOldPath. */}
+          <Route path="/business-portal" element={<Navigate to="/portal" replace />} />
+          <Route path="/business-portal/*" element={<Navigate to="/portal" replace />} />
           <Route path="/traces/:traceId" element={<TraceDetailPage />} />
-          <Route path="/business-portal/my-templates" element={<BusinessPortalStandalonePage><MyTemplatesPage /></BusinessPortalStandalonePage>} />
-          <Route path="/business-portal/industry-dashboard" element={<BusinessPortalStandalonePage><IndustryDashboardPage /></BusinessPortalStandalonePage>} />
-          <Route path="/runs/:workspaceId/:runId" element={<RunDetailPage />} />
+          <Route path="/runs/:workspaceId/:runId" element={<Navigate to="/portal" replace />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 

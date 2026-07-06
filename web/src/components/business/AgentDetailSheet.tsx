@@ -193,7 +193,7 @@ export default function AgentDetailSheet({ template, open, onClose }: AgentDetai
         <footer className="sticky bottom-0 border-t border-border bg-background/95 px-5 py-3 backdrop-blur">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="flex-1" onClick={onClose}>关闭</Button>
-            <Button size="sm" className="flex-1" onClick={() => { onClose(); navigate("/business-portal/templates"); }}>
+            <Button size="sm" className="flex-1" onClick={() => { onClose(); navigate("/portal/templates"); }}>
               查看相关场景
               <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Button>

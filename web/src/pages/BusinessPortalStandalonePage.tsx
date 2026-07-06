@@ -206,18 +206,18 @@ interface NavItem {
 // Order: 4 primary tabs (visible on narrow screens), then 5 secondary (collapsed
 // into "更多" on narrow / inlined on wide).
 const PRIMARY_NAV: NavItem[] = [
-  { to: "/business-portal", label: "首页", icon: Home, exact: true },
-  { to: "/business-portal/agents", label: "数字员工", icon: Sparkles },
-  { to: "/business-portal/templates", label: "场景模板", icon: Layers },
-  { to: "/business-portal/approvals", label: "待审批", icon: ShieldAlert },
+  { to: "/portal", label: "首页", icon: Home, exact: true },
+  { to: "/portal/agents", label: "数字员工", icon: Sparkles },
+  { to: "/portal/templates", label: "场景模板", icon: Layers },
+  { to: "/portal/approvals", label: "待审批", icon: ShieldAlert },
 ];
 
 const SECONDARY_NAV: NavItem[] = [
-  { to: "/business-portal/workspaces", label: "工作台", icon: BriefcaseBusiness },
-  { to: "/business-portal/risk-policy", label: "风险策略", icon: ShieldAlert },
-  { to: "/business-portal/evolution", label: "自进化", icon: Lightbulb },
-  { to: "/business-portal/industry-dashboard", label: "行业看板", icon: BarChart3 },
-  { to: "/business-portal/my-templates", label: "我的模板", icon: Upload },
+  { to: "/portal/workspaces", label: "工作台", icon: BriefcaseBusiness },
+  { to: "/portal/risk-policy", label: "风险策略", icon: ShieldAlert },
+  { to: "/portal/evolution", label: "自进化", icon: Lightbulb },
+  { to: "/portal/industry-dashboard", label: "行业看板", icon: BarChart3 },
+  { to: "/portal/my-templates", label: "我的模板", icon: Upload },
 ];
 
 function NavBar() {

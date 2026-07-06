@@ -126,7 +126,7 @@ export default function MyTemplatesPage() {
           {root && <p className="mt-1 text-xs font-mono text-muted-foreground/70">存储位置：{root}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/business-portal")}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/portal")}>
             <ArrowLeft className="mr-1 h-3.5 w-3.5" /> 返回 Portal
           </Button>
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
