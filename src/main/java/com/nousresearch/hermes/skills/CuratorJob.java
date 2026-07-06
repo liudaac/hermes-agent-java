@@ -350,13 +350,11 @@ public class CuratorJob {
      * Rewrite cron job skill references after consolidation.
      *
      * When skill X is consolidated into umbrella Y, any cron job that references
-     * X should be updated to reference Y instead. This is best-effort — a cron
-     * module failure never breaks the curator.
+     * X should be updated to reference Y instead. Checks both on-disk cron config
+     * files and in-memory CronjobTool jobs.
      */
     private void rewriteCronSkillReferences(CuratorRunReport report) {
         try {
-            // Build the rename map: old-name → new-name (for consolidations)
-            // and old-name → null (for prunings — drop the reference)
             Map<String, String> renameMap = new HashMap<>();
             for (var c : report.consolidations) {
                 renameMap.put(c.from, c.into);
@@ -364,60 +362,156 @@ public class CuratorJob {
             for (var p : report.prunings) {
                 renameMap.put(p.name, null);
             }
-
             if (renameMap.isEmpty()) return;
 
-            // Attempt to find and update cron job configs
-            // Cron jobs are stored in CronjobTool's internal map, but we can also
-            // check for cron config files in ~/.hermes/cron/
-            Path cronDir = skillManager.getSearchPaths().get(0).resolve("..").resolve("cron").normalize();
-            if (!Files.isDirectory(cronDir)) {
-                logger.debug("No cron directory found at {}", cronDir);
-                return;
-            }
-
             int rewritten = 0;
-            try (Stream<Path> files = Files.list(cronDir)) {
-                var fileList = files.filter(p -> p.toString().endsWith(".json")).toList();
-                for (Path jobFile : fileList) {
-                    try {
-                        String content = Files.readString(jobFile);
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> job = jsonMapper.readValue(content, Map.class);
-                        @SuppressWarnings("unchecked")
-                        List<String> skills = (List<String>) job.getOrDefault("skills", List.of());
-                        if (skills == null || skills.isEmpty()) continue;
 
-                        List<String> updated = new ArrayList<>();
-                        boolean changed = false;
-                        for (String skill : skills) {
-                            if (renameMap.containsKey(skill)) {
-                                String newName = renameMap.get(skill);
-                                if (newName != null) {
-                                    updated.add(newName);
+            // 1. Check in-memory cron jobs via CronjobTool
+            try {
+                var cronTool = com.nousresearch.hermes.tools.impl.CronjobTool.class;
+                // CronjobTool is instantiated by ToolInitializerV2 — we need to access its instance
+                // The ToolRegistry stores handlers as lambdas; the CronjobTool instance is captured
+                // in the closure. We use the tool dispatch path: cronjob_list returns the JSON.
+                var toolRegistry = com.nousresearch.hermes.tools.ToolRegistry.getInstance();
+                String jobsJson = toolRegistry.dispatch("cronjob_list", java.util.Map.of());
+                // Parse and rewrite
+                if (jobsJson != null && !jobsJson.isBlank()) {
+                    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    var parsed = mapper.readTree(jobsJson);
+                    if (parsed.has("jobs")) {
+                        for (var jobNode : parsed.get("jobs")) {
+                            String jobName = jobNode.get("name").asText();
+                            String command = jobNode.get("command").asText();
+                            String newCommand = rewriteCommand(command, renameMap);
+                            if (newCommand != null && !newCommand.equals(command)) {
+                                // Find the CronjobTool instance and update
+                                if (updateCronJobInMemory(jobName, newCommand)) {
+                                    rewritten++;
+                                    logger.info("Rewrote in-memory cron job skill references in: {}", jobName);
                                 }
-                                // null = pruned, drop the reference
-                                changed = true;
-                            } else {
-                                updated.add(skill);
                             }
                         }
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("In-memory cron job rewrite skipped: {}", e.getMessage());
+            }
 
-                        if (changed) {
-                            job.put("skills", updated);
-                            Files.writeString(jobFile, jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(job));
-                            rewritten++;
-                            logger.info("Rewrote cron job skill references in: {}", jobFile.getFileName());
+            // 2. Check on-disk cron config files
+            Path cronDir = skillManager.getSearchPaths().get(0).resolve("..").resolve("cron").normalize();
+            if (Files.isDirectory(cronDir)) {
+                try (Stream<Path> files = Files.list(cronDir)) {
+                    var fileList = files.filter(p -> p.toString().endsWith(".json")).toList();
+                    for (Path jobFile : fileList) {
+                        try {
+                            String content = Files.readString(jobFile);
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> job = jsonMapper.readValue(content, Map.class);
+                            @SuppressWarnings("unchecked")
+                            List<String> skills = (List<String>) job.getOrDefault("skills", List.of());
+                            if (skills == null || skills.isEmpty()) {
+                                // Also check command string for skill references
+                                String command = (String) job.get("command");
+                                if (command != null) {
+                                    String newCommand = rewriteCommand(command, renameMap);
+                                    if (newCommand != null && !newCommand.equals(command)) {
+                                        job.put("command", newCommand);
+                                        Files.writeString(jobFile, jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(job));
+                                        rewritten++;
+                                        logger.info("Rewrote cron job command in: {}", jobFile.getFileName());
+                                    }
+                                }
+                                continue;
+                            }
+
+                            List<String> updated = new ArrayList<>();
+                            boolean changed = false;
+                            for (String skill : skills) {
+                                if (renameMap.containsKey(skill)) {
+                                    String newName = renameMap.get(skill);
+                                    if (newName != null) updated.add(newName);
+                                    changed = true;
+                                } else {
+                                    updated.add(skill);
+                                }
+                            }
+
+                            if (changed) {
+                                job.put("skills", updated);
+                                Files.writeString(jobFile, jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(job));
+                                rewritten++;
+                                logger.info("Rewrote cron job skill references in: {}", jobFile.getFileName());
+                            }
+                        } catch (Exception e) {
+                            logger.debug("Failed to process cron job file {}: {}", jobFile, e.getMessage());
                         }
-                    } catch (Exception e) {
-                        logger.debug("Failed to process cron job file {}: {}", jobFile, e.getMessage());
                     }
                 }
             }
+
             report.cronJobsRewritten = rewritten;
         } catch (Exception e) {
             logger.debug("Cron skill reference rewrite failed: {}", e.getMessage(), e);
         }
+    }
+
+    /**
+     * Rewrite skill references in a command string.
+     * Handles patterns like: /skill-name, "skill-name", or skill-name as an argument.
+     */
+    private String rewriteCommand(String command, Map<String, String> renameMap) {
+        if (command == null) return null;
+        String result = command;
+        for (var entry : renameMap.entrySet()) {
+            String oldName = entry.getKey();
+            String newName = entry.getValue();
+            // Replace /old-name with /new-name or remove if pruned
+            if (newName != null) {
+                result = result.replace("/" + oldName, "/" + newName);
+                result = result.replace(" " + oldName + " ", " " + newName + " ");
+            } else {
+                // Pruned — can't safely remove from command string, just log
+                logger.debug("Skill '{}' was pruned but is referenced in command: {}", oldName, command);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Best-effort: update a cron job in CronjobTool's in-memory store.
+     */
+    private boolean updateCronJobInMemory(String jobName, String newCommand) {
+        try {
+            // Access the CronjobTool instance through reflection on ToolRegistry
+            // This is a pragmatic approach — the alternative is a full DI refactor
+            var toolRegistry = com.nousresearch.hermes.tools.ToolRegistry.getInstance();
+            // Try to find a CronjobTool instance that was registered
+            for (var field : toolRegistry.getClass().getDeclaredFields()) {
+                if (java.util.Collection.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    Object value = field.get(toolRegistry);
+                    if (value instanceof java.util.Collection<?> coll) {
+                        for (var item : coll) {
+                            // Check if item is a ToolEntry that wraps CronjobTool
+                            if (item != null) {
+                                for (var innerField : item.getClass().getDeclaredFields()) {
+                                    if (innerField.getType().getName().contains("CronjobTool")) {
+                                        innerField.setAccessible(true);
+                                        Object cronTool = innerField.get(item);
+                                        if (cronTool instanceof com.nousresearch.hermes.tools.impl.CronjobTool ct) {
+                                            return ct.updateJobCommand(jobName, newCommand);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not update in-memory cron job: {}", e.getMessage());
+        }
+        return false;
     }
 
     // =========================================================================

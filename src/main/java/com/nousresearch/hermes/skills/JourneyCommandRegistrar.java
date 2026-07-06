@@ -43,11 +43,18 @@ public class JourneyCommandRegistrar {
         }
 
         String args = extractArgs(input);
-        boolean asJson = args.contains("--json");
-
-        int limit = 50;
-        // Parse --limit N
         String[] parts = args.split("\\s+");
+        String subcommand = parts.length > 0 ? parts[0].toLowerCase() : "";
+
+        // Subcommands: delete, edit, pin, unpin — delegate to mutations
+        if ("delete".equals(subcommand) || "edit".equals(subcommand) ||
+            "pin".equals(subcommand) || "unpin".equals(subcommand)) {
+            return handleMutation(subcommand, args.substring(subcommand.length()).trim());
+        }
+
+        // Default: render timeline
+        boolean asJson = args.contains("--json");
+        int limit = 50;
         for (int i = 0; i < parts.length - 1; i++) {
             if ("--limit".equals(parts[i])) {
                 try { limit = Integer.parseInt(parts[i + 1]); } catch (NumberFormatException ignored) {}
@@ -58,7 +65,6 @@ public class JourneyCommandRegistrar {
         graphService.buildFromSkillManager(skillManager);
 
         if (asJson) {
-            // Return JSON payload for programmatic consumption
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("type", "json");
             result.put("data", graphService.toPayload());
@@ -70,7 +76,6 @@ public class JourneyCommandRegistrar {
             .map(JourneyCommandRegistrar::toNodeInfo)
             .toList();
 
-        // Memory nodes (if any were loaded)
         var memoryNodes = graphService.getMemoryNodes().stream()
             .map(JourneyCommandRegistrar::toNodeInfo)
             .toList();
@@ -80,6 +85,43 @@ public class JourneyCommandRegistrar {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("type", "message");
         result.put("message", "📊 Learning Timeline\n\n```\n" + chart + "\n```");
+        return result;
+    }
+
+    private static Object handleMutation(String action, String args) {
+        LearningGraphMutations mutations = new LearningGraphMutations(skillManager);
+        String[] parts = args.split("\\s+", 2);
+        String nodeId = parts.length > 0 ? parts[0] : "";
+
+        if (nodeId.isEmpty()) {
+            return errorResult("Usage: /journey " + action + " <node-id>");
+        }
+
+        Map<String, Object> result;
+        switch (action) {
+            case "delete" -> result = mutations.deleteNode(nodeId);
+            case "edit" -> {
+                if (parts.length < 2 || parts[1].isBlank()) {
+                    return errorResult("Usage: /journey edit <node-id> <new content>");
+                }
+                result = mutations.editNode(nodeId, parts[1]);
+            }
+            case "pin" -> result = mutations.pinSkill(nodeId);
+            case "unpin" -> result = mutations.unpinSkill(nodeId);
+            default -> result = Map.of("ok", false, "message", "Unknown action: " + action);
+        }
+
+        boolean ok = Boolean.TRUE.equals(result.get("ok"));
+        String message = String.valueOf(result.getOrDefault("message", ok ? "done" : "failed"));
+        return ok
+            ? messageResult("✅ " + message)
+            : errorResult("❌ " + message);
+    }
+
+    private static Map<String, Object> messageResult(String msg) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("type", "message");
+        result.put("message", msg);
         return result;
     }
 

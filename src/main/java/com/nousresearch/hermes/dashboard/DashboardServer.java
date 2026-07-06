@@ -540,6 +540,39 @@ public class DashboardServer {
             }
         });
 
+        // Learning Graph node mutations — inspect/delete/edit/pin
+        app.get("/api/learning/node/{id}", ctx -> {
+            var sm = new com.nousresearch.hermes.skills.SkillManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            String nodeId = ctx.pathParam("id");
+            ctx.json(mutations.nodeDetail(nodeId));
+        });
+        app.delete("/api/learning/node/{id}", ctx -> {
+            var sm = new com.nousresearch.hermes.skills.SkillManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            String nodeId = ctx.pathParam("id");
+            ctx.json(mutations.deleteNode(nodeId));
+        });
+        app.put("/api/learning/node/{id}", ctx -> {
+            var sm = new com.nousresearch.hermes.skills.SkillManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            String nodeId = ctx.pathParam("id");
+            String content = ctx.body();
+            ctx.json(mutations.editNode(nodeId, content));
+        });
+        app.post("/api/learning/node/{id}/pin", ctx -> {
+            var sm = new com.nousresearch.hermes.skills.SkillManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            String nodeId = ctx.pathParam("id");
+            ctx.json(mutations.pinSkill(nodeId));
+        });
+        app.post("/api/learning/node/{id}/unpin", ctx -> {
+            var sm = new com.nousresearch.hermes.skills.SkillManager();
+            var mutations = new com.nousresearch.hermes.skills.LearningGraphMutations(sm);
+            String nodeId = ctx.pathParam("id");
+            ctx.json(mutations.unpinSkill(nodeId));
+        });
+
         // Tools API
         app.get("/api/tools/toolsets", toolsHandler::getToolsets);
         app.get("/api/tools", toolsHandler::getTools);

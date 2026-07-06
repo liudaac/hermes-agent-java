@@ -96,6 +96,13 @@ public class CronjobTool {
     }
     
     private String listJobs() {
+        return ToolRegistry.toolResult(Map.of("jobs", getJobSnapshots(), "count", jobs.size()));
+    }
+
+    /**
+     * Return a snapshot of all cron jobs for external inspection (e.g. curator).
+     */
+    public List<Map<String, String>> getJobSnapshots() {
         List<Map<String, String>> jobList = new ArrayList<>();
         for (ScheduledJob job : jobs.values()) {
             jobList.add(Map.of(
@@ -104,7 +111,37 @@ public class CronjobTool {
                 "command", job.command
             ));
         }
-        return ToolRegistry.toolResult(Map.of("jobs", jobList, "count", jobList.size()));
+        return jobList;
+    }
+
+    /**
+     * Update a cron job's command string (used by curator to rewrite skill references).
+     */
+    public boolean updateJobCommand(String jobName, String newCommand) {
+        ScheduledJob job = jobs.get(jobName);
+        if (job == null) return false;
+        // Cancel old schedule and re-create with new command
+        job.future().cancel(false);
+        try {
+            long delay = parseSchedule(job.schedule());
+            ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
+                () -> executeCommand(newCommand),
+                delay, delay, TimeUnit.SECONDS
+            );
+            jobs.put(jobName, new ScheduledJob(jobName, job.schedule(), newCommand, future));
+            logger.info("Updated cron job command: {} → {}", jobName, newCommand);
+            return true;
+        } catch (Exception e) {
+            // Restore original on failure
+            long delay = parseSchedule(job.schedule());
+            ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
+                () -> executeCommand(job.command()),
+                delay, delay, TimeUnit.SECONDS
+            );
+            jobs.put(jobName, new ScheduledJob(jobName, job.schedule(), job.command(), future));
+            logger.error("Failed to update cron job {}: {}", jobName, e.getMessage());
+            return false;
+        }
     }
     
     private String removeJob(Map<String, Object> args) {

@@ -90,6 +90,10 @@ public class TenantAwareAIAgent {
 
     // ===== 工具级审批挂起状态 =====
     private volatile boolean approvalCheckpointActive = false;
+
+    /** Pending background-review summaries, flushed at the start of the next turn. */
+    private final java.util.concurrent.ConcurrentLinkedQueue<String> pendingReviewSummaries =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
     private ToolApprovalCheckpoint approvalCheckpoint;
 
     /** Callback invoked when a tool call requires approval. External code should create an approval record. */
@@ -943,6 +947,12 @@ public class TenantAwareAIAgent {
     }
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
+        // Flush any pending background-review summaries from the previous turn
+        String reviewSummary;
+        while ((reviewSummary = pendingReviewSummaries.poll()) != null) {
+            chunkConsumer.accept("\n" + reviewSummary + "\n");
+        }
+
         userTurnCount++;
 
         // Ensure system prompt is present at the start of conversation
@@ -1754,7 +1764,7 @@ public class TenantAwareAIAgent {
             ).withMaxIterations(16);
             SubAgentResult result = reviewAgent.call();
 
-            // Summarize actions for the user
+            // Summarize actions for the user — enqueue for next-turn flush
             if (result != null && result.success) {
                 boolean hasMemory = result.memoriesToSave != null && !result.memoriesToSave.isEmpty();
                 boolean hasInsights = result.insights != null && !result.insights.isEmpty();
@@ -1769,8 +1779,10 @@ public class TenantAwareAIAgent {
                     }
                     String summaryStr = summary.toString();
                     logger.info("Self-improvement review: {}", summaryStr);
-                    // The review summary is logged; the foreground turn's
-                    // chunkConsumer is not available here (background thread).
+                    // Enqueue for next-turn flush — the chunkConsumer from the
+                    // originating turn has already completed by the time the
+                    // background review finishes.
+                    pendingReviewSummaries.add("💾 Self-improvement review: " + summaryStr);
                 } else {
                     logger.debug("Background review completed — nothing to save");
                 }
