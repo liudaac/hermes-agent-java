@@ -103,6 +103,11 @@ public class HermesAgentV2 {
         com.nousresearch.hermes.skills.CuratorCommandRegistrar.register(pluginManager, curatorJob);
         logger.info("Curator slash command registered (/curator)");
 
+        // Register journey command
+        com.nousresearch.hermes.skills.LearningGraphService graphService = new com.nousresearch.hermes.skills.LearningGraphService();
+        com.nousresearch.hermes.skills.JourneyCommandRegistrar.register(pluginManager, sm, graphService);
+        logger.info("Journey slash command registered (/journey)");
+
         if (tenantMode) {
             this.gatewayServerV2 = new GatewayServerV2(gatewayPort, agentConfig);
             this.gatewayServer = null;

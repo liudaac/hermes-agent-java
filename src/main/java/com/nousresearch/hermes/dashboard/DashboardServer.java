@@ -511,6 +511,35 @@ public class DashboardServer {
         app.get("/api/skills", skillsHandler::getSkills);
         app.put("/api/skills/toggle", skillsHandler::toggleSkill);
 
+        // Learning Graph API — /journey data for dashboard
+        app.get("/api/learning/graph", ctx -> {
+            try {
+                var sm = new com.nousresearch.hermes.skills.SkillManager();
+                var graph = new com.nousresearch.hermes.skills.LearningGraphService();
+                graph.buildFromSkillManager(sm);
+
+                var skillNodes = graph.getSkillNodes().stream()
+                    .map(n -> {
+                        var info = new com.nousresearch.hermes.skills.LearningGraphRenderer.GraphNodeInfo();
+                        info.id = n.id();
+                        info.label = n.label();
+                        info.isMemory = false;
+                        info.category = n.tags() != null && !n.tags().isEmpty() ? n.tags().get(0) : "skill";
+                        info.meta = n.content() != null ? n.content() : "";
+                        info.timestamp = java.time.Instant.now();
+                        return info;
+                    })
+                    .toList();
+                var frame = com.nousresearch.hermes.skills.LearningGraphRenderer.renderFrame(
+                    skillNodes, java.util.List.of(), 80, 16);
+                var payload = graph.toPayload();
+                payload.put("frame", frame);
+                ctx.json(payload);
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of("error", e.getMessage()));
+            }
+        });
+
         // Tools API
         app.get("/api/tools/toolsets", toolsHandler::getToolsets);
         app.get("/api/tools", toolsHandler::getTools);

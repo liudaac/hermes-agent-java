@@ -156,7 +156,136 @@ public class LearningGraphService {
         edges.clear();
     }
 
-    // ============ 数据类 ============
+    /**
+     * Build the graph from a SkillManager's current skill list.
+     * Creates skill nodes and auto-detects similarity edges.
+     *
+     * @param skillManager the skill manager to source from
+     * @return number of nodes added
+     */
+    public int buildFromSkillManager(SkillManager skillManager) {
+        clear();
+        List<SkillManager.Skill> skills = skillManager.listSkills();
+        for (SkillManager.Skill skill : skills) {
+            if (skill.lifecycleStatus == SkillLifecycleStatus.ARCHIVED) continue;
+            addSkillNode(skill.name,
+                skill.description != null ? skill.description : "",
+                skill.tags != null ? skill.tags : List.of());
+        }
+        // Auto-detect similarity edges between skills
+        autoDetectSimilarities();
+
+        // Add EVOLUTION edges from skill metadata
+        for (SkillManager.Skill skill : skills) {
+            if (skill.lifecycleStatus == SkillLifecycleStatus.ARCHIVED) continue;
+            if (skill.metadata != null) {
+                Object evolvedFrom = skill.metadata.get("evolved_from");
+                if (evolvedFrom != null) {
+                    String fromId = "skill:" + evolvedFrom.toString();
+                    String toId = "skill:" + skill.name;
+                    if (nodes.containsKey(fromId) && nodes.containsKey(toId)) {
+                        addEdge(fromId, toId, EdgeType.EVOLUTION, 1.0);
+                    }
+                }
+            }
+        }
+        return skills.size();
+    }
+
+    /**
+     * Build the graph from both skill and memory data.
+     *
+     * @param skillManager  skill source
+     * @param memoryEntries list of memory entries (id, content, category)
+     * @return total nodes added
+     */
+    public int buildFromSources(SkillManager skillManager,
+                                 List<MemoryEntry> memoryEntries) {
+        int skillCount = buildFromSkillManager(skillManager);
+
+        if (memoryEntries != null) {
+            for (MemoryEntry entry : memoryEntries) {
+                addMemoryNode(entry.id, entry.content, entry.category);
+            }
+            // Auto-detect memory ↔ skill edges via lexical overlap
+            detectMemorySkillEdges();
+        }
+
+        return skillCount + (memoryEntries != null ? memoryEntries.size() : 0);
+    }
+
+    /**
+     * Detect edges between memory chunks and skills based on content overlap.
+     */
+    private void detectMemorySkillEdges() {
+        List<GraphNode> skillNodes = getSkillNodes();
+        List<GraphNode> memoryNodes = getMemoryNodes();
+
+        for (GraphNode skill : skillNodes) {
+            for (GraphNode memory : memoryNodes) {
+                double overlap = computeMemorySkillOverlap(skill, memory);
+                if (overlap > 0.15) {
+                    addEdge(memory.id(), skill.id(), EdgeType.USAGE, overlap);
+                }
+            }
+        }
+    }
+
+    static double computeMemorySkillOverlap(GraphNode skill, GraphNode memory) {
+        // Simple word overlap score
+        Set<String> skillWords = tokenize(skill.content() + " " + skill.label());
+        Set<String> memoryWords = tokenize(memory.content());
+
+        if (skillWords.isEmpty() || memoryWords.isEmpty()) return 0;
+
+        Set<String> intersection = new HashSet<>(skillWords);
+        intersection.retainAll(memoryWords);
+
+        return (double) intersection.size() / Math.min(skillWords.size(), memoryWords.size());
+    }
+
+    private static Set<String> tokenize(String text) {
+        if (text == null || text.isBlank()) return Set.of();
+        Set<String> words = new HashSet<>();
+        for (String word : text.toLowerCase().split("\\W+")) {
+            if (word.length() > 2) words.add(word);
+        }
+        return words;
+    }
+
+    /**
+     * Export the graph as a JSON-serializable payload for REST API.
+     */
+    public Map<String, Object> toPayload() {
+        List<Map<String, Object>> nodeList = new ArrayList<>();
+        for (GraphNode node : nodes.values()) {
+            Map<String, Object> n = new LinkedHashMap<>();
+            n.put("id", node.id());
+            n.put("kind", node.type() == NodeType.SKILL ? "skill" : "memory");
+            n.put("label", node.label());
+            n.put("content", node.content());
+            n.put("tags", node.tags());
+            nodeList.add(n);
+        }
+
+        List<Map<String, Object>> edgeList = new ArrayList<>();
+        for (GraphEdge edge : edges) {
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("from", edge.from());
+            e.put("to", edge.to());
+            e.put("type", edge.type().name().toLowerCase());
+            e.put("weight", edge.weight());
+            edgeList.add(e);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("nodes", nodeList);
+        payload.put("edges", edgeList);
+        payload.put("stats", getStatistics());
+        return payload;
+    }
+
+    // ── Data classes ──────────────────────────────────────────────────
 
     public record GraphNode(String id, NodeType type, String label, String content, List<String> tags) {}
 
@@ -166,4 +295,17 @@ public class LearningGraphService {
         int totalNodes, long skillNodes, long memoryNodes,
         int totalEdges, Map<EdgeType, Long> edgesByType
     ) {}
+
+    /** Lightweight memory entry for graph building. */
+    public static class MemoryEntry {
+        public String id;
+        public String content;
+        public String category;
+
+        public MemoryEntry(String id, String content, String category) {
+            this.id = id;
+            this.content = content;
+            this.category = category;
+        }
+    }
 }
