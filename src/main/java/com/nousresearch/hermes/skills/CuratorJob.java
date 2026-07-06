@@ -1,16 +1,30 @@
 package com.nousresearch.hermes.skills;
 
+import com.nousresearch.hermes.agent.SubAgent;
+import com.nousresearch.hermes.agent.SubAgentResult;
+import com.nousresearch.hermes.config.HermesConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.*;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * S5-2: Curator Job — 后台维护 agent 自建 skill 的生命周期。
  *
- * <p>对齐原版 agent/curator.py，但复用已有的 SelfEvolutionEngine + EvolutionProposalService 基础。</p>
+ * <p>对齐原版 agent/curator.py，包含两层：</p>
+ * <ul>
+ *   <li>Layer 1: 确定性状态转换 (active → stale → archived)，无 LLM</li>
+ *   <li>Layer 2: LLM 伞形合并 — fork SubAgent 做合并/归档/报告</li>
+ * </ul>
  *
  * <p>核心规则：</p>
  * <ul>
@@ -18,11 +32,13 @@ import java.util.*;
  *   <li>生命周期：active → stale (30d) → archived (90d)</li>
  *   <li>永不删除，只归档，可恢复</li>
  *   <li>Pinned skill 跳过所有转换</li>
- *   <li>输出 CuratorReport</li>
+ *   <li>Cron 引用的 skill 不归档</li>
  * </ul>
  */
 public class CuratorJob {
     private static final Logger logger = LoggerFactory.getLogger(CuratorJob.class);
+    private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private static final ObjectMapper jsonMapper = new ObjectMapper();
 
     /** 超过 30 天未使用 → STALE */
     public static final long STALE_THRESHOLD_DAYS = 30;
@@ -31,131 +47,446 @@ public class CuratorJob {
 
     private final SkillProvenanceService provenanceService;
     private final SkillManager skillManager;
+    private final HermesConfig config;
+
+    // State persistence
+    private final Path stateFile;
+    private CuratorState state;
+
+    // Report output
+    private final Path reportsDir;
 
     public CuratorJob(SkillProvenanceService provenanceService, SkillManager skillManager) {
-        this.provenanceService = provenanceService;
-        this.skillManager = skillManager;
+        this(provenanceService, skillManager, null);
     }
 
+    public CuratorJob(SkillProvenanceService provenanceService, SkillManager skillManager,
+                      HermesConfig config) {
+        this.provenanceService = provenanceService;
+        this.skillManager = skillManager;
+        this.config = config;
+        this.stateFile = skillManager.getSearchPaths().get(0).resolve(".curator_state.json");
+        this.reportsDir = skillManager.getSearchPaths().get(0).resolve("..").resolve("logs").resolve("curator").normalize();
+        this.state = loadState();
+    }
+
+    // =========================================================================
+    // Public API
+    // =========================================================================
+
     /**
-     * 执行一次完整的 curate 循环。
+     * Execute a full curator pass: deterministic transitions + optional LLM consolidation.
      *
-     * @return curate 报告
+     * @param consolidate true to run the LLM umbrella-building pass
+     * @param dryRun      true for preview-only (no mutations)
+     * @return detailed run report
      */
-    public CuratorReport run() {
-        logger.info("Curator job started");
+    public CuratorRunReport run(boolean consolidate, boolean dryRun) {
+        Instant start = Instant.now();
+        CuratorRunReport report = new CuratorRunReport();
+        report.startedAt = start;
 
+        logger.info("Curator job started (consolidate={}, dryRun={})", consolidate, dryRun);
+
+        // ── Layer 1: Deterministic state transitions ──
         List<SkillManager.Skill> agentSkills = provenanceService.getByProvenance(SkillProvenance.AGENT);
-        int totalReviewed = agentSkills.size();
-        int pinned = 0;
-        int markedStale = 0;
-        int archived = 0;
-        int restored = 0;
-        int consolidated = 0;
+        report.autoChecked = agentSkills.size();
 
-        Instant now = Instant.now();
-        Instant staleThreshold = now.minus(STALE_THRESHOLD_DAYS, ChronoUnit.DAYS);
-        Instant archiveThreshold = now.minus(ARCHIVE_THRESHOLD_DAYS, ChronoUnit.DAYS);
-
-        for (SkillManager.Skill skill : agentSkills) {
-            // Pinned skill 跳过
-            if (skill.pinned) {
-                pinned++;
-                continue;
-            }
-
-            Instant lastUsed = skill.lastUsedAt != null ? skill.lastUsedAt : skill.createdAt;
-            if (lastUsed == null) lastUsed = now;
-
-            // 归档检查：超过 90 天未使用
-            if (lastUsed.isBefore(archiveThreshold)) {
-                if (skill.lifecycleStatus != SkillLifecycleStatus.ARCHIVED) {
-                    skill.lifecycleStatus = SkillLifecycleStatus.ARCHIVED;
-                    archived++;
-                    logger.debug("Archived skill: '{}' (last used: {})", skill.name, lastUsed);
-                }
-                continue;
-            }
-
-            // 过期检查：超过 30 天未使用
-            if (lastUsed.isBefore(staleThreshold)) {
-                if (skill.lifecycleStatus == SkillLifecycleStatus.ACTIVE) {
-                    skill.lifecycleStatus = SkillLifecycleStatus.STALE;
-                    markedStale++;
-                    logger.debug("Marked stale: '{}' (last used: {})", skill.name, lastUsed);
-                }
-                continue;
-            }
-
-            // 活跃检查：如果之前是 stale/archived 但最近又用了，恢复
-            if (skill.lifecycleStatus != SkillLifecycleStatus.ACTIVE) {
-                skill.lifecycleStatus = SkillLifecycleStatus.ACTIVE;
-                restored++;
-                logger.debug("Restored to active: '{}'", skill.name);
-            }
+        if (!dryRun) {
+            applyAutomaticTransitions(agentSkills, report);
         }
 
-        // 合并检查：寻找名称相似或内容重复的 skill
-        List<ConsolidationCandidate> candidates = findConsolidationCandidates(agentSkills);
-        consolidated = candidates.size();
+        // ── Layer 2: LLM consolidation (opt-in) ──
+        if (consolidate && !agentSkills.isEmpty()) {
+            runLLMConsolidation(agentSkills, dryRun, report);
+        } else {
+            logger.info("LLM consolidation skipped (consolidate={}, candidates={})",
+                consolidate, agentSkills.size());
+        }
 
-        CuratorReport report = new CuratorReport(
-            totalReviewed, pinned, markedStale, archived, restored, consolidated,
-            candidates, now
-        );
+        report.durationSeconds = java.time.Duration.between(start, Instant.now()).toMillis() / 1000.0;
+
+        // ── Persist state ──
+        if (!dryRun) {
+            state.lastRunAt = start.toString();
+            state.runCount++;
+            state.lastRunSummary = report.toString();
+            saveState();
+        }
+
+        // ── Write report ──
+        writeReport(report);
 
         logger.info("Curator job completed: {}", report);
         return report;
     }
 
-    /**
-     * 查找可合并的 skill 候选（名称相似或标签重叠）。
-     */
-    private List<ConsolidationCandidate> findConsolidationCandidates(List<SkillManager.Skill> skills) {
-        List<ConsolidationCandidate> candidates = new ArrayList<>();
-
-        // 按 tag 分组，相同 tag 的 skill 可能可合并
-        Map<String, List<SkillManager.Skill>> byTag = new HashMap<>();
-        for (SkillManager.Skill s : skills) {
-            if (s.lifecycleStatus == SkillLifecycleStatus.ARCHIVED) continue;
-            for (String tag : s.tags) {
-                byTag.computeIfAbsent(tag, k -> new ArrayList<>()).add(s);
-            }
-        }
-
-        // 找有 2+ skill 共享同一 tag 的
-        for (var entry : byTag.entrySet()) {
-            if (entry.getValue().size() >= 2) {
-                candidates.add(new ConsolidationCandidate(
-                    entry.getValue().stream().map(s -> s.name).toList(),
-                    entry.getKey(),
-                    "Shared tag: " + entry.getKey()
-                ));
-            }
-        }
-
-        return candidates;
+    /** Convenience: run with defaults (consolidate=off, dryRun=false). */
+    public CuratorRunReport run() {
+        return run(false, false);
     }
 
     /**
-     * 恢复已归档的 skill（手动操作）。
+     * Restore an archived skill.
      */
     public boolean restore(String skillName) {
-        SkillManager.Skill skill = skillManager.listSkills().stream()
-            .filter(s -> skillName.equals(s.name))
-            .findFirst()
-            .orElse(null);
-        if (skill == null) return false;
-        if (skill.lifecycleStatus != SkillLifecycleStatus.ARCHIVED) return false;
-
-        skill.lifecycleStatus = SkillLifecycleStatus.ACTIVE;
-        skill.lastUsedAt = Instant.now();
-        logger.info("Manually restored skill: '{}'", skillName);
-        return true;
+        boolean restored = skillManager.restoreSkill(skillName);
+        if (restored) {
+            logger.info("Manually restored skill: '{}'", skillName);
+        }
+        return restored;
     }
 
-    // ============ 报告数据类 ============
+    public boolean isPaused() { return state.paused; }
+    public void setPaused(boolean paused) {
+        state.paused = paused;
+        saveState();
+    }
 
+    // =========================================================================
+    // Layer 1: Deterministic state transitions
+    // =========================================================================
+
+    private void applyAutomaticTransitions(List<SkillManager.Skill> skills, CuratorRunReport report) {
+        Instant now = Instant.now();
+        Instant staleThreshold = now.minus(STALE_THRESHOLD_DAYS, ChronoUnit.DAYS);
+        Instant archiveThreshold = now.minus(ARCHIVE_THRESHOLD_DAYS, ChronoUnit.DAYS);
+
+        for (SkillManager.Skill skill : skills) {
+            if (skill.pinned) continue;
+
+            Instant lastUsed = skill.lastUsedAt != null ? skill.lastUsedAt : skill.createdAt;
+            if (lastUsed == null) lastUsed = now;
+
+            if (lastUsed.isBefore(archiveThreshold)) {
+                if (skill.lifecycleStatus != SkillLifecycleStatus.ARCHIVED) {
+                    skillManager.archiveSkill(skill.name);
+                    skill.lifecycleStatus = SkillLifecycleStatus.ARCHIVED;
+                    report.autoArchived++;
+                }
+            } else if (lastUsed.isBefore(staleThreshold)) {
+                if (skill.lifecycleStatus == SkillLifecycleStatus.ACTIVE) {
+                    skill.lifecycleStatus = SkillLifecycleStatus.STALE;
+                    report.autoMarkedStale++;
+                }
+            } else {
+                if (skill.lifecycleStatus != SkillLifecycleStatus.ACTIVE) {
+                    skill.lifecycleStatus = SkillLifecycleStatus.ACTIVE;
+                    report.autoReactivated++;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Layer 2: LLM consolidation pass
+    // =========================================================================
+
+    private void runLLMConsolidation(List<SkillManager.Skill> agentSkills, boolean dryRun,
+                                      CuratorRunReport report) {
+        if (config == null) {
+            logger.warn("LLM consolidation skipped — no HermesConfig provided to CuratorJob");
+            return;
+        }
+
+        String candidateList = renderCandidateList(agentSkills);
+        if (candidateList.contains("No agent-created skills")) {
+            return;
+        }
+
+        String prompt;
+        if (dryRun) {
+            prompt = CuratorReviewPrompts.DRY_RUN_BANNER + "\n\n" +
+                     CuratorReviewPrompts.CURATOR_REVIEW_PROMPT + "\n\n" +
+                     candidateList;
+        } else {
+            prompt = CuratorReviewPrompts.CURATOR_REVIEW_PROMPT + "\n\n" + candidateList;
+        }
+
+        try {
+            SubAgent reviewAgent = new SubAgent(prompt, "", config);
+            reviewAgent.withSystemPrompt(
+                "You are Hermes' background skill CURATOR. You consolidate narrow skills "
+                + "into class-level umbrellas. You can use skill_list, skill_get, skill_patch, "
+                + "skill_create, skill_write_file, and skill_delete. Be thorough."
+            ).withToolWhitelist(java.util.Set.of(
+                "skill_list", "skill_get", "skill_patch", "skill_create",
+                "skill_write_file", "skill_delete", "skill_search"
+            )).withMaxIterations(999);
+
+            SubAgentResult result = reviewAgent.call();
+
+            if (result != null) {
+                report.llmFinalResponse = result.output;
+                report.llmToolCalls = result.iterationsUsed;
+                if (!result.success) {
+                    report.llmError = result.error;
+                }
+
+                // Parse structured YAML from the LLM response
+                parseStructuredSummary(result.output, report);
+
+                // Record new skills created
+                detectNewSkills(agentSkills, report);
+            }
+        } catch (Exception e) {
+            logger.error("LLM consolidation failed: {}", e.getMessage(), e);
+            report.llmError = e.getMessage();
+        }
+
+        // Cron job skill reference rewrite
+        if (!dryRun && (!report.consolidations.isEmpty() || !report.prunings.isEmpty())) {
+            rewriteCronSkillReferences(report);
+        }
+    }
+
+    // =========================================================================
+    // Candidate list rendering
+    // =========================================================================
+
+    private String renderCandidateList(List<SkillManager.Skill> skills) {
+        if (skills == null || skills.isEmpty()) return "No agent-created skills to review.";
+        StringBuilder sb = new StringBuilder();
+        sb.append("Agent-created skills (").append(skills.size()).append("):\n\n");
+        for (SkillManager.Skill s : skills) {
+            if (s.lifecycleStatus == SkillLifecycleStatus.ARCHIVED) continue;
+            sb.append("- ").append(s.name)
+              .append("  state=").append(s.lifecycleStatus)
+              .append("  pinned=").append(s.pinned ? "yes" : "no")
+              .append("  use=").append(s.usageCount)
+              .append("  last_used=").append(s.lastUsedAt != null ? s.lastUsedAt : "never")
+              .append("\n");
+        }
+        return sb.toString();
+    }
+
+    // =========================================================================
+    // Structured summary parsing
+    // =========================================================================
+
+    private void parseStructuredSummary(String llmOutput, CuratorRunReport report) {
+        if (llmOutput == null || llmOutput.isBlank()) return;
+
+        // Extract ```yaml ... ``` block
+        Pattern pattern = Pattern.compile("```ya?ml\\s*\\n(.*?)\\n```", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(llmOutput);
+        if (!matcher.find()) {
+            // Fallback: heuristic detection from tool calls vs before/after skill list
+            logger.debug("No structured YAML block found in curator LLM output");
+            return;
+        }
+
+        String yamlBody = matcher.group(1);
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> data = yamlMapper.readValue(yamlBody, Map.class);
+
+            // Parse consolidations
+            Object cons = data.get("consolidations");
+            if (cons instanceof List<?> consList) {
+                for (Object entry : consList) {
+                    if (entry instanceof Map<?, ?> map) {
+                        Object fromVal = map.get("from");
+                        Object intoVal = map.get("into");
+                        Object reasonVal = map.get("reason");
+                        if (fromVal != null && intoVal != null) {
+                            String from = fromVal.toString();
+                            String into = intoVal.toString();
+                            String reason = reasonVal != null ? reasonVal.toString() : "";
+                            if (!from.isBlank() && !into.isBlank()) {
+                                report.consolidations.add(new CuratorRunReport.ConsolidationEntry(from, into, reason));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Parse prunings
+            Object prun = data.get("prunings");
+            if (prun instanceof List<?> prunList) {
+                for (Object entry : prunList) {
+                    if (entry instanceof Map<?, ?> map) {
+                        Object nameVal = map.get("name");
+                        Object reasonVal = map.get("reason");
+                        if (nameVal != null) {
+                            String name = nameVal.toString();
+                            String reason = reasonVal != null ? reasonVal.toString() : "";
+                            if (!name.isBlank()) {
+                                report.prunings.add(new CuratorRunReport.PruningEntry(name, reason));
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to parse curator YAML summary: {}", e.getMessage());
+        }
+
+        report.consolidatedCount = report.consolidations.size();
+        report.prunedCount = report.prunings.size();
+    }
+
+    /**
+     * Detect skills that exist now but didn't before the run (new umbrellas).
+     */
+    private void detectNewSkills(List<SkillManager.Skill> beforeSkills, CuratorRunReport report) {
+        Set<String> beforeNames = new HashSet<>();
+        for (SkillManager.Skill s : beforeSkills) beforeNames.add(s.name);
+
+        List<SkillManager.Skill> afterSkills = provenanceService.getByProvenance(SkillProvenance.AGENT);
+        for (SkillManager.Skill s : afterSkills) {
+            if (!beforeNames.contains(s.name)) {
+                report.newSkills.add(s.name);
+            }
+        }
+        report.newSkillsCreated = report.newSkills.size();
+    }
+
+    // =========================================================================
+    // Cron job skill reference rewrite
+    // =========================================================================
+
+    /**
+     * Rewrite cron job skill references after consolidation.
+     *
+     * When skill X is consolidated into umbrella Y, any cron job that references
+     * X should be updated to reference Y instead. This is best-effort — a cron
+     * module failure never breaks the curator.
+     */
+    private void rewriteCronSkillReferences(CuratorRunReport report) {
+        try {
+            // Build the rename map: old-name → new-name (for consolidations)
+            // and old-name → null (for prunings — drop the reference)
+            Map<String, String> renameMap = new HashMap<>();
+            for (var c : report.consolidations) {
+                renameMap.put(c.from, c.into);
+            }
+            for (var p : report.prunings) {
+                renameMap.put(p.name, null);
+            }
+
+            if (renameMap.isEmpty()) return;
+
+            // Attempt to find and update cron job configs
+            // Cron jobs are stored in CronjobTool's internal map, but we can also
+            // check for cron config files in ~/.hermes/cron/
+            Path cronDir = skillManager.getSearchPaths().get(0).resolve("..").resolve("cron").normalize();
+            if (!Files.isDirectory(cronDir)) {
+                logger.debug("No cron directory found at {}", cronDir);
+                return;
+            }
+
+            int rewritten = 0;
+            try (Stream<Path> files = Files.list(cronDir)) {
+                var fileList = files.filter(p -> p.toString().endsWith(".json")).toList();
+                for (Path jobFile : fileList) {
+                    try {
+                        String content = Files.readString(jobFile);
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> job = jsonMapper.readValue(content, Map.class);
+                        @SuppressWarnings("unchecked")
+                        List<String> skills = (List<String>) job.getOrDefault("skills", List.of());
+                        if (skills == null || skills.isEmpty()) continue;
+
+                        List<String> updated = new ArrayList<>();
+                        boolean changed = false;
+                        for (String skill : skills) {
+                            if (renameMap.containsKey(skill)) {
+                                String newName = renameMap.get(skill);
+                                if (newName != null) {
+                                    updated.add(newName);
+                                }
+                                // null = pruned, drop the reference
+                                changed = true;
+                            } else {
+                                updated.add(skill);
+                            }
+                        }
+
+                        if (changed) {
+                            job.put("skills", updated);
+                            Files.writeString(jobFile, jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(job));
+                            rewritten++;
+                            logger.info("Rewrote cron job skill references in: {}", jobFile.getFileName());
+                        }
+                    } catch (Exception e) {
+                        logger.debug("Failed to process cron job file {}: {}", jobFile, e.getMessage());
+                    }
+                }
+            }
+            report.cronJobsRewritten = rewritten;
+        } catch (Exception e) {
+            logger.debug("Cron skill reference rewrite failed: {}", e.getMessage(), e);
+        }
+    }
+
+    // =========================================================================
+    // Report writing
+    // =========================================================================
+
+    private void writeReport(CuratorRunReport report) {
+        try {
+            Files.createDirectories(reportsDir);
+            String timestamp = report.startedAt.toString().replace(":", "").replace("-", "").substring(0, 15);
+            Path reportDir = reportsDir.resolve(timestamp);
+            Files.createDirectories(reportDir);
+
+            // run.json
+            Path jsonPath = reportDir.resolve("run.json");
+            Files.writeString(jsonPath, jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(report));
+
+            // REPORT.md
+            Path mdPath = reportDir.resolve("REPORT.md");
+            Files.writeString(mdPath, report.toMarkdown());
+
+            state.lastReportPath = reportDir.toString();
+            logger.info("Curator report written to: {}", reportDir);
+        } catch (IOException e) {
+            logger.debug("Failed to write curator report: {}", e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // State persistence
+    // =========================================================================
+
+    private CuratorState loadState() {
+        if (!Files.exists(stateFile)) return new CuratorState();
+        try {
+            return jsonMapper.readValue(stateFile.toFile(), CuratorState.class);
+        } catch (Exception e) {
+            logger.debug("Failed to read curator state: {}", e.getMessage());
+            return new CuratorState();
+        }
+    }
+
+    private void saveState() {
+        try {
+            Files.createDirectories(stateFile.getParent());
+            jsonMapper.writerWithDefaultPrettyPrinter().writeValue(stateFile.toFile(), state);
+        } catch (Exception e) {
+            logger.debug("Failed to save curator state: {}", e.getMessage());
+        }
+    }
+
+    public CuratorState getState() {
+        return state;
+    }
+
+    // =========================================================================
+    // Data classes
+    // =========================================================================
+
+    public static class CuratorState {
+        public String lastRunAt;
+        public Double lastRunDurationSeconds;
+        public String lastRunSummary;
+        public String lastReportPath;
+        public boolean paused = false;
+        public int runCount = 0;
+    }
+
+    // Legacy compat — old CuratorReport record
     public record CuratorReport(
         int totalReviewed,
         int pinnedCount,

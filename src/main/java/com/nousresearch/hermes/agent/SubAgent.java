@@ -13,16 +13,26 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 
 /**
  * Sub-agent for parallel task delegation.
  * Each sub-agent runs independently with its own context and budget.
+ *
+ * <p>Supports optional tool whitelist and system-prompt override for
+ * specialized forks (background review, curator, etc.).</p>
  */
 public class SubAgent implements Callable<SubAgentResult> {
     private static final Logger logger = LoggerFactory.getLogger(SubAgent.class);
     private static final ExecutorService executor = Executors.newCachedThreadPool();
+    
+    /** Default tool set for general-purpose sub-agents. */
+    private static final Set<String> DEFAULT_TOOLS = Set.of(
+        "web_search", "web_extract", "read_file", "write_file",
+        "execute_command", "search_files"
+    );
     
     private final String id;
     private final String task;
@@ -32,6 +42,11 @@ public class SubAgent implements Callable<SubAgentResult> {
     private final ToolRegistry toolRegistry;
     private final IterationBudget budget;
     private final List<ModelMessage> conversationHistory;
+    
+    // Optional overrides for specialized forks
+    private Set<String> toolWhitelist = null;
+    private String systemPromptOverride = null;
+    private Integer maxIterationsOverride = null;
     
     private volatile boolean running;
     private SubAgentResult result;
@@ -59,6 +74,24 @@ public class SubAgent implements Callable<SubAgentResult> {
                 logger.debug("[SubAgent {}] received message: {}", id, msg.getAction());
             });
         }
+        return this;
+    }
+
+    /** Restrict the sub-agent to a specific set of tools (whitelist). */
+    public SubAgent withToolWhitelist(Set<String> tools) {
+        this.toolWhitelist = tools != null ? new java.util.HashSet<>(tools) : null;
+        return this;
+    }
+
+    /** Override the system prompt for specialized forks (review, curator, etc.). */
+    public SubAgent withSystemPrompt(String prompt) {
+        this.systemPromptOverride = prompt;
+        return this;
+    }
+
+    /** Override max iterations for this sub-agent. */
+    public SubAgent withMaxIterations(int max) {
+        this.maxIterationsOverride = max;
         return this;
     }
 
@@ -216,6 +249,9 @@ public class SubAgent implements Callable<SubAgentResult> {
     }
     
     private String buildSystemPrompt() {
+        if (systemPromptOverride != null && !systemPromptOverride.isBlank()) {
+            return systemPromptOverride;
+        }
         return "You are a sub-agent working on a specific task. " +
                "Focus on completing the task efficiently. " +
                "Use tools when needed. " +
@@ -223,10 +259,8 @@ public class SubAgent implements Callable<SubAgentResult> {
     }
     
     private List<ToolDefinition> buildToolDefinitions() {
-        // Get a subset of tools for sub-agents
-        var toolNames = List.of("web_search", "web_extract", "read_file", "write_file", 
-                                "execute_command", "search_files");
-        return toolRegistry.getToolDefinitions(java.util.Set.copyOf(toolNames));
+        Set<String> tools = toolWhitelist != null ? toolWhitelist : DEFAULT_TOOLS;
+        return toolRegistry.getToolDefinitions(tools);
     }
     
     private String executeToolCall(com.nousresearch.hermes.model.ToolCall toolCall) {

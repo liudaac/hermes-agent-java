@@ -1741,8 +1741,17 @@ public class TenantAwareAIAgent {
                     .append("\n");
             }
 
-            // Use SubAgent for the forked review
+            // Use SubAgent for the forked review with memory+skill tool whitelist
             SubAgent reviewAgent = new SubAgent(reviewMessage, contextBuilder.toString(), config);
+            reviewAgent.withToolWhitelist(java.util.Set.of(
+                "memory", "skill_create", "skill_update", "skill_patch",
+                "skill_write_file", "skill_remove_file", "skill_get",
+                "skill_search", "skill_list"
+            )).withSystemPrompt(
+                "You are a background self-improvement reviewer. Review the "
+                + "conversation and save valuable learnings to memory or skills. "
+                + "Be concise. Only use memory and skill management tools."
+            ).withMaxIterations(16);
             SubAgentResult result = reviewAgent.call();
 
             // Summarize actions for the user

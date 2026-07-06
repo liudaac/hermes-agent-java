@@ -96,6 +96,13 @@ public class HermesAgentV2 {
             config.getModelName()
         );
 
+        // Register curator command (needs agentConfig for LLM consolidation)
+        com.nousresearch.hermes.skills.SkillManager sm = new com.nousresearch.hermes.skills.SkillManager();
+        com.nousresearch.hermes.skills.SkillProvenanceService sps = new com.nousresearch.hermes.skills.SkillProvenanceService(sm);
+        com.nousresearch.hermes.skills.CuratorJob curatorJob = new com.nousresearch.hermes.skills.CuratorJob(sps, sm, agentConfig);
+        com.nousresearch.hermes.skills.CuratorCommandRegistrar.register(pluginManager, curatorJob);
+        logger.info("Curator slash command registered (/curator)");
+
         if (tenantMode) {
             this.gatewayServerV2 = new GatewayServerV2(gatewayPort, agentConfig);
             this.gatewayServer = null;
