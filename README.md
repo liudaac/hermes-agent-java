@@ -11,6 +11,12 @@ Hermes Agent Java is a production-grade AI agent platform featuring:
 - **Sandbox Security**: File, process, network, and memory sandboxing
 - **Gateway**: Multi-platform messaging (Telegram, Discord, Slack, Feishu, QQ)
 - **Skills System**: Self-improving skills from experience
+- **/learn Command**: Standards-guided skill distillation from any source (URLs, dirs, conversation, notes)
+- **/curator Command**: Background umbrella-building consolidation + automatic lifecycle management
+- **/journey Command**: Visualize learned skills and memories as a learning timeline
+- **Learning Graph**: skill × memory relationship graph with REST API + ASCII renderer
+- **Background Self-Improvement**: Forked LLM reviews each turn for memory updates and skill patches
+- **Approval System**: Multi-mode human-in-the-loop for terminal/file/code/browser/skill-install operations
 
 ---
 
@@ -1044,8 +1050,36 @@ hermes-agent-java/
 │   │   │       │   ├── HermesConfig.java        # Hermes configuration
 │   │   │       │   └── Constants.java           # Constants
 │   │   │       ├── skills/
-│   │   │       │   ├── SkillManager.java        # Skill management
+│   │   │       │   ├── SkillManager.java        # Skill CRUD + archive/restore
+│   │   │       │   ├── LearnPromptBuilder.java  # /learn prompt + AUTHORING_STANDARDS
+│   │   │       │   ├── LearnCommandRegistrar.java # /learn slash command
+│   │   │       │   ├── BackgroundReviewPrompts.java # Memory/skill review prompts
+│   │   │       │   ├── CuratorJob.java          # Two-layer skill lifecycle
+│   │   │       │   ├── CuratorReviewPrompts.java # LLM umbrella-building prompt
+│   │   │       │   ├── CuratorRunReport.java    # run.json + REPORT.md
+│   │   │       │   ├── CuratorCommandRegistrar.java # /curator slash command
+│   │   │       │   ├── LearningGraphService.java # Skill × memory graph
+│   │   │       │   ├── LearningGraphRenderer.java # ASCII timeline + JSON frame
+│   │   │       │   ├── LearningGraphMutations.java # Node CRUD + pin/unpin
+│   │   │       │   ├── JourneyCommandRegistrar.java # /journey slash command
+│   │   │       │   ├── SkillProvenanceService.java # Agent/Bundled/Hub provenance
+│   │   │       │   ├── SkillBundleService.java  # Skill packaging
+│   │   │       │   ├── PreVerifyHook.java       # Pre-merge verification
+│   │   │       │   ├── FineTuneExporter.java    # Trajectory → training data
+│   │   │       │   ├── AchievementService.java  # Tenant achievement tracking
 │   │   │       │   └── SkillHubClient.java      # Skill hub client
+│   │   │       ├── memory/                      # Memory subsystem
+│   │   │       │   ├── MemoryManager.java       # MEMORY.md + USER.md (delimiter §)
+│   │   │       │   ├── MemoryRetriever.java     # Top-K retrieval
+│   │   │       │   ├── ActiveMemoryRecord.java
+│   │   │       │   ├── PromptContextBuilder.java # Inject memory into system prompt
+│   │   │       │   └── ...
+│   │   │       ├── learning/                    # Insight extraction
+│   │   │       │   ├── LearningPipeline.java    # Unified extraction pipeline
+│   │   │       │   ├── InsightExtractor.java
+│   │   │       │   ├── KnowledgeExtractor.java
+│   │   │       │   ├── CuriosityEngine.java     # Proactive exploration
+│   │   │       │   └── ...
 │   │   │       └── util/
 │   │   │           ├── SafeWriter.java          # Safe stdio wrapper
 │   │   │           └── JsonUtils.java           # JSON utilities
@@ -1076,6 +1110,153 @@ hermes-agent-java/
 
 ---
 
+## Self-Improvement & Skill Distillation
+
+Hermes is a self-improving agent — the skills it learns persist across sessions and get
+automatically consolidated over time. Three layers:
+
+### `/learn` — Skill Distillation
+
+Distill a reusable skill from anything you describe. The agent gathers the sources
+with its existing tools and authors the skill via standards-guided prompts.
+
+```bash
+# Learn from a directory
+/learn /path/to/source/dir focus on the auth flow, skip deprecated endpoints
+
+# Learn from a URL
+/learn https://example.com/api-docs
+
+# Learn from a conversation (no args)
+/learn
+
+# Learn from a workflow
+/learn the GitHub PR review pattern we just did
+```
+
+The `/learn` command:
+1. Parses the request (sources + requirements)
+2. Builds a prompt with embedded **AUTHORING_STANDARDS** (name rules, frontmatter schema, body section order, Hermes-tool framing, quality bar)
+3. Injects the prompt into the live agent's input
+4. The agent reads sources with `read_file` / `web_extract`, then authors the skill via `skill_create` / `skill_write_file`
+
+**Distilled skill lands in `~/.hermes/skills/<name>/SKILL.md`** with optional `references/`, `templates/`, `scripts/` subdirectories.
+
+### Background Self-Improvement
+
+After every turn, the agent forks a SubAgent with a memory+skill tool whitelist and asks
+it to review the conversation for:
+- **Memory updates**: user persona, preferences, durable facts → saved to MEMORY.md / USER.md
+- **Skill patches**: style/workflow corrections, new techniques → patched into existing skills
+
+The summary is queued and surfaced at the start of the next turn:
+```
+💾 Self-improvement review: 2 memory update(s), 1 insight(s)
+```
+
+Review prompts (`memory`, `skill`, `combined`) live in `BackgroundReviewPrompts.java`.
+
+### `/curator` — Skill Library Maintenance
+
+Two-layer skill lifecycle management:
+
+```bash
+/curator status                                # Last run info
+/curator run                                   # Deterministic transitions only
+/curator run --consolidate                     # Include LLM umbrella-building
+/curator run --dry-run                         # Preview without mutations
+/curator restore <name>                        # Restore an archived skill
+/curator pause | resume                        # Scheduler control
+```
+
+**Layer 1 — Deterministic** (no LLM):
+- 30 days unused → `STALE`
+- 90 days unused → `ARCHIVED` (recoverable, never deleted)
+- Pinned skills skipped
+- Skills referenced by cron jobs skipped
+
+**Layer 2 — LLM Umbrella-Building** (opt-in via `--consolidate`):
+- Forks a SubAgent with `skill_list`/`skill_get`/`skill_patch`/`skill_create`/`skill_write_file` whitelist
+- Identifies prefix clusters → merges narrow skills into class-level umbrellas
+- Demotes session-specific content to `references/`/`templates/`/`scripts/`
+- Rewrites cron job skill references automatically
+- Writes `~/.hermes/logs/curator/{timestamp}/run.json` + `REPORT.md`
+
+### `/journey` — Learning Timeline Visualization
+
+```bash
+/journey                          # ASCII timeline chart
+/journey --json                   # Raw graph data
+/journey delete <node-id>         # Archive a skill / delete a memory
+/journey edit <node-id> <content> # Update a skill or memory
+/journey pin <node-id>            # Protect from archive
+/journey unpin <node-id>          # Remove protection
+```
+
+Renders a date-row bar chart with proportional skill/memory bars colored by
+category, plus a cumulative trajectory sparkline. UTF-8 terminals use
+`●━◆·✦` glyphs; ASCII terminals use `=+.*^` fallback.
+
+Memory node id format: `memory:<source>:<index>` where source is `memory`
+(MEMORY.md) or `user` (USER.md).
+
+### Learning Graph
+
+A skill × memory relationship graph backing `/journey` and the dashboard:
+
+```bash
+# REST API
+GET    /api/learning/graph              # Full graph + timeline frame
+GET    /api/learning/node/{id}          # Inspect a node
+DELETE /api/learning/node/{id}          # Delete/archive
+PUT    /api/learning/node/{id}          # Edit content
+POST   /api/learning/node/{id}/pin      # Pin
+POST   /api/learning/node/{id}/unpin    # Unpin
+```
+
+Edge types: `USAGE` (memory→skill), `DEPENDENCY`, `EVOLUTION` (skill grew from skill),
+`SIMILARITY` (Jaccard on tags + name containment boost).
+
+### Skill CRUD Tools
+
+The agent manages skills through these tools (registered in `SkillTool.java`):
+
+| Tool | Description |
+|---|---|
+| `skill_create` | Create a new skill with SKILL.md + metadata |
+| `skill_get` | Load a skill by name |
+| `skill_search` / `skill_list` | Find skills by query / category |
+| `skill_update` | Replace skill content wholesale |
+| `skill_patch` | Incremental old_string → new_string replacement |
+| `skill_write_file` | Write a support file under a skill |
+| `skill_remove_file` | Remove a support file (SKILL.md protected) |
+| `skill_delete` | Archive a skill (recoverable via `/curator restore`) |
+| `skill_invoke` | Run a skill's procedure |
+
+---
+
+## Approval System
+
+`ApprovalSystem` provides defense-in-depth human-in-the-loop control over
+high-risk tool calls. Multi-mode:
+
+- **AUTO** — auto-approve (default for low-risk)
+- **PROMPT** — prompt the user (default for medium-risk)
+- **REQUIRE** — require explicit approval (high-risk)
+- **DENY** — hard-deny (very high-risk)
+
+Approval channels:
+- **Console** — terminal y/n prompt
+- **IM** — `/approve <id>` via Feishu/Telegram/Discord/QQ
+- **Dashboard** — three-color approval queue in the web UI
+
+Approval types: `terminal`, `file_write`, `file_delete`, `code`, `browser`,
+`subagent`, `skill_install`. Each has its own default mode and danger
+patterns. State persists for 30 minutes per session (same approval doesn't
+re-prompt within the same task).
+
+---
+
 ## Quick Start
 
 ### Build
@@ -1096,6 +1277,12 @@ java -jar target/hermes-agent-java-0.1.0.jar
 
 # With custom config
 java -jar target/hermes-agent-java-0.1.0.jar --config /path/to/config.yaml
+
+# Slash commands (in interactive mode)
+/help
+/learn <description>
+/curator run --consolidate
+/journey
 ```
 
 ### Run Gateway Mode
@@ -1334,5 +1521,5 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 ---
 
-*Last updated: 2026-05-03*
-*Version: 0.1.0*
+*Last updated: 2026-07-06*
+*Version: 0.2.0*
