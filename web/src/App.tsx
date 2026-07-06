@@ -1,7 +1,10 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
-import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { migrateOldPath, rememberSpace, SPACE_PATHS } from "@/lib/routing/spaces";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { migrateOldPath, rememberSpace, resolveDefaultSpace, SPACE_PATHS, type SpaceName } from "@/lib/routing/spaces";
 import { RootRedirect } from "@/lib/routing/Redirects";
+import { SpaceSwitcher } from "@/lib/routing/SpaceSwitcher";
+import { SpaceNav } from "@/lib/routing/SpaceNav";
+import { getNavForSpace, pathToSpace } from "@/lib/routing/nav";
 import {
   Activity,
   BarChart3,
@@ -23,10 +26,8 @@ import {
   Star,
   Code,
   Eye,
-  Monitor,
   Users,
   Bot,
-  Layout,
   ArrowLeftRight,
   BriefcaseBusiness,
   GitBranch,
@@ -71,47 +72,6 @@ const ComparePage = lazy(() => import("@/pages/ComparePage"));
 import { useI18n } from "@/i18n";
 import { usePlugins } from "@/plugins";
 import type { RegisteredPlugin } from "@/plugins";
-
-const BUILTIN_NAV: NavItem[] = [
-  { path: "/", labelKey: "status", label: "Status", icon: Activity },
-  {
-    path: "/playground",
-    labelKey: "playground",
-    label: "Playground",
-    icon: Bot,
-  },
-  {
-    path: "/compare",
-    labelKey: "compare",
-    label: "Compare",
-    icon: ArrowLeftRight,
-  },
-  {
-    path: "/sessions",
-    labelKey: "sessions",
-    label: "Sessions",
-    icon: MessageSquare,
-  },
-  {
-    path: "/analytics",
-    labelKey: "analytics",
-    label: "Analytics",
-    icon: BarChart3,
-  },
-  { path: "/logs", labelKey: "logs", label: "Logs", icon: FileText },
-  { path: "/cron", labelKey: "cron", label: "Cron", icon: Clock },
-  { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
-  { path: "/tools", labelKey: "tools", label: "Tools", icon: Wrench },
-  { path: "/tenants", labelKey: "tenants", label: "Tenants", icon: Users },
-  { path: "/org", labelKey: "orgOverview", label: "Org Overview", icon: Layout },
-  { path: "/org-control", labelKey: "orgControl", label: "Org Control", icon: Monitor },
-  { path: "/config", labelKey: "config", label: "Config", icon: Settings },
-  { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
-  { path: "/workflows", label: "Workflows", icon: GitBranch },
-  { path: "/sla", label: "SLA", icon: Timer },
-  { path: "/dlq", label: "DLQ", icon: AlertOctagon },
-  { path: "/hitl", label: "Human Loop", icon: Hand },
-];
 
 // Plugins can reference any of these by name in their manifest — keeps bundle
 // size sane vs. importing the full lucide-react set.
@@ -169,11 +129,15 @@ function buildNavItems(
     if (pos === "end") {
       items.push(pluginItem);
     } else if (pos.startsWith("after:")) {
-      const target = "/" + pos.slice(6);
+      // Plugin manifests may reference old top-level paths (e.g. "after:/status").
+      // Migrate to the space-scoped path so we can find the right insertion point.
+      const target =
+        migrateOldPath("/" + pos.slice(6)) ?? "/" + pos.slice(6);
       const idx = items.findIndex((i) => i.path === target);
       items.splice(idx >= 0 ? idx + 1 : items.length, 0, pluginItem);
     } else if (pos.startsWith("before:")) {
-      const target = "/" + pos.slice(7);
+      const target =
+        migrateOldPath("/" + pos.slice(7)) ?? "/" + pos.slice(7);
       const idx = items.findIndex((i) => i.path === target);
       items.splice(idx >= 0 ? idx : items.length, 0, pluginItem);
     } else {
@@ -207,9 +171,20 @@ export default function App() {
     else if (location.pathname.startsWith(SPACE_PATHS.noc)) rememberSpace("noc");
   }, [location.pathname]);
 
+  // Compute the active space from the URL.
+  const activeSpace: SpaceName =
+    pathToSpace(location.pathname) ?? resolveDefaultSpace();
+
+  // Plugin manifests augment the active space's nav (legacy BUILTIN_NAV flow).
+  const builtinItems = useMemo(() => {
+    const nav = getNavForSpace(activeSpace);
+    // For flat (Portal, NOC) use flat; for grouped (Ops) use flat
+    return nav.flat;
+  }, [activeSpace]);
+
   const navItems = useMemo(
-    () => buildNavItems(BUILTIN_NAV, plugins),
-    [plugins],
+    () => buildNavItems(builtinItems, plugins),
+    [builtinItems, plugins],
   );
 
   return (
@@ -242,56 +217,16 @@ export default function App() {
                 </Typography>
               </Cell>
 
-              {navItems.map(({ path, label, labelKey, icon: Icon }) => (
-                <Cell key={path} className="relative !p-0">
-                  <NavLink
-                    to={path}
-                    end={path === "/"}
-                    className={({ isActive }) =>
-                      cn(
-                        "group relative flex h-full w-full items-center gap-1.5",
-                        "px-2.5 sm:px-4 py-2",
-                        "font-mondwest text-[0.65rem] sm:text-[0.8rem] tracking-[0.12em]",
-                        "whitespace-nowrap transition-colors cursor-pointer",
-                        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
-                        isActive
-                          ? "text-midground"
-                          : "opacity-60 hover:opacity-100",
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <Icon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="hidden sm:inline">
-                          {labelKey
-                            ? ((t.app.nav as Record<string, string>)[
-                                labelKey
-                              ] ?? label)
-                            : label}
-                        </span>
-
-                        <span
-                          aria-hidden
-                          className="absolute inset-1 bg-midground opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-5"
-                        />
-
-                        {isActive && (
-                          <span
-                            aria-hidden
-                            className="absolute bottom-0 left-0 right-0 h-px bg-midground blend-lighter"
-                          />
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                </Cell>
-              ))}
+              <SpaceNav
+                flat={navItems.map((i) => ({ path: i.path, label: i.label, labelKey: i.labelKey, icon: i.icon as any }))}
+                templateColumns={`auto repeat(${navItems.length}, auto)`}
+              />
             </Grid>
           </div>
 
           <Grid className="h-full shrink-0 !border-t-0 !border-b-0">
             <Cell className="flex items-center gap-2 !p-0 !px-2 sm:!px-4">
+              <SpaceSwitcher activeSpace={activeSpace} />
               <ThemeSwitcher />
               <LanguageSwitcher />
               <Typography
@@ -350,7 +285,7 @@ export default function App() {
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
-          <Route path="/business" element={<Navigate to="/business-portal" replace />} />
+          <Route path="/business" element={<Navigate to="/portal" replace />} />
           <Route path="/business-portal" element={<BusinessPortalStandalonePage><BusinessPortalHome /></BusinessPortalStandalonePage>} />
           <Route path="/business-portal/workspaces" element={<BusinessPortalStandalonePage />} />
           <Route path="/business-portal/agents" element={<BusinessPortalStandalonePage><AgentMarketPage /></BusinessPortalStandalonePage>} />
@@ -366,7 +301,7 @@ export default function App() {
           <Route path="/env" element={<EnvPage />} />
 
           <Route path="/org" element={<OrgPage />} />
-          <Route path="/org-manage" element={<Navigate to="/business-portal" replace />} />
+          <Route path="/org-manage" element={<Navigate to="/portal" replace />} />
           <Route path="/org-control" element={<OrgControlCenterPage />} />
           <Route path="/workflows" element={<WorkflowPage />} />
           <Route path="/sla" element={<SLAPage />} />

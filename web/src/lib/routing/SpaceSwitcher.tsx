@@ -1,0 +1,63 @@
+/**
+ * Space switcher — button in the top-right that lets the user
+ * jump between Portal / Ops / NOC.
+ *
+ * Aligned with the three-space refactor. The switcher persists the
+ * choice to localStorage and uses it as the default on next `/`.
+ */
+
+import { useLocation, useNavigate } from "react-router-dom";
+import { BriefcaseBusiness, TerminalSquare, ShieldCheck, type LucideIcon } from "lucide-react";
+import { rememberSpace, SPACE_PATHS, type SpaceName } from "./spaces";
+
+interface SpaceOption {
+  key: SpaceName;
+  label: string;
+  icon: LucideIcon;
+}
+
+const SPACE_OPTIONS: SpaceOption[] = [
+  { key: "portal", label: "Portal", icon: BriefcaseBusiness },
+  { key: "ops", label: "Ops", icon: TerminalSquare },
+  { key: "noc", label: "NOC", icon: ShieldCheck },
+];
+
+export function SpaceSwitcher({ activeSpace }: { activeSpace: SpaceName }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const goTo = (space: SpaceName) => {
+    rememberSpace(space);
+    navigate(SPACE_PATHS[space]);
+  };
+
+  // If the user is mid-path, jump to the space root rather than forcing
+    // them through the same page in a different space.
+  void location;
+
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-current/20 bg-background-base/40 px-1 py-0.5">
+      {SPACE_OPTIONS.map(({ key, label, icon: Icon }) => {
+        const isActive = activeSpace === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => goTo(key)}
+            title={`Switch to ${label}`}
+            aria-current={isActive ? "page" : undefined}
+            className={
+              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] tracking-[0.12em] transition-colors " +
+              (isActive
+                ? "bg-midground text-background-base blend-lighter"
+                : "opacity-60 hover:opacity-100")
+            }
+          >
+            <Icon className="h-3 w-3" />
+            <span className="hidden md:inline">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
