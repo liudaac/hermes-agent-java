@@ -14,8 +14,8 @@
  * Aligned with the three-space refactor (Portal default page).
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portalApi } from "@/lib/api/portal";
@@ -24,6 +24,10 @@ import type {
   BusinessProgressStep,
   StepStatus,
 } from "@/lib/api/types/portal";
+import { DataStateBadge } from "@/components/portal/DataStateBadge";
+
+/** Query param that opts into sample/demo data. */
+const SAMPLE_PARAM = "sample";
 
 interface ProgressBarProps {
   workspaceId?: string;
@@ -33,8 +37,16 @@ interface ProgressBarProps {
 }
 
 export function PortalProgressBar({ workspaceId, currentWorkspaceId, className }: ProgressBarProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isSample = searchParams.get(SAMPLE_PARAM) === "1";
   const [data, setData] = useState<BusinessProgressResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const exitSampleMode = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(SAMPLE_PARAM);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +75,7 @@ export function PortalProgressBar({ workspaceId, currentWorkspaceId, className }
   }
 
   const allMissing = data.steps.every((s) => s.status === "missing");
+  const dataState = isSample ? "sample" : allMissing ? "empty" : "production";
 
   return (
     <div
@@ -72,8 +85,19 @@ export function PortalProgressBar({ workspaceId, currentWorkspaceId, className }
         className,
       )}
       data-testid="portal-progress-bar"
+      data-state={dataState}
     >
-      {allMissing && <EmptyStateHint />}
+      {dataState !== "production" && (
+        <div className="mb-3">
+          <DataStateBadge
+            state={dataState}
+            entity="工作空间"
+            ctaLabel="选一个模板"
+            ctaHref="/portal/templates"
+            onClearSample={dataState === "sample" ? exitSampleMode : undefined}
+          />
+        </div>
+      )}
 
       <div className="flex items-start gap-1.5 sm:gap-3 overflow-x-auto scrollbar-none">
         {data.steps.map((step, idx) => (
@@ -175,19 +199,6 @@ function ProgressStep({
         />
       )}
     </>
-  );
-}
-
-// ── Empty state ────────────────────────────────────────────────
-
-function EmptyStateHint() {
-  return (
-    <div className="mb-3 rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-[0.7rem] tracking-[0.08em] text-amber-200/90">
-      还没有行业模板 —{" "}
-      <a href="/portal/templates" className="underline underline-offset-2 hover:text-amber-100">
-        选一个模板开始
-      </a>
-    </div>
   );
 }
 
