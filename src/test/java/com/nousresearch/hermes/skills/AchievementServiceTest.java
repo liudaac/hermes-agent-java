@@ -56,7 +56,7 @@ class AchievementServiceTest {
         @DisplayName("skills-created=1 → 解锁 first-skill")
         void firstSkillUnlocked() {
             // 注册 metric 关联
-            service.register(new Achievement("test-skill", "测试", "desc", 1, "🎯", "skills-created"));
+            service.register(new AchievementService.Achievement("test-skill", "测试", "desc", 1, "🎯", "skills-created"));
 
             List<AchievementService.Achievement> unlocked = service.updateProgress("t1", "skills-created", 1);
             assertFalse(unlocked.isEmpty());
@@ -65,8 +65,8 @@ class AchievementServiceTest {
         @Test
         @DisplayName("skills-created=10 → 解锁 first-skill + ten-skills")
         void tenSkillsUnlocked() {
-            service.register(new Achievement("first-skill", "初出茅庐", "desc", 1, "🎯", "skills-created"));
-            service.register(new Achievement("ten-skills", "收藏家", "desc", 10, "🏆", "skills-created"));
+            service.register(new AchievementService.Achievement("first-skill", "初出茅庐", "desc", 1, "🎯", "skills-created"));
+            service.register(new AchievementService.Achievement("ten-skills", "收藏家", "desc", 10, "🏆", "skills-created"));
 
             List<AchievementService.Achievement> unlocked = service.updateProgress("t1", "skills-created", 10);
             assertEquals(2, unlocked.size());
@@ -75,7 +75,7 @@ class AchievementServiceTest {
         @Test
         @DisplayName("重复 updateProgress 不重复解锁")
         void noRepeatUnlock() {
-            service.register(new Achievement("a1", "A1", "desc", 5, "🎯", "metric-1"));
+            service.register(new AchievementService.Achievement("a1", "A1", "desc", 5, "🎯", "metric-1"));
 
             service.updateProgress("t1", "metric-1", 5);
             List<AchievementService.Achievement> second = service.updateProgress("t1", "metric-1", 10);
@@ -85,7 +85,7 @@ class AchievementServiceTest {
         @Test
         @DisplayName("未达阈值 → 不解锁")
         void belowThreshold() {
-            service.register(new Achievement("hard", "困难", "desc", 100, "💎", "metric-x"));
+            service.register(new AchievementService.Achievement("hard", "困难", "desc", 100, "💎", "metric-x"));
             List<AchievementService.Achievement> unlocked = service.updateProgress("t1", "metric-x", 50);
             assertTrue(unlocked.isEmpty());
         }
@@ -93,7 +93,7 @@ class AchievementServiceTest {
         @Test
         @DisplayName("不同租户独立解锁")
         void tenantIsolation() {
-            service.register(new Achievement("a1", "A1", "desc", 1, "🎯", "m1"));
+            service.register(new AchievementService.Achievement("a1", "A1", "desc", 1, "🎯", "m1"));
 
             List<AchievementService.Achievement> t1 = service.updateProgress("t1", "m1", 1);
             List<AchievementService.Achievement> t2 = service.updateProgress("t2", "m1", 0);

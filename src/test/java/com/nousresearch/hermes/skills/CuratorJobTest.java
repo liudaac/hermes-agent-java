@@ -24,6 +24,11 @@ class CuratorJobTest {
     void setUp() {
         skillManager = org.mockito.Mockito.mock(SkillManager.class);
         provenanceService = org.mockito.Mockito.mock(SkillProvenanceService.class);
+        // Mock getSearchPaths so CuratorJob constructor doesn't fail
+        java.nio.file.Path tmpDir = java.nio.file.Paths.get(
+            System.getProperty("java.io.tmpdir"), "hermes-test-skills");
+        org.mockito.Mockito.when(skillManager.getSearchPaths())
+            .thenReturn(java.util.List.of(tmpDir));
         curator = new CuratorJob(provenanceService, skillManager);
     }
 
@@ -55,9 +60,9 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(1, report.totalReviewed());
-            assertEquals(1, report.markedStaleCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(1, report.autoChecked);
+            assertEquals(1, report.autoMarkedStale);
             assertEquals(SkillLifecycleStatus.STALE, skill.lifecycleStatus);
         }
 
@@ -69,8 +74,8 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(1, report.archivedCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(1, report.autoArchived);
             assertEquals(SkillLifecycleStatus.ARCHIVED, skill.lifecycleStatus);
         }
 
@@ -82,9 +87,9 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(0, report.markedStaleCount());
-            assertEquals(0, report.archivedCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(0, report.autoMarkedStale);
+            assertEquals(0, report.autoArchived);
             assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
         }
 
@@ -96,9 +101,10 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(1, report.pinnedCount());
-            assertEquals(0, report.archivedCount());
+            CuratorRunReport report = curator.run();
+            // pinned skills are skipped — not counted in auto transitions
+            assertEquals(0, report.autoMarkedStale);
+            assertEquals(0, report.autoArchived);
             assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
         }
 
@@ -110,8 +116,8 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(1, report.restoredCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(1, report.autoReactivated);
             assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
         }
 
@@ -123,8 +129,8 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(0, report.archivedCount()); // 不重复计数
+            CuratorRunReport report = curator.run();
+            assertEquals(0, report.autoArchived); // 不重复计数
         }
 
         @Test
@@ -135,66 +141,13 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(skill));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(0, report.markedStaleCount()); // 不重复计数
+            CuratorRunReport report = curator.run();
+            assertEquals(0, report.autoMarkedStale); // 不重复计数
         }
     }
 
     // ========================================================================
-    // 合并候选
-    // ========================================================================
-
-    @Nested
-    @DisplayName("合并候选检测")
-    class ConsolidationTest {
-
-        @Test
-        @DisplayName("共享 tag 的 skill 被识别为合并候选")
-        void sharedTagCandidates() {
-            SkillManager.Skill s1 = createSkill("search-web", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            s1.tags.add("search");
-            SkillManager.Skill s2 = createSkill("search-files", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            s2.tags.add("search");
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(s1, s2));
-
-            CuratorJob.CuratorReport report = curator.run();
-            assertTrue(report.consolidationCandidateCount() > 0);
-            assertFalse(report.consolidationCandidates().isEmpty());
-        }
-
-        @Test
-        @DisplayName("无共享 tag → 无合并候选")
-        void noSharedTag() {
-            SkillManager.Skill s1 = createSkill("a", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            s1.tags.add("coding");
-            SkillManager.Skill s2 = createSkill("b", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            s2.tags.add("writing");
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(s1, s2));
-
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(0, report.consolidationCandidateCount());
-        }
-
-        @Test
-        @DisplayName("ARCHIVED skill 不参与合并检测")
-        void archivedExcluded() {
-            SkillManager.Skill s1 = createSkill("a", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            s1.tags.add("shared");
-            SkillManager.Skill s2 = createSkill("b", Instant.now(), false, SkillLifecycleStatus.ARCHIVED);
-            s2.tags.add("shared");
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(s1, s2));
-
-            CuratorJob.CuratorReport report = curator.run();
-            // 只有 1 个活跃 skill 有 "shared" tag，不构成候选
-            assertEquals(0, report.consolidationCandidateCount());
-        }
-    }
-
-    // ========================================================================
-    // 空数据处理
+    // 合并候选 — Layer 1 只做确定性转换，合并候选在 Layer 2 (LLM)
     // ========================================================================
 
     @Nested
@@ -207,11 +160,10 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of());
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(0, report.totalReviewed());
-            assertEquals(0, report.pinnedCount());
-            assertEquals(0, report.markedStaleCount());
-            assertEquals(0, report.archivedCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(0, report.autoChecked);
+            assertEquals(0, report.autoMarkedStale);
+            assertEquals(0, report.autoArchived);
         }
     }
 
@@ -236,12 +188,11 @@ class CuratorJobTest {
             org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
                 .thenReturn(List.of(active, pinned, toStale, toArchive, toRestore));
 
-            CuratorJob.CuratorReport report = curator.run();
-            assertEquals(5, report.totalReviewed());
-            assertEquals(1, report.pinnedCount());
-            assertEquals(1, report.markedStaleCount());
-            assertEquals(1, report.archivedCount());
-            assertEquals(1, report.restoredCount());
+            CuratorRunReport report = curator.run();
+            assertEquals(5, report.autoChecked);
+            assertEquals(1, report.autoMarkedStale);
+            assertEquals(1, report.autoArchived);
+            assertEquals(1, report.autoReactivated);
         }
     }
 
@@ -256,47 +207,36 @@ class CuratorJobTest {
         @Test
         @DisplayName("恢复 ARCHIVED skill")
         void restoreArchived() {
-            SkillManager.Skill skill = createSkill("archived", Instant.now().minus(100, ChronoUnit.DAYS), false, SkillLifecycleStatus.ARCHIVED);
-            org.mockito.Mockito.when(skillManager.listSkills()).thenReturn(List.of(skill));
+            org.mockito.Mockito.when(skillManager.restoreSkill("archived")).thenReturn(true);
 
             assertTrue(curator.restore("archived"));
-            assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
-            assertNotNull(skill.lastUsedAt);
         }
 
         @Test
-        @DisplayName("恢复 ACTIVE skill → false（不需要恢复）")
-        void restoreActive() {
-            SkillManager.Skill skill = createSkill("active", Instant.now(), false, SkillLifecycleStatus.ACTIVE);
-            org.mockito.Mockito.when(skillManager.listSkills()).thenReturn(List.of(skill));
-
-            assertFalse(curator.restore("active"));
-        }
-
-        @Test
-        @DisplayName("不存在的 skill → false")
+        @DisplayName("恢复不存在的 skill → false")
         void notFound() {
-            org.mockito.Mockito.when(skillManager.listSkills()).thenReturn(List.of());
+            org.mockito.Mockito.when(skillManager.restoreSkill("nonexistent")).thenReturn(false);
             assertFalse(curator.restore("nonexistent"));
         }
     }
 
     // ========================================================================
-    // CuratorReport
+    // CuratorRunReport
     // ========================================================================
 
     @Nested
-    @DisplayName("CuratorReport")
+    @DisplayName("CuratorRunReport")
     class ReportTest {
 
         @Test
         @DisplayName("toString 包含关键字段")
         void toString_() {
-            CuratorJob.CuratorReport report = new CuratorJob.CuratorReport(
-                10, 2, 3, 1, 0, 1, List.of(), Instant.now());
+            CuratorRunReport report = new CuratorRunReport();
+            report.autoChecked = 10;
+            report.autoMarkedStale = 3;
+            report.autoArchived = 1;
             String s = report.toString();
-            assertTrue(s.contains("reviewed=10"));
-            assertTrue(s.contains("pinned=2"));
+            assertTrue(s.contains("checked=10"));
             assertTrue(s.contains("stale=3"));
             assertTrue(s.contains("archived=1"));
         }
