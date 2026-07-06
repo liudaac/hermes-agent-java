@@ -81,6 +81,10 @@ public class HermesAgentV2 {
         logger.info("Plugin system initialized: {} plugins loaded",
                 pluginManager.getPlugins().size());
 
+        // Register core slash commands
+        com.nousresearch.hermes.skills.LearnCommandRegistrar.register(pluginManager);
+        logger.info("Core slash commands registered (/learn)");
+
         // Register built-in providers (backends)
         registerBuiltinProviders();
 

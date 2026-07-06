@@ -448,6 +448,262 @@ public class SkillManager {
         return Collections.unmodifiableList(paths);
     }
 
+    /**
+     * Patch a skill by replacing old_string with new_string in SKILL.md.
+     * Preferred for incremental fixes — avoids rewriting the entire file.
+     *
+     * @return true if the patch was applied (old_string found and replaced)
+     */
+    public PatchResult patchSkill(String name, String oldString, String newString,
+                                  String filePath, boolean replaceAll) {
+        String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+        Path skillDir = resolveSkillDir(safeName);
+        if (skillDir == null) {
+            return PatchResult.notFound(name);
+        }
+
+        // Determine target file: SKILL.md (default) or a relative path like references/foo.md
+        Path targetFile;
+        if (filePath != null && !filePath.isBlank()) {
+            // Normalize and prevent path traversal
+            String normalized = filePath.replace("\\", "/");
+            if (normalized.startsWith("/") || normalized.contains("..")) {
+                return PatchResult.error("file_path must be relative to the skill directory");
+            }
+            targetFile = skillDir.resolve(normalized).normalize();
+            if (!targetFile.startsWith(skillDir)) {
+                return PatchResult.error("file_path escapes skill directory");
+            }
+        } else {
+            targetFile = skillDir.resolve("SKILL.md");
+        }
+
+        if (!Files.exists(targetFile)) {
+            return PatchResult.error("File not found: " + skillDir.relativize(targetFile));
+        }
+
+        try {
+            String content = Files.readString(targetFile, StandardCharsets.UTF_8);
+            String replacement = newString != null ? newString : "";
+            String patched;
+
+            if (replaceAll) {
+                patched = content.replace(oldString, replacement);
+            } else {
+                int idx = content.indexOf(oldString);
+                if (idx < 0) {
+                    return PatchResult.error("old_string not found in " + skillDir.relativize(targetFile));
+                }
+                patched = content.substring(0, idx) + replacement + content.substring(idx + oldString.length());
+            }
+
+            if (patched.equals(content)) {
+                return PatchResult.error("No changes applied — old_string not found or replacement is identical");
+            }
+
+            Files.writeString(targetFile, patched, StandardCharsets.UTF_8);
+
+            // Bump version on SKILL.md patches
+            if (targetFile.equals(skillDir.resolve("SKILL.md"))) {
+                Skill skill = loadSkillFromFile(targetFile, "hermes");
+                if (skill != null) {
+                    skill.version++;
+                    skill.updatedAt = Instant.now();
+                    if (skill.metadata == null) skill.metadata = new HashMap<>();
+                    skill.metadata.put("last_patch_time", Instant.now().toString());
+                    saveSkillToFile(skill, targetFile);
+                }
+            }
+
+            logger.info("Patched skill: {} (file: {})", safeName, skillDir.relativize(targetFile));
+            return PatchResult.success(safeName, skillDir.relativize(targetFile).toString());
+
+        } catch (Exception e) {
+            logger.error("Failed to patch skill {}: {}", safeName, e.getMessage(), e);
+            return PatchResult.error("Patch failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Write a support file under a skill's directory (references/, templates/, scripts/, assets/).
+     * Creates parent directories as needed.
+     *
+     * @return true on success
+     */
+    public boolean writeFile(String skillName, String filePath, String fileContent) {
+        String safeName = skillName.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+        Path skillDir = resolveSkillDir(safeName);
+        if (skillDir == null) {
+            logger.warn("Cannot write file: skill '{}' not found", skillName);
+            return false;
+        }
+
+        // Normalize and prevent path traversal
+        String normalized = filePath.replace("\\", "/");
+        if (normalized.startsWith("/") || normalized.contains("..")) {
+            logger.warn("Cannot write file: path traversal detected in '{}'", filePath);
+            return false;
+        }
+
+        Path target = skillDir.resolve(normalized).normalize();
+        if (!target.startsWith(skillDir)) {
+            logger.warn("Cannot write file: path escapes skill directory");
+            return false;
+        }
+
+        try {
+            Files.createDirectories(target.getParent());
+            Files.writeString(target, fileContent, StandardCharsets.UTF_8);
+            logger.info("Wrote file: {} (skill: {})", skillDir.relativize(target), safeName);
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to write file {} in skill {}: {}", filePath, safeName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Remove a support file from a skill's directory.
+     * Cannot remove SKILL.md (use deleteSkill instead).
+     *
+     * @return true on success
+     */
+    public boolean removeFile(String skillName, String filePath) {
+        String safeName = skillName.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+        Path skillDir = resolveSkillDir(safeName);
+        if (skillDir == null) {
+            return false;
+        }
+
+        String normalized = filePath.replace("\\", "/");
+        if (normalized.startsWith("/") || normalized.contains("..")) {
+            return false;
+        }
+
+        Path target = skillDir.resolve(normalized).normalize();
+        if (!target.startsWith(skillDir)) {
+            return false;
+        }
+
+        // Protect SKILL.md
+        if (target.equals(skillDir.resolve("SKILL.md"))) {
+            logger.warn("Cannot remove SKILL.md via removeFile — use deleteSkill instead");
+            return false;
+        }
+
+        try {
+            boolean deleted = Files.deleteIfExists(target);
+            if (deleted) {
+                logger.info("Removed file: {} (skill: {})", skillDir.relativize(target), safeName);
+            }
+            return deleted;
+        } catch (Exception e) {
+            logger.error("Failed to remove file {} in skill {}: {}", filePath, safeName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Archive a skill by moving its directory to skillsDir/.archive/.
+     * Recoverable via restoreSkill().
+     */
+    public boolean archiveSkill(String name) {
+        String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+        Path skillDir = resolveSkillDir(safeName);
+        if (skillDir == null) return false;
+
+        Path archiveDir = skillsDir.resolve(".archive");
+        Path target = archiveDir.resolve(safeName);
+        if (Files.exists(target)) {
+            // Already archived
+            return true;
+        }
+
+        try {
+            Files.createDirectories(archiveDir);
+            Files.move(skillDir, target);
+            logger.info("Archived skill: {} → {}", safeName, target);
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to archive skill {}: {}", safeName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Restore an archived skill.
+     */
+    public boolean restoreSkill(String name) {
+        String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");
+        Path archiveDir = skillsDir.resolve(".archive");
+        Path archived = archiveDir.resolve(safeName);
+        if (!Files.exists(archived)) return false;
+
+        Path target = skillsDir.resolve(safeName);
+        if (Files.exists(target)) {
+            logger.warn("Cannot restore: skill '{}' already exists in active directory", safeName);
+            return false;
+        }
+
+        try {
+            Files.move(archived, target);
+            logger.info("Restored skill: {}", safeName);
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to restore skill {}: {}", safeName, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Resolve a skill's directory by searching user, external, and builtin paths.
+     */
+    private Path resolveSkillDir(String safeName) {
+        // Check user skills
+        Path userDir = skillsDir.resolve(safeName);
+        if (Files.isDirectory(userDir)) return userDir;
+
+        // Check external dirs
+        for (Path dir : externalSkillDirs) {
+            Path extDir = dir.resolve(safeName);
+            if (Files.isDirectory(extDir)) return extDir;
+        }
+
+        // Check builtin
+        Path builtinDir = builtinSkillsDir.resolve(safeName);
+        if (Files.isDirectory(builtinDir)) return builtinDir;
+
+        return null;
+    }
+
+    // ── Patch result helper ──────────────────────────────────────────
+
+    public static class PatchResult {
+        public final boolean success;
+        public final String message;
+        public final String skillName;
+        public final String file;
+
+        private PatchResult(boolean success, String message, String skillName, String file) {
+            this.success = success;
+            this.message = message;
+            this.skillName = skillName;
+            this.file = file;
+        }
+
+        static PatchResult success(String skillName, String file) {
+            return new PatchResult(true, "patched", skillName, file);
+        }
+
+        static PatchResult notFound(String name) {
+            return new PatchResult(false, "Skill not found: " + name, name, null);
+        }
+
+        static PatchResult error(String msg) {
+            return new PatchResult(false, msg, null, null);
+        }
+    }
+
     private int scoreRelevance(Skill skill, String task) {
         int score = 0;
 

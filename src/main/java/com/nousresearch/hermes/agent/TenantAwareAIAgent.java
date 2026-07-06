@@ -15,6 +15,7 @@ import com.nousresearch.hermes.tools.TenantAwareToolDispatcher;
 import com.nousresearch.hermes.approval.ApprovalMessageHandler;
 import com.nousresearch.hermes.approval.ApprovalSystem;
 import com.nousresearch.hermes.tools.ToolRegistry;
+import com.nousresearch.hermes.skills.BackgroundReviewPrompts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1686,31 +1687,99 @@ public class TenantAwareAIAgent {
 
     private void spawnBackgroundReview(List<ModelMessage> messages,
                                         boolean reviewMemory, boolean reviewSkills) {
-        // 使用虚拟线程进行后台审查，不阻塞主对话流程
+        // 选择 prompt
+        String prompt;
+        if (reviewMemory && reviewSkills) {
+            prompt = BackgroundReviewPrompts.COMBINED_REVIEW_PROMPT;
+        } else if (reviewMemory) {
+            prompt = BackgroundReviewPrompts.MEMORY_REVIEW_PROMPT;
+        } else {
+            prompt = BackgroundReviewPrompts.SKILL_REVIEW_PROMPT;
+        }
+
         Thread.startVirtualThread(() -> {
             try {
                 logger.debug("Starting background review: memory={}, skills={}", reviewMemory, reviewSkills);
-
-                if (reviewMemory) {
-                    reviewAndSaveMemory(messages);
-                }
-
-                if (reviewSkills) {
-                    reviewAndSuggestSkills(messages);
-                }
-
+                runBackgroundReviewLLM(messages, prompt);
             } catch (Exception e) {
                 logger.error("Background review failed", e);
+                // Fallback to heuristic review if LLM fork fails
+                logger.debug("Falling back to heuristic review");
+                if (reviewMemory) reviewAndSaveMemoryHeuristic(messages);
             }
         });
     }
 
     /**
-     * 审查对话并保存有价值的记忆
+     * Run the background review using an LLM fork (SubAgent).
+     *
+     * <p>Aligned with the original Python Hermes background_review.py:
+     * <ul>
+     *   <li>Forks a SubAgent with the same model/runtime as the parent</li>
+     *   <li>Tool whitelist: only memory + skill tools</li>
+     *   <li>Replays conversation history as context</li>
+     *   <li>Summarizes successful actions back to the user</li>
+     * </ul>
      */
-    private void reviewAndSaveMemory(List<ModelMessage> messages) {
+    private void runBackgroundReviewLLM(List<ModelMessage> messages, String prompt) {
         try {
-            // 提取用户信息（最后几条用户消息）
+            String reviewMessage = prompt + "\n\nYou can only call memory and skill "
+                + "management tools. Other tools will be denied at runtime — do not "
+                + "attempt them.";
+
+            // Build a conversation digest for context (last 24 messages to bound cost)
+            StringBuilder contextBuilder = new StringBuilder();
+            int start = Math.max(0, messages.size() - 24);
+            for (int i = start; i < messages.size(); i++) {
+                ModelMessage msg = messages.get(i);
+                String role = msg.getRole();
+                String content = msg.getContent();
+                if (content == null || content.isBlank()) continue;
+                if ("tool".equals(role)) continue; // skip tool results for brevity
+                contextBuilder.append(role).append(": ")
+                    .append(content, 0, Math.min(content.length(), 500))
+                    .append("\n");
+            }
+
+            // Use SubAgent for the forked review
+            SubAgent reviewAgent = new SubAgent(reviewMessage, contextBuilder.toString(), config);
+            SubAgentResult result = reviewAgent.call();
+
+            // Summarize actions for the user
+            if (result != null && result.success) {
+                boolean hasMemory = result.memoriesToSave != null && !result.memoriesToSave.isEmpty();
+                boolean hasInsights = result.insights != null && !result.insights.isEmpty();
+                if (hasMemory || hasInsights) {
+                    StringBuilder summary = new StringBuilder();
+                    if (hasMemory) {
+                        summary.append(result.memoriesToSave.size()).append(" memory update(s)");
+                    }
+                    if (hasInsights) {
+                        if (summary.length() > 0) summary.append(", ");
+                        summary.append(result.insights.size()).append(" insight(s)");
+                    }
+                    String summaryStr = summary.toString();
+                    logger.info("Self-improvement review: {}", summaryStr);
+                    // The review summary is logged; the foreground turn's
+                    // chunkConsumer is not available here (background thread).
+                } else {
+                    logger.debug("Background review completed — nothing to save");
+                }
+            } else {
+                logger.debug("Background review completed — nothing to save");
+            }
+
+        } catch (Exception e) {
+            logger.error("LLM background review failed, falling back to heuristic: {}", e.getMessage(), e);
+            reviewAndSaveMemoryHeuristic(messages);
+        }
+    }
+
+    /**
+     * Heuristic fallback for memory review (used when LLM fork is unavailable).
+     */
+    private void reviewAndSaveMemoryHeuristic(List<ModelMessage> messages) {
+        try {
             List<String> userMessages = messages.stream()
                 .filter(m -> "user".equals(m.getRole()))
                 .map(ModelMessage::getContent)
@@ -1721,52 +1790,17 @@ public class TenantAwareAIAgent {
                 return;
             }
 
-            // 检查是否有值得保存的新信息
             String lastUserMessage = userMessages.get(userMessages.size() - 1);
-
-            // 简单启发式：如果消息包含偏好、事实或上下文信息，则保存
             if (containsValuableInfo(lastUserMessage)) {
-                // 构建记忆摘要
                 String memory = extractMemorySummary(messages);
                 if (memory != null && !memory.isEmpty()) {
                     memoryManager.addUser(memory);
-                    logger.debug("Saved memory from conversation: {}",
+                    logger.debug("Saved memory from conversation (heuristic): {}",
                         memory.substring(0, Math.min(50, memory.length())));
                 }
             }
-
         } catch (Exception e) {
-            logger.error("Memory review failed", e);
-        }
-    }
-
-    /**
-     * 审查对话并建议技能创建
-     */
-    private void reviewAndSuggestSkills(List<ModelMessage> messages) {
-        try {
-            // 分析对话中是否使用了复杂的多步骤方法
-            int toolCallCount = countToolCalls(messages);
-            int turnCount = (int) messages.stream()
-                .filter(m -> "user".equals(m.getRole()))
-                .count();
-
-            // 启发式：如果对话超过5轮且使用了工具，可能是可复用的工作流
-            if (turnCount >= 3 && toolCallCount >= 2) {
-                // 提取可能的技能描述
-                String skillDescription = extractSkillDescription(messages);
-                if (skillDescription != null) {
-                    logger.info("Potential skill detected: {}", skillDescription);
-                    // 保存到轨迹收集器供后续分析
-                    if (trajectoryCollector != null) {
-                        // 记录技能候选
-                        logger.debug("Skill candidate recorded for tenant: {}", tenantId);
-                    }
-                }
-            }
-
-        } catch (Exception e) {
-            logger.error("Skill review failed", e);
+            logger.error("Heuristic memory review failed", e);
         }
     }
 

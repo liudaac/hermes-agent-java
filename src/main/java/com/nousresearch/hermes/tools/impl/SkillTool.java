@@ -167,6 +167,67 @@ public class SkillTool {
             .build());
 
 
+        // skill_patch — incremental fix (preferred over skill_update for small changes)
+        registry.register(new ToolEntry.Builder()
+            .name("skill_patch")
+            .toolset("skills")
+            .schema(Map.of(
+                "description", "Patch a skill by replacing old_string with new_string. Preferred for incremental fixes.",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "name", Map.of("type", "string", "description", "Skill name"),
+                        "old_string", Map.of("type", "string", "description", "Text to find in the file"),
+                        "new_string", Map.of("type", "string", "description", "Replacement text (empty string to delete)"),
+                        "file_path", Map.of("type", "string", "description", "Relative path within skill (default: SKILL.md). E.g. references/api.md"),
+                        "replace_all", Map.of("type", "boolean", "description", "Replace all occurrences", "default", false)
+                    ),
+                    "required", List.of("name", "old_string", "new_string")
+                )
+            ))
+            .handler(SkillTool::patchSkill)
+            .emoji("🔧")
+            .build());
+
+        // skill_write_file — add a support file under a skill
+        registry.register(new ToolEntry.Builder()
+            .name("skill_write_file")
+            .toolset("skills")
+            .schema(Map.of(
+                "description", "Write a support file under a skill's directory (references/, templates/, scripts/, assets/).",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "name", Map.of("type", "string", "description", "Skill name"),
+                        "file_path", Map.of("type", "string", "description", "Relative path within skill, e.g. references/api-guide.md, scripts/verify.sh"),
+                        "file_content", Map.of("type", "string", "description", "File content to write")
+                    ),
+                    "required", List.of("name", "file_path", "file_content")
+                )
+            ))
+            .handler(SkillTool::writeSkillFile)
+            .emoji("📎")
+            .build());
+
+        // skill_remove_file — remove a support file from a skill
+        registry.register(new ToolEntry.Builder()
+            .name("skill_remove_file")
+            .toolset("skills")
+            .schema(Map.of(
+                "description", "Remove a support file from a skill's directory. Cannot remove SKILL.md.",
+                "parameters", Map.of(
+                    "type", "object",
+                    "properties", Map.of(
+                        "name", Map.of("type", "string", "description", "Skill name"),
+                        "file_path", Map.of("type", "string", "description", "Relative path within skill, e.g. references/old-api.md")
+                    ),
+                    "required", List.of("name", "file_path")
+                )
+            ))
+            .handler(SkillTool::removeSkillFile)
+            .emoji("📂")
+            .build());
+
         // skill_invoke
         registry.register(new ToolEntry.Builder()
             .name("skill_invoke")
@@ -394,6 +455,110 @@ public class SkillTool {
         } catch (Exception e) {
             logger.error("Failed to delete skill: {}", e.getMessage(), e);
             return ToolRegistry.toolError("Delete failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Patch a skill (incremental old_string → new_string replacement).
+     */
+    private static String patchSkill(Map<String, Object> args) {
+        String name = (String) args.get("name");
+        String oldString = (String) args.get("old_string");
+        String newString = (String) args.get("new_string");
+        String filePath = (String) args.get("file_path");
+        boolean replaceAll = Boolean.TRUE.equals(args.get("replace_all"));
+
+        if (name == null || name.trim().isEmpty()) {
+            return ToolRegistry.toolError("Name is required");
+        }
+        if (oldString == null) {
+            return ToolRegistry.toolError("old_string is required");
+        }
+        if (newString == null) {
+            return ToolRegistry.toolError("new_string is required (use empty string to delete matched text)");
+        }
+
+        try {
+            SkillManager.PatchResult result = skillManager.patchSkill(name, oldString, newString, filePath, replaceAll);
+            if (result.success) {
+                return ToolRegistry.toolResult(Map.of(
+                    "success", true,
+                    "name", result.skillName,
+                    "file", result.file != null ? result.file : "SKILL.md",
+                    "message", result.message
+                ));
+            } else {
+                return ToolRegistry.toolError(result.message);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to patch skill: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Patch failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Write a support file under a skill.
+     */
+    private static String writeSkillFile(Map<String, Object> args) {
+        String name = (String) args.get("name");
+        String filePath = (String) args.get("file_path");
+        String fileContent = (String) args.get("file_content");
+
+        if (name == null || name.trim().isEmpty()) {
+            return ToolRegistry.toolError("Name is required");
+        }
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return ToolRegistry.toolError("file_path is required. Example: references/api-guide.md");
+        }
+        if (fileContent == null) {
+            return ToolRegistry.toolError("file_content is required");
+        }
+
+        try {
+            boolean success = skillManager.writeFile(name, filePath, fileContent);
+            if (success) {
+                return ToolRegistry.toolResult(Map.of(
+                    "success", true,
+                    "name", name,
+                    "file_path", filePath
+                ));
+            } else {
+                return ToolRegistry.toolError("Failed to write file — skill not found or path invalid");
+            }
+        } catch (Exception e) {
+            logger.error("Failed to write skill file: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Write failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Remove a support file from a skill.
+     */
+    private static String removeSkillFile(Map<String, Object> args) {
+        String name = (String) args.get("name");
+        String filePath = (String) args.get("file_path");
+
+        if (name == null || name.trim().isEmpty()) {
+            return ToolRegistry.toolError("Name is required");
+        }
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return ToolRegistry.toolError("file_path is required");
+        }
+
+        try {
+            boolean success = skillManager.removeFile(name, filePath);
+            if (success) {
+                return ToolRegistry.toolResult(Map.of(
+                    "success", true,
+                    "name", name,
+                    "file_path", filePath
+                ));
+            } else {
+                return ToolRegistry.toolError("File not found or cannot be removed (SKILL.md is protected)");
+            }
+        } catch (Exception e) {
+            logger.error("Failed to remove skill file: {}", e.getMessage(), e);
+            return ToolRegistry.toolError("Remove failed: " + e.getMessage());
         }
     }
 
