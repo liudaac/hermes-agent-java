@@ -40,6 +40,7 @@ public final class BusinessPortalDashboardIntegration {
         app.get("/api/v1/business/teams", ctx -> teams(ctx, workspaceService, teamBlueprintService));
         app.get("/api/v1/business/runs", ctx -> runs(ctx, runService));
         app.get("/api/v1/business/approvals", ctx -> approvals(ctx, approvalService));
+        app.get("/api/v1/business/workspace-progress", ctx -> workspaceProgress(ctx, workspaceService, teamBlueprintService, approvalService, runService, insightService));
     }
 
     static void home(Context ctx, WorkspaceService workspaceService, TeamBlueprintService teamBlueprintService, BusinessInsightService insightService, BusinessRunService runService) {
@@ -272,6 +273,170 @@ public final class BusinessPortalDashboardIntegration {
             "total", approvals.size(),
             "emptyState", approvals.isEmpty() ? "当前没有待审批事项。高风险动作和版本发布会出现在这里。" : ""
         ));
+    }
+
+    /**
+     * Workspace progress — the 7-step portal journey state.
+     *
+     * Drives the Business Portal top progress bar (template → workspace →
+     * team → scenario → run → approval → knowledge). Each step carries
+     * a `status` of "missing" | "partial" | "done" so the front-end can
+     * highlight the current step and pick an empty-state message.
+     *
+     * Aligned with the three-space refactor (Portal default page).
+     */
+    static void workspaceProgress(Context ctx, WorkspaceService workspaceService,
+                                   TeamBlueprintService teamBlueprintService,
+                                   BusinessApprovalService approvalService,
+                                   BusinessRunService runService,
+                                   BusinessInsightService insightService) {
+        String workspaceId = ctx.queryParam("workspaceId");
+
+        // Resolve the workspace (or first if not specified).
+        WorkspaceRecord workspace = null;
+        List<WorkspaceRecord> workspaces = workspaceId == null || workspaceId.isBlank()
+            ? workspaceService.listWorkspaces()
+            : workspaceService.getWorkspace(workspaceId).map(List::of).orElse(List.of());
+        if (!workspaces.isEmpty()) {
+            workspace = workspaces.get(0);
+        }
+        String effectiveWsId = workspace != null ? workspace.getWorkspaceId() : null;
+
+        // Step 1: template (any workspace means a template was used).
+        Map<String, Object> template = new LinkedHashMap<>();
+        if (workspace != null) {
+            // The source template id may live in metadata.sourceTemplateId (set by clone).
+            Object sourceId = null;
+            Map<String, Object> meta = workspace.getMetadata();
+            if (meta != null) {
+                sourceId = meta.get("sourceTemplateId");
+            }
+            template.put("id", sourceId != null ? sourceId : workspace.getWorkspaceId());
+            template.put("name", workspace.getName() != null ? workspace.getName() : "");
+            template.put("status", "done");
+        } else {
+            template.put("id", null);
+            template.put("name", null);
+            template.put("status", "missing");
+        }
+
+        // Step 2: workspace
+        Map<String, Object> wsStep = new LinkedHashMap<>();
+        if (workspace != null) {
+            wsStep.put("id", workspace.getWorkspaceId());
+            wsStep.put("name", workspace.getName());
+            wsStep.put("status", "active".equals(workspace.getStatus()) || "ready".equals(workspace.getStatus()) ? "done" : "partial");
+        } else {
+            wsStep.put("id", null);
+            wsStep.put("status", "missing");
+        }
+
+        // Step 3: team
+        List<TeamBlueprintRecord> teams = effectiveWsId == null
+            ? List.of()
+            : teamBlueprintService.listTeamBlueprints(effectiveWsId);
+        Map<String, Object> team = new LinkedHashMap<>();
+        if (teams.isEmpty()) {
+            team.put("id", null);
+            team.put("members", 0);
+            team.put("status", "missing");
+        } else {
+            // Count agent slots in the active version (each role = one "member").
+            int totalMembers = teams.stream()
+                .mapToInt(t -> {
+                    var versions = t.getVersions();
+                    if (versions == null || versions.isEmpty()) return 0;
+                    var active = versions.get(0);
+                    if (active.getAgents() == null) return 0;
+                    return active.getAgents().size();
+                })
+                .sum();
+            team.put("id", teams.get(0).getTeamId());
+            team.put("members", totalMembers);
+            team.put("status", totalMembers > 0 ? "done" : "partial");
+        }
+
+        // Steps 4-5: scenarios + runs (from insight summary)
+        BusinessInsightSummary summary = insightService.summarize(effectiveWsId);
+
+        // Step 4: scenario — inferred from runs. Any run implies at least one scenario exists.
+        Map<String, Object> scenarios = new LinkedHashMap<>();
+        if (effectiveWsId != null && summary.getRunCount() > 0) {
+            scenarios.put("count", 1);
+            scenarios.put("status", "done");
+        } else if (effectiveWsId != null) {
+            scenarios.put("count", 0);
+            scenarios.put("status", "missing");
+        } else {
+            scenarios.put("count", 0);
+            scenarios.put("status", "missing");
+        }
+
+        Map<String, Object> runs = new LinkedHashMap<>();
+        List<BusinessRunRecord> runningNow = effectiveWsId == null
+            ? List.of()
+            : runService.listRuns(effectiveWsId, null, "RUNNING", 0);
+        runs.put("total", summary.getRunCount());
+        runs.put("running", runningNow.size());
+        runs.put("failed", summary.getFailedRunCount());
+        runs.put("status", summary.getRunCount() > 0 ? "done" : "missing");
+
+        // Step 6: pending approvals
+        List<?> pendingApprovals = effectiveWsId == null
+            ? List.of()
+            : approvalService.listApprovals(effectiveWsId, BusinessApprovalService.PENDING);
+        Map<String, Object> approvalsStep = new LinkedHashMap<>();
+        approvalsStep.put("pending", pendingApprovals.size());
+        approvalsStep.put("highRisk", summary.getHighRiskApprovalCount());
+        approvalsStep.put("status", pendingApprovals.isEmpty() ? "done" : "active");
+
+        // Step 7: knowledge (insights + skills added)
+        Map<String, Object> knowledge = new LinkedHashMap<>();
+        int insightCount = summary.getInsights() == null ? 0 : summary.getInsights().size();
+        knowledge.put("insights", insightCount);
+        knowledge.put("skillsAdded", 0); // populated by future SelfEvolution hook; today we only have insights
+        knowledge.put("status", insightCount > 0 ? "done" : "partial");
+
+        // Compute the active step index (1-7): the first non-done step.
+        int activeStep = 1;
+        for (Map<String, Object> step : List.of(template, wsStep, team, scenarios, runs, approvalsStep, knowledge)) {
+            String s = String.valueOf(step.get("status"));
+            if (!"done".equals(s)) {
+                break;
+            }
+            activeStep++;
+        }
+        if (activeStep > 7) activeStep = 7;
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("ok", true);
+        response.put("workspaceId", effectiveWsId);
+        response.put("activeStep", activeStep);
+        // Build the 7-step array. Each step is its own map.
+        response.put("steps", List.of(
+            buildStep(1, "template", "模板", template),
+            buildStep(2, "workspace", "工作空间", wsStep),
+            buildStep(3, "team", "团队", team),
+            buildStep(4, "scenario", "场景", scenarios),
+            buildStep(5, "run", "运行", runs),
+            buildStep(6, "approval", "审批", approvalsStep),
+            buildStep(7, "knowledge", "沉淀", knowledge)
+        ));
+        response.put("pendingApprovals", pendingApprovals.size());
+        response.put("highRiskApprovals", summary.getHighRiskApprovalCount());
+        response.put("generatedAt", java.time.Instant.now().toString());
+
+        ctx.status(200).json(response);
+    }
+
+    /** Helper — wraps a step's status map with step index/key/label. */
+    private static Map<String, Object> buildStep(int index, String key, String label, Map<String, Object> data) {
+        Map<String, Object> step = new LinkedHashMap<>();
+        step.put("step", index);
+        step.put("key", key);
+        step.put("label", label);
+        step.putAll(data);
+        return step;
     }
 
     private static double autoCompletionRate(BusinessInsightSummary summary) {
