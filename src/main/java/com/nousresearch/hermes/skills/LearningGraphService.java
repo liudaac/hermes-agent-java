@@ -97,7 +97,7 @@ public class LearningGraphService {
         // 名称包含
         double nameBoost = 0;
         if (a.label().contains(b.label()) || b.label().contains(a.label())) {
-            nameBoost = 0.2;
+            nameBoost = 0.35;
         }
 
         return Math.min(1.0, jaccard + nameBoost);

@@ -31,6 +31,9 @@ public class FineTuneExporter {
     private static final ObjectMapper MAPPER = new ObjectMapper()
         .enable(SerializationFeature.INDENT_OUTPUT);
 
+    /** Compact mapper for JSONL export — one JSON object per line, no pretty printing. */
+    private static final ObjectMapper JSONL_MAPPER = new ObjectMapper();
+
     /**
      * 单条对话记录。
      */
@@ -72,7 +75,7 @@ public class FineTuneExporter {
                 if (!sample.metadata().isEmpty()) {
                     record.put("metadata", sample.metadata());
                 }
-                writer.write(MAPPER.writeValueAsString(record));
+                writer.write(JSONL_MAPPER.writeValueAsString(record));
                 writer.newLine();
             }
         }

@@ -104,14 +104,33 @@ public class PreVerifyHook {
             pb.environment().put("TERM", "dumb");
 
             Process process = pb.start();
-            String output = new String(process.getInputStream().readAllBytes());
+
+            // Read output asynchronously to avoid blocking on readAllBytes before timeout
+            StringBuilder outputBuilder = new StringBuilder();
+            Thread outputReader = new Thread(() -> {
+                try (var is = process.getInputStream()) {
+                    byte[] buffer = new byte[4096];
+                    int n;
+                    while ((n = is.read(buffer)) != -1) {
+                        outputBuilder.append(new String(buffer, 0, n));
+                    }
+                } catch (Exception ignored) {}
+            });
+            outputReader.setDaemon(true);
+            outputReader.start();
+
             boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
-                return new StepResult(step.name(), false, "Timeout after " + timeoutSeconds + "s", output,
+                outputReader.interrupt();
+                return new StepResult(step.name(), false, "Timeout after " + timeoutSeconds + "s",
+                    outputBuilder.toString(),
                     System.currentTimeMillis() - startTime);
             }
+
+            outputReader.join(500); // give reader a moment to finish
+            String output = outputBuilder.toString();
 
             int exitCode = process.exitValue();
             boolean success = exitCode == 0;
