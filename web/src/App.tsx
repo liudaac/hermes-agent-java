@@ -6,6 +6,8 @@ import { SpaceSwitcher } from "@/lib/routing/SpaceSwitcher";
 import { SpaceNav } from "@/lib/routing/SpaceNav";
 import { getNavForSpace, pathToSpace } from "@/lib/routing/nav";
 import { SpaceThemeBridge } from "@/themes";
+import { SpaceLayout } from "@/layouts/SpaceLayout";
+import { SpaceDecorations } from "@/layouts/SpaceDecorations";
 import {
   Activity,
   BarChart3,
@@ -189,10 +191,12 @@ export default function App() {
   );
 
   return (
-    <div className="text-midground font-mondwest bg-black min-h-screen flex flex-col uppercase antialiased overflow-x-hidden">
-      <SpaceThemeBridge activeSpace={activeSpace} />
-      <SelectionSwitcher />
-      <Backdrop />
+    <SpaceLayout>
+      <div className="text-midground font-mondwest bg-black min-h-screen flex flex-col uppercase antialiased overflow-x-hidden">
+        <SpaceDecorations space={activeSpace} />
+        <SpaceThemeBridge activeSpace={activeSpace} />
+        <SelectionSwitcher />
+        <Backdrop />
 
       <header
         className={cn(
@@ -342,7 +346,8 @@ export default function App() {
           </Cell>
         </Grid>
       </footer>
-    </div>
+      </div>
+    </SpaceLayout>
   );
 }
 

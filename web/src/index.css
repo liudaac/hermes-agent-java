@@ -363,3 +363,63 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
     opacity: 0.2;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Space-scoped layout — three product spaces share the same chrome  */
+/* but with different density, padding, and visual emphasis.         */
+/* Aligned with the three-space refactor (Portal / Ops / NOC).       */
+/* ------------------------------------------------------------------ */
+
+/* Default (no data-space) — treat as portal. */
+[data-space="portal"] main {
+  /* airy — default padding, comfortable for business users */
+}
+
+/* Ops — high density, tighter padding for tables and dense lists. */
+[data-space="ops"] main {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+@media (min-width: 640px) {
+  [data-space="ops"] main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+[data-space="ops"] main .container,
+[data-space="ops"] main > div {
+  max-width: 1800px; /* wider for table-heavy layouts */
+}
+
+/* NOC — full-width, dark amber, alert cadence. */
+[data-space="noc"] main {
+  padding-left: 0;
+  padding-right: 0;
+}
+[data-space="noc"] {
+  /* On NOC, the global page background is overridden by the noc-amber theme,
+     so we add a subtle top accent bar to remind users they're in NOC mode. */
+  position: relative;
+}
+[data-space="noc"]::before {
+  content: "";
+  position: fixed;
+  top: 48px; /* below the App header */
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(251, 191, 36, 0.6) 20%,
+    rgba(251, 191, 36, 0.6) 80%,
+    transparent 100%
+  );
+  z-index: 30;
+  pointer-events: none;
+  animation: noc-pulse 4s ease-in-out infinite;
+}
+@keyframes noc-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
