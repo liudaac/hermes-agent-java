@@ -426,3 +426,35 @@ export interface QuickTeamDraft {
   rawJson: string;
 }
 
+// ── 7-step workspace progress (Portal progress bar) ─────────────
+
+export type StepStatus = "missing" | "partial" | "done" | "active";
+
+export interface BusinessProgressStep {
+  step: number;
+  key: "template" | "workspace" | "team" | "scenario" | "run" | "approval" | "knowledge";
+  label: string;
+  status: StepStatus;
+  id?: string | null;
+  name?: string | null;
+  members?: number;
+  count?: number;
+  total?: number;
+  running?: number;
+  failed?: number;
+  pending?: number;
+  highRisk?: number;
+  insights?: number;
+  skillsAdded?: number;
+}
+
+export interface BusinessProgressResponse {
+  ok: boolean;
+  workspaceId: string | null;
+  activeStep: number;
+  steps: BusinessProgressStep[];
+  pendingApprovals: number;
+  highRiskApprovals: number;
+  generatedAt: string;
+}
+

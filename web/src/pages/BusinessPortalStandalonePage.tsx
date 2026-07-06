@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import BusinessPortalPage from "@/pages/BusinessPortalPage";
 import FloatingBusinessChat from "@/components/business/FloatingBusinessChat";
 import FirstTimeOnboardingDrawer from "@/components/business/FirstTimeOnboardingDrawer";
+import { PortalProgressBar } from "@/components/portal/PortalProgressBar";
 
 /**
  * Business Portal Standalone — Independent portal page without Dashboard chrome.
@@ -144,6 +145,7 @@ export default function BusinessPortalStandalonePage({ children }: { children?: 
 
       <main className="mx-auto max-w-[1400px] px-4 pb-12 pt-20 sm:px-6">
         <NavBar />
+        <PortalProgressBar />
         <div key={path} className="page-transition-enter">
           {children ?? <BusinessPortalPage />}
         </div>

@@ -14,6 +14,7 @@ import type {
   BusinessInsightsResponse,
   BusinessScenariosResponse,
   BusinessPromptAssetsResponse,
+  BusinessProgressResponse,
   CreateBusinessScenarioPayload,
   CreateBusinessScenarioResponse,
   CreateBusinessRunResponse,
@@ -63,6 +64,11 @@ export const portalApi = {
     const qs = new URLSearchParams();
     if (workspaceId) qs.set("workspaceId", workspaceId);
     return fetchJSON<BusinessTeamsResponse>(`/api/v1/business/teams${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  getBusinessProgress: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<BusinessProgressResponse>(`/api/v1/business/workspace-progress${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
   getBusinessRuns: (workspaceId?: string, limit = 20, scenarioId?: string) => {
     const qs = new URLSearchParams();
