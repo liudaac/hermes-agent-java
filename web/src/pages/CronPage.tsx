@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
+import { openCronRunStream } from "@/lib/api/sse";
 import type {
   CronJob,
   CronRunRecord,
@@ -188,7 +189,7 @@ export default function CronPage() {
     }
     // Subscribe to live runs while drawer is open
     if (historySource.current) historySource.current.close();
-    const src = await api.openCronRunStream(job.id);
+    const src = await openCronRunStream(job.id);
     historySource.current = src;
     src.addEventListener("run", (e: MessageEvent) => {
       try {

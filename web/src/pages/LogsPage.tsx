@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { FileText, RefreshCw, ChevronRight, Layers, Trash2 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api, type LogFileInfo } from "@/lib/api";
+import { openLogTail } from "@/lib/api/sse";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -182,7 +183,7 @@ export default function LogsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const source = await api.openLogTail({
+        const source = await openLogTail({
           file,
           level,
           component,

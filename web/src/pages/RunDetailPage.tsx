@@ -20,6 +20,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { openBusinessRunStream } from "@/lib/api/sse";
 import type { BusinessRunRecord, BusinessRunStep } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,7 +66,7 @@ export default function RunDetailPage() {
     if (!workspaceId || !runId) return;
     if (terminal) return;
 
-    const es = api.streamBusinessRun(
+    const es = openBusinessRunStream(
       workspaceId,
       runId,
       (event, data) => {
