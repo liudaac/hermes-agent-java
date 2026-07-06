@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { BriefcaseBusiness, TerminalSquare, ShieldCheck, type LucideIcon } from "lucide-react";
 import { rememberSpace, SPACE_PATHS, type SpaceName } from "./spaces";
 import { useTheme } from "@/themes";
+import { ReturnToSource } from "./CrossSpaceLink";
 
 interface SpaceOption {
   key: SpaceName;
@@ -42,6 +43,7 @@ export function SpaceSwitcher({ activeSpace }: { activeSpace: SpaceName }) {
 
   return (
     <div className="flex items-center gap-1.5">
+      <ReturnToSource />
       <div className="flex items-center gap-1 rounded-full border border-current/20 bg-background-base/40 px-1 py-0.5">
         {SPACE_OPTIONS.map(({ key, label, icon: Icon }) => {
           const isActive = activeSpace === key;
