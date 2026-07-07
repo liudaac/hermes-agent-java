@@ -22,12 +22,12 @@ import type {
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useI18n } from "@/i18n";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectOption } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
+import { Label } from "@hermes/ui";
+import { Select, SelectOption } from "@hermes/ui";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 function formatTime(iso?: string | null): string {

@@ -3,7 +3,7 @@ import { Palette, Check } from "lucide-react";
 import { Typography } from "@nous-research/ui";
 import { BUILTIN_THEMES, useTheme } from "@/themes";
 import { useI18n } from "@/i18n";
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 /**
  * Compact theme picker mounted next to the language switcher in the header.

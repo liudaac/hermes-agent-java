@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 const SIZE_MAP = {
   sm: "h-4 w-4",

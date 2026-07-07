@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Users } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
-import { cn } from "@/lib/cn";
+import { cn } from "@hermes/ui";
 import type { BusinessTeamCard } from "@/api/types-portal";
 
 interface EmployeeCardProps {

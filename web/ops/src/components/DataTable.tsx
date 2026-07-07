@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 /* ------------------------------------------------------------------ */
 /*  Generic table primitives — shared by AnalyticsPage tables.         */

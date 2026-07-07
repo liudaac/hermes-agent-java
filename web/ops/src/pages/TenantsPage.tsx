@@ -29,10 +29,10 @@ import type {
 } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useI18n } from "@/i18n";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
 
 function formatTime(value?: string): string {
   if (!value) return "-";

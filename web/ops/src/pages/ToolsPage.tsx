@@ -3,9 +3,9 @@ import { Wrench, Search, X, ChevronRight, Loader2 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type { ToolGroup, ToolDetail } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Input } from "@hermes/ui";
 
 export default function ToolsPage() {
   const [groups, setGroups] = useState<ToolGroup[]>([]);

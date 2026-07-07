@@ -1,4 +1,4 @@
-import { CardHeader, CardTitle } from "@/components/ui/card";
+import { CardHeader, CardTitle } from "@hermes/ui";
 
 /**
  * CardHeader pre-composed with an icon and title.

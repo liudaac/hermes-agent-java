@@ -9,11 +9,11 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AnalyticsResponse, AnalyticsDailyEntry, AnalyticsModelEntry, AnalyticsSkillEntry } from "@/lib/api";
-import { timeAgo } from "@/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import { timeAgo } from "@hermes/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Switch } from "@hermes/ui";
+import { Label } from "@hermes/ui";
 import { LiveBadge } from "@/components/LiveBadge";
 import { CardHeaderIcon } from "@/components/CardHeaderIcon";
 import { useI18n } from "@/i18n";

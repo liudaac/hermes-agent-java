@@ -19,8 +19,8 @@ import { EmployeeCard } from "@/components/EmployeeCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
 import { useI18n } from "@/i18n";
-import { cn } from "@/lib/cn";
-import { formatNumber, formatRelativeTime } from "@/lib/format";
+import { cn } from "@hermes/ui";
+import { formatNumber, formatRelativeTime } from "@hermes/ui";
 
 export default function Home() {
   const { t } = useI18n();

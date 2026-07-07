@@ -18,15 +18,15 @@ import React, {
   createContext,
 } from "react";
 import { api, fetchJSON } from "@/lib/api";
-import { cn, timeAgo, isoTimeAgo } from "@/lib/utils";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectOption } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn, timeAgo, isoTimeAgo } from "@hermes/ui";
+import { Card, CardHeader, CardTitle, CardContent } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
+import { Label } from "@hermes/ui";
+import { Select, SelectOption } from "@hermes/ui";
+import { Separator } from "@hermes/ui";
+import { Tabs, TabsList, TabsTrigger } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 
 // ---------------------------------------------------------------------------

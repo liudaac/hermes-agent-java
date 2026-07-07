@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Copy, X, Check, Loader2 } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api, type OAuthProvider, type OAuthStartResponse } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 
 interface Props {

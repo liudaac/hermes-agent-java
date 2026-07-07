@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { type LucideIcon, ExternalLink, BriefcaseBusiness, TerminalSquare } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 import { NOC_NAV, CROSS_PRODUCT_LINKS } from "@/lib/nav";
 
 /**

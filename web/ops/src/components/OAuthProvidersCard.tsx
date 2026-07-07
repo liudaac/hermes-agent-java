@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { ShieldCheck, ShieldOff, Copy, ExternalLink, RefreshCw, LogOut, Terminal, LogIn } from "lucide-react";
 import { api, type OAuthProvider } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
 import { OAuthLoginModal } from "@/components/OAuthLoginModal";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useI18n } from "@/i18n";

@@ -5,7 +5,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { Lightbulb } from "lucide-react";
 import { useI18n } from "@/i18n";
-import { cn } from "@/lib/cn";
+import { cn } from "@hermes/ui";
 
 export default function Insights() {
   const { t } = useI18n();

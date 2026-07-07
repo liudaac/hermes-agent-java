@@ -45,12 +45,12 @@ import {
   Mic,
   MicOff,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectOption } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Select, SelectOption } from "@hermes/ui";
+import { cn } from "@hermes/ui";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import MarkdownRenderer from "@/components/MarkdownRenderer";

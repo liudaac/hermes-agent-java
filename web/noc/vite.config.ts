@@ -38,11 +38,6 @@ function hermesDevToken(): Plugin {
 export default defineConfig({
   root: __dirname,
   plugins: [react(), tailwindcss(), hermesDevToken()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
   build: {
     outDir: path.resolve(__dirname, "../../hermes_cli/web_dist/noc"),
     emptyOutDir: true,
@@ -54,6 +49,12 @@ export default defineConfig({
     port: 5177,
     proxy: {
       "/api": BACKEND,
+    },
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@hermes/ui": path.resolve(__dirname, "../packages/ui/src"),
     },
   },
 });

@@ -19,11 +19,11 @@ import type { EnvVarInfo } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import { useI18n } from "@/i18n";
 import { OAuthProvidersCard } from "@/components/OAuthProvidersCard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
+import { Label } from "@hermes/ui";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 /* ------------------------------------------------------------------ */

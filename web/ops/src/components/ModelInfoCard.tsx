@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ModelInfoResponse } from "@/lib/api";
-import { formatTokenCount } from "@/lib/format";
+import { formatTokenCount } from "@hermes/ui";
 
 interface ModelInfoCardProps {
   /** Current model string from config state — used to detect changes */

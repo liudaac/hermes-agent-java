@@ -14,10 +14,10 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { cn } from "@hermes/ui";
 
 // S3-3: Trace Step 类型（对齐后端 AgentTrace.Step）
 interface TraceStep {

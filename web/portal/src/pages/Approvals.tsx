@@ -8,8 +8,8 @@ import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { Inbox, Check, X } from "lucide-react";
 import { useI18n } from "@/i18n";
-import { formatRelativeTime } from "@/lib/format";
-import { cn } from "@/lib/cn";
+import { formatRelativeTime } from "@hermes/ui";
+import { cn } from "@hermes/ui";
 
 export default function Approvals() {
   const { t } = useI18n();

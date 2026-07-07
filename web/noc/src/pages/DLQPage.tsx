@@ -2,12 +2,12 @@ import { useEffect, useState, useCallback } from "react";
 import { RotateCcw, CheckCircle, AlertOctagon, RotateCw, Activity } from "lucide-react";
 import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
 import { useToast } from "@/hooks/useToast";
 import { useSse } from "@/hooks/useSse";
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 interface DLQItem {
   itemId: string;

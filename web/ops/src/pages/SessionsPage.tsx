@@ -21,11 +21,11 @@ import type {
   SessionMessage,
   SessionSearchResult,
 } from "@/lib/api";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo } from "@hermes/ui";
 import { Markdown } from "@/components/Markdown";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Input } from "@hermes/ui";
 import { LiveBadge } from "@/components/LiveBadge";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useI18n } from "@/i18n";

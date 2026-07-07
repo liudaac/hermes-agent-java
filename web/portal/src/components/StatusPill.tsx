@@ -1,4 +1,4 @@
-import { cn } from "@/lib/cn";
+import { cn } from "@hermes/ui";
 
 interface StatusPillProps {
   status: string | null | undefined;

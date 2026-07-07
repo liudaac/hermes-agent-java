@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@hermes/ui";
 
 /**
  * Animated "live" indicator badge with a pulsing dot.

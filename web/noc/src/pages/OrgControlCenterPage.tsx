@@ -12,11 +12,11 @@ import {
   Zap,
 } from "lucide-react";
 import { fetchJSON } from "@/lib/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
+import { Button } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Label } from "@hermes/ui";
+import { Switch } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 
 interface Overview {

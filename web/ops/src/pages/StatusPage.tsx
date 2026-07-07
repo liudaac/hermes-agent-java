@@ -25,10 +25,10 @@ import type {
   SessionInfo,
   StatusResponse,
 } from "@/lib/api";
-import { cn, timeAgo, isoTimeAgo } from "@/lib/utils";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { cn, timeAgo, isoTimeAgo } from "@hermes/ui";
+import { Card, CardContent, CardTitle } from "@hermes/ui";
+import { Badge } from "@hermes/ui";
+import { Button } from "@hermes/ui";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { LiveBadge } from "@/components/LiveBadge";
 import { CardHeaderIcon } from "@/components/CardHeaderIcon";

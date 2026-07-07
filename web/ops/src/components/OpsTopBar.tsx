@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { Activity, Wrench, type LucideIcon, ExternalLink, BriefcaseBusiness, ShieldCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 import { OPS_NAV, CROSS_PRODUCT_LINKS, type OpsNavItem } from "@/lib/nav";
 
 const GROUPS: Array<{ key: OpsNavItem["group"]; label: string; icon: LucideIcon }> = [

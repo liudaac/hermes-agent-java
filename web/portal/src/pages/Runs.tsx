@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
 import { useI18n } from "@/i18n";
-import { formatRelativeTime } from "@/lib/format";
+import { formatRelativeTime } from "@hermes/ui";
 import { Activity as ActivityIcon, Inbox } from "lucide-react";
 
 export default function Runs() {

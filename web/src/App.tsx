@@ -1,9 +1,43 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { BriefcaseBusiness, TerminalSquare, ShieldCheck, ExternalLink, type LucideIcon } from "lucide-react";
-import { forwardToExternalPortal } from "@/lib/routing/spaces";
 import { Typography } from "@nous-research/ui";
-import { cn } from "@/lib/utils";
+
+/**
+ * Cross-product forward table. Maps a URL on the root dashboard to the
+ * matching independent SPA's `index.html` + the same rest.
+ *
+ * The rule: any path that starts with a known product prefix (or a
+ * legacy alias) is delegated to that product's SPA via a full-page
+ * navigation. Anything else (the only remaining valid path is `/`)
+ * renders the hub.
+ */
+const PRODUCT_FORWARDS: Array<{ from: string[]; to: string }> = [
+  { from: ["/portal", "/portal/", "/business", "/business-portal", "/business-portal/"], to: "/portal/index.html" },
+  { from: ["/ops", "/ops/", "/status", "/playground", "/compare",
+            "/sessions", "/analytics", "/logs", "/cron", "/skills",
+            "/tools", "/tenants", "/config", "/env", "/org",
+            "/org-manage"], to: "/ops/index.html" },
+  { from: ["/noc", "/noc/", "/org-control", "/workflows", "/sla", "/dlq",
+            "/hitl", "/traces/"], to: "/noc/index.html" },
+];
+
+/** Match `/traces/:id` and forward to `/noc/traces/:id`. */
+const TRACES_RE = /^\/traces\/([^/]+)$/;
+
+function resolveForward(pathname: string): { target: string; rest: string } | null {
+  for (const { from, to } of PRODUCT_FORWARDS) {
+    for (const prefix of from) {
+      if (pathname === prefix) return { target: to, rest: "" };
+      if (prefix.endsWith("/") && pathname.startsWith(prefix)) {
+        return { target: to, rest: pathname.slice(prefix.length - 1) };
+      }
+    }
+  }
+  const m = pathname.match(TRACES_RE);
+  if (m) return { target: "/noc/index.html", rest: `/traces/${m[1]}` };
+  return null;
+}
 
 interface ProductEntry {
   href: string;
@@ -44,46 +78,23 @@ const ENTRIES: ProductEntry[] = [
  * to one of the three independent SPAs (Portal / Ops / NOC).
  *
  * No routes other than `/` are handled by this app. Every other path
- * is forwarded to the appropriate SPA via `forwardToExternalPortal`
- * or via the dev-server proxy in development.
+ * is forwarded to the matching SPA via a full-page navigation
+ * (window.location.replace), preserving the rest of the path and any
+ * query / hash.
  */
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Forward any non-root path to the matching external SPA.
   useEffect(() => {
     if (location.pathname === "/") return;
-    // Preserve query/hash on the way out.
+    const fwd = resolveForward(location.pathname);
     const suffix = location.search + location.hash;
-    if (location.pathname.startsWith("/portal/") || location.pathname === "/portal"
-        || location.pathname === "/business-portal" || location.pathname.startsWith("/business-portal/")
-        || location.pathname === "/business") {
-      const rest = location.pathname.startsWith("/portal/")
-        ? location.pathname.slice("/portal".length)
-        : "";
-      window.location.replace(`/portal/index.html${rest}${suffix}`);
+    if (fwd) {
+      window.location.replace(`${fwd.target}${fwd.rest}${suffix}`);
       return;
     }
-    if (location.pathname.startsWith("/ops/") || location.pathname === "/ops"
-        || location.pathname === "/status" || location.pathname.startsWith("/org-manage")) {
-      const rest = location.pathname.startsWith("/ops/")
-        ? location.pathname.slice("/ops".length)
-        : location.pathname === "/ops" ? "" : location.pathname;
-      window.location.replace(`/ops/index.html${rest}${suffix}`);
-      return;
-    }
-    if (location.pathname.startsWith("/noc/") || location.pathname === "/noc"
-        || location.pathname === "/org-control" || location.pathname.startsWith("/traces/")) {
-      const rest = location.pathname.startsWith("/noc/")
-        ? location.pathname.slice("/noc".length)
-        : "";
-      window.location.replace(`/noc/index.html${rest}${suffix}`);
-      return;
-    }
-    // Unknown path — let forwardToExternalPortal handle portal/business.
-    if (forwardToExternalPortal(location.pathname)) return;
-    // Final fallback: send back to root.
+    // Unknown path on the root dashboard — send back to /.
     navigate("/", { replace: true });
   }, [location.pathname, location.search, location.hash, navigate]);
 
@@ -95,9 +106,7 @@ export default function App() {
     <div className="min-h-screen bg-background text-foreground antialiased">
       <div className="relative mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center px-4 py-12 sm:py-20">
         <header className="mb-12 text-center">
-          <Typography
-            className="font-mondwest font-bold tracking-[0.15rem] text-[0.7rem] sm:text-[0.8rem] uppercase text-midground blend-lighter opacity-70"
-          >
+          <Typography className="font-mondwest font-bold tracking-[0.15rem] text-[0.7rem] sm:text-[0.8rem] uppercase text-midground blend-lighter opacity-70">
             Hermes Agent
           </Typography>
           <h1 className="mt-3 font-display text-[32px] sm:text-[44px] font-medium leading-[1.05] text-foreground">
@@ -116,12 +125,12 @@ export default function App() {
               className="group relative flex h-full flex-col gap-3 rounded-2xl border border-current/15 bg-card p-5 sm:p-6 transition-all hover:border-current/35 hover:translate-y-[-2px] active:scale-[0.99]"
             >
               <div
-                className={cn(
+                className={[
                   "flex h-10 w-10 items-center justify-center rounded-xl",
                   e.tone === "rose" && "bg-[oklch(0.78_0.16_70_/_0.18)] text-[oklch(0.95_0.10_70)]",
                   e.tone === "teal" && "bg-[oklch(0.72_0.14_180_/_0.18)] text-[oklch(0.92_0.10_180)]",
                   e.tone === "amber" && "bg-[oklch(0.78_0.16_85_/_0.18)] text-[oklch(0.95_0.10_85)]",
-                )}
+                ].filter(Boolean).join(" ")}
               >
                 <e.icon className="h-5 w-5" />
               </div>

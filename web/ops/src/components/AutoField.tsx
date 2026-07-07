@@ -1,7 +1,7 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectOption } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { Input } from "@hermes/ui";
+import { Label } from "@hermes/ui";
+import { Select, SelectOption } from "@hermes/ui";
+import { Switch } from "@hermes/ui";
 import { RotateCcw } from "lucide-react";
 
 function FieldHint({ schema, schemaKey }: { schema: Record<string, unknown>; schemaKey: string }) {

@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 /**
  * Reusable two-column layout with a sticky sidebar.

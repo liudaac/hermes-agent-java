@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Home, Users, Layers, ShieldCheck, Activity, Sparkles } from "lucide-react";
-import { cn } from "@/lib/cn";
+import { cn } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 
 interface TabItem {

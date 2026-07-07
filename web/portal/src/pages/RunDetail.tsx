@@ -5,7 +5,7 @@ import type { BusinessRunRecord, BusinessRunStep } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
-import { formatRelativeTime } from "@/lib/format";
+import { formatRelativeTime } from "@hermes/ui";
 import { Clock, Zap, Users } from "lucide-react";
 
 export default function RunDetail() {

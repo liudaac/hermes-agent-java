@@ -1,6 +1,6 @@
 import { useState, useCallback, type ReactElement, type ReactNode } from "react";
 import { Copy, Check } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@hermes/ui";
 
 interface MarkdownRendererProps {
   content: string;
