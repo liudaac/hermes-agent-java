@@ -1,0 +1,267 @@
+/**
+ * Portal H5 theme — visual system aligned with the public H5 marketing site
+ * (agent-team-h5). Warm dark base, glass surfaces, aurora glow.
+ *
+ * Scope: portal only. Ops/NOC keep their own design languages.
+ */
+@import "tailwindcss";
+
+@theme {
+  /* ── Color tokens (oklch) ───────────────────────────────────── */
+  --color-bg-0: oklch(0.14 0.015 60);
+  --color-bg-1: oklch(0.18 0.015 60);
+  --color-bg-2: oklch(0.22 0.015 55);
+  --color-surface: oklch(0.20 0.015 55);
+  --color-surface-hover: oklch(0.26 0.02 50);
+
+  --color-text-primary: oklch(0.96 0.01 85);
+  --color-text-secondary: oklch(0.72 0.02 70);
+  --color-text-muted: oklch(0.55 0.02 60);
+
+  --color-accent: oklch(0.78 0.16 70);
+  --color-accent-soft: oklch(0.70 0.12 65 / 0.15);
+  --color-accent-glow: oklch(0.78 0.18 70 / 0.3);
+  --color-accent-deep: oklch(0.55 0.10 60);
+
+  --color-border-subtle: oklch(0.30 0.015 50);
+  --color-border-accent: oklch(0.60 0.12 65 / 0.4);
+
+  --color-success: oklch(0.72 0.14 145);
+  --color-warning: oklch(0.78 0.16 85);
+  --color-info: oklch(0.70 0.14 210);
+  --color-purple: oklch(0.70 0.16 280);
+  --color-danger: oklch(0.68 0.20 25);
+
+  /* ── Font families ──────────────────────────────────────────── */
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* ── Base ─────────────────────────────────────────────────────── */
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg-0);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar but keep functional */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Typography shortcuts ────────────────────────────────────── */
+
+.font-display {
+  font-family: var(--font-display);
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Glass surfaces ──────────────────────────────────────────── */
+
+.glass {
+  background: oklch(0.22 0.015 55 / 0.55);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid oklch(0.35 0.02 50 / 0.5);
+}
+
+.glass-strong {
+  background: oklch(0.20 0.015 55 / 0.78);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid oklch(0.35 0.02 50 / 0.6);
+}
+
+.glass-accent {
+  background: linear-gradient(
+    135deg,
+    oklch(0.78 0.16 70 / 0.20),
+    oklch(0.55 0.10 60 / 0.08),
+    oklch(0.78 0.16 70 / 0.14)
+  );
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid oklch(0.55 0.10 65 / 0.35);
+}
+
+/* ── Aurora glows (background decorations) ───────────────────── */
+
+.aurora {
+  position: relative;
+  isolation: isolate;
+}
+
+.aurora::before,
+.aurora::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.aurora::before {
+  top: -20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160%;
+  height: 60vh;
+  background: radial-gradient(
+    ellipse at center,
+    oklch(0.78 0.18 70 / 0.14) 0%,
+    transparent 60%
+  );
+}
+
+.aurora::after {
+  bottom: -10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200%;
+  height: 40vh;
+  background: radial-gradient(
+    ellipse at center,
+    oklch(0.70 0.14 65 / 0.08) 0%,
+    transparent 50%
+  );
+}
+
+/* ── Grain texture (subtle film noise) ───────────────────────── */
+
+.grain {
+  position: relative;
+}
+
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  border-radius: inherit;
+}
+
+/* ── Status dot with glow ────────────────────────────────────── */
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot.online {
+  background: var(--color-success);
+  box-shadow: 0 0 10px oklch(0.72 0.14 145 / 0.7);
+}
+.status-dot.busy {
+  background: var(--color-warning);
+  box-shadow: 0 0 10px oklch(0.78 0.16 85 / 0.7);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.status-dot.offline {
+  background: var(--color-text-muted);
+}
+.status-dot.error {
+  background: var(--color-danger);
+  box-shadow: 0 0 10px oklch(0.68 0.20 25 / 0.7);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+
+/* ── Card hover lift (H5 micro-interaction) ──────────────────── */
+
+.card-lift {
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 240ms ease;
+}
+
+.card-lift:active {
+  transform: scale(0.985);
+}
+
+@media (hover: hover) {
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px -8px oklch(0 0 0 / 0.5),
+                0 0 0 1px oklch(0.55 0.10 65 / 0.3);
+  }
+}
+
+/* ── Page transitions ────────────────────────────────────────── */
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-in {
+  animation: page-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* ── Shimmer (loading state) ─────────────────────────────────── */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.22 0.015 55 / 0.5) 0%,
+    oklch(0.30 0.02 55 / 0.6) 50%,
+    oklch(0.22 0.015 55 / 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* ── Touch-friendly tap targets ──────────────────────────────── */
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ── Reduced motion ──────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

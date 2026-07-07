@@ -63,10 +63,25 @@ export default defineConfig({
   build: {
     outDir: "../hermes_cli/web_dist",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        // Legacy combined dashboard (ops + noc). Kept for backward compat.
+        main: path.resolve(__dirname, "index.html"),
+      },
+    },
   },
   server: {
+    port: 5174,
     proxy: {
       "/api": BACKEND,
+      // When portal dev server is running, route any /portal/* request
+      // there. The portal SPA reads the rest of the path on its own.
+      "/portal": {
+        target: "http://localhost:5175",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/portal/, ""),
+        ws: true,
+      },
     },
   },
 });

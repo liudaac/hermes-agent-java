@@ -4,31 +4,18 @@
  * Renders nothing visible to the user by default. Each space can opt
  * in to its own decoration by adding a component to this file.
  *
- * Aligned with the three-space refactor: each space has a unique
- * visual signature:
- *  - Portal:  subtle aurora gradient at top, glass card pattern
- *  - Ops:     minimal — terminal grid lines
- *  - NOC:     amber glow pulse, alert cadence indicator
+ * Portal is now a separate SPA — it carries its own decorations there
+ * (see web/portal/src/theme.css `.aurora` / `.grain`). The combined
+ * dashboard only renders Ops and NOC decorations.
+ *
+ *  - Ops:  minimal — terminal grid lines
+ *  - NOC:  amber glow pulse, alert cadence indicator
  */
 
 import type { SpaceName } from "@/lib/routing/spaces";
 
 interface DecorationProps {
   active: boolean;
-}
-
-function PortalDecoration({ active }: DecorationProps) {
-  if (!active) return null;
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-12 z-0 h-32 opacity-40"
-      style={{
-        background:
-          "radial-gradient(ellipse 80% 100% at 50% 0%, rgba(249, 168, 212, 0.18), transparent 60%)",
-      }}
-    />
-  );
 }
 
 function OpsDecoration({ active }: DecorationProps) {
@@ -61,7 +48,6 @@ function NocDecoration({ active }: DecorationProps) {
 }
 
 const DECORATIONS: Record<SpaceName, (p: DecorationProps) => React.JSX.Element | null> = {
-  portal: PortalDecoration,
   ops: OpsDecoration,
   noc: NocDecoration,
 };

@@ -26,7 +26,7 @@ export interface SpaceLayoutProps {
 export function SpaceLayout({ children }: SpaceLayoutProps) {
   const location = useLocation();
   const space: SpaceName =
-    pathToSpace(location.pathname) ?? "portal";
+    pathToSpace(location.pathname) ?? "ops";
 
   useEffect(() => {
     // Reflect the active space on <html> so the global CSS can branch.

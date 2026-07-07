@@ -1,18 +1,21 @@
 /**
  * Space-scoped theme mappings.
  *
- * Each "mental space" (Portal / Ops / NOC) maps to a dashboard theme
- * that visually matches its product role:
+ * Each "mental space" (Ops / NOC) maps to a dashboard theme that
+ * visually matches its product role:
  *
- *   - Portal: rose (soft, AI-SaaS feel, business user friendly)
- *   - Ops:    default (classic Hermes teal, terminal/DS feel)
- *   - NOC:    amber (warm alert + amber glow, SOC/NOC feel)
+ *   - Ops:  default (classic Hermes teal, terminal/DS feel)
+ *   - NOC:  amber (warm alert + amber glow, SOC/NOC feel)
+ *
+ * Portal is now a separate SPA (web/portal/) and ships its own
+ * H5 visual system — it no longer participates in the combined
+ * dashboard theme registry.
  *
  * The active theme follows the active space. Users can still override
  * via ThemeSwitcher — that override is remembered per-browser.
  */
 
-import { BUILTIN_THEMES, defaultTheme, roseTheme, midnightTheme } from "./presets";
+import { BUILTIN_THEMES, defaultTheme, midnightTheme } from "./presets";
 import type { DashboardTheme } from "./types";
 import type { SpaceName } from "@/lib/routing/spaces";
 
@@ -20,9 +23,6 @@ import type { SpaceName } from "@/lib/routing/spaces";
  * Custom NOC theme — not in the backend BUILTIN_THEMES list because the
  * backend list is owned by the Java server. This is a frontend-only
  * palette that NOC users get automatically when they enter /noc.
- *
- * If a backend theme with the same name is registered later, the
- * frontend's preset will be used; otherwise we ship our own.
  */
 export const nocTheme: DashboardTheme = {
   name: "noc-amber",
@@ -38,7 +38,6 @@ export const nocTheme: DashboardTheme = {
 };
 
 export const SPACE_THEMES: Record<SpaceName, string> = {
-  portal: "rose",
   ops: "default",
   noc: "noc-amber",
 };
@@ -62,7 +61,6 @@ export const SPACE_THEME_PALETTES: Array<{
   theme: DashboardTheme;
   description: string;
 }> = [
-  { space: "portal", theme: roseTheme, description: "Portal default — soft rose, business feel" },
   { space: "ops", theme: defaultTheme, description: "Ops default — classic Hermes teal, terminal feel" },
   { space: "noc", theme: midnightTheme, description: "NOC default — midnight + amber glow" },
 ];

@@ -15,21 +15,16 @@ import {
   AlertOctagon,
   AlertTriangle,
   BarChart3,
-  Bot,
-  BriefcaseBusiness,
   Building2,
   Clock,
   FileText,
   GitBranch,
   Hand,
   KeyRound,
-  LayoutDashboard,
   MessageSquare,
   Network,
   Package,
   Settings,
-  ShieldCheck,
-  Sparkles,
   Terminal,
   Timer,
   TrendingUp,
@@ -38,6 +33,13 @@ import {
 } from "lucide-react";
 
 import { SPACE_PATHS, type SpaceName } from "./spaces";
+
+/**
+ * Standalone portal entry — set to a relative URL that the browser will
+ * load as a full-page navigation, exiting the combined dashboard.
+ * The portal SPA reads the rest of the path on its own.
+ */
+export const PORTAL_ENTRY = "/portal/index.html";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -53,19 +55,10 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-// ── Portal nav (business users) ──────────────────────────────────
-
-export const PORTAL_NAV: NavItem[] = [
-  { path: SPACE_PATHS.portal, label: "Home", labelKey: "portalHome", icon: LayoutDashboard },
-  { path: `${SPACE_PATHS.portal}/workspaces`, label: "Workspaces", labelKey: "portalWorkspaces", icon: BriefcaseBusiness },
-  { path: `${SPACE_PATHS.portal}/agents`, label: "Teams", labelKey: "portalTeams", icon: Bot },
-  { path: `${SPACE_PATHS.portal}/templates`, label: "Templates", labelKey: "portalTemplates", icon: Package },
-  { path: `${SPACE_PATHS.portal}/approvals`, label: "Approvals", labelKey: "portalApprovals", icon: ShieldCheck },
-  { path: `${SPACE_PATHS.portal}/industry-dashboard`, label: "Industry", labelKey: "portalIndustry", icon: BarChart3 },
-  { path: `${SPACE_PATHS.portal}/evolution`, label: "Insights", labelKey: "portalInsights", icon: Sparkles },
-];
-
 // ── Ops nav (platform admins, grouped) ──────────────────────────
+//
+// Portal no longer lives inside the combined dashboard — it is a fully
+// independent SPA at PORTAL_ENTRY. So the dashboard only renders Ops + NOC.
 
 export const OPS_NAV: NavGroup[] = [
   {
@@ -102,14 +95,17 @@ export const OPS_NAV: NavGroup[] = [
 export const OPS_NAV_FLAT: NavItem[] = OPS_NAV.flatMap((g) => g.items);
 
 // ── NOC nav (governance, single row) ────────────────────────────
+//
+// Items that live in the standalone portal SPA use PORTAL_ENTRY so the
+// browser exits the combined dashboard (full-page navigation, true isolation).
 
 export const NOC_NAV: NavItem[] = [
   { path: SPACE_PATHS.noc, label: "Agents", labelKey: "nocAgents", icon: Network },
   { path: `${SPACE_PATHS.noc}/traces`, label: "Traces", labelKey: "nocTraces", icon: GitBranch },
   { path: `${SPACE_PATHS.noc}/dlq`, label: "DLQ", labelKey: "nocDlq", icon: AlertOctagon },
   { path: `${SPACE_PATHS.noc}/hitl`, label: "Human Loop", labelKey: "nocHitl", icon: Hand },
-  { path: `${SPACE_PATHS.portal}/risk-policy`, label: "Risk", labelKey: "nocRisk", icon: AlertTriangle },
-  { path: `${SPACE_PATHS.portal}/evolution`, label: "Evolution", labelKey: "nocEvolution", icon: TrendingUp },
+  { path: `${PORTAL_ENTRY}/risk-policy`, label: "Risk", labelKey: "nocRisk", icon: AlertTriangle },
+  { path: `${PORTAL_ENTRY}/evolution`, label: "Evolution", labelKey: "nocEvolution", icon: TrendingUp },
 ];
 
 // ── Loaders ──────────────────────────────────────────────────────
@@ -121,11 +117,11 @@ export interface NavPayload {
 
 /**
  * Get the nav structure for a given space.
+ * The combined dashboard only renders Ops and NOC. Portal is a separate
+ * SPA with its own nav inside it.
  */
 export function getNavForSpace(space: SpaceName): NavPayload {
   switch (space) {
-    case "portal":
-      return { groups: [{ label: "", items: PORTAL_NAV }], flat: PORTAL_NAV };
     case "ops":
       return { groups: OPS_NAV, flat: OPS_NAV_FLAT };
     case "noc":
@@ -134,10 +130,10 @@ export function getNavForSpace(space: SpaceName): NavPayload {
 }
 
 /**
- * Determine which space a path belongs to.
+ * Determine which space a path belongs to. The combined dashboard only
+ * owns Ops and NOC paths; portal paths belong to the standalone SPA.
  */
 export function pathToSpace(pathname: string): SpaceName | null {
-  if (pathname === SPACE_PATHS.portal || pathname.startsWith(`${SPACE_PATHS.portal}/`)) return "portal";
   if (pathname === SPACE_PATHS.ops || pathname.startsWith(`${SPACE_PATHS.ops}/`)) return "ops";
   if (pathname === SPACE_PATHS.noc || pathname.startsWith(`${SPACE_PATHS.noc}/`)) return "noc";
   return null;

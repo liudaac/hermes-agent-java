@@ -1,17 +1,20 @@
 /**
  * SpaceNav — render the right nav structure for the current space.
  *
- * - Portal: single flat row of 7 business objects
- * - Ops:    grouped (Operations / Observability / Configuration)
- * - NOC:    single flat row of 6 governance items
+ * - Ops:  grouped (Operations / Observability / Configuration)
+ * - NOC:  single flat row of governance items (some link out to the
+ *         standalone portal SPA via <a href>; see ./nav.tsx PORTAL_ENTRY)
  *
- * Renders inside the App header alongside the brand mark.
+ * Items whose path starts with PORTAL_ENTRY are external (live in a
+ * separate SPA). We render them with a plain <a> so the browser does a
+ * full-page navigation, exiting the combined dashboard.
  */
 
-import { NavLink } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import { Cell, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
 import type { NavGroup, NavItem } from "./nav";
+import { PORTAL_ENTRY } from "./nav";
 import { useI18n } from "@/i18n";
 
 interface SpaceNavProps {
@@ -21,53 +24,64 @@ interface SpaceNavProps {
   showLabels?: boolean;
 }
 
+function isExternalPath(p: string): boolean {
+  return p.startsWith(PORTAL_ENTRY);
+}
+
 export function SpaceNav({ flat, groups, templateColumns, showLabels = true }: SpaceNavProps) {
   const { t } = useI18n();
 
-  // Render a single NavLink cell
+  // Render a single nav cell — NavLink for internal paths, <a> for portal SPA.
   const renderCell = (item: NavItem) => {
-    const isExact = item.path.endsWith("/portal") ||
-      item.path.endsWith("/ops") ||
-      item.path.endsWith("/noc");
+    const isExact = item.path.endsWith("/ops") || item.path.endsWith("/noc");
+    const external = isExternalPath(item.path);
+    const className = ({ isActive }: { isActive: boolean }) =>
+      cn(
+        "group relative flex h-full w-full items-center gap-1.5",
+        "px-2.5 sm:px-4 py-2",
+        "font-mondwest text-[0.65rem] sm:text-[0.8rem] tracking-[0.12em]",
+        "whitespace-nowrap transition-colors cursor-pointer",
+        "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
+        isActive ? "text-midground" : "opacity-60 hover:opacity-100",
+      );
+    const inner = (isActive: boolean) => (
+      <>
+        <item.icon className="h-3.5 w-3.5 shrink-0" />
+        {showLabels && (
+          <span className="hidden sm:inline">
+            {item.labelKey
+              ? ((t.app.nav as Record<string, string>)[item.labelKey] ?? item.label)
+              : item.label}
+          </span>
+        )}
+
+        <span
+          aria-hidden
+          className="absolute inset-1 bg-midground opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-5"
+        />
+        {isActive && (
+          <span
+            aria-hidden
+            className="absolute bottom-0 left-0 right-0 h-px bg-midground blend-lighter"
+          />
+        )}
+      </>
+    );
+
+    if (external) {
+      return (
+        <Cell key={item.path} className="relative !p-0">
+          <a href={item.path} className={className({ isActive: false })}>
+            {inner(false)}
+          </a>
+        </Cell>
+      );
+    }
+
     return (
       <Cell key={item.path} className="relative !p-0">
-        <NavLink
-          to={item.path}
-          end={isExact}
-          className={({ isActive }) =>
-            cn(
-              "group relative flex h-full w-full items-center gap-1.5",
-              "px-2.5 sm:px-4 py-2",
-              "font-mondwest text-[0.65rem] sm:text-[0.8rem] tracking-[0.12em]",
-              "whitespace-nowrap transition-colors cursor-pointer",
-              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground",
-              isActive ? "text-midground" : "opacity-60 hover:opacity-100",
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <item.icon className="h-3.5 w-3.5 shrink-0" />
-              {showLabels && (
-                <span className="hidden sm:inline">
-                  {item.labelKey
-                    ? ((t.app.nav as Record<string, string>)[item.labelKey] ?? item.label)
-                    : item.label}
-                </span>
-              )}
-
-              <span
-                aria-hidden
-                className="absolute inset-1 bg-midground opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-5"
-              />
-              {isActive && (
-                <span
-                  aria-hidden
-                  className="absolute bottom-0 left-0 right-0 h-px bg-midground blend-lighter"
-                />
-              )}
-            </>
-          )}
+        <NavLink to={item.path} end={isExact} className={className}>
+          {({ isActive }) => inner(isActive)}
         </NavLink>
       </Cell>
     );
@@ -95,7 +109,7 @@ export function SpaceNav({ flat, groups, templateColumns, showLabels = true }: S
     );
   }
 
-  // Portal / NOC: single flat row
+  // NOC: single flat row
   return (
     <div
       className="min-w-0 flex-1 overflow-x-auto scrollbar-none"
@@ -105,3 +119,6 @@ export function SpaceNav({ flat, groups, templateColumns, showLabels = true }: S
     </div>
   );
 }
+
+// keep the Link import used (some bundlers complain otherwise)
+void Link;

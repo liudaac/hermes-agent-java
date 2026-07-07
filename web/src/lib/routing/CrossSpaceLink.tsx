@@ -1,15 +1,10 @@
 /**
- * CrossSpaceLink — link component for jumping between Portal / Ops / NOC.
+ * CrossSpaceLink — link component for jumping between Ops and NOC within
+ * the combined dashboard.
  *
- * Aligned with the three-space refactor: business users land in /portal
- * by default, but sometimes need to drill into /ops or /noc (e.g. when
- * a business-team health issue needs a governance-deep-link). This
- * component:
- *
- *   1. Renders an inline <a> (or <button>) styled as a "→ NOC" link.
- *   2. On click, navigates to the target space root.
- *   3. Remembers the source space so the user can return with a single
- *      click via <ReturnToSource />.
+ * Portal is now a separate SPA (web/portal/) and is reached via a regular
+ * <a href="/portal/index.html"> or the SpaceSwitcher's "Portal" pill. This
+ * component stays for in-app jumps between Ops and NOC.
  *
  *   <CrossSpaceLink to="/noc/agents/abc-123" sourceLabel="治理详情" />
  *
@@ -33,7 +28,7 @@ const STORAGE_KEY = "hermes.lastVisitedSpace";
 export function readLastVisitedSpace(): SpaceName | null {
   if (typeof window === "undefined") return null;
   const raw = window.sessionStorage.getItem(STORAGE_KEY);
-  if (raw === "portal" || raw === "ops" || raw === "noc") return raw;
+  if (raw === "ops" || raw === "noc") return raw;
   return null;
 }
 
@@ -46,7 +41,7 @@ function writeLastVisitedSpace(space: SpaceName): void {
 }
 
 export interface CrossSpaceLinkProps {
-  /** Target path (anywhere, including other spaces). */
+  /** Target path (anywhere inside /ops or /noc). */
   to: string;
   /** Visible label (e.g. "治理详情", "查看日志", "审计"). */
   children: ReactNode;
@@ -117,10 +112,10 @@ export function CrossSpaceLink({
 }
 
 /**
- * ReturnToSource — small "← 返回" button that shows in non-portal spaces
- * and returns the user to their most recently visited space.
+ * ReturnToSource — small "← 返回" button shown in non-source spaces,
+ * returns the user to the most recently visited space.
  *
- * <ReturnToSource /> // → "← 返回 Portal"
+ * <ReturnToSource /> // → "← 返回 Ops"
  */
 export interface ReturnToSourceProps {
   fallback?: SpaceName;
@@ -129,17 +124,15 @@ export interface ReturnToSourceProps {
 }
 
 const SPACE_LABEL: Record<SpaceName, string> = {
-  portal: "业务",
   ops: "Ops",
   noc: "NOC",
 };
 
-export function ReturnToSource({ fallback = "portal", className, children }: ReturnToSourceProps) {
+export function ReturnToSource({ fallback = "ops", className, children }: ReturnToSourceProps) {
   const navigate = useNavigate();
   const source = readLastVisitedSpace() ?? fallback;
 
   if (pathToSpace(window.location.pathname) === source) {
-    // Already in the source space — no need to render.
     return null;
   }
 
@@ -148,10 +141,7 @@ export function ReturnToSource({ fallback = "portal", className, children }: Ret
       type="button"
       onClick={() => {
         rememberSpace(source);
-        const root =
-          source === "portal" ? "/portal"
-            : source === "ops" ? "/ops"
-            : "/noc";
+        const root = source === "ops" ? "/ops" : "/noc";
         navigate(root);
       }}
       className={cn(

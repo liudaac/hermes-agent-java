@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { migrateOldPath, rememberSpace, resolveDefaultSpace, SPACE_PATHS, type SpaceName } from "@/lib/routing/spaces";
+import { forwardToExternalPortal, migrateOldPath, rememberSpace, resolveDefaultSpace, SPACE_PATHS, type SpaceName } from "@/lib/routing/spaces";
 import { RootRedirect } from "@/lib/routing/Redirects";
 import { SpaceSwitcher } from "@/lib/routing/SpaceSwitcher";
 import { SpaceNav } from "@/lib/routing/SpaceNav";
@@ -53,17 +53,7 @@ const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
 const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const OrgPage = lazy(() => import("@/pages/OrgPage"));
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
-const BusinessPortalStandalonePage = lazy(() => import("@/pages/BusinessPortalStandalonePage"));
-const BusinessPortalHome = lazy(() => import("@/pages/BusinessPortalHome"));
-const AgentMarketPage = lazy(() => import("@/pages/AgentMarketPage"));
-const TemplateGalleryPage = lazy(() => import("@/pages/TemplateGalleryPage"));
-const ApprovalsPage = lazy(() => import("@/pages/ApprovalsPage"));
-const RiskPolicyPage = lazy(() => import("@/pages/RiskPolicyPage"));
-const EvolutionPanelPage = lazy(() => import("@/pages/EvolutionPanelPage"));
 const TraceDetailPage = lazy(() => import("@/pages/TraceDetailPage"));
-const MyTemplatesPage = lazy(() => import("@/pages/MyTemplatesPage"));
-const IndustryDashboardPage = lazy(() => import("@/pages/IndustryDashboardPage"));
-const RunDetailPage = lazy(() => import("@/pages/RunDetailPage"));
 const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
 const SLAPage = lazy(() => import("@/pages/SLAPage"));
 const DLQPage = lazy(() => import("@/pages/DLQPage"));
@@ -158,9 +148,10 @@ export default function App() {
   const navigate = useNavigate();
 
   // Redirect legacy top-level paths to their space-scoped equivalents
-  // (e.g. /status → /ops, /business-portal/teams → /portal/teams).
-  // Skips paths that are already under /portal, /ops, or /noc.
+  // (e.g. /status → /ops). Portal paths are forwarded to the standalone
+  // portal SPA — see forwardToExternalPortal.
   useEffect(() => {
+    if (forwardToExternalPortal(location.pathname)) return;
     const target = migrateOldPath(location.pathname);
     if (target && target !== location.pathname) {
       navigate(target, { replace: true });
@@ -169,8 +160,7 @@ export default function App() {
 
   // Persist the active space whenever the user enters one.
   useEffect(() => {
-    if (location.pathname.startsWith(SPACE_PATHS.portal)) rememberSpace("portal");
-    else if (location.pathname.startsWith(SPACE_PATHS.ops)) rememberSpace("ops");
+    if (location.pathname.startsWith(SPACE_PATHS.ops)) rememberSpace("ops");
     else if (location.pathname.startsWith(SPACE_PATHS.noc)) rememberSpace("noc");
   }, [location.pathname]);
 
@@ -250,18 +240,7 @@ export default function App() {
         <Suspense fallback={<PageLoading />}>
           <Routes>
           <Route path="/" element={<RootRedirect />} />
-          {/* ── Three-space refactor: /portal /ops /noc ─────────────── */}
-          <Route path="/portal" element={<BusinessPortalStandalonePage><BusinessPortalHome /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/workspaces" element={<BusinessPortalStandalonePage />} />
-          <Route path="/portal/agents" element={<BusinessPortalStandalonePage><AgentMarketPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/templates" element={<BusinessPortalStandalonePage><TemplateGalleryPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/approvals" element={<BusinessPortalStandalonePage><ApprovalsPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/risk-policy" element={<BusinessPortalStandalonePage><RiskPolicyPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/evolution" element={<BusinessPortalStandalonePage><EvolutionPanelPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/my-templates" element={<BusinessPortalStandalonePage><MyTemplatesPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/industry-dashboard" element={<BusinessPortalStandalonePage><IndustryDashboardPage /></BusinessPortalStandalonePage>} />
-          <Route path="/portal/runs/:workspaceId/:runId" element={<RunDetailPage />} />
-
+          {/* ── Two-space: /ops /noc (Portal is a separate SPA) ──────── */}
           <Route path="/ops" element={<StatusPage />} />
           <Route path="/ops/playground" element={<PlaygroundPage />} />
           <Route path="/ops/compare" element={<ComparePage />} />
@@ -291,17 +270,14 @@ export default function App() {
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tenants" element={<TenantsPage />} />
-          <Route path="/business" element={<Navigate to="/portal" replace />} />
-          {/* /business-portal/* — all redirect to /portal/* via migrateOldPath. */}
-          <Route path="/business-portal" element={<Navigate to="/portal" replace />} />
-          <Route path="/business-portal/*" element={<Navigate to="/portal" replace />} />
+          {/* /business, /business-portal, /portal*, /runs/:ws/:id — all forwarded
+              to the standalone portal SPA via forwardToExternalPortal. */}
           <Route path="/traces/:traceId" element={<TraceDetailPage />} />
-          <Route path="/runs/:workspaceId/:runId" element={<Navigate to="/portal" replace />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 
           <Route path="/org" element={<OrgPage />} />
-          <Route path="/org-manage" element={<Navigate to="/portal" replace />} />
+          <Route path="/org-manage" element={<OrgPage />} />
           <Route path="/org-control" element={<OrgControlCenterPage />} />
           <Route path="/workflows" element={<WorkflowPage />} />
           <Route path="/sla" element={<SLAPage />} />

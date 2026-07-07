@@ -1,0 +1,8 @@
+# Vite cache + tsbuildinfo — local only
+node_modules/
+.vite/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+*.swp
