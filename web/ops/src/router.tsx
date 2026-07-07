@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { OpsTopBar } from "@/components/OpsTopBar";
+import { JarvisCore } from "@hermes/jarvis";
 
 const StatusPage = lazy(() => import("@/pages/StatusPage"));
 const PlaygroundPage = lazy(() => import("@/pages/PlaygroundPage"));
@@ -56,6 +57,9 @@ export function OpsRouter() {
           </Routes>
         </Suspense>
       </main>
+
+      {/* Cross-space dialogue shell — design.md §0 */}
+      <JarvisCore />
     </div>
   );
 }

@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@hermes/ui": ["../packages/ui/src"]
+      "@hermes/ui": ["../packages/ui/src"],
+      "@hermes/jarvis": ["../packages/jarvis/src"]
     },
     "strict": true,
     "noUnusedLocals": true,

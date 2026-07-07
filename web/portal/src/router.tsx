@@ -1,9 +1,9 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { TopBar } from "@/components/TopBar";
 import { useI18n } from "@/i18n";
-import { useLocation } from "react-router-dom";
+import { JarvisCore } from "@hermes/jarvis";
 
 const Home = lazy(() => import("@/pages/Home"));
 const Teams = lazy(() => import("@/pages/Teams"));
@@ -50,6 +50,9 @@ export function PortalRouter() {
       </Suspense>
 
       <BottomTabBar />
+
+      {/* Cross-space dialogue shell — design.md §0 */}
+      <JarvisCore />
     </div>
   );
 }

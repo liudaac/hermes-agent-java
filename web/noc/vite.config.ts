@@ -55,6 +55,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@hermes/ui": path.resolve(__dirname, "../packages/ui/src"),
+      "@hermes/jarvis": path.resolve(__dirname, "../packages/jarvis/src"),
     },
   },
 });

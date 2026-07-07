@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { NocTopBar } from "@/components/NocTopBar";
+import { JarvisCore } from "@hermes/jarvis";
 
 const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
 const TraceDetailPage = lazy(() => import("@/pages/TraceDetailPage"));
@@ -39,6 +40,9 @@ export function NocRouter() {
           </Routes>
         </Suspense>
       </main>
+
+      {/* Cross-space dialogue shell — design.md §0 */}
+      <JarvisCore />
     </div>
   );
 }
