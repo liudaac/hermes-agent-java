@@ -62,10 +62,14 @@ export default defineConfig({
   },
   build: {
     outDir: "../hermes_cli/web_dist",
-    emptyOutDir: true,
+    emptyOutDir: false,
     rollupOptions: {
       input: {
-        // Legacy combined dashboard (ops + noc). Kept for backward compat.
+        // The root "hub" — landing page with three product cards
+        // (Portal / Ops / NOC). The three products themselves are
+        // built by their own Vite entries into `portal/`, `ops/`,
+        // and `noc/` subdirectories; we explicitly leave those
+        // alone.
         main: path.resolve(__dirname, "index.html"),
       },
     },
@@ -74,12 +78,20 @@ export default defineConfig({
     port: 5174,
     proxy: {
       "/api": BACKEND,
-      // When portal dev server is running, route any /portal/* request
-      // there. The portal SPA reads the rest of the path on its own.
+      // Portal and NOC are independent SPAs on their own dev ports.
+      // When the user is on the combined dashboard and follows an
+      // /portal/* or /noc/* link, proxy the request to the matching
+      // dev server.
       "/portal": {
         target: "http://localhost:5175",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/portal/, ""),
+        ws: true,
+      },
+      "/noc": {
+        target: "http://localhost:5177",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/noc/, ""),
         ws: true,
       },
     },

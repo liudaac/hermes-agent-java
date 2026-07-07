@@ -5,11 +5,20 @@
  *  - Chat playground (gateway-direct SSE)
  *  - Dashboard plugins
  *  - Dashboard themes
+ *  - DLQ / takeover / SLA / workflow governance endpoints
+ *    (historically lived in portal.ts — they are NOC concerns)
  */
 import { fetchJSON, gatewayFetch } from "./_base";
 import type { PluginManifestResponse } from "./types/noc";
 import type { DashboardThemesResponse } from "./types/noc";
 import type { CompareRun, CompareRunResponse } from "./types/common";
+import type {
+  SLATemplatesResponse,
+  DLQResponse,
+  ApprovalAnalyticsResponse,
+  TakeoverSession,
+  WorkflowStatusResponse,
+} from "./types/orchestration";
 
 /**
  * Read SSE chunked stream from gateway (compare runs, chat playground).
@@ -155,15 +164,8 @@ export const nocApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
-};
 
-// ── NOC operational methods (DLQ, takeover, SLA, workflow) ────────
-// Historically these lived in portal.ts; they are NOC concerns and
-// the NOC SPA owns them now.
-
-import type { SLATemplatesResponse, DLQResponse, ApprovalAnalyticsResponse, TakeoverSession, WorkflowStatusResponse } from "./types/orchestration";
-
-Object.assign(nocApi as Record<string, unknown>, {
+  // ── NOC operational governance (DLQ, takeover, SLA, workflow) ──
   getSLATemplates: () => fetchJSON<SLATemplatesResponse>("/api/v1/business/sla/templates"),
   getDLQ: (workspaceId?: string) => {
     const qs = new URLSearchParams();
@@ -212,4 +214,6 @@ Object.assign(nocApi as Record<string, unknown>, {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ decision }),
     }),
-});
+};
+
+// ── NOC operational methods merged into nocApi above. ─────────────

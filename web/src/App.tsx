@@ -1,337 +1,160 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
-import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { forwardToExternalPortal, migrateOldPath, rememberSpace, resolveDefaultSpace, SPACE_PATHS, type SpaceName } from "@/lib/routing/spaces";
-import { RootRedirect } from "@/lib/routing/Redirects";
-import { SpaceSwitcher } from "@/lib/routing/SpaceSwitcher";
-import { SpaceNav } from "@/lib/routing/SpaceNav";
-import { getNavForSpace, pathToSpace } from "@/lib/routing/nav";
-import { SpaceThemeBridge } from "@/themes";
-import { SpaceLayout } from "@/layouts/SpaceLayout";
-import { SpaceDecorations } from "@/layouts/SpaceDecorations";
-import {
-  Activity,
-  BarChart3,
-  Clock,
-  FileText,
-  KeyRound,
-  MessageSquare,
-  Package,
-  Settings,
-  Puzzle,
-  Sparkles,
-  Terminal,
-  Globe,
-  Database,
-  Shield,
-  Wrench,
-  Zap,
-  Heart,
-  Star,
-  Code,
-  Eye,
-  Users,
-  Bot,
-  ArrowLeftRight,
-  BriefcaseBusiness,
-  GitBranch,
-  Timer,
-  AlertOctagon,
-  Hand,
-} from "lucide-react";
-import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { BriefcaseBusiness, TerminalSquare, ShieldCheck, ExternalLink, type LucideIcon } from "lucide-react";
+import { forwardToExternalPortal } from "@/lib/routing/spaces";
+import { Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
-import { Backdrop } from "@/components/Backdrop";
-const StatusPage = lazy(() => import("@/pages/StatusPage"));
-const ConfigPage = lazy(() => import("@/pages/ConfigPage"));
-const EnvPage = lazy(() => import("@/pages/EnvPage"));
-const SessionsPage = lazy(() => import("@/pages/SessionsPage"));
-const LogsPage = lazy(() => import("@/pages/LogsPage"));
-const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
-const CronPage = lazy(() => import("@/pages/CronPage"));
-const SkillsPage = lazy(() => import("@/pages/SkillsPage"));
-const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
-const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
-const OrgPage = lazy(() => import("@/pages/OrgPage"));
-const OrgControlCenterPage = lazy(() => import("@/pages/OrgControlCenterPage"));
-const TraceDetailPage = lazy(() => import("@/pages/TraceDetailPage"));
-const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
-const SLAPage = lazy(() => import("@/pages/SLAPage"));
-const DLQPage = lazy(() => import("@/pages/DLQPage"));
-const HumanInTheLoopPage = lazy(() => import("@/pages/HumanInTheLoopPage"));
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { ThemeSwitcher } from "@/components/ThemeSwitcher";
-const PlaygroundPage = lazy(() => import("@/pages/PlaygroundPage"));
-const ComparePage = lazy(() => import("@/pages/ComparePage"));
-import { useI18n } from "@/i18n";
-import { usePlugins } from "@/plugins";
-import type { RegisteredPlugin } from "@/plugins";
 
-// Plugins can reference any of these by name in their manifest — keeps bundle
-// size sane vs. importing the full lucide-react set.
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  Activity,
-  BarChart3,
-  Clock,
-  FileText,
-  KeyRound,
-  MessageSquare,
-  Package,
-  Settings,
-  Puzzle,
-  Sparkles,
-  Terminal,
-  Globe,
-  Database,
-  Shield,
-  Wrench,
-  Zap,
-  Heart,
-  Star,
-  Code,
-  Eye,
-  Users,
-  Bot,
-  ArrowLeftRight,
-  BriefcaseBusiness,
-  GitBranch,
-  Timer,
-  AlertOctagon,
-  Hand,
-};
-
-function resolveIcon(
-  name: string,
-): React.ComponentType<{ className?: string }> {
-  return ICON_MAP[name] ?? Puzzle;
+interface ProductEntry {
+  href: string;
+  title: string;
+  blurb: string;
+  icon: LucideIcon;
+  tone: "rose" | "teal" | "amber";
 }
 
-function buildNavItems(
-  builtIn: NavItem[],
-  plugins: RegisteredPlugin[],
-): NavItem[] {
-  const items = [...builtIn];
+const ENTRIES: ProductEntry[] = [
+  {
+    href: "/portal/index.html",
+    title: "Portal",
+    blurb: "业务前店 · 数字员工 · 场景模板 · 待审批",
+    icon: BriefcaseBusiness,
+    tone: "rose",
+  },
+  {
+    href: "/ops/index.html",
+    title: "Ops",
+    blurb: "平台控制台 · 多租户 · Sessions · Logs · 配置",
+    icon: TerminalSquare,
+    tone: "teal",
+  },
+  {
+    href: "/noc/index.html",
+    title: "NOC",
+    blurb: "Org Control Center · Workflow · DLQ · SLA · 告警",
+    icon: ShieldCheck,
+    tone: "amber",
+  },
+];
 
-  for (const { manifest } of plugins) {
-    const pluginItem: NavItem = {
-      path: manifest.tab.path,
-      label: manifest.label,
-      icon: resolveIcon(manifest.icon),
-    };
-
-    const pos = manifest.tab.position ?? "end";
-    if (pos === "end") {
-      items.push(pluginItem);
-    } else if (pos.startsWith("after:")) {
-      // Plugin manifests may reference old top-level paths (e.g. "after:/status").
-      // Migrate to the space-scoped path so we can find the right insertion point.
-      const target =
-        migrateOldPath("/" + pos.slice(6)) ?? "/" + pos.slice(6);
-      const idx = items.findIndex((i) => i.path === target);
-      items.splice(idx >= 0 ? idx + 1 : items.length, 0, pluginItem);
-    } else if (pos.startsWith("before:")) {
-      const target =
-        migrateOldPath("/" + pos.slice(7)) ?? "/" + pos.slice(7);
-      const idx = items.findIndex((i) => i.path === target);
-      items.splice(idx >= 0 ? idx : items.length, 0, pluginItem);
-    } else {
-      items.push(pluginItem);
-    }
-  }
-
-  return items;
-}
-
+/**
+ * Hub — landing page for the root URL.
+ *
+ * Renders a simple three-card grid: each card is a full-page link
+ * to one of the three independent SPAs (Portal / Ops / NOC).
+ *
+ * No routes other than `/` are handled by this app. Every other path
+ * is forwarded to the appropriate SPA via `forwardToExternalPortal`
+ * or via the dev-server proxy in development.
+ */
 export default function App() {
-  const { t } = useI18n();
-  const { plugins } = usePlugins();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Redirect legacy top-level paths to their space-scoped equivalents
-  // (e.g. /status → /ops). Portal paths are forwarded to the standalone
-  // portal SPA — see forwardToExternalPortal.
+  // Forward any non-root path to the matching external SPA.
   useEffect(() => {
-    if (forwardToExternalPortal(location.pathname)) return;
-    const target = migrateOldPath(location.pathname);
-    if (target && target !== location.pathname) {
-      navigate(target, { replace: true });
+    if (location.pathname === "/") return;
+    // Preserve query/hash on the way out.
+    const suffix = location.search + location.hash;
+    if (location.pathname.startsWith("/portal/") || location.pathname === "/portal"
+        || location.pathname === "/business-portal" || location.pathname.startsWith("/business-portal/")
+        || location.pathname === "/business") {
+      const rest = location.pathname.startsWith("/portal/")
+        ? location.pathname.slice("/portal".length)
+        : "";
+      window.location.replace(`/portal/index.html${rest}${suffix}`);
+      return;
     }
-  }, [location.pathname, navigate]);
+    if (location.pathname.startsWith("/ops/") || location.pathname === "/ops"
+        || location.pathname === "/status" || location.pathname.startsWith("/org-manage")) {
+      const rest = location.pathname.startsWith("/ops/")
+        ? location.pathname.slice("/ops".length)
+        : location.pathname === "/ops" ? "" : location.pathname;
+      window.location.replace(`/ops/index.html${rest}${suffix}`);
+      return;
+    }
+    if (location.pathname.startsWith("/noc/") || location.pathname === "/noc"
+        || location.pathname === "/org-control" || location.pathname.startsWith("/traces/")) {
+      const rest = location.pathname.startsWith("/noc/")
+        ? location.pathname.slice("/noc".length)
+        : "";
+      window.location.replace(`/noc/index.html${rest}${suffix}`);
+      return;
+    }
+    // Unknown path — let forwardToExternalPortal handle portal/business.
+    if (forwardToExternalPortal(location.pathname)) return;
+    // Final fallback: send back to root.
+    navigate("/", { replace: true });
+  }, [location.pathname, location.search, location.hash, navigate]);
 
-  // Persist the active space whenever the user enters one.
-  useEffect(() => {
-    if (location.pathname.startsWith(SPACE_PATHS.ops)) rememberSpace("ops");
-    else if (location.pathname.startsWith(SPACE_PATHS.noc)) rememberSpace("noc");
-  }, [location.pathname]);
-
-  // Compute the active space from the URL.
-  const activeSpace: SpaceName =
-    pathToSpace(location.pathname) ?? resolveDefaultSpace();
-
-  // Plugin manifests augment the active space's nav (legacy BUILTIN_NAV flow).
-  const builtinItems = useMemo(() => {
-    const nav = getNavForSpace(activeSpace);
-    // For flat (Portal, NOC) use flat; for grouped (Ops) use flat
-    return nav.flat;
-  }, [activeSpace]);
-
-  const navItems = useMemo(
-    () => buildNavItems(builtinItems, plugins),
-    [builtinItems, plugins],
-  );
+  if (location.pathname !== "/") {
+    return <ForwardingScreen />;
+  }
 
   return (
-    <SpaceLayout>
-      <div className="text-midground font-mondwest bg-black min-h-screen flex flex-col uppercase antialiased overflow-x-hidden">
-        <SpaceDecorations space={activeSpace} />
-        <SpaceThemeBridge activeSpace={activeSpace} />
-        <SelectionSwitcher />
-        <Backdrop />
+    <div className="min-h-screen bg-background text-foreground antialiased">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-5xl flex-col items-center justify-center px-4 py-12 sm:py-20">
+        <header className="mb-12 text-center">
+          <Typography
+            className="font-mondwest font-bold tracking-[0.15rem] text-[0.7rem] sm:text-[0.8rem] uppercase text-midground blend-lighter opacity-70"
+          >
+            Hermes Agent
+          </Typography>
+          <h1 className="mt-3 font-display text-[32px] sm:text-[44px] font-medium leading-[1.05] text-foreground">
+            三个产品 · 一个入口
+          </h1>
+          <p className="mt-3 text-[14px] sm:text-[15px] text-muted-foreground">
+            选一个进入 — 每个入口都是独立的 Web App，跨产品跳转是整页跳。
+          </p>
+        </header>
 
-      <header
-        className={cn(
-          "fixed top-0 left-0 right-0 z-40",
-          "border-b border-current/20",
-          "bg-background-base/90 backdrop-blur-sm",
-        )}
-      >
-        <div className="mx-auto flex h-12 max-w-[1600px]">
-          <div className="min-w-0 flex-1 overflow-x-auto scrollbar-none">
-            <Grid
-              className="h-full !border-t-0 !border-b-0"
-              style={{
-                gridTemplateColumns: `auto repeat(${navItems.length}, auto)`,
-              }}
+        <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5">
+          {ENTRIES.map((e) => (
+            <a
+              key={e.href}
+              href={e.href}
+              className="group relative flex h-full flex-col gap-3 rounded-2xl border border-current/15 bg-card p-5 sm:p-6 transition-all hover:border-current/35 hover:translate-y-[-2px] active:scale-[0.99]"
             >
-              <Cell className="flex items-center !p-0 !px-3 sm:!px-5">
-                <Typography
-                  className="font-bold text-[1.0625rem] sm:text-[1.125rem] leading-[0.95] tracking-[0.0525rem] text-midground blend-lighter"
-                >
-                  Hermes
-                  <br />
-                  Agent
-                </Typography>
-              </Cell>
-
-              <SpaceNav
-                flat={navItems.map((i) => ({ path: i.path, label: i.label, labelKey: i.labelKey, icon: i.icon as any }))}
-                templateColumns={`auto repeat(${navItems.length}, auto)`}
-              />
-            </Grid>
-          </div>
-
-          <Grid className="h-full shrink-0 !border-t-0 !border-b-0">
-            <Cell className="flex items-center gap-2 !p-0 !px-2 sm:!px-4">
-              <SpaceSwitcher activeSpace={activeSpace} />
-              <ThemeSwitcher />
-              <LanguageSwitcher />
-              <Typography
-                mondwest
-                className="hidden sm:inline text-[0.7rem] tracking-[0.15em] opacity-50"
+              <div
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-xl",
+                  e.tone === "rose" && "bg-[oklch(0.78_0.16_70_/_0.18)] text-[oklch(0.95_0.10_70)]",
+                  e.tone === "teal" && "bg-[oklch(0.72_0.14_180_/_0.18)] text-[oklch(0.92_0.10_180)]",
+                  e.tone === "amber" && "bg-[oklch(0.78_0.16_85_/_0.18)] text-[oklch(0.95_0.10_85)]",
+                )}
               >
-                {t.app.webUi}
-              </Typography>
-            </Cell>
-          </Grid>
-        </div>
-      </header>
-
-      <main className="relative z-2 mx-auto w-full max-w-[1600px] flex-1 px-3 sm:px-6 pt-16 sm:pt-20 pb-4 sm:pb-8">
-        <Suspense fallback={<PageLoading />}>
-          <Routes>
-          <Route path="/" element={<RootRedirect />} />
-          {/* ── Two-space: /ops /noc (Portal is a separate SPA) ──────── */}
-          <Route path="/ops" element={<StatusPage />} />
-          <Route path="/ops/playground" element={<PlaygroundPage />} />
-          <Route path="/ops/compare" element={<ComparePage />} />
-          <Route path="/ops/sessions" element={<SessionsPage />} />
-          <Route path="/ops/analytics" element={<AnalyticsPage />} />
-          <Route path="/ops/logs" element={<LogsPage />} />
-          <Route path="/ops/cron" element={<CronPage />} />
-          <Route path="/ops/skills" element={<SkillsPage />} />
-          <Route path="/ops/tools" element={<ToolsPage />} />
-          <Route path="/ops/tenants" element={<TenantsPage />} />
-          <Route path="/ops/config" element={<ConfigPage />} />
-          <Route path="/ops/env" element={<EnvPage />} />
-          <Route path="/ops/org" element={<OrgPage />} />
-
-          <Route path="/noc" element={<OrgControlCenterPage />} />
-          <Route path="/noc/traces/:traceId" element={<TraceDetailPage />} />
-          <Route path="/noc/workflows" element={<WorkflowPage />} />
-          <Route path="/noc/sla" element={<SLAPage />} />
-          <Route path="/noc/dlq" element={<DLQPage />} />
-          <Route path="/noc/hitl" element={<HumanInTheLoopPage />} />
-          <Route path="/playground" element={<PlaygroundPage />} />
-          <Route path="/compare" element={<ComparePage />} />
-          <Route path="/sessions" element={<SessionsPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/logs" element={<LogsPage />} />
-          <Route path="/cron" element={<CronPage />} />
-          <Route path="/skills" element={<SkillsPage />} />
-          <Route path="/tools" element={<ToolsPage />} />
-          <Route path="/tenants" element={<TenantsPage />} />
-          {/* /business, /business-portal, /portal*, /runs/:ws/:id — all forwarded
-              to the standalone portal SPA via forwardToExternalPortal. */}
-          <Route path="/traces/:traceId" element={<TraceDetailPage />} />
-          <Route path="/config" element={<ConfigPage />} />
-          <Route path="/env" element={<EnvPage />} />
-
-          <Route path="/org" element={<OrgPage />} />
-          <Route path="/org-manage" element={<OrgPage />} />
-          <Route path="/org-control" element={<OrgControlCenterPage />} />
-          <Route path="/workflows" element={<WorkflowPage />} />
-          <Route path="/sla" element={<SLAPage />} />
-          <Route path="/dlq" element={<DLQPage />} />
-          <Route path="/hitl" element={<HumanInTheLoopPage />} />
-          {plugins.map(({ manifest, component: PluginComponent }) => (
-            <Route
-              key={manifest.name}
-              path={manifest.tab.path}
-              element={<PluginComponent />}
-            />
+                <e.icon className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <h2 className="font-mondwest text-[0.95rem] font-bold tracking-[0.18em] uppercase text-foreground">
+                  {e.title}
+                </h2>
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                  {e.blurb}
+                </p>
+              </div>
+              <div className="mt-auto inline-flex items-center gap-1 text-[11px] tracking-[0.15em] text-muted-foreground group-hover:text-foreground">
+                打开
+                <ExternalLink className="h-3 w-3" />
+              </div>
+            </a>
           ))}
+        </div>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </main>
-
-      <footer className="relative z-2 border-t border-current/20">
-        <Grid className="mx-auto max-w-[1600px] !border-t-0 !border-b-0">
-          <Cell className="flex items-center !px-3 sm:!px-6 !py-3">
-            <Typography
-              mondwest
-              className="text-[0.7rem] sm:text-[0.8rem] tracking-[0.12em] opacity-60"
-            >
-              {t.app.footer.name}
-            </Typography>
-          </Cell>
-          <Cell className="flex items-center justify-end !px-3 sm:!px-6 !py-3">
-            <Typography
-              mondwest
-              className="text-[0.6rem] sm:text-[0.7rem] tracking-[0.15em] text-midground blend-lighter"
-            >
-              {t.app.footer.org}
-            </Typography>
-          </Cell>
-        </Grid>
-      </footer>
+        <footer className="mt-12 text-center text-[10px] tracking-[0.18em] uppercase text-muted-foreground opacity-60">
+          Hermes Agent · 三个独立 SPA · ops 5176 · noc 5177 · portal 5175
+        </footer>
       </div>
-    </SpaceLayout>
-  );
-}
-
-function PageLoading() {
-  return (
-    <div className="flex h-64 items-center justify-center text-sm tracking-[0.12em] opacity-70">
-      Loading...
     </div>
   );
 }
 
-interface NavItem {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  labelKey?: string;
-  path: string;
+function ForwardingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <div className="text-center text-[12px] tracking-[0.15em] uppercase text-muted-foreground">
+        Loading...
+      </div>
+    </div>
+  );
 }
