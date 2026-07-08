@@ -1105,14 +1105,21 @@ public class DashboardServer {
             // web_dist/<spa>/assets/. The /<spa>/favicon.ico and
             // /<spa>/manifest.webmanifest paths are served from the
             // shared webDist root so we don't need to copy them per SPA.
+            //
+            // serveStaticFile strips exactly one path segment (the SPA
+            // prefix itself) and then resolves the rest under basePath.
+            // So basePath must be the SPA's directory, not the deeper
+            // /assets subdirectory — otherwise we'd end up with the
+            // double "assets/assets" segment and a 404.
             for (String spa : new String[]{"portal", "ops", "noc"}) {
                 String prefix = "/" + spa;
+                java.nio.file.Path spaDir = webDist.resolve(spa);
                 app.get(prefix + "/assets/*",
-                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("assets")));
+                    ctx -> serveStaticFile(ctx, spaDir));
                 app.get(prefix + "/fonts/*",
-                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("fonts")));
+                    ctx -> serveStaticFile(ctx, spaDir));
                 app.get(prefix + "/ds-assets/*",
-                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("ds-assets")));
+                    ctx -> serveStaticFile(ctx, spaDir));
                 // SPA-scoped fallbacks for the shared root files.
                 app.get(prefix + "/favicon.ico",
                     ctx -> serveSharedFile(ctx, webDist, "favicon.ico"));
