@@ -101,8 +101,7 @@ public class JarvisHandler {
     // so the front-end's EventSource doesn't time out. Real proactive
     // suggestions land when ReflectionDaemon is wired in.
 
-    public void streamSuggestions(Context ctx) {
-        SseClient client = ctx.sse("jarvis-stream");
+    public void streamSuggestions(SseClient client) {
         String id = "jarvis-sse-" + System.nanoTime();
         streams.put(id, client);
 
@@ -113,10 +112,6 @@ public class JarvisHandler {
             streams.remove(id);
             log.debug("Jarvis SSE client disconnected: {}", id);
         });
-
-        // Send a periodic noop heartbeat. Real suggestions are produced
-        // by ReflectionDaemon (not yet wired).
-        client.keepAlive();
     }
 
     /** Allow the ReflectionDaemon to push a suggestion onto all live streams. */

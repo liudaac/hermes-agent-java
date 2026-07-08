@@ -4,6 +4,10 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
+import com.nousresearch.hermes.dashboard.jarvis.ApprovalBridge;
+import com.nousresearch.hermes.dashboard.jarvis.ChatService;
+import com.nousresearch.hermes.dashboard.jarvis.IntentRouter;
+import com.nousresearch.hermes.dashboard.jarvis.JarvisHandler;
 import com.nousresearch.hermes.org.auth.PermissionPolicy;
 import com.nousresearch.hermes.org.compliance.ComplianceFramework;
 import com.nousresearch.hermes.org.distributed.AgentRegistry;
@@ -118,6 +122,7 @@ public class DashboardServer {
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     private final OrgControlCenterHandler orgControlCenterHandler;
+    private final JarvisHandler jarvisHandler;
     /** AI 原生组织 API 统一处理器 — 聚合 identity、handoff、auth 等 12 个模块 */
     private final OrgApiHandler orgApiHandler = new OrgApiHandler()
             .with("identity", new AgentIdentityManager())
@@ -235,6 +240,12 @@ public class DashboardServer {
         this.scenarioService = new ScenarioService(workspaceService, teamBlueprintService);
         this.scenarioService.setScenarioIntentAdapter(new com.nousresearch.hermes.scenario.ScenarioIntentAdapter(workspaceService, tenantManager));
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
+        // ── Jarvis 跨空间对话壳：approval 走 BusinessApprovalService 的持久化与事件总线
+        this.jarvisHandler = new JarvisHandler(
+            new ChatService(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
+            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
+            new ApprovalBridge(businessApprovalService)
+        );
         this.businessRunService = new BusinessRunService(workspaceService, teamBlueprintService, scenarioService);
         this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
         this.promptAssetService = new PromptAssetService(workspaceService);
@@ -1034,7 +1045,7 @@ public class DashboardServer {
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));
         app.post("/api/jarvis/chat", jarvisHandler::chat);
         app.post("/api/jarvis/intent", jarvisHandler::classifyIntent);
-        app.get("/api/jarvis/stream", jarvisHandler::streamSuggestions);
+        app.sse("/api/jarvis/stream", jarvisHandler::streamSuggestions);
         app.post("/api/jarvis/approval/{approvalId}", jarvisHandler::resolveApproval);
         app.get("/api/dashboard/plugins/rescan", ctx -> ctx.json(new JSONObject()
             .fluentPut("ok", true)
