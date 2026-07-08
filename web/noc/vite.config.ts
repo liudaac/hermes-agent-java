@@ -37,6 +37,7 @@ function hermesDevToken(): Plugin {
 
 export default defineConfig({
   root: __dirname,
+  base: "/noc/",
   plugins: [react(), tailwindcss(), hermesDevToken()],
   build: {
     outDir: path.resolve(__dirname, "../../hermes_cli/web_dist/noc"),

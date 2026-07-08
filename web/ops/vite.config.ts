@@ -41,6 +41,7 @@ function hermesDevToken(): Plugin {
 
 export default defineConfig({
   root: __dirname,
+  base: "/ops/",
   plugins: [react(), tailwindcss(), hermesDevToken()],
   build: {
     outDir: path.resolve(__dirname, "../../hermes_cli/web_dist/ops"),

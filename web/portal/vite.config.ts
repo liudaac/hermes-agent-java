@@ -48,6 +48,7 @@ function hermesDevToken(): Plugin {
 
 export default defineConfig({
   root: __dirname,
+  base: "/portal/",
   plugins: [react(), tailwindcss(), hermesDevToken()],
   build: {
     outDir: path.resolve(__dirname, "../../hermes_cli/web_dist/portal"),

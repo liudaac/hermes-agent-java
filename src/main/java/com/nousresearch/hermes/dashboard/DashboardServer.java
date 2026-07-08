@@ -1093,10 +1093,40 @@ public class DashboardServer {
 
         if (java.nio.file.Files.exists(webDist)) {
             logger.info("Serving dashboard static assets from {}", webDist);
-            // Serve static files
+            // Root-hub static files. The hub build copies /assets, /fonts,
+            // /ds-assets to web_dist/* via vite's "public" convention.
             app.get("/assets/*", ctx -> serveStaticFile(ctx, webDist.resolve("assets")));
             app.get("/fonts/*", ctx -> serveStaticFile(ctx, webDist.resolve("fonts")));
             app.get("/ds-assets/*", ctx -> serveStaticFile(ctx, webDist.resolve("ds-assets")));
+
+            // Per-SPA static files. Each independent SPA's vite build has
+            // base: '/<spa>/' which prefixes its built index.html to
+            // reference /<spa>/assets/*. Those files live at
+            // web_dist/<spa>/assets/. The /<spa>/favicon.ico and
+            // /<spa>/manifest.webmanifest paths are served from the
+            // shared webDist root so we don't need to copy them per SPA.
+            for (String spa : new String[]{"portal", "ops", "noc"}) {
+                String prefix = "/" + spa;
+                app.get(prefix + "/assets/*",
+                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("assets")));
+                app.get(prefix + "/fonts/*",
+                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("fonts")));
+                app.get(prefix + "/ds-assets/*",
+                    ctx -> serveStaticFile(ctx, webDist.resolve(spa).resolve("ds-assets")));
+                // SPA-scoped fallbacks for the shared root files.
+                app.get(prefix + "/favicon.ico",
+                    ctx -> serveSharedFile(ctx, webDist, "favicon.ico"));
+                app.get(prefix + "/favicon.svg",
+                    ctx -> serveSharedFile(ctx, webDist, "favicon.svg"));
+                app.get(prefix + "/manifest.webmanifest",
+                    ctx -> serveSharedFile(ctx, webDist, "manifest.webmanifest"));
+            }
+
+            // Shared root-level static files (favicon, manifest, sw).
+            app.get("/favicon.ico", ctx -> serveSharedFile(ctx, webDist, "favicon.ico"));
+            app.get("/favicon.svg", ctx -> serveSharedFile(ctx, webDist, "favicon.svg"));
+            app.get("/manifest.webmanifest", ctx -> serveSharedFile(ctx, webDist, "manifest.webmanifest"));
+            app.get("/sw.js", ctx -> serveSharedFile(ctx, webDist, "sw.js"));
 
             // Serve each independent SPA's index.html for its own path
             // space. This is the server-side fix for the "URL grows
@@ -1226,6 +1256,22 @@ public class DashboardServer {
         java.nio.file.Path fallback = cwdCandidates.get(0).toAbsolutePath().normalize();
         logger.warn("No web_dist found; falling back to {} (static routes will be skipped)", fallback);
         return fallback;
+    }
+
+    /** Serve a single shared root-level file (favicon, manifest, sw). */
+    private void serveSharedFile(Context ctx, java.nio.file.Path webDist, String filename) {
+        java.nio.file.Path filePath = webDist.resolve(filename);
+        if (java.nio.file.Files.exists(filePath) && java.nio.file.Files.isRegularFile(filePath)) {
+            try {
+                ctx.contentType(getContentType(filePath.toString()));
+                ctx.result(java.nio.file.Files.readAllBytes(filePath));
+            } catch (Exception e) {
+                logger.error("Error serving shared file {}: {}", filename, e.getMessage());
+                ctx.status(500).result("Error");
+            }
+        } else {
+            ctx.status(404).result("Not found");
+        }
     }
 
     /** 安全地提供静态文件 — 通过 basePath 校验防止目录穿越。 */
