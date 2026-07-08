@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { NocTopBar } from "@/components/NocTopBar";
 import { JarvisCore } from "@hermes/jarvis";
 
@@ -36,7 +36,10 @@ export function NocRouter() {
             <Route path="/sla" element={<SLAPage />} />
             <Route path="/dlq" element={<DLQPage />} />
             <Route path="/hitl" element={<HumanInTheLoopPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* See portal/src/router.tsx for the rationale: render
+                OrgControlCenterPage on unknown paths so /noc/index.html
+                stays in NOC instead of bouncing to the hub. */}
+            <Route path="*" element={<OrgControlCenterPage />} />
           </Routes>
         </Suspense>
       </main>

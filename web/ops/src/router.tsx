@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { OpsTopBar } from "@/components/OpsTopBar";
 import { JarvisCore } from "@hermes/jarvis";
 
@@ -53,7 +53,10 @@ export function OpsRouter() {
             <Route path="/env" element={<EnvPage />} />
             <Route path="/org" element={<OrgPage />} />
             <Route path="/sla" element={<AnalyticsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* See portal/src/router.tsx for the rationale: render
+                StatusPage on unknown paths so /ops/index.html stays
+                in the ops console instead of bouncing to the hub. */}
+            <Route path="*" element={<StatusPage />} />
           </Routes>
         </Suspense>
       </main>

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { TopBar } from "@/components/TopBar";
 import { useI18n } from "@/i18n";
@@ -45,7 +45,13 @@ export function PortalRouter() {
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetail />} />
           <Route path="/insights" element={<Insights />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* Unknown paths inside the portal render Home instead of
+              navigating away. This matters because the portal's entry
+              URL is /portal/index.html — when the user opens that
+              directly, the router sees the path "/portal/index.html"
+              and would otherwise treat it as an unknown route, firing
+              the catch-all and bouncing the user back to the hub. */}
+          <Route path="*" element={<Home />} />
         </Routes>
       </Suspense>
 
