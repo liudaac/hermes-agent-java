@@ -55,8 +55,42 @@ public class JarvisHandler {
     private final BusinessEventBus businessEventBus;
     private final BusinessApprovalService businessApprovalService;
 
+    /**
+     * Per-client SSE state. We need to remember each connected client's
+     * workspace scope so we can filter cross-tenant events (see
+     * {@link #broadcastFiltered}).
+     *
+     * <ul>
+     *   <li>{@code workspaceId} — the workspace this client is scoped to.
+     *       {@code null} means "no events at all" (defense in depth: a
+     *       client that doesn't declare its scope is a misconfiguration).</li>
+     *   <li>{@code allAccess} — admin mode: receives events from every
+     *       workspace, including events with no workspaceId. Opt-in only
+     *       via {@code ?all=true} on the SSE URL.</li>
+     *   <li>{@code seesGlobalEvents} — whether to deliver events that
+     *       don't carry a workspaceId (e.g. system-wide stats).
+     *       Only {@code allAccess=true} clients get these.</li>
+     * </ul>
+     */
+    public record StreamContext(
+        String id,
+        SseClient client,
+        String workspaceId,
+        boolean allAccess
+    ) {
+        public boolean canSee(String eventWorkspaceId) {
+            if (allAccess) return true;
+            if (eventWorkspaceId == null || eventWorkspaceId.isBlank()) {
+                // Workspace-scoped events without a workspaceId are
+                // considered system-wide; only allAccess clients see them.
+                return false;
+            }
+            return eventWorkspaceId.equals(workspaceId);
+        }
+    }
+
     /** Active SSE streams, keyed by client id. */
-    private final Map<String, SseClient> streams = new ConcurrentHashMap<>();
+    private final Map<String, StreamContext> streams = new ConcurrentHashMap<>();
     private final AtomicLong suggestionSeq = new AtomicLong(0);
 
     /** Single global subscriber that we register with the event bus. */
@@ -165,25 +199,50 @@ public class JarvisHandler {
     }
 
     // ── GET /api/jarvis/stream (SSE) ──────────────────────────────
+    //
+    // The stream is workspace-scoped: a client only receives events
+    // whose workspaceId matches the workspace they declared on connect.
+    // Pass ?workspaceId=<id> in the URL for the standard case, or
+    // ?all=true for an admin/super-user view that crosses workspaces.
+    // Clients that declare neither receive nothing — defense in depth.
 
-    public void streamSuggestions(SseClient client) {
+    public void streamSuggestions(SseClient client, String workspaceId, boolean allAccess) {
         String id = "jarvis-sse-" + System.nanoTime();
-        streams.put(id, client);
+        String safeWorkspace = (workspaceId == null || workspaceId.isBlank()) ? null : workspaceId;
+        StreamContext ctx = new StreamContext(id, client, safeWorkspace, allAccess);
+        streams.put(id, ctx);
 
         client.keepAlive();
-        client.sendEvent("hello", "{\"msg\":\"jarvis stream connected\"}");
+        JSONObject hello = new JSONObject();
+        hello.put("msg", "jarvis stream connected");
+        hello.put("workspaceId", safeWorkspace);
+        hello.put("allAccess", allAccess);
+        if (safeWorkspace == null && !allAccess) {
+            hello.put("warning", "no workspaceId declared and allAccess=false; no events will be delivered");
+        }
+        client.sendEvent("hello", hello.toJSONString());
 
         client.onClose(() -> {
             streams.remove(id);
             log.debug("Jarvis SSE client disconnected: {}", id);
         });
+
+        log.info("Jarvis SSE client connected: id={} workspace={} allAccess={}",
+            id, safeWorkspace, allAccess);
     }
 
     /**
-     * Push a suggestion onto all live SSE clients. Called by the
-     * business-event and approval-event subscribers.
+     * Push a suggestion to every connected client whose workspace
+     * scope includes {@code eventWorkspaceId}. This is the workspace-
+     * safe broadcast: the only path event subscribers should use.
+     *
+     * @param eventWorkspaceId workspace the originating event belongs
+     *                         to, or {@code null} for system-wide events
+     *                         (only delivered to {@code allAccess=true}
+     *                         clients)
      */
-    public void broadcastSuggestion(String title, String body, String severity, String linkTo) {
+    public void broadcastFiltered(String eventWorkspaceId, String title, String body,
+                                   String severity, String linkTo) {
         if (streams.isEmpty()) return;
         JSONObject evt = new JSONObject();
         evt.put("id", "s-" + suggestionSeq.incrementAndGet());
@@ -191,14 +250,22 @@ public class JarvisHandler {
         evt.put("body", body);
         evt.put("severity", severity);
         if (linkTo != null) evt.put("linkTo", linkTo);
+        evt.put("workspaceId", eventWorkspaceId);
         evt.put("createdAt", java.time.Instant.now().toString());
         String data = evt.toJSONString();
-        for (SseClient c : streams.values()) {
+        int delivered = 0;
+        for (StreamContext ctx : streams.values()) {
+            if (!ctx.canSee(eventWorkspaceId)) continue;
             try {
-                c.sendEvent("suggestion", data);
+                ctx.client.sendEvent("suggestion", data);
+                delivered++;
             } catch (Exception ignored) {
                 // SSE is best-effort; dead clients are removed on close
             }
+        }
+        if (delivered > 0 && log.isDebugEnabled()) {
+            log.debug("Jarvis broadcast '{}' (ws={}, severity={}) → {}/{} clients",
+                title, eventWorkspaceId, severity, delivered, streams.size());
         }
     }
 
@@ -249,13 +316,15 @@ public class JarvisHandler {
         String type = event.type();
         if (type == null) return;
 
+        String ws = event.workspaceId();
+
         // Skip noisy / low-value events by default. v1 keeps it conservative.
         switch (type) {
             case "WORKFLOW_CHECKPOINT" -> {
                 String step = stringField(event, "stepName");
                 String decision = stringField(event, "decision");
                 String link = "/portal/runs/" + safeEntity(event);
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "工作流等待确认",
                     "步骤 " + (step == null ? "?" : step)
                         + " 等待决策: " + (decision == null ? "?" : decision),
@@ -267,7 +336,7 @@ public class JarvisHandler {
                 String sla = stringField(event, "slaName");
                 long elapsed = longField(event, "elapsedMs");
                 long threshold = longField(event, "thresholdMs");
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "SLA 即将超时",
                     "SLA '" + (sla == null ? "?" : sla) + "' 已用 "
                         + formatMs(elapsed) + " / 阈值 " + formatMs(threshold),
@@ -278,7 +347,7 @@ public class JarvisHandler {
             case "SLA_BREACH" -> {
                 String sla = stringField(event, "slaName");
                 String action = stringField(event, "action");
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "SLA 已超时",
                     "SLA '" + (sla == null ? "?" : sla) + "' 触发动作: "
                         + (action == null ? "（未指定）" : action),
@@ -289,7 +358,7 @@ public class JarvisHandler {
             case "DLQ_ENQUEUE" -> {
                 String runId = stringField(event, "runId");
                 String reason = stringField(event, "reason");
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "任务进入死信队列",
                     "Run " + (runId == null ? "?" : runId) + ": "
                         + (reason == null ? "（无原因）" : reason),
@@ -300,7 +369,7 @@ public class JarvisHandler {
             case "TAKEOVER_REQUESTED" -> {
                 String runId = stringField(event, "runId");
                 String operatorId = stringField(event, "operatorId");
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "需要人工接管",
                     "Run " + (runId == null ? "?" : runId) + " 被 "
                         + (operatorId == null ? "?" : operatorId) + " 申请接管",
@@ -319,7 +388,7 @@ public class JarvisHandler {
                     return;
                 }
                 String message = stringField(event, "message");
-                broadcastSuggestion(
+                broadcastFiltered(ws,
                     "Run " + status,
                     message == null ? ("Run " + safeEntity(event) + " " + status) : message,
                     lower.contains("fail") || lower.contains("error") ? "critical" : "info",
@@ -362,12 +431,12 @@ public class JarvisHandler {
                 return;
             }
         }
-        String ws = event.workspaceId() == null ? "" : event.workspaceId();
-        String body = ws.isBlank() ? event.approvalId() : (ws + " / " + event.approvalId());
+        String ws = event.workspaceId();
+        String body = ws == null ? event.approvalId() : (ws + " / " + event.approvalId());
         if (event.actor() != null && !event.actor().isBlank()) {
             body += " — " + event.actor();
         }
-        broadcastSuggestion(title, body, severity, link);
+        broadcastFiltered(ws, title, body, severity, link);
     }
 
     private static String stringField(BusinessEventBus.BusinessEvent event, String key) {

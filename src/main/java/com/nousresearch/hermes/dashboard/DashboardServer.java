@@ -414,6 +414,7 @@ public class DashboardServer {
                 // EventSource (SSE) cannot set custom headers — allow ?token=... on SSE routes.
                 if ((auth == null || !hmacCompare(auth, expected))
                     && (path.equals("/api/logs/tail")
+                        || path.equals("/api/jarvis/stream")
                         || path.matches("^/api/cron/jobs/[^/]+/runs/stream$"))) {
                     String tokenParam = ctx.queryParam("token");
                     if (tokenParam != null && hmacCompare(tokenParam, sessionToken)) {
@@ -1067,7 +1068,16 @@ public class DashboardServer {
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));
         app.post("/api/jarvis/chat", jarvisHandler::chat);
         app.post("/api/jarvis/intent", jarvisHandler::classifyIntent);
-        app.sse("/api/jarvis/stream", jarvisHandler::streamSuggestions);
+        // SSE can't set custom headers, so we read token + workspaceId + allAccess
+        // from query params. The token is verified by the auth middleware
+        // (this route is in the query-token whitelist below).
+        app.get("/api/jarvis/stream", ctx -> {
+            String workspaceId = ctx.queryParam("workspaceId");
+            boolean allAccess = "true".equalsIgnoreCase(ctx.queryParam("all"));
+            io.javalin.http.sse.SseHandler sseHandler = new io.javalin.http.sse.SseHandler(
+                client -> jarvisHandler.streamSuggestions(client, workspaceId, allAccess));
+            sseHandler.handle(ctx);
+        });
         app.post("/api/jarvis/approval/{approvalId}", jarvisHandler::resolveApproval);
         app.get("/api/dashboard/plugins/rescan", ctx -> ctx.json(new JSONObject()
             .fluentPut("ok", true)

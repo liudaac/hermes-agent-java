@@ -95,9 +95,28 @@ export const jarvisApi = {
       body: JSON.stringify({ decision }),
     }),
 
-  /** SSE stream of proactive suggestions. Returns the EventSource. */
-  openSuggestionStream(onSuggestion: (s: Suggestion) => void): EventSource {
-    const es = new EventSource("/api/jarvis/stream");
+  /**
+   * SSE stream of proactive suggestions. Returns the EventSource.
+   *
+   * Pass `workspaceId` to receive only events for that workspace.
+   * Pass `all: true` for an admin/super-user view that crosses
+   * workspaces (only used by ops / noc). Pass neither and the
+   * connection is a no-op (defense in depth — the server delivers
+   * nothing to unscoped clients).
+   */
+  openSuggestionStream(
+    onSuggestion: (s: Suggestion) => void,
+    opts: { workspaceId?: string; all?: boolean } = {}
+  ): EventSource {
+    const params = new URLSearchParams();
+    // SSE can't set custom headers, so we authenticate via ?token=
+    const t = window.__HERMES_SESSION_TOKEN__;
+    if (t) params.set("token", t);
+    if (opts.workspaceId) params.set("workspaceId", opts.workspaceId);
+    if (opts.all) params.set("all", "true");
+    const qs = params.toString();
+    const url = qs ? `/api/jarvis/stream?${qs}` : "/api/jarvis/stream";
+    const es = new EventSource(url);
     es.addEventListener("suggestion", (e) => {
       try {
         const s = JSON.parse((e as MessageEvent).data) as Suggestion;
