@@ -162,7 +162,11 @@ export function JarvisCore({
           type="button"
           aria-label="召唤 Jarvis (⌘K)"
           onClick={() => setOverlay(overlay === "summoned" ? "hidden" : "summoned")}
-          className="group fixed bottom-6 right-6 z-30 h-[88px] w-[88px] focus:outline-none"
+          // z-50 = above SPA chrome (TopBar / BottomTabBar use z-40).
+          // Without this, the portal's BottomTabBar covers the bottom
+          // 32-66px of the orb, and on some layouts the entire orb can
+          // be visually swallowed by the tab bar.
+          className="group fixed bottom-6 right-6 z-50 h-[88px] w-[88px] focus:outline-none"
         >
           <div className="relative h-full w-full">
             {/* Particle canvas (60×60) */}
