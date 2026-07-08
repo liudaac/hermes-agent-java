@@ -37,7 +37,7 @@ interface FormSpec {
   motion: number;
 }
 
-const FORM_SPEC: Record<FormName, FormSpec> = {
+export const FORM_SPEC: Record<FormName, FormSpec> = {
   core:      { count: 24, motion: 0.3 },
   sphere:    { count: 60, motion: 0.6 },
   helix:     { count: 80, motion: 0.8 },

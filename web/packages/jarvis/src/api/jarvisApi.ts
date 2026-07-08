@@ -90,7 +90,7 @@ export const jarvisApi = {
     }),
 
   resolveApproval: (approvalId: string, decision: "approve" | "reject") =>
-    jsonFetch<{ ok: boolean }>(`/api/jarvis/approval/${encodeURIComponent(approvalId)}`, {
+    jsonFetch<{ ok: boolean; approved: boolean; reply?: string; decision?: string }>(`/api/jarvis/approval/${encodeURIComponent(approvalId)}`, {
       method: "POST",
       body: JSON.stringify({ decision }),
     }),

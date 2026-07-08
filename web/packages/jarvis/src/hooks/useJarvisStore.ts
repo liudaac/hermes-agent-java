@@ -25,6 +25,10 @@ export interface JarvisMessage {
   role: "user" | "jarvis" | "tool" | "approval";
   text: string;
   timestamp: number;
+  /** Placeholder while backend is thinking. */
+  pending?: boolean;
+  /** Error bubble. */
+  error?: boolean;
   meta?: Record<string, unknown>;
 }
 
