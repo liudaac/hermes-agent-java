@@ -28,6 +28,7 @@ import { useLongIdle } from "../hooks/useLongIdle";
 import { useKeyShortcuts } from "../hooks/useKeyShortcuts";
 import { useCrossSpaceSync, broadcastForm } from "../hooks/useCrossSpaceSync";
 import { useJarvisChat } from "../hooks/useJarvisChat";
+import { useJarvisVoice } from "../hooks/useJarvisVoice";
 import { JarvisOrb } from "./JarvisOrb";
 import { JarvisHudPanel } from "../overlay/JarvisHudPanel";
 import { JarvisFullscreen } from "../overlay/JarvisFullscreen";
@@ -94,6 +95,7 @@ export function JarvisCore({
   // their own. This is the path all three SPAs use (they mount
   // <JarvisCore /> with no props).
   const chatHook = useJarvisChat();
+  const { welcome: voiceWelcome, speak: voiceSpeak, cancel: voiceCancel, muted, toggleMute } = useJarvisVoice();
   const submitHandler = onSubmit ?? chatHook.onSubmit;
   const approveHandler = onApprove ?? (async (approvalId: string) => {
     try {
@@ -142,6 +144,34 @@ export function JarvisCore({
     return () => window.clearInterval(id);
   }, []);
 
+  // Voice welcome when summoned. Cancels any in-progress speech when
+  // hidden (so closing mid-sentence doesn't leave the synth talking).
+  const prevOverlayRef = useRef(overlay);
+  useEffect(() => {
+    const wasSummoned = prevOverlayRef.current === "summoned" || prevOverlayRef.current === "fullscreen";
+    const isSummoned  = overlay === "summoned" || overlay === "fullscreen";
+    if (isSummoned && !wasSummoned) {
+      voiceWelcome();
+    } else if (!isSummoned && wasSummoned) {
+      voiceCancel();
+    }
+    prevOverlayRef.current = overlay;
+  }, [overlay, voiceWelcome, voiceCancel]);
+
+  // Speak new jarvis replies (short text only, < 120 chars). Long
+  // replies or approval prompts are not auto-read to avoid spam.
+  const lastSpokenIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (last.role !== "jarvis") return;
+    if (last.pending || last.error) return;
+    if (!last.text || last.text.length > 120) return;
+    if (lastSpokenIdRef.current === last.id) return;
+    lastSpokenIdRef.current = last.id;
+    voiceSpeak(last.text);
+  }, [messages, voiceSpeak]);
+
   if (!enabled) {
     return (
       <JarvisHudPanel
@@ -169,6 +199,9 @@ export function JarvisCore({
         onSubmit={submitHandler}
         onApprove={approveHandler}
         onReject={rejectHandler}
+        muted={muted}
+        onToggleMute={toggleMute}
+        onMicClick={() => { /* voice input TBD — mic UI placeholder */ }}
       />
       <JarvisFullscreen
         onSubmit={submitHandler}

@@ -13,7 +13,7 @@
  *   - Input is a terminal-style prompt ("> _")
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Mic, Send, Settings, AlertTriangle } from "lucide-react";
+import { X, Mic, Send, Settings, AlertTriangle, Volume2, VolumeX } from "lucide-react";
 import {
   useJarvisStore,
   setOverlay,
@@ -29,6 +29,10 @@ interface JarvisHudPanelProps {
   onReject: (approvalId: string) => void | Promise<void>;
   onMicClick?: () => void;
   onSettingsClick?: () => void;
+  /** Whether voice output is muted. */
+  muted?: boolean;
+  /** Toggle voice mute. */
+  onToggleMute?: () => void;
 }
 
 export function JarvisHudPanel({
@@ -37,6 +41,8 @@ export function JarvisHudPanel({
   onReject,
   onMicClick,
   onSettingsClick,
+  muted = true,
+  onToggleMute,
 }: JarvisHudPanelProps) {
   const overlay = useJarvisStore((s) => s.overlay);
   const form = useJarvisStore((s) => s.form);
@@ -177,6 +183,24 @@ export function JarvisHudPanel({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            {onToggleMute && (
+              <button
+                type="button"
+                onClick={onToggleMute}
+                aria-label={muted ? "Unmute voice" : "Mute voice"}
+                title={muted ? "语音已静音" : "语音开启"}
+                className={[
+                  "rounded p-1.5 transition-colors",
+                  muted
+                    ? "text-[oklch(0.55_0.10_30)] hover:bg-[oklch(0.65_0.22_30/_0.1)]"
+                    : "text-[oklch(0.55_0.10_200)] hover:bg-[oklch(0.75_0.18_200/_0.1)] hover:text-[oklch(0.82_0.14_200)]",
+                ].join(" ")}
+              >
+                {muted
+                  ? <VolumeX className="h-4 w-4" />
+                  : <Volume2 className="h-4 w-4" />}
+              </button>
+            )}
             {onSettingsClick && (
               <button
                 type="button"
