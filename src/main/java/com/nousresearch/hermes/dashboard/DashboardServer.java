@@ -1032,6 +1032,10 @@ public class DashboardServer {
 
         // Plugins API
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));
+        app.post("/api/jarvis/chat", jarvisHandler::chat);
+        app.post("/api/jarvis/intent", jarvisHandler::classifyIntent);
+        app.get("/api/jarvis/stream", jarvisHandler::streamSuggestions);
+        app.post("/api/jarvis/approval/{approvalId}", jarvisHandler::resolveApproval);
         app.get("/api/dashboard/plugins/rescan", ctx -> ctx.json(new JSONObject()
             .fluentPut("ok", true)
             .fluentPut("count", 0)));
