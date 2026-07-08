@@ -12,6 +12,7 @@
     "dev:portal": "npm --prefix portal run dev",
     "dev:ops": "npm --prefix ops run dev",
     "dev:noc": "npm --prefix noc run dev",
+    "build": "npm run build:all",
     "build:hub": "tsc -b && vite build",
     "build:portal": "npm --prefix portal run build",
     "build:ops": "npm --prefix ops run build",
