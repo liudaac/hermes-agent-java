@@ -252,18 +252,6 @@ public class DashboardServer {
             workspaceService, businessApprovalService);
         this.scenarioService.getTeamBlueprintRuntime().setToolApprovalCoordinator(toolApprovalCoordinator);
         this.toolApprovalCoordinator = toolApprovalCoordinator;
-        // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
-        //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级）
-        this.jarvisHandler = new JarvisHandler(
-            new ChatService(
-                config,
-                tenantManager,
-                toolApprovalCoordinator,
-                businessApprovalService
-            ),
-            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
-            new ApprovalBridge(businessApprovalService, toolApprovalCoordinator)
-        );
         this.evalSetService = new EvalSetService(workspaceService, scenarioService);
         this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
         // Wire canary into scenario service for traffic-based version routing + metrics
@@ -302,6 +290,23 @@ public class DashboardServer {
         this.slaManager.setEventBus(businessEventBus);
         this.humanOverrideService.setEventBus(businessEventBus);
         this.deadLetterQueue.setEventBus(businessEventBus);
+
+        // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
+        //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级），
+        //    stream 订阅 BusinessEventBus + 审批事件流，把工作流/SLA/DLQ/接管/审批
+        //    生命周期事件实时推到 SSE 浮窗
+        this.jarvisHandler = new JarvisHandler(
+            new ChatService(
+                config,
+                tenantManager,
+                toolApprovalCoordinator,
+                businessApprovalService
+            ),
+            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
+            new ApprovalBridge(businessApprovalService, toolApprovalCoordinator),
+            businessEventBus,
+            businessApprovalService
+        );
 
         // ---- ACP 集成：初始化 Agent Collaboration Protocol 服务器 ----
         com.nousresearch.hermes.acp.integration.AcpIntegration acpIntegration = new com.nousresearch.hermes.acp.integration.AcpIntegration();

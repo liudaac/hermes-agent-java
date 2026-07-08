@@ -2,6 +2,8 @@ package com.nousresearch.hermes.dashboard.jarvis;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.event.BusinessEventBus;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService.ChatReply;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService.ChatRequest;
 import com.nousresearch.hermes.dashboard.jarvis.IntentRouter.IntentResult;
@@ -13,22 +15,36 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
- * JarvisHandler — FastAPI-equivalent of the four Jarvis endpoints.
+ * JarvisHandler — FastAPI-equivalent of the four Jarvis endpoints, now
+ * wired into the live agent runtime.
  *
- * Routes (registered in DashboardServer):
- *   POST /api/jarvis/chat                    →  chat
- *   POST /api/jarvis/intent                  →  classifyIntent
- *   GET  /api/jarvis/stream                  →  streamSuggestions  (SSE, v1)
- *   POST /api/jarvis/approval/{approvalId}  →  resolveApproval
+ * <p>Routes (registered in DashboardServer):</p>
+ * <ul>
+ *   <li>{@code POST /api/jarvis/chat} → {@link #chat(Context)}</li>
+ *   <li>{@code POST /api/jarvis/intent} → {@link #classifyIntent(Context)}</li>
+ *   <li>{@code GET  /api/jarvis/stream} → {@link #streamSuggestions(SseClient)} (SSE)</li>
+ *   <li>{@code POST /api/jarvis/approval/{approvalId}} → {@link #resolveApproval(Context)}</li>
+ * </ul>
  *
- * MVP scope (this commit):
- *   - chat: full LLM call, history preserved, space context injected
- *   - classifyIntent: full LLM classification, JSON shape enforced
- *   - resolveApproval: thin wrapper over ApprovalSystem
- *   - streamSuggestions: stub — connects and sends a heartbeat every 15s
- *     (real proactive-suggestion engine lands in v1 with ReflectionDaemon)
+ * <p>Each endpoint touches the real runtime:</p>
+ * <ul>
+ *   <li><b>chat</b> goes through {@link ChatService} which delegates to
+ *       {@code TenantAwareAIAgent.processMessage()}. Tool-approval gates
+ *       are surfaced via the {@link ChatReply.Approval} field.</li>
+ *   <li><b>resolveApproval</b> goes through {@link ApprovalBridge} which
+ *       dispatches to {@code ToolApprovalCoordinator.resumeToolApproval}
+ *       (for tool-level approvals — the agent resumes and returns its
+ *       final text) or {@code BusinessApprovalService.approve/reject}
+ *       (for Jarvis-initiated approvals).</li>
+ *   <li><b>stream</b> subscribes the new SSE client to
+ *       {@link BusinessEventBus} and {@link BusinessApprovalService}'s
+ *       global event stream, so workflow / SLA / DLQ / takeover / run
+ *       status / approval lifecycle events appear as proactive
+ *       suggestions in real time.</li>
+ * </ul>
  */
 public class JarvisHandler {
     private static final Logger log = LoggerFactory.getLogger(JarvisHandler.class);
@@ -36,15 +52,42 @@ public class JarvisHandler {
     private final ChatService chatService;
     private final IntentRouter intentRouter;
     private final ApprovalBridge approvalBridge;
+    private final BusinessEventBus businessEventBus;
+    private final BusinessApprovalService businessApprovalService;
 
     /** Active SSE streams, keyed by client id. */
     private final Map<String, SseClient> streams = new ConcurrentHashMap<>();
     private final AtomicLong suggestionSeq = new AtomicLong(0);
 
-    public JarvisHandler(ChatService chatService, IntentRouter intentRouter, ApprovalBridge approvalBridge) {
+    /** Single global subscriber that we register with the event bus. */
+    private Consumer<BusinessEventBus.BusinessEvent> businessEventSubscriber;
+    /** Single global subscriber that we register with the approval service. */
+    private Consumer<BusinessApprovalService.ApprovalEvent> approvalEventSubscriber;
+
+    public JarvisHandler(ChatService chatService,
+                         IntentRouter intentRouter,
+                         ApprovalBridge approvalBridge,
+                         BusinessEventBus businessEventBus,
+                         BusinessApprovalService businessApprovalService) {
         this.chatService = chatService;
         this.intentRouter = intentRouter;
         this.approvalBridge = approvalBridge;
+        this.businessEventBus = businessEventBus;
+        this.businessApprovalService = businessApprovalService;
+        wireEventSubscriptions();
+    }
+
+    private void wireEventSubscriptions() {
+        if (businessEventBus != null) {
+            this.businessEventSubscriber = this::onBusinessEvent;
+            businessEventBus.subscribe(businessEventSubscriber);
+            log.info("JarvisHandler subscribed to BusinessEventBus");
+        }
+        if (businessApprovalService != null) {
+            this.approvalEventSubscriber = this::onApprovalEvent;
+            businessApprovalService.subscribeGlobal(approvalEventSubscriber);
+            log.info("JarvisHandler subscribed to BusinessApprovalService global events");
+        }
     }
 
     // ── POST /api/jarvis/chat ──────────────────────────────────────
@@ -103,10 +146,6 @@ public class JarvisHandler {
     }
 
     // ── GET /api/jarvis/stream (SSE) ──────────────────────────────
-    //
-    // v1 stub: keeps the connection alive with a heartbeat every 15s
-    // so the front-end's EventSource doesn't time out. Real proactive
-    // suggestions land when ReflectionDaemon is wired in.
 
     public void streamSuggestions(SseClient client) {
         String id = "jarvis-sse-" + System.nanoTime();
@@ -121,21 +160,25 @@ public class JarvisHandler {
         });
     }
 
-    /** Allow the ReflectionDaemon to push a suggestion onto all live streams. */
-    public void broadcastSuggestion(String title, String body, String severity) {
+    /**
+     * Push a suggestion onto all live SSE clients. Called by the
+     * business-event and approval-event subscribers.
+     */
+    public void broadcastSuggestion(String title, String body, String severity, String linkTo) {
         if (streams.isEmpty()) return;
         JSONObject evt = new JSONObject();
         evt.put("id", "s-" + suggestionSeq.incrementAndGet());
         evt.put("title", title);
         evt.put("body", body);
         evt.put("severity", severity);
+        if (linkTo != null) evt.put("linkTo", linkTo);
         evt.put("createdAt", java.time.Instant.now().toString());
         String data = evt.toJSONString();
         for (SseClient c : streams.values()) {
             try {
                 c.sendEvent("suggestion", data);
             } catch (Exception ignored) {
-                // SSE is best-effort; remove the dead client on next tick
+                // SSE is best-effort; dead clients are removed on close
             }
         }
     }
@@ -180,6 +223,159 @@ public class JarvisHandler {
         ctx.json(out);
     }
 
+    // ── Event bus → suggestion translation ────────────────────────
+
+    private void onBusinessEvent(BusinessEventBus.BusinessEvent event) {
+        if (event == null) return;
+        String type = event.type();
+        if (type == null) return;
+
+        // Skip noisy / low-value events by default. v1 keeps it conservative.
+        switch (type) {
+            case "WORKFLOW_CHECKPOINT" -> {
+                String step = stringField(event, "stepName");
+                String decision = stringField(event, "decision");
+                String link = "/portal/runs/" + safeEntity(event);
+                broadcastSuggestion(
+                    "工作流等待确认",
+                    "步骤 " + (step == null ? "?" : step)
+                        + " 等待决策: " + (decision == null ? "?" : decision),
+                    "info",
+                    link
+                );
+            }
+            case "SLA_WARN" -> {
+                String sla = stringField(event, "slaName");
+                long elapsed = longField(event, "elapsedMs");
+                long threshold = longField(event, "thresholdMs");
+                broadcastSuggestion(
+                    "SLA 即将超时",
+                    "SLA '" + (sla == null ? "?" : sla) + "' 已用 "
+                        + formatMs(elapsed) + " / 阈值 " + formatMs(threshold),
+                    "warning",
+                    "/noc/sla"
+                );
+            }
+            case "SLA_BREACH" -> {
+                String sla = stringField(event, "slaName");
+                String action = stringField(event, "action");
+                broadcastSuggestion(
+                    "SLA 已超时",
+                    "SLA '" + (sla == null ? "?" : sla) + "' 触发动作: "
+                        + (action == null ? "（未指定）" : action),
+                    "critical",
+                    "/noc/sla"
+                );
+            }
+            case "DLQ_ENQUEUE" -> {
+                String runId = stringField(event, "runId");
+                String reason = stringField(event, "reason");
+                broadcastSuggestion(
+                    "任务进入死信队列",
+                    "Run " + (runId == null ? "?" : runId) + ": "
+                        + (reason == null ? "（无原因）" : reason),
+                    "warning",
+                    "/noc/dlq"
+                );
+            }
+            case "TAKEOVER_REQUESTED" -> {
+                String runId = stringField(event, "runId");
+                String operatorId = stringField(event, "operatorId");
+                broadcastSuggestion(
+                    "需要人工接管",
+                    "Run " + (runId == null ? "?" : runId) + " 被 "
+                        + (operatorId == null ? "?" : operatorId) + " 申请接管",
+                    "critical",
+                    "/noc/takeovers"
+                );
+            }
+            case "RUN_STATUS" -> {
+                // Only push the "completed" / "failed" terminal statuses to
+                // avoid spamming the stream with progress events.
+                String status = stringField(event, "status");
+                if (status == null) return;
+                String lower = status.toLowerCase();
+                if (!lower.contains("completed") && !lower.contains("failed")
+                    && !lower.contains("succeeded") && !lower.contains("error")) {
+                    return;
+                }
+                String message = stringField(event, "message");
+                broadcastSuggestion(
+                    "Run " + status,
+                    message == null ? ("Run " + safeEntity(event) + " " + status) : message,
+                    lower.contains("fail") || lower.contains("error") ? "critical" : "info",
+                    "/portal/runs/" + safeEntity(event)
+                );
+            }
+            default -> {
+                // Unhandled event types are silently ignored. Add a case
+                // above when you want them surfaced in the stream.
+            }
+        }
+    }
+
+    private void onApprovalEvent(BusinessApprovalService.ApprovalEvent event) {
+        if (event == null) return;
+        String type = event.type() == null ? "" : event.type().name();
+        String title;
+        String severity = "info";
+        String link = "/portal/approvals";
+        switch (type) {
+            case "CREATED" -> {
+                title = "新审批待处理";
+                severity = "warning";
+            }
+            case "APPROVED" -> {
+                title = "审批已通过";
+            }
+            case "REJECTED" -> {
+                title = "审批被驳回";
+                severity = "warning";
+            }
+            case "INFO_REQUESTED" -> {
+                title = "审批请求补充信息";
+                severity = "info";
+            }
+            case "EXECUTION_RESUMED" -> {
+                title = "审批后流程已恢复";
+            }
+            default -> {
+                return;
+            }
+        }
+        String ws = event.workspaceId() == null ? "" : event.workspaceId();
+        String body = ws.isBlank() ? event.approvalId() : (ws + " / " + event.approvalId());
+        if (event.actor() != null && !event.actor().isBlank()) {
+            body += " — " + event.actor();
+        }
+        broadcastSuggestion(title, body, severity, link);
+    }
+
+    private static String stringField(BusinessEventBus.BusinessEvent event, String key) {
+        if (event.data() == null) return null;
+        Object v = event.data().get(key);
+        return v == null ? null : v.toString();
+    }
+
+    private static long longField(BusinessEventBus.BusinessEvent event, String key) {
+        if (event.data() == null) return 0;
+        Object v = event.data().get(key);
+        if (v instanceof Number n) return n.longValue();
+        if (v == null) return 0;
+        try { return Long.parseLong(v.toString()); } catch (Exception e) { return 0; }
+    }
+
+    private static String safeEntity(BusinessEventBus.BusinessEvent event) {
+        return event.entityId() == null ? "" : event.entityId();
+    }
+
+    private static String formatMs(long ms) {
+        if (ms < 1000) return ms + "ms";
+        if (ms < 60_000) return (ms / 1000) + "s";
+        if (ms < 3_600_000) return (ms / 60_000) + "m";
+        return (ms / 3_600_000) + "h" + ((ms % 3_600_000) / 60_000) + "m";
+    }
+
     // ── body parsing helpers ───────────────────────────────────────
 
     private ChatRequest parseChatRequest(String body) {
@@ -204,8 +400,9 @@ public class JarvisHandler {
                 }
                 req.context = c;
             }
-            // (history intentionally skipped in MVP — would re-hydrate from
-            // front-end sessionStorage on next commit when we add it)
+            // (history intentionally skipped — the agent owns its own
+            // conversation history via TenantAwareAIAgent's per-workspace
+            // instance pool in ChatService)
         } catch (Exception e) {
             log.warn("Failed to parse /api/jarvis/chat body: {}", e.getMessage());
         }
