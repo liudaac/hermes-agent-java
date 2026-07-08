@@ -2,7 +2,6 @@ package com.nousresearch.hermes.dashboard.jarvis;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.model.ModelMessage;
@@ -14,19 +13,26 @@ import java.util.Set;
 
 /**
  * IntentRouter — classify a user message into one of the three product
- * spaces (portal / ops / noc) or "cross" (spans multiple spaces).
+ * spaces (portal / ops / noc) or "cross" (spans multiple spaces), and
+ * (when classified) dispatch the question to the corresponding product
+ * via {@link ProductQueryService} so the user gets a real answer rather
+ * than just a label.
  *
- * MVP approach: a single small LLM call with a system prompt that
+ * <p>Classification: a single small LLM call with a system prompt that
  * describes the four intents. The LLM is asked to reply with a strict
  * JSON object so we can parse reliably. On any failure (LLM error,
  * parse error, unknown intent), fall back to "cross" with confidence
- * 0 so the front-end can take the safe "ask the user" path.
+ * 0 so the front-end can take the safe "ask the user" path.</p>
  *
- * Heuristic short-circuits live in the front-end {@code
+ * <p>Heuristic short-circuits live in the front-end {@code
  * useIntentRouter} hook — the backend is only consulted when the
- * heuristic says "cross" / "idle".
+ * heuristic says "cross" / "idle".</p>
  *
- * This is part of the cross-space dialogue shell (design.md §11.3).
+ * <p>Dispatch: after classification, if the intent is portal / ops / noc,
+ * the router calls {@link ProductQueryService#dispatch} which picks a
+ * specific action via another small LLM call and executes it. The
+ * resulting {@link ProductQueryService.QueryResult} is folded into
+ * {@link RoutingResult#routed}.</p>
  */
 public class IntentRouter {
     private static final Logger log = LoggerFactory.getLogger(IntentRouter.class);
@@ -57,18 +63,21 @@ Reply with a single JSON object and nothing else. Use this exact shape:
 """;
 
     private final ModelClient modelClient;
+    private final ProductQueryService productQueryService;
 
-    public IntentRouter(ModelClient modelClient) {
+    public IntentRouter(ModelClient modelClient, ProductQueryService productQueryService) {
         this.modelClient = modelClient;
+        this.productQueryService = productQueryService;
     }
 
     /**
-     * Classify a free-form user input. Never throws — returns a fallback
-     * result on any error.
+     * Classify a free-form user input and (if a specific product is
+     * identified) dispatch to that product's query service. Never throws
+     * — returns a fallback result on any error.
      */
-    public IntentResult route(String input) {
+    public RoutingResult route(String input, String workspaceId) {
         if (input == null || input.isBlank()) {
-            return IntentResult.fallback("cross");
+            return RoutingResult.fallback("cross");
         }
 
         List<ModelMessage> messages = List.of(
@@ -76,29 +85,31 @@ Reply with a single JSON object and nothing else. Use this exact shape:
             ModelMessage.user("用户输入：" + input.trim())
         );
 
-        ChatCompletionResponse resp;
+        IntentResult intent;
         try {
-            resp = modelClient.chatCompletion(messages, null, false);
+            ChatCompletionResponse resp = modelClient.chatCompletion(messages, null, false);
+            if (resp == null || resp.getContent() == null || resp.getContent().isBlank()) {
+                return RoutingResult.fallback("cross");
+            }
+            intent = parse(resp.getContent());
         } catch (Exception e) {
             log.warn("Intent classification LLM call failed: {}", e.getMessage());
-            return IntentResult.fallback("cross");
+            return RoutingResult.fallback("cross");
         }
 
-        if (resp == null) {
-            return IntentResult.fallback("cross");
+        // Dispatch to the product query service when classification is
+        // specific. "cross" falls through (no single product owns it).
+        ProductQueryService.QueryResult routed = null;
+        if (intent != null && productQueryService != null
+            && !"cross".equals(intent.getIntent())) {
+            try {
+                routed = productQueryService.dispatch(intent.getIntent(), input, workspaceId);
+            } catch (Exception e) {
+                log.warn("Product dispatch for intent={} failed: {}",
+                    intent.getIntent(), e.getMessage());
+            }
         }
-
-        String content = resp.getContent();
-        if (content == null || content.isBlank()) {
-            return IntentResult.fallback("cross");
-        }
-
-        try {
-            return parse(content);
-        } catch (Exception e) {
-            log.warn("Intent classification parse failed: {} (content={})", e.getMessage(), content);
-            return IntentResult.fallback("cross");
-        }
+        return new RoutingResult(intent, routed);
     }
 
     /**
@@ -171,5 +182,23 @@ Reply with a single JSON object and nothing else. Use this exact shape:
         public double getConfidence() { return confidence; }
         public String getSource() { return source; }
         public String getReasoning() { return reasoning; }
+    }
+
+    /**
+     * Routing result: classification + (optional) product dispatch.
+     * Mirrors the front-end type `RoutingResult`.
+     */
+    public static final class RoutingResult {
+        public final IntentResult intent;
+        public final ProductQueryService.QueryResult routed;
+
+        public RoutingResult(IntentResult intent, ProductQueryService.QueryResult routed) {
+            this.intent = intent;
+            this.routed = routed;
+        }
+
+        public static RoutingResult fallback(String intent) {
+            return new RoutingResult(IntentResult.fallback(intent), null);
+        }
     }
 }

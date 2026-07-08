@@ -8,6 +8,7 @@ import com.nousresearch.hermes.dashboard.jarvis.ApprovalBridge;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService;
 import com.nousresearch.hermes.dashboard.jarvis.IntentRouter;
 import com.nousresearch.hermes.dashboard.jarvis.JarvisHandler;
+import com.nousresearch.hermes.dashboard.jarvis.ProductQueryService;
 import com.nousresearch.hermes.org.auth.PermissionPolicy;
 import com.nousresearch.hermes.org.compliance.ComplianceFramework;
 import com.nousresearch.hermes.org.distributed.AgentRegistry;
@@ -294,7 +295,7 @@ public class DashboardServer {
         // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
         //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级），
         //    stream 订阅 BusinessEventBus + 审批事件流，把工作流/SLA/DLQ/接管/审批
-        //    生命周期事件实时推到 SSE 浮窗
+        //    生命周期事件实时推到 SSE 浮窗，intent 走 ProductQueryService 真实路由
         this.jarvisHandler = new JarvisHandler(
             new ChatService(
                 config,
@@ -302,7 +303,17 @@ public class DashboardServer {
                 toolApprovalCoordinator,
                 businessApprovalService
             ),
-            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
+            new IntentRouter(
+                new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()),
+                new ProductQueryService(
+                    new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()),
+                    businessApprovalService,
+                    businessRunService,
+                    teamBlueprintService,
+                    tenantManager,
+                    deadLetterQueue
+                )
+            ),
             new ApprovalBridge(businessApprovalService, toolApprovalCoordinator),
             businessEventBus,
             businessApprovalService

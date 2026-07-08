@@ -6,7 +6,7 @@ import com.nousresearch.hermes.business.approval.BusinessApprovalService;
 import com.nousresearch.hermes.business.event.BusinessEventBus;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService.ChatReply;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService.ChatRequest;
-import com.nousresearch.hermes.dashboard.jarvis.IntentRouter.IntentResult;
+import com.nousresearch.hermes.dashboard.jarvis.IntentRouter.RoutingResult;
 import io.javalin.http.Context;
 import io.javalin.http.sse.SseClient;
 import org.slf4j.Logger;
@@ -133,14 +133,33 @@ public class JarvisHandler {
             ctx.status(400).json(Map.of("error", "missing 'input'"));
             return;
         }
+        String workspaceId = obj.getString("workspaceId");
 
-        IntentResult result = intentRouter.route(input);
+        // route(input, workspaceId) classifies + dispatches to the
+        // appropriate product's query service. For "cross" or unclassifiable
+        // input, routed is null and only the classification is returned.
+        IntentRouter.RoutingResult result = intentRouter.route(input, workspaceId);
+
         JSONObject out = new JSONObject();
-        out.put("intent", result.getIntent());
-        out.put("confidence", result.getConfidence());
-        out.put("source", result.getSource());
-        if (result.getReasoning() != null) {
-            out.put("reasoning", result.getReasoning());
+        out.put("intent", result.intent.getIntent());
+        out.put("confidence", result.intent.getConfidence());
+        out.put("source", result.intent.getSource());
+        if (result.intent.getReasoning() != null) {
+            out.put("reasoning", result.intent.getReasoning());
+        }
+        if (result.routed != null) {
+            JSONObject routed = new JSONObject();
+            routed.put("action", result.routed.action());
+            routed.put("summary", result.routed.summary());
+            routed.put("linkTo", result.routed.linkTo());
+            JSONObject data = new JSONObject();
+            if (result.routed.data() != null) {
+                for (var e : result.routed.data().entrySet()) {
+                    data.put(e.getKey(), e.getValue());
+                }
+            }
+            routed.put("data", data);
+            out.put("routed", routed);
         }
         ctx.json(out);
     }
