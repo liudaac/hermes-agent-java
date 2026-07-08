@@ -5,6 +5,14 @@
    Tailwind's JIT purge. */
 @source '../node_modules/@nous-research/ui/dist';
 
+/* Tailwind v4 only auto-scans the current SPA's src/ by default. The
+   cross-space dialogue shell (@hermes/jarvis) lives in a sibling
+   package — without this @source, classes used only in JarvisCore
+   (e.g. fixed bottom-6 right-6 z-50 h-[88px] w-[88px]) get purged
+   and the orb becomes invisible. */
+@source '../../packages/jarvis/src/**/*.{ts,tsx,html}';
+@source '../../packages/ui/src/**/*.{ts,tsx,html}';
+
 /* ------------------------------------------------------------------ */
 /* Hermes Agent — Nous DS with the LENS_0 (Hermes teal) lens applied   */
 /* statically. Mirrors nousnet-web/(hermes-agent)/layout.tsx so the    */

@@ -6,6 +6,14 @@
  */
 @import "tailwindcss";
 
+/* Tailwind v4 only auto-scans the current SPA's src/ by default. The
+   cross-space dialogue shell (@hermes/jarvis) lives in a sibling
+   package — without this @source, classes used only in JarvisCore
+   (e.g. fixed bottom-6 right-6 z-50 h-[88px] w-[88px]) get purged
+   and the orb becomes invisible. */
+@source "../../packages/jarvis/src/**/*.{ts,tsx,html}";
+@source "../../packages/ui/src/**/*.{ts,tsx,html}";
+
 @theme {
   /* ── Color tokens (oklch) ───────────────────────────────────── */
   --color-bg-0: oklch(0.14 0.015 60);
