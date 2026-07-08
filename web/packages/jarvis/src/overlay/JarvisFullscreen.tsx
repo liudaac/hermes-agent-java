@@ -17,7 +17,11 @@ interface JarvisFullscreenProps {
   onReject?: (id: string) => void;
 }
 
-export function JarvisFullscreen({ onSubmit, onApprove, onReject }: JarvisFullscreenProps) {
+export function JarvisFullscreen({ onSubmit: _onSubmit, onApprove: _onApprove, onReject: _onReject }: JarvisFullscreenProps) {
+  // Fullscreen mode will be reworked in a follow-up commit; for now
+  // we render an immersive canvas + the read-only ConversationFlow.
+  // Props are accepted for back-compat and intentionally ignored.
+  void _onSubmit; void _onApprove; void _onReject;
   const overlay = useJarvisStore((s) => s.overlay);
   const form = useJarvisStore((s) => s.form);
   const { mountParticleCanvas } = useJarvisCore();
@@ -46,12 +50,8 @@ export function JarvisFullscreen({ onSubmit, onApprove, onReject }: JarvisFullsc
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1">
-          <ConversationFlow
-            onSubmit={onSubmit}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <ConversationFlow />
         </div>
       </div>
       <div className="flex flex-1 items-center justify-center">

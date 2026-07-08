@@ -1,84 +1,100 @@
 /**
- * MessageBubble — the 4 message kinds (design.md §10).
+ * MessageBubble — JARVIS HUD style message line. Not a chat bubble — a
+ * labeled, timestamped line in monospace, with a role tag prefix:
  *
- *   1. user            right-aligned, primary tint
- *   2. jarvis          left-aligned, glass, with sparkles icon
- *   3. tool            dim, monospace, with chevron
- *   4. approval        amber border, prominent gate button
+ *   [USER]     12:04:32    帮我看下今天有多少待审批
+ *   [JARVIS]   12:04:33    工作区 default 有 3 条 PENDING 审批...
+ *   [TOOL]     12:04:34    调用 list_approvals
+ *   [APPROVAL] 12:04:35    ⚠ 需要批准: 发送邮件 (MEDIUM)
+ *
+ * Pending thinking messages pulse. Error messages are red.
  */
-
-import { Sparkles, Wrench, ShieldAlert, Send } from "lucide-react";
+import { useMemo } from "react";
 import type { JarvisMessage } from "../hooks/useJarvisStore";
 
 interface MessageBubbleProps {
-  msg: JarvisMessage;
-  onApprove?: (approvalId: string) => void;
-  onReject?: (approvalId: string) => void;
+  message: JarvisMessage;
 }
 
-export function MessageBubble({ msg, onApprove, onReject }: MessageBubbleProps) {
-  if (msg.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-[oklch(0.78_0.16_70_/_0.85)] px-3 py-2 text-[12px] leading-relaxed text-[oklch(0.18_0.04_60)]">
-          {msg.text}
-        </div>
-      </div>
-    );
-  }
+const ROLE_STYLES: Record<string, { tag: string; color: string; bg?: string }> = {
+  user:     { tag: "USER",     color: "oklch(0.85 0.05 200)" },
+  jarvis:   { tag: "JARVIS",   color: "oklch(0.88 0.12 200)" },
+  tool:     { tag: "TOOL",     color: "oklch(0.70 0.10 260)" },
+  approval: { tag: "APPROVAL", color: "oklch(0.78 0.16 85)" },
+};
 
-  if (msg.role === "tool") {
-    return (
-      <div className="flex items-start gap-2 rounded-lg border border-[oklch(0.30_0.015_50_/_0.4)] bg-[oklch(0.22_0.015_55_/_0.5)] px-3 py-2 font-mono text-[11px] text-[var(--color-text-muted)]">
-        <Wrench className="mt-0.5 h-3 w-3 shrink-0 text-[oklch(0.78_0.12_200)]" />
-        <span className="break-all">{msg.text}</span>
-      </div>
-    );
-  }
+export function MessageBubble({ message }: MessageBubbleProps) {
+  const style = ROLE_STYLES[message.role] ?? ROLE_STYLES.jarvis;
 
-  if (msg.role === "approval") {
-    const approvalId = (msg.meta?.approvalId as string) ?? "";
-    return (
-      <div className="rounded-xl border border-[oklch(0.78_0.16_85_/_0.4)] bg-[oklch(0.78_0.16_85_/_0.08)] p-3">
-        <div className="flex items-start gap-2">
-          <ShieldAlert className="mt-0.5 h-4 w-4 text-[oklch(0.85_0.16_85)]" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-semibold text-[oklch(0.95_0.10_85)]">
-              {msg.text}
-            </p>
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => onApprove?.(approvalId)}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[oklch(0.72_0.14_145_/_0.85)] px-2 py-1.5 text-[11px] font-semibold text-[oklch(0.18_0.04_145)] active:scale-95 transition"
-              >
-                批准
-              </button>
-              <button
-                type="button"
-                onClick={() => onReject?.(approvalId)}
-                className="flex-1 rounded-lg bg-[oklch(0.30_0.02_50_/_0.6)] px-2 py-1.5 text-[11px] font-semibold text-[var(--color-text-secondary)] active:scale-95 transition"
-              >
-                驳回
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const time = useMemo(() => {
+    const d = new Date(message.timestamp);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+  }, [message.timestamp]);
 
-  // default: jarvis reply
+  const isError = message.error === true;
+  const isPending = message.pending === true;
+
   return (
-    <div className="flex items-start gap-2">
-      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[oklch(0.78_0.12_200_/_0.2)] text-[oklch(0.92_0.10_200)]">
-        <Sparkles className="h-3 w-3" />
-      </div>
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-[oklch(0.30_0.015_50_/_0.4)] bg-[oklch(0.22_0.015_55_/_0.6)] px-3 py-2 text-[12px] leading-relaxed text-[var(--color-text-primary)]">
-        {msg.text}
-      </div>
+    <div
+      className={[
+        "group flex gap-3 py-1.5 text-[12px] leading-relaxed",
+        "border-l-2 border-transparent pl-2",
+        isPending ? "animate-pulse" : "",
+        message.role === "jarvis" ? "border-l-[oklch(0.70_0.12_200/_0.3)]" : "",
+        isError ? "border-l-[oklch(0.65_0.22_30)] text-[oklch(0.82_0.18_30)]" : "",
+      ].join(" ")}
+    >
+      {/* Role tag — fixed-width */}
+      <span
+        className="w-[72px] shrink-0 text-right text-[9px] tracking-[0.2em] pt-0.5"
+        style={{ color: style.color, opacity: isError ? 1 : 0.85 }}
+      >
+        [{style.tag}]
+      </span>
+      {/* Timestamp — fixed-width */}
+      <span className="w-[60px] shrink-0 text-[9px] tracking-[0.15em] text-[oklch(0.45_0.08_200)] pt-0.5">
+        {time}
+      </span>
+      {/* Message body */}
+      <span
+        className={[
+          "min-w-0 flex-1 whitespace-pre-wrap break-words",
+          isPending ? "text-[oklch(0.55_0.08_200)]" : "",
+        ].join(" ")}
+        style={isError ? { color: "oklch(0.82 0.18 30)" } : undefined}
+      >
+        {isPending && !message.text
+          ? "processing..."
+          : renderText(message.text, message.role)}
+      </span>
     </div>
   );
 }
 
-void Send;
+/** Render plain text with minimal formatting — bold **x**, inline code. */
+function renderText(text: string, _role: string) {
+  if (!text) return null;
+  // Split by **bold** markers and inline `code`. For HUD-style we keep it
+  // light — monospace already does most of the work.
+  const parts: React.ReactNode[] = [];
+  const segments = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  segments.forEach((seg, i) => {
+    if (!seg) return;
+    if (seg.startsWith("**") && seg.endsWith("**")) {
+      parts.push(
+        <strong key={i} className="text-[oklch(0.92_0.08_200)]">
+          {seg.slice(2, -2)}
+        </strong>,
+      );
+    } else if (seg.startsWith("`") && seg.endsWith("`")) {
+      parts.push(
+        <code key={i} className="rounded bg-[oklch(0.75_0.18_200/_0.12)] px-1 text-[11px] text-[oklch(0.85_0.12_200)]">
+          {seg.slice(1, -1)}
+        </code>,
+      );
+    } else {
+      parts.push(<span key={i}>{seg}</span>);
+    }
+  });
+  return parts;
+}

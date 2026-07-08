@@ -22,7 +22,10 @@ interface JarvisOverlayProps {
   onReject?: (approvalId: string) => void;
 }
 
-export function JarvisOverlay({ onSubmit, onApprove, onReject }: JarvisOverlayProps) {
+export function JarvisOverlay({ onSubmit: _onSubmit, onApprove: _onApprove, onReject: _onReject }: JarvisOverlayProps) {
+  // Legacy component preserved for back-compat; JarvisCore now uses
+  // JarvisHudPanel directly. These props are intentionally ignored.
+  void _onSubmit; void _onApprove; void _onReject;
   const overlay = useJarvisStore((s) => s.overlay);
   const form = useJarvisStore((s) => s.form);
   const { mountParticleCanvas } = useJarvisCore();
@@ -75,13 +78,10 @@ export function JarvisOverlay({ onSubmit, onApprove, onReject }: JarvisOverlayPr
         </div>
       </div>
 
-      {/* Message flow + input */}
+      {/* Message flow (input is handled by JarvisHudPanel now; kept
+          for backward compat — render only the read-only conversation) */}
       <div className="min-h-0 flex-1">
-        <ConversationFlow
-          onSubmit={onSubmit}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
+        <ConversationFlow />
       </div>
     </div>
   );

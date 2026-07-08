@@ -62,7 +62,10 @@ export { jarvisApi, type ChatRequest, type ChatResponse, type IntentResult, type
 export { routeForIntent, type RouteTarget } from "./api/intentRoutes";
 
 // Overlay
+export { JarvisHudPanel } from "./overlay/JarvisHudPanel";
 export { JarvisOverlay } from "./overlay/JarvisOverlay";
 export { JarvisFullscreen } from "./overlay/JarvisFullscreen";
 export { ConversationFlow } from "./overlay/ConversationFlow";
 export { MessageBubble } from "./overlay/MessageBubble";
+// Orb
+export { JarvisOrb } from "./core/JarvisOrb";
