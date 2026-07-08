@@ -1098,7 +1098,22 @@ public class DashboardServer {
             app.get("/fonts/*", ctx -> serveStaticFile(ctx, webDist.resolve("fonts")));
             app.get("/ds-assets/*", ctx -> serveStaticFile(ctx, webDist.resolve("ds-assets")));
 
-            // Serve index.html for all other routes (SPA fallback)
+            // Serve each independent SPA's index.html for its own path
+            // space. This is the server-side fix for the "URL grows
+            // /portal/index.html/index.html/..." bug: the SPA's own
+            // entry point is what should be served, never the hub
+            // (which would forward again and re-append /index.html).
+            app.get("/portal", ctx -> serveSpaIndexHtml(ctx, webDist, "portal"));
+            app.get("/portal/*", ctx -> serveSpaIndexHtml(ctx, webDist, "portal"));
+            app.get("/ops", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
+            app.get("/ops/*", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
+            app.get("/noc", ctx -> serveSpaIndexHtml(ctx, webDist, "noc"));
+            app.get("/noc/*", ctx -> serveSpaIndexHtml(ctx, webDist, "noc"));
+
+            // Serve the root hub for `/` and any other non-API path
+            // (legacy aliases, accidental 404s, etc.). The hub does
+            // its own client-side forwarding for the remaining legacy
+            // paths (/business, /business-portal, /runs/:ws/:id, etc.)
             app.get("/", ctx -> serveIndexHtml(ctx, webDist));
             app.get("/*", ctx -> {
                 String path = ctx.path();
@@ -1112,9 +1127,25 @@ public class DashboardServer {
         }
     }
 
+    /**
+     * Serve one of the independent SPAs (portal / ops / noc) by
+     * returning its index.html. The SPA's React Router then takes
+     * over client-side. This is what `/portal/teams` should resolve
+     * to — not the hub (which would forward to /portal/index.html
+     * and add another segment on every reload).
+     */
+    private void serveSpaIndexHtml(Context ctx, java.nio.file.Path webDist, String spaName) {
+        java.nio.file.Path indexPath = webDist.resolve(spaName).resolve("index.html");
+        serveIndexHtmlFromPath(ctx, indexPath);
+    }
+
     /** 返回 index.html 并注入会话令牌 — 供 SPA fallback 使用。 */
     private void serveIndexHtml(Context ctx, java.nio.file.Path webDist) {
         java.nio.file.Path indexPath = webDist.resolve("index.html");
+        serveIndexHtmlFromPath(ctx, indexPath);
+    }
+
+    private void serveIndexHtmlFromPath(Context ctx, java.nio.file.Path indexPath) {
         if (java.nio.file.Files.exists(indexPath)) {
             try {
                 String html = java.nio.file.Files.readString(indexPath);

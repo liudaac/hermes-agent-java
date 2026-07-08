@@ -30,7 +30,16 @@ function resolveForward(pathname: string): { target: string; rest: string } | nu
     for (const prefix of from) {
       if (pathname === prefix) return { target: to, rest: "" };
       if (prefix.endsWith("/") && pathname.startsWith(prefix)) {
-        return { target: to, rest: pathname.slice(prefix.length - 1) };
+        // Strip the prefix and the leading '/'. If the rest already
+        // starts with "index.html" (which happens on reload of a deep
+        // portal route, since the SPA's entry is /<product>/index.html),
+        // we have to stop and not re-forward — the user is already
+        // inside the right SPA. Sending them through the forwarder
+        // again would append another "/index.html" segment, leading
+        // to "/portal/index.html/index.html/..." on every reload.
+        const rest = pathname.slice(prefix.length);
+        if (rest.startsWith("index.html")) return null;
+        return { target: to, rest: "/" + rest };
       }
     }
   }
