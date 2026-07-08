@@ -60,6 +60,13 @@ public class JarvisHandler {
         if (!reply.crossSpaceLinks.isEmpty()) {
             body.put("crossSpaceLink", reply.crossSpaceLinks.get(0));
         }
+        if (reply.approval != null) {
+            JSONObject ap = new JSONObject();
+            ap.put("approvalId", reply.approval.approvalId);
+            ap.put("title", reply.approval.title);
+            ap.put("risk", reply.approval.risk);
+            body.put("approval", ap);
+        }
         ctx.json(body);
     }
 
@@ -160,8 +167,17 @@ public class JarvisHandler {
 
         boolean approved = "approve".equalsIgnoreCase(decision)
             || "approved".equalsIgnoreCase(decision);
-        approvalBridge.resolve(approvalId, decision);
-        ctx.json(Map.of("ok", true, "approved", approved, "approvalId", approvalId));
+        ApprovalBridge.ResolutionResult result = approvalBridge.resolve(approvalId, decision);
+
+        JSONObject out = new JSONObject();
+        out.put("ok", result.ok());
+        out.put("approved", approved);
+        out.put("approvalId", approvalId);
+        out.put("decision", result.decision().name());
+        if (result.reply() != null && !result.reply().isBlank()) {
+            out.put("reply", result.reply());
+        }
+        ctx.json(out);
     }
 
     // ── body parsing helpers ───────────────────────────────────────

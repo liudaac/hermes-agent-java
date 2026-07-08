@@ -2,26 +2,58 @@ package com.nousresearch.hermes.dashboard.jarvis;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
-import com.nousresearch.hermes.model.ChatCompletionResponse;
-import com.nousresearch.hermes.model.ModelClient;
-import com.nousresearch.hermes.model.ModelMessage;
+import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.approval.ToolApprovalCoordinator;
+import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * ChatService — answer a user message with the LLM.
+ * ChatService — answer a user message by delegating to a real
+ * {@link TenantAwareAIAgent} (not a bare LLM call).
  *
- * MVP scope (design.md §16):
- *   - system prompt describes Jarvis's role + the current space context
- *   - multi-turn history preserved (capped at 10 turns)
- *   - returns plain text reply (no tool calls, no approval gating —
- *     those land in v1)
- *   - any LLM error → graceful fallback message so the front-end never
- *     sees an empty/null reply
+ * <p>Why this matters: the previous implementation called
+ * {@code ModelClient.chatCompletion()} directly, which bypassed the entire
+ * agent runtime — no tools, no SubAgent, no team, no reflection, no traces,
+ * no tenant sandbox / quota / audit / metrics. By going through
+ * {@code processMessage()} we get all of that for free, and dangerous
+ * tool calls are routed through the real approval pipeline (see
+ * {@link ApprovalBridge} + {@link ToolApprovalCoordinator}).</p>
+ *
+ * <p>Per-workspace agent pool: we lazily create one
+ * {@link TenantAwareAIAgent} per workspaceId so the agent's conversation
+ * history (and any paused {@code ToolApprovalCheckpoint}) persists across
+ * HTTP requests. This is what allows the approval → resume cycle to
+ * actually work end-to-end.</p>
+ *
+ * <p>MVP scope:</p>
+ * <ul>
+ *   <li>Happy path: {@code agent.processMessage(message)} returns the
+ *       agent's full response (after all tool calls and final LLM turn).</li>
+ *   <li>Tool approval path: when the agent throws
+ *       {@link TenantAwareAIAgent.ToolApprovalRequiredException}, we
+ *       capture the exception via the tool-approval callback, then
+ *       call {@link ToolApprovalCoordinator#requestToolApproval} to
+ *       create a real {@code BusinessApprovalRecord} (persisted, event
+ *       bus, Portal inbox). The chat reply carries the
+ *       {@link ChatReply#approval} field so the front-end can show the
+ *       approval UI.</li>
+ *   <li>Resume: when the user resolves the approval, the front-end calls
+ *       {@code POST /api/jarvis/approval/{id}}. The handler routes through
+ *       {@link ApprovalBridge#resolve}, which calls
+ *       {@link ToolApprovalCoordinator#resumeToolApproval}, which calls
+ *       {@code agent.resumeToolApproval(...)}, which returns the agent's
+ *       final response. The approval endpoint returns that response as
+ *       {@code reply} so the front-end can drop it into the chat.</li>
+ * </ul>
  */
 public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
@@ -36,75 +68,158 @@ public class ChatService {
 - 理解用户在问什么（业务前店 / 平台控制台 / 治理中心 / 跨空间）
 - 必要时给出明确、可点击的跳转建议
 - 简洁回答（中文优先），不要重复用户的问题
-- 如果用户的问题是危险操作（删除、配置变更、部署、跨空间批量动作），
-  不要直接执行——告诉用户「我已准备好执行该操作，请确认」，等待用户在
-  浮窗内批准/驳回。
+- 你拥有真实的工具调用能力。如果用户的请求需要执行动作（查询数据、
+  调度工作流、修改配置等），请直接调用相应工具——危险操作会在执行前
+  弹出审批请求。
+- 如果你的工具调用被批准/驳回，继续完成任务并向用户汇报结果。
+- 如果没有合适的工具，回答「这件事需要 XX 工具，我目前没有」。
 
-回答用 Markdown，简短（< 120 字），不要客套。
+回答用 Markdown，简短（< 200 字），不要客套。
 """;
 
-    private final ModelClient modelClient;
+    private final HermesConfig config;
+    private final TenantManager tenantManager;
+    private final ToolApprovalCoordinator toolApprovalCoordinator;
+    private final BusinessApprovalService businessApprovalService;
+    private final Map<String, TenantAwareAIAgent> agentPool = new ConcurrentHashMap<>();
 
-    public ChatService(ModelClient modelClient) {
-        this.modelClient = modelClient;
+    public ChatService(HermesConfig config,
+                       TenantManager tenantManager,
+                       ToolApprovalCoordinator toolApprovalCoordinator,
+                       BusinessApprovalService businessApprovalService) {
+        this.config = config;
+        this.tenantManager = tenantManager;
+        this.toolApprovalCoordinator = toolApprovalCoordinator;
+        this.businessApprovalService = businessApprovalService;
     }
 
     public ChatReply reply(ChatRequest req) {
         String userMessage = req.message == null ? "" : req.message.trim();
+        String workspaceId = (req.context != null && req.context.workspaceId != null
+            && !req.context.workspaceId.isBlank())
+                ? req.context.workspaceId : "default";
+
         if (userMessage.isEmpty()) {
-            return new ChatReply("（消息为空）", "portal", 0.0, List.of());
+            return new ChatReply("（消息为空）", spaceName(req), 0.0, List.of(), null);
         }
 
-        List<ModelMessage> messages = buildMessages(userMessage, req);
-        ChatCompletionResponse resp;
+        TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
+        if (agent == null) {
+            return new ChatReply(
+                "（未找到 workspace=" + workspaceId + " 的租户上下文，无法启动 agent）",
+                spaceName(req), 0.0, List.of(), null
+            );
+        }
+
+        // Wire the space context into the agent's system prompt (idempotent)
+        applySystemPrompt(agent, req);
+
+        // Register a one-shot tool approval callback: when the agent throws
+        // ToolApprovalRequiredException, the callback creates a real
+        // BusinessApprovalRecord via the coordinator and stashes the
+        // exception so we can return the approval id to the front-end.
+        ToolApprovalCapture capture = new ToolApprovalCapture();
+        agent.setToolApprovalCallback(ex -> capture.exception = ex);
+
         try {
-            resp = modelClient.chatCompletion(messages, null, false);
+            String result = agent.processMessage(userMessage);
+            capture.exception = null; // completed without approval gate
+            return new ChatReply(
+                result == null ? "（agent 未返回内容）" : result.trim(),
+                spaceName(req),
+                0.8,
+                List.of(),
+                null
+            );
+        } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
+            // Create a real BusinessApprovalRecord via the coordinator. The
+            // coordinator stores the agent reference in its pendingApprovals
+            // map so resumeToolApproval can find it again later.
+            String approvalId;
+            try {
+                approvalId = toolApprovalCoordinator.requestToolApproval(
+                    workspaceId,
+                    null, // teamId — Jarvis is cross-team
+                    agent.getAgentId() != null ? agent.getAgentId() : "jarvis",
+                    ex.getToolName(),
+                    ex.getToolArguments(),
+                    ex.getMatchedRule(),
+                    ex.getReason(),
+                    ex.getToolName(), // toolCallId — coordinator will use the tool name as the call id placeholder
+                    agent
+                );
+            } catch (Exception createEx) {
+                log.error("Failed to create tool approval for Jarvis: {}", createEx.getMessage(), createEx);
+                return new ChatReply(
+                    "（无法创建审批：" + createEx.getMessage() + "）",
+                    spaceName(req), 0.0, List.of(), null
+                );
+            }
+
+            ChatReply.Approval approval = new ChatReply.Approval(
+                approvalId,
+                "工具调用审批: " + ex.getToolName(),
+                inferRisk(ex.getToolName())
+            );
+            String note = "我准备执行工具 `" + ex.getToolName() + "`（" + ex.getReason()
+                + "），请在浮窗内确认。";
+            return new ChatReply(note, spaceName(req), 0.7, List.of(), approval);
         } catch (Exception e) {
-            log.warn("Jarvis chat LLM call failed: {}", e.getMessage());
+            log.warn("Jarvis chat agent call failed: {}", e.getMessage(), e);
             return new ChatReply(
-                "（后台繁忙，请稍后再试）",
-                req.context != null && req.context.space != null ? req.context.space : "portal",
-                0.0,
-                List.of()
+                "（agent 执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage()) + "）",
+                spaceName(req), 0.0, List.of(), null
             );
         }
-
-        if (resp == null || resp.getContent() == null) {
-            return new ChatReply(
-                "（后台未返回内容）",
-                req.context != null && req.context.space != null ? req.context.space : "portal",
-                0.0,
-                List.of()
-            );
-        }
-
-        String text = resp.getContent().trim();
-        String intent = req.context != null && req.context.space != null ? req.context.space : "portal";
-        double confidence = 0.5;
-        return new ChatReply(text, intent, confidence, List.of());
     }
 
-    private List<ModelMessage> buildMessages(String userMessage, ChatRequest req) {
-        List<ModelMessage> out = new ArrayList<>();
-        out.add(ModelMessage.system(BASE_SYSTEM_PROMPT + spaceContextLine(req)));
+    /**
+     * Resume an agent that was paused on a tool approval. Used by
+     * ApprovalBridge when the resolve path goes through the coordinator.
+     */
+    public String resumeAfterApproval(String approvalId, boolean approved, String reason) {
+        // The coordinator already knows which agent to resume (it stored
+        // the reference in pendingApprovals). It calls
+        // agent.resumeToolApproval internally and returns the agent's
+        // final text. We just propagate.
+        return toolApprovalCoordinator.resumeToolApproval(approvalId, approved, reason);
+    }
 
-        if (req.history != null) {
-            int n = Math.min(MAX_HISTORY_TURNS, req.history.size());
-            int start = req.history.size() - n;
-            for (int i = start; i < req.history.size(); i++) {
-                HistoryTurn turn = req.history.get(i);
-                if (turn.role == null) continue;
-                String text = turn.text == null ? "" : turn.text;
-                if (turn.role.equalsIgnoreCase("user")) {
-                    out.add(ModelMessage.user(text));
-                } else if (turn.role.equalsIgnoreCase("jarvis")) {
-                    out.add(ModelMessage.assistant(text));
+    private TenantAwareAIAgent getOrCreateAgent(String workspaceId) {
+        return agentPool.computeIfAbsent(workspaceId, wsId -> {
+            try {
+                TenantContext ctx = tenantManager.resolveForWorkspace(wsId);
+                if (ctx == null) {
+                    log.warn("Could not resolve TenantContext for workspace {}", wsId);
+                    return null;
                 }
+                TenantAwareAIAgent a = TenantAwareAIAgent.forContext(ctx, "jarvis-" + wsId, config);
+                applyJarvisSystemPrompt(a, null);
+                return a;
+            } catch (Exception e) {
+                log.error("Failed to create TenantAwareAIAgent for workspace {}: {}",
+                    wsId, e.getMessage(), e);
+                return null;
             }
-        }
+        });
+    }
 
-        out.add(ModelMessage.user(userMessage));
-        return out;
+    private void applySystemPrompt(TenantAwareAIAgent agent, ChatRequest req) {
+        String prompt = BASE_SYSTEM_PROMPT + spaceContextLine(req);
+        if (!prompt.equals(agent.getSystemPrompt())) {
+            applyJarvisSystemPrompt(agent, req);
+        }
+    }
+
+    private void applyJarvisSystemPrompt(TenantAwareAIAgent agent, ChatRequest req) {
+        agent.setSystemPrompt(BASE_SYSTEM_PROMPT + spaceContextLine(req));
+    }
+
+    private static String spaceName(ChatRequest req) {
+        if (req != null && req.context != null && req.context.space != null) {
+            return req.context.space;
+        }
+        return "portal";
     }
 
     private static String spaceContextLine(ChatRequest req) {
@@ -122,7 +237,28 @@ public class ChatService {
             }
             sb.append("\n");
         }
+        sb.append("- 来源: 跨空间对话壳 (Jarvis)\n");
         return sb.toString();
+    }
+
+    private static String inferRisk(String toolName) {
+        if (toolName == null) return "medium";
+        String lower = toolName.toLowerCase();
+        if (lower.contains("delete") || lower.contains("payment") || lower.contains("refund")
+            || lower.contains("transfer") || lower.contains("drop") || lower.contains("terminate")) {
+            return "high";
+        }
+        if (lower.contains("send") || lower.contains("email") || lower.contains("post")
+            || lower.contains("publish") || lower.contains("exec") || lower.contains("write")
+            || lower.contains("update") || lower.contains("deploy") || lower.contains("rotate")) {
+            return "medium";
+        }
+        return "low";
+    }
+
+    /** Mutable capture slot used by the one-shot tool approval callback. */
+    private static final class ToolApprovalCapture {
+        volatile TenantAwareAIAgent.ToolApprovalRequiredException exception;
     }
 
     // ── DTOs (kept package-private, no Jackson/fastjson annotations) ─
@@ -155,13 +291,27 @@ public class ChatService {
         public final String intent;
         public final double confidence;
         public final List<CrossSpaceLink> crossSpaceLinks;
+        public final Approval approval;
 
         public ChatReply(String text, String intent, double confidence,
-                         List<CrossSpaceLink> crossSpaceLinks) {
+                         List<CrossSpaceLink> crossSpaceLinks, Approval approval) {
             this.text = text;
             this.intent = intent;
             this.confidence = confidence;
             this.crossSpaceLinks = crossSpaceLinks;
+            this.approval = approval;
+        }
+
+        public static final class Approval {
+            public final String approvalId;
+            public final String title;
+            public final String risk; // "low" | "medium" | "high"
+
+            public Approval(String approvalId, String title, String risk) {
+                this.approvalId = approvalId;
+                this.title = title;
+                this.risk = risk;
+            }
         }
     }
 

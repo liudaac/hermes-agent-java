@@ -2,6 +2,7 @@ package com.nousresearch.hermes.dashboard.jarvis;
 
 import com.nousresearch.hermes.business.approval.BusinessApprovalRecord;
 import com.nousresearch.hermes.business.approval.BusinessApprovalService;
+import com.nousresearch.hermes.business.approval.ToolApprovalCoordinator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,33 +10,47 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * JarvisApprovalBridge — thin facade that routes Jarvis-initiated approvals
- * through the real BusinessApprovalService.
+ * ApprovalBridge — single entry point that routes Jarvis approval
+ * resolutions to whichever subsystem owns the decision.
  *
- * <p>Why this exists: Jarvis lives above the agent runtime and is consulted
- * for top-level "do something dangerous" decisions (delete a workspace, rotate
- * a key, run a mass-update scenario, etc.). These decisions are exactly the
- * shape that BusinessApprovalService already handles (PENDING → APPROVED /
- * REJECTED, workspace-scoped, with evidence and timeline), so we reuse it
- * instead of maintaining a parallel in-memory registry.</p>
+ * <p>There are two kinds of approvals that come through the
+ * {@code /api/jarvis/approval/{id}} endpoint:</p>
  *
- * <p>This class does NOT store the decision state. The decision is owned by
- * BusinessApprovalService and its backing repository (file by default; plug
- * in Redis/SQL via the same repository interface for multi-instance
- * deployments). What we keep here is just a small lookup table for the
- * workspace id — the front-end sends only the approval id when resolving,
- * so we need to remember which workspace a given approval belongs to.</p>
+ * <ol>
+ *   <li><b>Jarvis-initiated</b> approvals — created by Jarvis when it
+ *       wants to do a top-level dangerous action (no agent in the loop).
+ *       The decision is owned by {@link BusinessApprovalService}, which
+ *       persists the record, fires the event bus, and surfaces it in the
+ *       Portal inbox.</li>
+ *   <li><b>Tool-level</b> approvals — created when a
+ *       {@code TenantAwareAIAgent} hits a tool approval rule during
+ *       {@code processMessage()}. The agent is paused, and the
+ *       {@link ToolApprovalCoordinator} holds a reference to it. When
+ *       the user resolves, we call
+ *       {@link ToolApprovalCoordinator#resumeToolApproval}, which
+ *       invokes {@code agent.resumeToolApproval()} and returns the
+ *       agent's continuation output.</li>
+ * </ol>
  *
- * <p>Risk mapping: Jarvis uses {@code low/medium/high}; BusinessApprovalService
- * uses {@code LOW/MEDIUM/HIGH}. We normalize on the way in and back on the
- * way out.</p>
+ * <p>This class figures out which path to take by looking up
+ * {@code coordinator.isPending(id)} first (fast check), and falling
+ * back to the local metadata map for Jarvis-initiated approvals.</p>
  */
 public class ApprovalBridge {
     private static final Logger log = LoggerFactory.getLogger(ApprovalBridge.class);
 
     public enum Decision { PENDING, APPROVED, REJECTED, INFO_REQUESTED }
 
-    /** Per-approval metadata we keep alongside the BusinessApprovalRecord. */
+    /** Result of resolving an approval. */
+    public record ResolutionResult(
+        boolean ok,
+        String approvalId,
+        Decision decision,
+        /** Agent continuation output (for tool-level approvals), or null. */
+        String reply
+    ) {}
+
+    /** Per-approval metadata we keep for Jarvis-initiated approvals. */
     public record PendingApproval(
         String id,
         String workspaceId,
@@ -47,24 +62,19 @@ public class ApprovalBridge {
     ) {}
 
     private final BusinessApprovalService approvalService;
+    private final ToolApprovalCoordinator toolApprovalCoordinator;
     private final Map<String, PendingApproval> metadata = new ConcurrentHashMap<>();
 
-    public ApprovalBridge(BusinessApprovalService approvalService) {
+    public ApprovalBridge(BusinessApprovalService approvalService,
+                          ToolApprovalCoordinator toolApprovalCoordinator) {
         this.approvalService = approvalService;
+        this.toolApprovalCoordinator = toolApprovalCoordinator;
     }
 
     /**
-     * Request a Jarvis-initiated approval. Delegates to
-     * BusinessApprovalService.createApproval so the approval is persisted,
-     * appears in the Portal's approval inbox, and fires the global /
-     * workspace / approval-scoped event bus.
-     *
-     * @param workspaceId  workspace that owns the action
-     * @param teamId       team (may be null for cross-team Jarvis actions)
-     * @param title        short title shown in the approval card
-     * @param description  long-form description / evidence
-     * @param riskLevel    {@code low|medium|high} — normalized internally
-     * @return the generated approval id
+     * Create a Jarvis-initiated approval. Delegates to
+     * BusinessApprovalService so the approval is persisted, appears in
+     * the Portal inbox, and fires the global/workspace event bus.
      */
     public String request(String workspaceId, String teamId,
                           String title, String description, String riskLevel) {
@@ -110,52 +120,64 @@ public class ApprovalBridge {
     }
 
     /**
-     * Resolve a pending approval. The decision is recorded by
-     * BusinessApprovalService, which fires the appropriate event on the
-     * workspace + global event bus.
+     * Resolve a pending approval. Routes to either the tool-level
+     * coordinator (if the approval is for a paused agent tool call) or
+     * the business approval service (if the approval is Jarvis-initiated).
+     *
+     * @return the resolution result, including the agent's continuation
+     *         output for tool-level approvals
      */
-    public void resolve(String approvalId, String decisionStr) {
-        if (approvalId == null || approvalId.isBlank()) return;
-        PendingApproval md = metadata.get(approvalId);
-        if (md == null) {
-            // Approval may have been created by another path (e.g. tool-level
-            // approval via ToolApprovalCoordinator). Look it up via the service
-            // to see if we can find a matching record; if not, it's a no-op
-            // and we log a warning.
-            log.warn("Jarvis resolveApproval called with unknown approvalId={} (decision={})",
-                approvalId, decisionStr);
-            return;
+    public ResolutionResult resolve(String approvalId, String decisionStr) {
+        if (approvalId == null || approvalId.isBlank()) {
+            return new ResolutionResult(false, approvalId, Decision.PENDING, null);
         }
         Decision d = parseDecision(decisionStr);
+
+        // Tool-level approvals live in the coordinator's pendingApprovals map.
+        if (toolApprovalCoordinator != null && toolApprovalCoordinator.isPending(approvalId)) {
+            boolean approved = (d == Decision.APPROVED);
+            String reply = null;
+            try {
+                reply = toolApprovalCoordinator.resumeToolApproval(
+                    approvalId, approved, "通过 Jarvis 浮窗决议");
+            } catch (Exception e) {
+                log.error("Failed to resume tool approval {}: {}", approvalId, e.getMessage(), e);
+                return new ResolutionResult(false, approvalId, Decision.PENDING,
+                    "（resume 失败：" + e.getMessage() + "）");
+            }
+            log.info("Jarvis tool-approval {} {} via dashboard; agent reply length={}",
+                approvalId, approved ? "approved" : "rejected",
+                reply == null ? 0 : reply.length());
+            return new ResolutionResult(true, approvalId, d, reply);
+        }
+
+        // Otherwise it's a Jarvis-initiated approval — resolve via the
+        // business approval service.
+        PendingApproval md = metadata.get(approvalId);
+        if (md == null) {
+            log.warn("Jarvis resolveApproval called with unknown approvalId={} (decision={})",
+                approvalId, decisionStr);
+            return new ResolutionResult(false, approvalId, d, null);
+        }
         try {
             switch (d) {
-                case APPROVED -> {
-                    BusinessApprovalRecord rec = approvalService.approve(
-                        md.workspaceId, approvalId, "jarvis-user", "通过浮窗批准");
-                    log.info("Jarvis approval {} approved via dashboard", approvalId);
-                }
-                case REJECTED -> {
-                    BusinessApprovalRecord rec = approvalService.reject(
-                        md.workspaceId, approvalId, "jarvis-user", "通过浮窗驳回");
-                    log.info("Jarvis approval {} rejected via dashboard", approvalId);
-                }
-                case INFO_REQUESTED -> {
-                    BusinessApprovalRecord rec = approvalService.requestInfo(
-                        md.workspaceId, approvalId, "jarvis-user", "Jarvis 已请求补充信息");
-                    log.info("Jarvis approval {} info-requested via dashboard", approvalId);
-                }
+                case APPROVED -> approvalService.approve(
+                    md.workspaceId, approvalId, "jarvis-user", "通过浮窗批准");
+                case REJECTED -> approvalService.reject(
+                    md.workspaceId, approvalId, "jarvis-user", "通过浮窗驳回");
+                case INFO_REQUESTED -> approvalService.requestInfo(
+                    md.workspaceId, approvalId, "jarvis-user", "Jarvis 已请求补充信息");
                 default -> {
                     // PENDING shouldn't be sent by the front-end; ignore.
                 }
             }
+            log.info("Jarvis business-approval {} {} via dashboard",
+                approvalId, d);
         } catch (Exception e) {
             log.error("Failed to resolve Jarvis approval {}: {}", approvalId, e.getMessage(), e);
-            return;
+            return new ResolutionResult(false, approvalId, d, null);
         }
-        // Keep metadata around for a short window so follow-up lookups (e.g.
-        // for the front-end's status check) still work. A periodic reaper
-        // would be ideal; for now we leave them — the in-memory map is bounded
-        // by the number of approvals this JVM has seen, and they're small.
+        return new ResolutionResult(true, approvalId, d, null);
     }
 
     /** Read the current decision for a Jarvis-initiated approval, if known. */

@@ -240,12 +240,6 @@ public class DashboardServer {
         this.scenarioService = new ScenarioService(workspaceService, teamBlueprintService);
         this.scenarioService.setScenarioIntentAdapter(new com.nousresearch.hermes.scenario.ScenarioIntentAdapter(workspaceService, tenantManager));
         this.businessApprovalService = new BusinessApprovalService(workspaceService);
-        // ── Jarvis 跨空间对话壳：approval 走 BusinessApprovalService 的持久化与事件总线
-        this.jarvisHandler = new JarvisHandler(
-            new ChatService(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
-            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
-            new ApprovalBridge(businessApprovalService)
-        );
         this.businessRunService = new BusinessRunService(workspaceService, teamBlueprintService, scenarioService);
         this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
         this.promptAssetService = new PromptAssetService(workspaceService);
@@ -258,6 +252,18 @@ public class DashboardServer {
             workspaceService, businessApprovalService);
         this.scenarioService.getTeamBlueprintRuntime().setToolApprovalCoordinator(toolApprovalCoordinator);
         this.toolApprovalCoordinator = toolApprovalCoordinator;
+        // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
+        //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级）
+        this.jarvisHandler = new JarvisHandler(
+            new ChatService(
+                config,
+                tenantManager,
+                toolApprovalCoordinator,
+                businessApprovalService
+            ),
+            new IntentRouter(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())),
+            new ApprovalBridge(businessApprovalService, toolApprovalCoordinator)
+        );
         this.evalSetService = new EvalSetService(workspaceService, scenarioService);
         this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
         // Wire canary into scenario service for traffic-based version routing + metrics
