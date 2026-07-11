@@ -1,0 +1,1 @@
+import{j as r,e}from"./index-BubGmrlm.js";const a={sm:"h-4 w-4",md:"h-5 w-5",lg:"h-6 w-6"};function o({className:n,size:s="lg",padding:t="py-24"}){return r.jsx("div",{className:e("flex items-center justify-center",t,n),children:r.jsx("div",{className:e("animate-spin rounded-full border-2 border-primary border-t-transparent",a[s])})})}export{o as L};

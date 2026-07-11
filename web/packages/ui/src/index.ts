@@ -46,6 +46,8 @@ export * from "./components/ui/separator";
 export * from "./components/ui/skeleton";
 export * from "./components/ui/switch";
 export * from "./components/ui/tabs";
+export { ToastProvider, useToast } from "./components/toast";
+export type { ToastState } from "./components/toast";
 
 // ── 3. i18n ───────────────────────────────────────────────────────
 export { I18nProvider, useI18n } from "./i18n";

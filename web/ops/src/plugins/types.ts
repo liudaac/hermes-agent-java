@@ -1,4 +1,5 @@
 /** Types for the dashboard plugin system. */
+import type { ComponentType } from "react";
 
 export interface PluginManifest {
   name: string;
@@ -8,7 +9,7 @@ export interface PluginManifest {
   version: string;
   tab: {
     path: string;
-    position: string;  // "end", "after:<tab>", "before:<tab>"
+    position: string; // "end", "after:<tab>", "before:<tab>"
   };
   entry: string;
   css?: string | null;
@@ -18,5 +19,5 @@ export interface PluginManifest {
 
 export interface RegisteredPlugin {
   manifest: PluginManifest;
-  component: React.ComponentType;
+  component: ComponentType;
 }

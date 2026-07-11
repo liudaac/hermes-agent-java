@@ -1,0 +1,1 @@
+import{j as e,l as t,C as d}from"./index-BubGmrlm.js";function c({icon:s,title:a,className:r}){return e.jsx(t,{className:r,children:e.jsxs("div",{className:"flex items-center gap-2",children:[e.jsx(s,{className:"h-5 w-5 text-muted-foreground"}),e.jsx(d,{className:"text-base",children:a})]})})}export{c as C};
