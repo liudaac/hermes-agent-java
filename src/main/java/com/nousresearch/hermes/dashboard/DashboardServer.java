@@ -23,8 +23,11 @@ import com.nousresearch.hermes.org.workflow.WorkflowEngine;
 import java.util.function.Supplier;
 import java.time.Instant;
 import java.util.Map;
+import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.config.HermesConfig;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.BusinessPortalDashboardIntegration;
@@ -221,7 +224,7 @@ public class DashboardServer {
         this.gatewayStatusSupplier = gatewayStatusSupplier != null
             ? gatewayStatusSupplier
             : GatewayRuntimeStatus::disconnected;
-        this.sessionToken = generateSessionToken();
+        this.sessionToken = loadOrCreateSessionToken();
         this.sseSigningKey = generateSigningKey();
 
         // Initialize handlers
@@ -356,6 +359,42 @@ public class DashboardServer {
         byte[] bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    /**
+     * Load a persisted session token from disk, or generate a new one and persist it.
+     * This allows restarts to keep existing browser sessions authenticated (the token
+     * injected into window.__HERMES_SESSION_TOKEN__ stays stable). The file is mode 600
+     * so only the running user can read it.
+     */
+    private String loadOrCreateSessionToken() {
+        try {
+            Path hermesHome = Constants.getHermesHome();
+            Path stateDir = hermesHome.resolve("state");
+            Files.createDirectories(stateDir);
+            Path tokenFile = stateDir.resolve("session-token");
+            if (Files.exists(tokenFile)) {
+                String existing = Files.readString(tokenFile, StandardCharsets.UTF_8).trim();
+                if (existing.length() >= 32) return existing;
+            }
+            String newToken = generateSessionToken();
+            Files.writeString(tokenFile, newToken, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                // best-effort: tighten permissions to owner-only
+                java.nio.file.attribute.PosixFilePermission ownerRead =
+                    java.nio.file.attribute.PosixFilePermission.OWNER_READ;
+                java.nio.file.attribute.PosixFilePermission ownerWrite =
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
+                Files.setPosixFilePermissions(tokenFile, java.util.Set.of(ownerRead, ownerWrite));
+            } catch (UnsupportedOperationException | SecurityException ignored) {
+                // Windows / non-POSIX FS — skip; file permissions are best-effort
+            }
+            return newToken;
+        } catch (Exception e) {
+            logger.warn("Failed to persist session token, falling back to ephemeral token: {}", e.getMessage());
+            return generateSessionToken();
+        }
     }
 
     private byte[] generateSigningKey() {
