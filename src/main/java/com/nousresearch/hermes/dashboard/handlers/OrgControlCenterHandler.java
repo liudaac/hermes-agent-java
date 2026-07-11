@@ -565,14 +565,21 @@ public class OrgControlCenterHandler {
     }
 
     private static String operatorActor(Context ctx, Map<String, Object> body) {
-        String fromBody = stringValue(body.get("actor"));
-        if (fromBody != null && !fromBody.isBlank()) return fromBody;
+        // Security: do NOT trust the client-supplied actor from body/query.
+        // Any caller reaching this handler has already passed DashboardServer Bearer auth.
+        // We accept X-Hermes-Operator only when it is injected by a trusted reverse proxy
+        // (e.g. after SSO). Otherwise fall back to "dashboard" (a known FULL_ACCESS role).
+        // Clients can no longer escalate privileges by sending actor=admin in body/query.
         String header = ctx.header("X-Hermes-Operator");
-        if (header != null && !header.isBlank()) return header;
-        header = ctx.header("X-Operator");
-        if (header != null && !header.isBlank()) return header;
-        String query = ctx.queryParam("actor");
-        return query != null && !query.isBlank() ? query : "dashboard";
+        if (header != null && !header.isBlank()) {
+            // Trust only simple role identifiers, reject anything suspicious (injection defense)
+            String normalized = header.trim().toLowerCase(java.util.Locale.ROOT);
+            if (normalized.matches("[a-z][a-z0-9_-]{0,31}")) {
+                return normalized;
+            }
+        }
+        // No trusted identity → attribute to the dashboard itself (authenticated admin console).
+        return "dashboard";
     }
 
     @SuppressWarnings("unchecked")

@@ -64,6 +64,7 @@ import org.slf4j.LoggerFactory;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -92,6 +93,10 @@ public class DashboardServer {
     // ---- 安全相关 ----
     /** 会话令牌 — 生成后不可变，用于 /api/ 路由的 Bearer 鉴权 */
     private final String sessionToken;
+    /** SSE 短期签名密钥（启动随机生成，不持久化，重启即失效）*/
+    private final byte[] sseSigningKey;
+    /** SSE token 有效期（秒）*/
+    private static final long SSE_TOKEN_TTL_SECONDS = 600; // 10 minutes
     /** 公开 API 路径白名单 — 无需鉴权 */
     private final Set<String> publicApiPaths = Set.of(
         "/api/status",
@@ -217,6 +222,7 @@ public class DashboardServer {
             ? gatewayStatusSupplier
             : GatewayRuntimeStatus::disconnected;
         this.sessionToken = generateSessionToken();
+        this.sseSigningKey = generateSigningKey();
 
         // Initialize handlers
         this.configHandler = new ConfigHandler(config);
@@ -334,6 +340,77 @@ public class DashboardServer {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
+    private byte[] generateSigningKey() {
+        byte[] key = new byte[32];
+        new SecureRandom().nextBytes(key);
+        return key;
+    }
+
+    /**
+     * Issue a short-lived signed token for SSE streams.
+     * Format: base64url(expiry).base64url(hmac)
+     * Expiry is seconds since epoch; TTL = SSE_TOKEN_TTL_SECONDS (10 min).
+     */
+    String issueSseToken() {
+        try {
+            long expiry = System.currentTimeMillis() / 1000L + SSE_TOKEN_TTL_SECONDS;
+            String payload = Long.toUnsignedString(expiry);
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(sseSigningKey, "HmacSHA256"));
+            byte[] sig = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            String payloadB64 = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+            String sigB64 = Base64.getUrlEncoder().withoutPadding().encodeToString(sig);
+            return payloadB64 + "." + sigB64;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to issue SSE token", e);
+        }
+    }
+
+    /**
+     * Constant-time validation of an SSE query token.
+     * Accepts either the new short-lived signed token OR, for backward compatibility,
+     * the permanent sessionToken. The permanent-token path is logged so operators
+     * can migrate clients away from it.
+     */
+    boolean isValidSseToken(String token) {
+        if (token == null || token.isBlank()) return false;
+        // Fast path: new signed token format
+        int dot = token.indexOf('.');
+        if (dot > 0 && dot < token.length() - 1) {
+            try {
+                String payloadB64 = token.substring(0, dot);
+                String sigB64 = token.substring(dot + 1);
+                byte[] payload = Base64.getUrlDecoder().decode(payloadB64);
+                byte[] expected = Base64.getUrlDecoder().decode(sigB64);
+                String payloadStr = new String(payload, StandardCharsets.UTF_8);
+                long expiry = Long.parseUnsignedLong(payloadStr);
+                long now = System.currentTimeMillis() / 1000L;
+                if (expiry < now) return false;
+                Mac mac = Mac.getInstance("HmacSHA256");
+                mac.init(new SecretKeySpec(sseSigningKey, "HmacSHA256"));
+                byte[] actual = mac.doFinal(payloadStr.getBytes(StandardCharsets.UTF_8));
+                return MessageDigest.isEqual(expected, actual);
+            } catch (Exception e) {
+                logger.debug("SSE token parse failed: {}", e.getMessage());
+                // fall through
+            }
+        }
+        // Legacy path: equal to permanent sessionToken (constant-time compare).
+        // TODO: remove after clients migrate to issueSseToken().
+        boolean matches = constantTimeEquals(token, sessionToken);
+        if (matches) {
+            logger.warn("SSE stream authenticated with permanent session token; migrate client to short-lived SSE token");
+        }
+        return matches;
+    }
+
+    private static boolean constantTimeEquals(String a, String b) {
+        if (a == null || b == null) return false;
+        byte[] ba = a.getBytes(StandardCharsets.UTF_8);
+        byte[] bb = b.getBytes(StandardCharsets.UTF_8);
+        return MessageDigest.isEqual(ba, bb);
+    }
+
     /** 获取当前会话令牌 — 用于前端鉴权和 SSE 连接参数。 */
     public String getSessionToken() {
         return sessionToken;
@@ -411,18 +488,20 @@ public class DashboardServer {
                 String auth = ctx.header("Authorization");
                 String expected = "Bearer " + sessionToken;
 
-                // EventSource (SSE) cannot set custom headers — allow ?token=... on SSE routes.
-                if ((auth == null || !hmacCompare(auth, expected))
+                // EventSource (SSE) cannot set custom headers — allow ?token= on SSE routes.
+                // Token must be a short-lived signed SSE token (preferred) or the permanent
+                // sessionToken (legacy, logged as warning).
+                if ((auth == null || !constantTimeEquals(auth, expected))
                     && (path.equals("/api/logs/tail")
                         || path.equals("/api/jarvis/stream")
                         || path.matches("^/api/cron/jobs/[^/]+/runs/stream$"))) {
                     String tokenParam = ctx.queryParam("token");
-                    if (tokenParam != null && hmacCompare(tokenParam, sessionToken)) {
+                    if (isValidSseToken(tokenParam)) {
                         auth = expected;
                     }
                 }
 
-                if (auth == null || !hmacCompare(auth, expected)) {
+                if (auth == null || !constantTimeEquals(auth, expected)) {
                     ctx.status(401).result(JSON.toJSONString(new JSONObject()
                         .fluentPut("detail", "Unauthorized")));
                     ctx.skipRemainingHandlers();
@@ -433,19 +512,12 @@ public class DashboardServer {
     }
 
     /**
-     * Constant-time string comparison to prevent timing attacks.
+     * @deprecated Use {@link #constantTimeEquals(String, String)} for simple equality.
+     * Kept for backward compatibility with any external callers.
      */
+    @Deprecated
     private boolean hmacCompare(String a, String b) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(new byte[32], "HmacSHA256"));
-            byte[] hashA = mac.doFinal(a.getBytes(StandardCharsets.UTF_8));
-            byte[] hashB = mac.doFinal(b.getBytes(StandardCharsets.UTF_8));
-            return java.util.Arrays.equals(hashA, hashB);
-        } catch (Exception e) {
-            // Fallback to standard equals (less secure but functional)
-            return a.equals(b);
-        }
+        return constantTimeEquals(a, b);
     }
 
     /**
@@ -1068,6 +1140,16 @@ public class DashboardServer {
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));
         app.post("/api/jarvis/chat", jarvisHandler::chat);
         app.post("/api/jarvis/intent", jarvisHandler::classifyIntent);
+        // Short-lived SSE token endpoint — Bearer-auth'd clients call this to refresh
+        // the ?token= used for EventSource connections. The token injected into
+        // window.__HERMES_SSE_TOKEN__ at page load expires in 10 min; long-lived pages
+        // can call this endpoint every 9 minutes to roll.
+        app.get("/api/auth/sse-token", ctx -> {
+            ctx.contentType("application/json");
+            ctx.result(JSON.toJSONString(new JSONObject()
+                .fluentPut("token", issueSseToken())
+                .fluentPut("expires_in", SSE_TOKEN_TTL_SECONDS)));
+        });
         // SSE can't set custom headers, so we read token + workspaceId + allAccess
         // from query params. The token is verified by the auth middleware
         // (this route is in the query-token whitelist below).
@@ -1186,9 +1268,13 @@ public class DashboardServer {
         if (java.nio.file.Files.exists(indexPath)) {
             try {
                 String html = java.nio.file.Files.readString(indexPath);
-                // Inject session token
-                html = html.replace("<head>",
-                    "<head><script>window.__HERMES_SESSION_TOKEN__=\"" + sessionToken + "\";</script>");
+                // Inject session token + short-lived SSE token (refreshed on each page load).
+                String sseToken = issueSseToken();
+                String inject = "<head><script>"
+                    + "window.__HERMES_SESSION_TOKEN__=\"" + sessionToken + "\";"
+                    + "window.__HERMES_SSE_TOKEN__=\"" + sseToken + "\";"
+                    + "</script>";
+                html = html.replace("<head>", inject);
                 ctx.contentType("text/html");
                 ctx.result(html);
             } catch (Exception e) {

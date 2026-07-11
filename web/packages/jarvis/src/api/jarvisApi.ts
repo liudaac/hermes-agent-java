@@ -53,6 +53,8 @@ export interface IntentResult {
 declare global {
   interface Window {
     __HERMES_SESSION_TOKEN__?: string;
+    /** Short-lived (10-min) signed token for SSE query-param auth; refreshed on page load. */
+    __HERMES_SSE_TOKEN__?: string;
   }
 }
 
@@ -61,6 +63,14 @@ function authHeaders(): HeadersInit {
   const t = window.__HERMES_SESSION_TOKEN__;
   if (t) h.Authorization = `Bearer ${t}`;
   return h;
+}
+
+/**
+ * Return a usable SSE auth token, preferring the short-lived signed token injected
+ * at page load. Falls back to the permanent session token for backward compatibility.
+ */
+function sseToken(): string | undefined {
+  return window.__HERMES_SSE_TOKEN__ || window.__HERMES_SESSION_TOKEN__;
 }
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -109,8 +119,8 @@ export const jarvisApi = {
     opts: { workspaceId?: string; all?: boolean } = {}
   ): EventSource {
     const params = new URLSearchParams();
-    // SSE can't set custom headers, so we authenticate via ?token=
-    const t = window.__HERMES_SESSION_TOKEN__;
+    // SSE can't set custom headers — authenticate via short-lived ?token=
+    const t = sseToken();
     if (t) params.set("token", t);
     if (opts.workspaceId) params.set("workspaceId", opts.workspaceId);
     if (opts.all) params.set("all", "true");

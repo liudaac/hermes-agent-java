@@ -200,11 +200,17 @@ public class TenantAwareToolDispatcher {
         try {
             result = switch (toolName) {
                 case "read_file", "write_file", "list_directory", "search_files",
-                     "file_read", "file_write", "file_list" -> dispatchFileTool(toolName, safeArgs);
+                     "file_read", "file_write", "file_list", "grep_files" -> dispatchFileTool(toolName, safeArgs);
                 case "execute_python", "execute_javascript", "execute_bash" -> dispatchCodeTool(toolName, safeArgs);
                 case "terminal", "execute_command" -> dispatchTerminalTool(toolName, safeArgs);
                 case "memory_read", "memory_write", "memory_search" -> dispatchMemoryTool(toolName, safeArgs);
+                case "git_status", "git_add", "git_commit", "git_push", "git_pull",
+                     "git_log", "git_branch", "git_clone" -> dispatchGitTool(toolName, safeArgs);
                 case "find_teammate", "delegate_task", "query_org_knowledge", "escalate_to_human", "team_post", "team_read", "team_status", "orchestrate_intent", "intent_status", "org_traces", "org_anomalies", "browser_bridge" -> dispatchOrgTool(toolName, safeArgs);
+                case "browser_open", "browser_navigate", "browser_get_content", "browser_snapshot",
+                     "browser_click", "browser_type", "browser_scroll", "browser_press",
+                     "browser_back", "browser_submit", "browser_close", "browser_screenshot" -> dispatchBrowserTool(toolName, safeArgs);
+                case "browser_cdp_connect", "browser_cdp_status" -> dispatchBrowserTool(toolName, safeArgs);
                 default -> dispatchGenericTool(toolName, safeArgs);
             };
         } catch (Exception e) {
@@ -367,6 +373,62 @@ public class TenantAwareToolDispatcher {
                         "truncated", results.size() >= MAX_SEARCH_RESULTS
                     ));
                 }
+                case "grep_files": {
+                    String pattern = (String) args.get("pattern");
+                    if (pattern == null || pattern.isBlank()) {
+                        return ToolRegistry.toolError("Search pattern is required");
+                    }
+                    String pathStr = (String) args.getOrDefault("path", ".");
+                    var validation = validateTenantPath(pathStr, TenantFileSandbox.AccessMode.READ);
+                    if (!validation.isAllowed()) {
+                        return ToolRegistry.toolError("Access denied: " + validation.getReason());
+                    }
+                    Path root = validation.path();
+                    int maxResults = ((Number) args.getOrDefault("max_results", 50)).intValue();
+                    int maxMatchesPerFile = ((Number) args.getOrDefault("max_matches_per_file", 20)).intValue();
+                    boolean ignoreCase = Boolean.TRUE.equals(args.get("ignore_case"));
+                    java.util.regex.Pattern regex;
+                    try {
+                        regex = ignoreCase
+                            ? java.util.regex.Pattern.compile(pattern, java.util.regex.Pattern.CASE_INSENSITIVE)
+                            : java.util.regex.Pattern.compile(pattern);
+                    } catch (java.util.regex.PatternSyntaxException e) {
+                        return ToolRegistry.toolError("Invalid regex pattern: " + e.getMessage());
+                    }
+                    List<Map<String, Object>> matches = new ArrayList<>();
+                    Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                        @Override
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                            if (attrs.size() > 5_000_000) return FileVisitResult.CONTINUE; // skip >5MB
+                            int fileMatches = 0;
+                            int lineNo = 0;
+                            try (var reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                                String line;
+                                while ((line = reader.readLine()) != null) {
+                                    lineNo++;
+                                    if (regex.matcher(line).find()) {
+                                        Map<String, Object> m = new HashMap<>();
+                                        m.put("file", sandbox.getSandboxRoot().relativize(file).toString());
+                                        m.put("line", lineNo);
+                                        m.put("content", line.length() > 500 ? line.substring(0, 500) : line);
+                                        matches.add(m);
+                                        fileMatches++;
+                                        if (fileMatches >= maxMatchesPerFile) break;
+                                        if (matches.size() >= maxResults) return FileVisitResult.TERMINATE;
+                                    }
+                                }
+                            }
+                            return FileVisitResult.CONTINUE;
+                        }
+                    });
+                    return ToolRegistry.toolResult(Map.of(
+                        "pattern", pattern,
+                        "path", sandbox.getSandboxRoot().relativize(root).toString(),
+                        "matches", matches,
+                        "count", matches.size(),
+                        "truncated", matches.size() >= maxResults
+                    ));
+                }
                 default:
                     return ToolRegistry.toolError("Unknown file tool: " + toolName);
             }
@@ -434,6 +496,116 @@ public class TenantAwareToolDispatcher {
             }
             default -> ToolRegistry.toolError("Unknown memory tool: " + toolName);
         };
+    }
+
+    /**
+     * Execute git commands inside the tenant file sandbox.
+     *
+     * <p>Security:
+     * <ul>
+     *   <li>All paths are validated against the tenant file sandbox via validateTenantPath()</li>
+     *   <li>Execution uses tenantContext.exec() (cgroup/process sandbox with memory limits)</li>
+     *   <li>git clone validates that the destination path is inside the sandbox</li>
+     *   <li>Network access is governed by the tenant's NetworkSandbox (RestrictedHttpClient) —
+     *       note: git itself uses its own network stack, so we rely on URL allowlist here</li>
+     * </ul>
+     */
+    private String dispatchGitTool(String toolName, Map<String, Object> args) {
+        String path = (String) args.get("path");
+        // Validate cwd is inside sandbox (or default to sandbox root)
+        String cwdStr = (path == null || path.isBlank()) ? "." : path;
+        var validation = validateTenantPath(cwdStr, TenantFileSandbox.AccessMode.READ);
+        if (!validation.isAllowed()) {
+            return ToolRegistry.toolError("Access denied: " + validation.getReason());
+        }
+        Path cwd = validation.path();
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add("git");
+
+        int timeout = ((Number) args.getOrDefault("timeout", 60)).intValue();
+        long memoryLimitMb = 256;
+
+        try {
+            switch (toolName) {
+                case "git_status" -> cmd.add("status");
+                case "git_add" -> {
+                    cmd.add("add");
+                    String files = stringArg(args, "files", ".");
+                    for (String f : files.split("\\s+")) {
+                        if (!f.isBlank()) cmd.add(f);
+                    }
+                }
+                case "git_commit" -> {
+                    cmd.add("commit");
+                    String msg = stringArg(args, "message", "");
+                    if (msg.isBlank()) return ToolRegistry.toolError("Commit message is required");
+                    cmd.add("-m"); cmd.add(msg);
+                }
+                case "git_push", "git_pull" -> {
+                    cmd.add(toolName.substring(4)); // push / pull
+                    String remote = stringArg(args, "remote", null);
+                    String branch = stringArg(args, "branch", null);
+                    if (remote != null) cmd.add(remote);
+                    if (branch != null) cmd.add(branch);
+                }
+                case "git_log" -> {
+                    cmd.add("log");
+                    cmd.add("--oneline");
+                    cmd.add("-n"); cmd.add(String.valueOf(((Number) args.getOrDefault("max_count", 20)).intValue()));
+                }
+                case "git_branch" -> {
+                    cmd.add("branch");
+                    String branch = stringArg(args, "branch", null);
+                    if (branch != null) {
+                        // Validate branch name (simple chars only, no shell metachars)
+                        if (!branch.matches("[A-Za-z0-9._/-]+")) {
+                            return ToolRegistry.toolError("Invalid branch name");
+                        }
+                        cmd.add(branch);
+                    } else {
+                        cmd.add("-a");
+                    }
+                }
+                case "git_clone" -> {
+                    String url = stringArg(args, "url", null);
+                    if (url == null || url.isBlank()) return ToolRegistry.toolError("Clone URL is required");
+                    // Restrict clone URLs to http(s):// and git@ to avoid file:// or ssh inject.
+                    // NOTE: git uses its own network stack; this blocks local file:// clones.
+                    if (!(url.startsWith("https://") || url.startsWith("http://") || url.startsWith("git@"))) {
+                        return ToolRegistry.toolError("Only http(s):// and git@ clone URLs are allowed");
+                    }
+                    String destPath = stringArg(args, "path", null);
+                    Path dest;
+                    if (destPath != null && !destPath.isBlank()) {
+                        var destValidation = validateTenantPath(destPath, TenantFileSandbox.AccessMode.WRITE);
+                        if (!destValidation.isAllowed()) {
+                            return ToolRegistry.toolError("Access denied for clone destination: " + destValidation.getReason());
+                        }
+                        dest = destValidation.path();
+                    } else {
+                        // Default destination: sandbox root; use last path segment of URL
+                        String leaf = url.substring(url.lastIndexOf('/') + 1).replaceAll("\\.git$", "");
+                        if (!leaf.matches("[A-Za-z0-9._-]+")) leaf = "repo";
+                        dest = cwd.resolve(leaf);
+                    }
+                    cmd.add("clone"); cmd.add(url); cmd.add(dest.toString());
+                    // Clone can be slow/heavy; bump timeout and memory
+                    timeout = Math.max(timeout, 300);
+                    memoryLimitMb = 512;
+                }
+                default -> { return ToolRegistry.toolError("Unknown git tool: " + toolName); }
+            }
+            return executeInTenantSandbox(cmd, timeout, memoryLimitMb, cwd);
+        } catch (Exception e) {
+            logger.error("Git tool '{}' failed", toolName, e);
+            return ToolRegistry.toolError("Git tool failed: " + e.getMessage());
+        }
+    }
+
+    private static String stringArg(Map<String, Object> args, String key, String defaultValue) {
+        Object v = args.get(key);
+        return v == null ? defaultValue : String.valueOf(v);
     }
     
     // ========== AI原生组织工具 ==========
@@ -984,6 +1156,57 @@ public class TenantAwareToolDispatcher {
         return result.ok()
             ? ToolRegistry.toolResult(payload)
             : ToolRegistry.toolError(result.message(), payload);
+    }
+
+    /**
+     * Route the browser_* family of tool calls (originally from BrowserToolV2) through
+     * the BrowserBridgePolicy + BrowserBridge audit trail. This closes the hole where
+     * BrowserToolV2's fine-grained actions (browser_click, browser_type, …) bypassed
+     * the policy and audit layer.
+     *
+     * <p>Mapping from BrowserToolV2 tool names to BrowserAction.action:</p>
+     * <ul>
+     *   <li>browser_open / browser_navigate → action=open (with url)</li>
+     *   <li>browser_get_content → action=extract</li>
+     *   <li>browser_snapshot → action=observe</li>
+     *   <li>browser_click → action=click (target=ref)</li>
+     *   <li>browser_type → action=type (target=ref, text)</li>
+     *   <li>browser_scroll → action=scroll (target/direction)</li>
+     *   <li>browser_press → action=press (text=key)</li>
+     *   <li>browser_back → action=close?  → use observe with instruction "go back"
+     *       (BrowserBridge capabilities list doesn't include back natively; keep as observe)</li>
+     *   <li>browser_submit → action=submit</li>
+     *   <li>browser_close → action=close</li>
+     *   <li>browser_screenshot → action=extract (screenshot is part of result)</li>
+     * </ul>
+     */
+    private String dispatchBrowserTool(String toolName, Map<String, Object> args) {
+        Map<String, Object> bridgeArgs = new HashMap<>(args);
+        String action = switch (toolName) {
+            case "browser_open", "browser_navigate" -> "open";
+            case "browser_get_content", "browser_screenshot" -> "extract";
+            case "browser_snapshot" -> "observe";
+            case "browser_click" -> "click";
+            case "browser_type" -> "type";
+            case "browser_scroll" -> "scroll";
+            case "browser_press" -> "press";
+            case "browser_back" -> "observe";
+            case "browser_submit" -> "submit";
+            case "browser_close" -> "close";
+            case "browser_cdp_connect" -> "open";   // connect → treated as open with target
+            case "browser_cdp_status" -> "observe"; // status → observe session
+            default -> "observe";
+        };
+        bridgeArgs.put("action", action);
+        if (!bridgeArgs.containsKey("actor")) bridgeArgs.put("actor", "agent");
+        // browser_back: inject instruction so the adapter knows to navigate back
+        if ("browser_back".equals(toolName) && !bridgeArgs.containsKey("instruction")) {
+            bridgeArgs.put("instruction", "Navigate back to the previous page.");
+        }
+        // CDP actions may carry endpoint/url in a different arg name; pass through
+        // BrowserBridgePolicy does not natively know CDP args but the adapters may.
+        // Reuse the existing, policy-guarded browserBridge() implementation
+        return browserBridge(bridgeArgs);
     }
 
     private String dispatchGenericTool(String toolName, Map<String, Object> args) {

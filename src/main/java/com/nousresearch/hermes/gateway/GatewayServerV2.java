@@ -229,25 +229,50 @@ public class GatewayServerV2 {
         });
         app.options("/*", ctx -> ctx.status(200));
 
-        // Auth middleware for chat endpoints (share DashboardServer session token)
-        app.before("/api/chat", this::checkChatAuth);
-        app.before("/api/chat/stream", this::checkChatAuth);
+        // ---- Auth: all /api/* and /v1/chat/completions require Bearer token ----
+        // Public (no auth):
+        //   - /health (liveness probe)
+        //   - /webhook/* (platform webhooks use their own signature verification)
+        //   - /api/status (server status, safe to expose)
+        //   - /v1/models (OpenAI clients list models before auth in some flows)
+        // Webhook endpoints have their own signature verification (adapter.verifyWebhook).
+        app.before("/api/*", ctx -> {
+            // Whitelist public endpoints under /api/*
+            String path = ctx.path();
+            if ("/api/status".equals(path)) return;
+            requireBearerAuth(ctx);
+        });
+        app.before("/v1/chat/completions", this::requireBearerAuth);
 
-        // 租户上下文中间件
+        // 租户上下文中间件（after auth so we can trust headers）
         app.before("/api/*", this::extractTenantContext);
     }
 
-    private void checkChatAuth(Context ctx) {
+    /**
+     * Require a valid Bearer token (shared with DashboardServer) for protected endpoints.
+     * If no session token is configured we fall back to dev mode (allows all) for local dev.
+     */
+    private void requireBearerAuth(Context ctx) {
         String token = sessionToken;
         if (token == null || token.isBlank()) {
-            return; // no token configured — dev mode, allow all
+            return; // dev mode — no token configured, allow all
         }
         String auth = ctx.header("Authorization");
         String expected = "Bearer " + token;
-        if (auth == null || !java.security.MessageDigest.isEqual(auth.getBytes(), expected.getBytes())) {
+        if (auth == null || !java.security.MessageDigest.isEqual(auth.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                                                                 expected.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
             ctx.status(401).json(Map.of("error", "Unauthorized"));
             ctx.skipRemainingHandlers();
         }
+    }
+
+    /**
+     * @deprecated Use {@link #requireBearerAuth(Context)} which covers all protected endpoints.
+     * Kept for backward compatibility with any external callers.
+     */
+    @Deprecated
+    private void checkChatAuth(Context ctx) {
+        requireBearerAuth(ctx);
     }
 
     // ==================== Handler Methods ====================
@@ -375,36 +400,32 @@ public class GatewayServerV2 {
     private void handleTools(Context ctx) {
         List<Map<String, Object>> tools = new ArrayList<>();
 
-        // 获取当前租户的可用工具
+        // 认证后使用 X-Tenant-ID 选择租户；未指定时用 default 租户，而不是返回所有工具
         String tenantId = ctx.header("X-Tenant-ID");
-        if (tenantId != null) {
-            TenantContext tenant = tenantManager.getTenant(tenantId);
-            if (tenant != null) {
-                var allowedTools = tenant.getSecurityPolicy().getAllowedTools();
-                var deniedTools = tenant.getSecurityPolicy().getDeniedTools();
+        if (tenantId == null || tenantId.isBlank()) {
+            tenantId = "default";
+        }
+        TenantContext tenant = tenantManager.getTenant(tenantId);
+        if (tenant != null) {
+            var allowedTools = tenant.getSecurityPolicy().getAllowedTools();
+            var deniedTools = tenant.getSecurityPolicy().getDeniedTools();
 
-                // 只返回允许的工具
-                for (var entry : ToolRegistry.getInstance().getAllTools()) {
-                    String name = entry.getName();
-                    if (!deniedTools.contains(name) &&
-                        (allowedTools.isEmpty() || allowedTools.contains(name))) {
-                        tools.add(Map.of(
-                            "name", name,
-                            "description", entry.getSchema().get("description"),
-                            "toolset", entry.getToolset()
-                        ));
-                    }
+            // 只返回允许的工具
+            for (var entry : ToolRegistry.getInstance().getAllTools()) {
+                String name = entry.getName();
+                if (!deniedTools.contains(name) &&
+                    (allowedTools.isEmpty() || allowedTools.contains(name))) {
+                    tools.add(Map.of(
+                        "name", name,
+                        "description", entry.getSchema().get("description"),
+                        "toolset", entry.getToolset()
+                    ));
                 }
             }
         } else {
-            // 返回所有工具
-            for (var entry : ToolRegistry.getInstance().getAllTools()) {
-                tools.add(Map.of(
-                    "name", entry.getName(),
-                    "description", entry.getSchema().get("description"),
-                    "toolset", entry.getToolset()
-                ));
-            }
+            // 未知租户 → 返回空列表而不是所有工具（防御性）
+            ctx.status(404).json(Map.of("error", "Tenant not found: " + tenantId));
+            return;
         }
 
         ctx.json(tools);
