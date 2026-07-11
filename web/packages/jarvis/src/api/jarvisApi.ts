@@ -73,6 +73,39 @@ function sseToken(): string | undefined {
   return window.__HERMES_SSE_TOKEN__ || window.__HERMES_SESSION_TOKEN__;
 }
 
+/**
+ * Refresh the short-lived SSE token from /api/auth/sse-token.
+ * Called on page load and every 9 minutes (token TTL is 10 minutes).
+ * Silently falls back to the permanent session token on failure.
+ */
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+async function refreshSseToken(): Promise<void> {
+  try {
+    const res = await fetch("/api/auth/sse-token", {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { token: string; expires_in: number };
+    window.__HERMES_SSE_TOKEN__ = data.token;
+  } catch {
+    // offline / auth issue — keep using previous or fallback
+  }
+}
+
+function startSseTokenRefresh(): void {
+  if (refreshTimer) return;
+  // Refresh every 9 minutes (540s) to stay under the 10-minute TTL with headroom.
+  refreshTimer = setInterval(refreshSseToken, 9 * 60 * 1000);
+  // Also refresh a moment after page load to get a fresh token (the injected one is
+  // from page render, may already be a few seconds old).
+  setTimeout(refreshSseToken, 2000);
+}
+
+// Kick off token refresh as soon as this module loads.
+if (typeof window !== "undefined") {
+  startSseTokenRefresh();
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -118,24 +151,70 @@ export const jarvisApi = {
     onSuggestion: (s: Suggestion) => void,
     opts: { workspaceId?: string; all?: boolean } = {}
   ): EventSource {
-    const params = new URLSearchParams();
-    // SSE can't set custom headers — authenticate via short-lived ?token=
-    const t = sseToken();
-    if (t) params.set("token", t);
-    if (opts.workspaceId) params.set("workspaceId", opts.workspaceId);
-    if (opts.all) params.set("all", "true");
-    const qs = params.toString();
-    const url = qs ? `/api/jarvis/stream?${qs}` : "/api/jarvis/stream";
-    const es = new EventSource(url);
-    es.addEventListener("suggestion", (e) => {
-      try {
-        const s = JSON.parse((e as MessageEvent).data) as Suggestion;
-        onSuggestion(s);
-      } catch {
-        // ignore parse errors
+    const buildUrl = () => {
+      const params = new URLSearchParams();
+      const t = sseToken();
+      if (t) params.set("token", t);
+      if (opts.workspaceId) params.set("workspaceId", opts.workspaceId);
+      if (opts.all) params.set("all", "true");
+      const qs = params.toString();
+      return qs ? `/api/jarvis/stream?${qs}` : "/api/jarvis/stream";
+    };
+
+    // Proxy EventSource that can transparently reconnect on auth failure.
+    // The returned object mirrors EventSource's close()/addEventListener/readyState/url
+    // so callers don't see the swap.
+    let es = new EventSource(buildUrl());
+    let reconnectAttempts = 0;
+    const listeners: Array<{ type: string; handler: EventListener }> = [];
+    const wire = (source: EventSource) => {
+      source.addEventListener("suggestion", (e) => {
+        try {
+          const s = JSON.parse((e as MessageEvent).data) as Suggestion;
+          onSuggestion(s);
+        } catch {
+          // ignore parse errors
+        }
+      });
+      for (const { type, handler } of listeners) {
+        source.addEventListener(type, handler);
       }
-    });
-    return es;
+      source.addEventListener("error", async () => {
+        if (source.readyState === EventSource.CLOSED) return;
+        if (reconnectAttempts >= 3) {
+          source.close();
+          return;
+        }
+        reconnectAttempts++;
+        source.close();
+        await refreshSseToken();
+        es = new EventSource(buildUrl());
+        wire(es);
+      });
+    };
+    wire(es);
+    return {
+      get url() { return es.url; },
+      get readyState() { return es.readyState; },
+      get withCredentials() { return es.withCredentials; },
+      close: () => es.close(),
+      addEventListener: (type: string, handler: EventListener) => {
+        listeners.push({ type, handler });
+        es.addEventListener(type, handler);
+      },
+      removeEventListener: (type: string, handler: EventListener) => {
+        const i = listeners.findIndex((l) => l.type === type && l.handler === handler);
+        if (i >= 0) listeners.splice(i, 1);
+        es.removeEventListener(type, handler);
+      },
+      dispatchEvent: () => false,
+      onmessage: null,
+      onerror: null,
+      onopen: null,
+      CONNECTING: EventSource.CONNECTING,
+      OPEN: EventSource.OPEN,
+      CLOSED: EventSource.CLOSED,
+    } as unknown as EventSource;
   },
 };
 

@@ -1,0 +1,40 @@
+{
+  "name": "Hermes Business Portal",
+  "short_name": "Hermes",
+  "description": "AI 数字员工业务运营中心",
+  "start_url": "/business-portal",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "any",
+  "lang": "zh-CN",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48 64x64",
+      "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "数字员工市场",
+      "short_name": "Agents",
+      "url": "/business-portal/agents",
+      "description": "浏览所有数字员工角色"
+    },
+    {
+      "name": "场景模板",
+      "short_name": "Templates",
+      "url": "/business-portal/templates",
+      "description": "一键搭建行业团队"
+    },
+    {
+      "name": "待审批",
+      "short_name": "Approvals",
+      "url": "/business-portal/approvals",
+      "description": "处理待审批事项"
+    }
+  ]
+}
