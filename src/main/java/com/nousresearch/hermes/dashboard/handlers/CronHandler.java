@@ -102,6 +102,7 @@ public class CronHandler {
             String scheduleExpr = body.getString("schedule");
             String name = blankToNull(body.getString("name"));
             String deliver = blankToNull(body.getString("deliver"));
+            String workspaceId = blankToNull(body.getString("workspaceId"));
 
             if (prompt == null || prompt.isBlank()) {
                 ctx.status(400).json(Map.of("error", "prompt is required"));
@@ -121,6 +122,7 @@ public class CronHandler {
             job.enabled = true;
             job.state = "scheduled";
             job.deliver = deliver != null ? deliver : "local";
+            job.workspaceId = workspaceId;
             job.createdAt = Instant.now().toString();
             job.nextRunAt = null; // no runtime scheduler wired yet
             job.lastRunAt = null;
@@ -316,6 +318,7 @@ public class CronHandler {
         job.enabled = obj.getBooleanValue("enabled");
         job.state = firstNonBlank(obj.getString("state"), job.enabled ? "scheduled" : "paused");
         job.deliver = blankToNull(obj.getString("deliver"));
+        job.workspaceId = blankToNull(obj.getString("workspaceId"));
         job.lastRunAt = blankToNull(obj.getString("last_run_at"));
         job.nextRunAt = blankToNull(obj.getString("next_run_at"));
         job.lastError = blankToNull(obj.getString("last_error"));
@@ -337,6 +340,7 @@ public class CronHandler {
         map.put("enabled", job.enabled);
         map.put("state", job.state);
         map.put("deliver", job.deliver);
+        map.put("workspaceId", job.workspaceId);
         map.put("last_run_at", job.lastRunAt);
         map.put("next_run_at", job.nextRunAt);
         map.put("last_error", job.lastError);
@@ -605,6 +609,7 @@ public class CronHandler {
         boolean enabled;
         String state;
         String deliver;
+        String workspaceId;
         String lastRunAt;
         String nextRunAt;
         String lastError;

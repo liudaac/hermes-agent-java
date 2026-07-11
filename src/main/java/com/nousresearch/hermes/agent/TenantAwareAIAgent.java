@@ -52,6 +52,8 @@ public class TenantAwareAIAgent {
     private final IterationBudget iterationBudget;
     private final List<ModelMessage> conversationHistory;
     private final AtomicBoolean interrupted;
+    /** Soft context window limit (tokens, ~4 chars/token). Default 100k tokens = 400k chars. */
+    private static final int DEFAULT_CONTEXT_CHARS = 400_000;
 
     // 租户隔离的子组件
     private final com.nousresearch.hermes.memory.MemoryManager memoryManager;
@@ -772,6 +774,7 @@ public class TenantAwareAIAgent {
                 }
 
                 long llmStart = System.currentTimeMillis();
+                enforceContextBudget();
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
@@ -1003,6 +1006,7 @@ public class TenantAwareAIAgent {
                     }
                 }
 
+                enforceContextBudget();
                 var response = modelClient.chatCompletion(
                     conversationHistory,
                     buildToolDefinitions(),
@@ -1040,11 +1044,25 @@ public class TenantAwareAIAgent {
                         String result;
                         try {
                             result = executeToolCall(toolCall);
+                        } catch (ToolApprovalRequiredException are) {
+                            // Stream-mode approval checkpoint: emit a clear marker, persist state,
+                            // and re-throw so caller can surface an approval UI. The non-stream
+                            // doProcessMessage handles this by storing a checkpoint; for stream we
+                            // keep the conversation consistent (assistant msg + partial tool marker)
+                            // and propagate; resumeToolApproval re-enters the loop.
+                            toolOk = false;
+                            recordToolCall(toolCall, false, System.currentTimeMillis() - toolStart);
+                            chunkConsumer.accept("\n⏸ [Approval required: " + are.getToolName()
+                                + " — " + are.getReason() + "]\n");
+                            persistSession();
+                            throw are;
                         } catch (RuntimeException ex) {
                             toolOk = false;
                             throw ex;
                         } finally {
-                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
+                            if (toolOk) {
+                                recordToolCall(toolCall, true, System.currentTimeMillis() - toolStart);
+                            }
                         }
                         conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
                     }
@@ -1153,6 +1171,23 @@ public class TenantAwareAIAgent {
         // Wire sub-agent shared memory callback for this tenant
 
         logger.info("Tenant approval system initialized for: {}", tenantId);
+    }
+
+    private void enforceContextBudget() {
+        int totalChars = 0;
+        for (ModelMessage m : conversationHistory) {
+            String c = m.getContent();
+            if (c != null) totalChars += c.length();
+        }
+        int targetChars = (int) (DEFAULT_CONTEXT_CHARS * 0.75);
+        if (totalChars <= DEFAULT_CONTEXT_CHARS) return;
+        // Drop oldest non-system messages to bring under target
+        int i = 1; // preserve system (index 0)
+        while (totalChars > targetChars && conversationHistory.size() > 6 && i < conversationHistory.size() - 4) {
+            ModelMessage m = conversationHistory.remove(i);
+            totalChars -= m.getContent() == null ? 0 : m.getContent().length();
+        }
+        logger.info("Enforced context budget, dropped to ~{} chars", totalChars);
     }
 
     // ==================== Tool Execution ====================

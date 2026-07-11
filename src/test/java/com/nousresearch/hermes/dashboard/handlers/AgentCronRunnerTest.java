@@ -1,7 +1,10 @@
 package com.nousresearch.hermes.dashboard.handlers;
 
-import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantAIAgent;
+import com.nousresearch.hermes.tenant.core.TenantContext;
+import com.nousresearch.hermes.tenant.core.TenantManager;
+import com.nousresearch.hermes.workspace.WorkspaceService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -10,18 +13,28 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AgentCronRunnerTest {
 
-    @Test
-    @DisplayName("Local cron jobs should invoke the TenantAwareAIAgent processMessage")
-    void localRunInvokesAgent() throws Exception {
-        TenantAwareAIAgent agent = Mockito.mock(TenantAwareAIAgent.class);
-        Mockito.when(agent.processMessage("Say hi")).thenReturn("hello");
-
+    private AgentCronRunner buildRunner(TenantAIAgent agent, boolean withWorkspace) throws Exception {
         HermesConfig config = Mockito.mock(HermesConfig.class);
-        AgentCronRunner runner = new AgentCronRunner(config, (cfg, sessionId) -> {
-            assertNotNull(sessionId);
-            assertTrue(sessionId.startsWith("cron-job_abc-"), "session id should embed safe job id");
-            return agent;
-        });
+        TenantManager tm = Mockito.mock(TenantManager.class);
+        WorkspaceService ws = Mockito.mock(WorkspaceService.class);
+        if (withWorkspace) {
+            TenantContext ctx = Mockito.mock(TenantContext.class);
+            Mockito.when(ws.resolveTenantContext("ws-1")).thenReturn(ctx);
+            Mockito.when(ctx.getOrCreateAgent(Mockito.anyString(), Mockito.any())).thenReturn(agent);
+        } else {
+            TenantContext defaultCtx = Mockito.mock(TenantContext.class);
+            Mockito.when(tm.getOrCreateTenant(Mockito.eq("default"), Mockito.any())).thenReturn(defaultCtx);
+            Mockito.when(defaultCtx.getOrCreateAgent(Mockito.anyString(), Mockito.any())).thenReturn(agent);
+        }
+        return new AgentCronRunner(config, tm, ws);
+    }
+
+    @Test
+    @DisplayName("Local cron jobs (legacy, no workspaceId) should invoke an agent on default tenant")
+    void localRunInvokesAgent() throws Exception {
+        TenantAIAgent agent = Mockito.mock(TenantAIAgent.class);
+        Mockito.when(agent.processMessage("Say hi")).thenReturn("hello");
+        AgentCronRunner runner = buildRunner(agent, false);
 
         CronHandler.CronJob job = new CronHandler.CronJob();
         job.id = "job/abc";
@@ -35,9 +48,28 @@ class AgentCronRunnerTest {
     }
 
     @Test
+    @DisplayName("Local cron jobs with workspaceId should resolve via WorkspaceService")
+    void localRunWithWorkspace() throws Exception {
+        TenantAIAgent agent = Mockito.mock(TenantAIAgent.class);
+        Mockito.when(agent.processMessage("hello world")).thenReturn("done");
+        AgentCronRunner runner = buildRunner(agent, true);
+
+        CronHandler.CronJob job = new CronHandler.CronJob();
+        job.id = "wjob";
+        job.prompt = "hello world";
+        job.deliver = "local";
+        job.workspaceId = "ws-1";
+        job.schedule = new CronHandler.CronSchedule("cron", "* * * * *", "* * * * *");
+
+        String result = runner.run(job);
+        assertEquals("done", result);
+        Mockito.verify(agent).processMessage("hello world");
+    }
+
+    @Test
     @DisplayName("Non-local deliver targets should surface as structured failures")
-    void nonLocalDeliverUnsupported() {
-        AgentCronRunner runner = new AgentCronRunner(Mockito.mock(HermesConfig.class));
+    void nonLocalDeliverUnsupported() throws Exception {
+        AgentCronRunner runner = buildRunner(Mockito.mock(TenantAIAgent.class), false);
         CronHandler.CronJob job = new CronHandler.CronJob();
         job.id = "remote";
         job.prompt = "hi";
@@ -50,8 +82,8 @@ class AgentCronRunnerTest {
 
     @Test
     @DisplayName("Empty prompt should not invoke the agent")
-    void emptyPromptRejected() {
-        AgentCronRunner runner = new AgentCronRunner(Mockito.mock(HermesConfig.class));
+    void emptyPromptRejected() throws Exception {
+        AgentCronRunner runner = buildRunner(Mockito.mock(TenantAIAgent.class), false);
         CronHandler.CronJob job = new CronHandler.CronJob();
         job.id = "empty";
         job.prompt = "   ";

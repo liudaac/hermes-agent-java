@@ -123,7 +123,7 @@ public class DashboardServer {
     private final SkillsHandler skillsHandler;
     private final ToolsHandler toolsHandler;
     private final GatewayHandler gatewayHandler;
-    private final CronHandler cronHandler;
+    private CronHandler cronHandler;
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
     private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
@@ -235,11 +235,6 @@ public class DashboardServer {
         this.skillsHandler = new SkillsHandler();
         this.toolsHandler = new ToolsHandler();
         this.gatewayHandler = new GatewayHandler();
-        this.cronHandler = new CronHandler(
-            Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"),
-            true,
-            new com.nousresearch.hermes.dashboard.handlers.AgentCronRunner(config)
-        );
         this.oauthProvidersHandler = new OAuthProvidersHandler();
         this.analyticsHandler = new AnalyticsHandler();
         this.workspaceService = new WorkspaceService(tenantManager);
@@ -254,6 +249,12 @@ public class DashboardServer {
         this.policyService = new PolicyService(workspaceService, teamBlueprintService);
         this.scenarioService.setPolicyService(policyService, businessApprovalService);
         this.scenarioService.setBusinessMemoryNoteService(new com.nousresearch.hermes.memory.BusinessMemoryNoteService(workspaceService));
+        // Cron jobs run against workspace agents so they see teams/skills/tools/policy
+        this.cronHandler = new CronHandler(
+            Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"),
+            true,
+            new com.nousresearch.hermes.dashboard.handlers.AgentCronRunner(config, tenantManager, workspaceService)
+        );
         // Wire tool-level approval coordinator into team runtime
         var toolApprovalCoordinator = new com.nousresearch.hermes.business.approval.ToolApprovalCoordinator(
             workspaceService, businessApprovalService);
