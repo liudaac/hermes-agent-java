@@ -164,7 +164,12 @@ public class TenantQuotaManager {
     public void checkDailyRequestQuota() {
         checkRequestQuota();
     }
-    
+
+    /** Expose the underlying store for callers who need to record usage directly (e.g. LLM tokens). */
+    public java.util.Optional<QuotaStore> getStoreIfAvailable() {
+        return java.util.Optional.ofNullable(store);
+    }
+
     public void updateQuota(TenantQuota newQuota) {
         this.quota.setMaxDailyRequests(newQuota.getMaxDailyRequests());
         this.quota.setMaxDailyTokens(newQuota.getMaxDailyTokens());

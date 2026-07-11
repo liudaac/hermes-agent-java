@@ -299,6 +299,23 @@ public class DashboardServer {
         this.humanOverrideService.setEventBus(businessEventBus);
         this.deadLetterQueue.setEventBus(businessEventBus);
 
+        // Bridge run-status events (RunEventBus) onto the global BusinessEventBus so
+        // Jarvis SSE subscribers see real-time run started/completed/failed/approval-needed
+        // events without having to subscribe to a second bus.
+        this.businessRunService.getEventBus().subscribeGlobal(event -> {
+            // Map RunEvent.EventType to a status string the Jarvis/BusinessEvent consumers
+            // already understand (used by BusinessEventSseHandler and Jarvis Suggestions).
+            String status = switch (event.type()) {
+                case RUN_STARTED -> "STARTED";
+                case RUN_COMPLETED -> "COMPLETED";
+                case RUN_FAILED -> "FAILED";
+                case RUN_NEEDS_APPROVAL -> "NEEDS_APPROVAL";
+                case STEP_STARTED, STEP_COMPLETED, STEP_FAILED, STEP_UPDATED -> "STEP";
+            };
+            String msg = event.message() != null ? event.message() : "";
+            businessEventBus.runStatus(event.workspaceId(), event.runId(), status, msg);
+        });
+
         // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
         //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级），
         //    stream 订阅 BusinessEventBus + 审批事件流，把工作流/SLA/DLQ/接管/审批

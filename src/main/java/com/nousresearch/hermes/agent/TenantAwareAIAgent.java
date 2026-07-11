@@ -1105,21 +1105,35 @@ public class TenantAwareAIAgent {
         if (response == null || response.getUsage() == null) {
             return;
         }
+        var usage = response.getUsage();
+        long prompt = usage.getPromptTokens();
+        long completion = usage.getCompletionTokens();
+        long total = usage.getTotalTokens() > 0 ? usage.getTotalTokens() : prompt + completion;
         try {
             var session = new com.nousresearch.hermes.gateway.SessionManager(
                 com.nousresearch.hermes.config.Constants.getHermesHome())
                 .getSession(sessionId);
-            var usage = response.getUsage();
             session.recordUsage(
                 response.getModel() != null ? response.getModel() : "unknown",
-                usage.getPromptTokens(),
-                usage.getCompletionTokens(),
+                prompt, completion,
                 usage.getCachedPromptTokens(),
                 usage.getReasoningTokens(),
-                usage.getTotalTokens()
-            );
+                total);
         } catch (Exception e) {
-            logger.debug("Failed to record model usage: {}", e.getMessage());
+            logger.debug("Failed to record model usage to session: {}", e.getMessage());
+        }
+        // Count this LLM call against tenant daily token quota. This is after-call accounting
+        // so tokens already used are counted; the NEXT call will be blocked if quota exceeded.
+        try {
+            if (tenantContext != null && tenantContext.getQuotaManager() != null) {
+                // Don't throw — just add to quota counter via addAndGet. If quota exceeded,
+                // next tool/llm call that invokes checkTokenQuota will reject.
+                tenantContext.getQuotaManager()
+                    .getStoreIfAvailable()
+                    .ifPresent(store -> store.addAndGetDailyTokens(total));
+            }
+        } catch (Exception e) {
+            logger.debug("Failed to update tenant token quota: {}", e.getMessage());
         }
     }
 
