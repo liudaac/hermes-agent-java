@@ -1,0 +1,1 @@
+import{j as e,d as a}from"./index-D9uUNmsT.js";function r({label:s="live"}){return e.jsxs(a,{variant:"success",className:"text-[10px]",children:[e.jsx("span",{className:"mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"}),s]})}export{r as L};

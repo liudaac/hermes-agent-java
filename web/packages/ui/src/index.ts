@@ -5,21 +5,19 @@
  * resolves `@hermes/ui` to this directory. The package never ships as
  * a real npm package — the alias routes everything to source.
  *
- * This package deliberately contains ONLY code with zero external
- * dependencies (no `api`, no `react-router-dom`, no lucide). Anything
- * that needs to call /api/* or talk to the runtime stays in the SPA
- * that owns it.
+ * This package deliberately contains ONLY code with zero npm-package
+ * dependencies. Browser globals (window, fetch, EventSource) and React are OK.
  *
- *   1. **Atoms**    — cn(), format helpers
+ *   1. **Atoms**    — cn(), format helpers, HTTP primitives (fetchJSON)
  *   2. **UI**       — shadcn-compat primitives
  *   3. **i18n**     — I18nProvider + useI18n (no external deps)
  *   4. **Themes**   — theme types + default presets
  *
  * What is NOT here (and intentionally so):
- *   - useSse / useToast (ops/noc specific; portal doesn't need them)
  *   - ThemeProvider (calls /api/dashboard/themes; per-SPA wrapper)
  *   - Plugin SDK (calls /api/dashboard/plugins; per-SPA wrapper)
  *   - Page-level components, routing, top bar
+ *   - useToast (ops/noc specific)
  */
 
 // ── 1. Atoms ──────────────────────────────────────────────────────
@@ -35,6 +33,7 @@ export {
   timeAgo,
   isoTimeAgo,
 } from "./lib/format";
+export { fetchJSON, getSessionToken, gatewayFetch, API_BASE } from "./lib/api";
 
 // ── 2. UI primitives ──────────────────────────────────────────────
 export * from "./components/ui/badge";
