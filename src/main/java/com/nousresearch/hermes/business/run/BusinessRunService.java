@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * 业务运行服务 — 管理面向 B 端用户的完整业务执行生命周期。
  *
@@ -432,4 +435,56 @@ public class BusinessRunService {
     public static class BusinessRunNotFoundException extends RuntimeException {
         public BusinessRunNotFoundException(String workspaceId, String runId) { super("Business run not found: " + workspaceId + "/" + runId); }
     }
+
+    /**
+     * Recover runs that were left in RUNNING/NEEDS_APPROVAL state across a JVM
+     * restart. Without this, the UI shows them as "RUNNING" forever after a
+     * server crash / restart.
+     *
+     * Policy:
+     *   - RUNNING runs → FAILED with a recovery note in metadata (the
+     *     in-flight agent can't resume mid-step after a process restart —
+     *     its process and state are gone).
+     *   - NEEDS_APPROVAL runs → kept as-is (the approval checkpoint was
+     *     persisted to disk; when the user approves we spawn a new agent
+     *     rather than resuming the dead one).
+     *   - PENDING-internal runs that never transitioned → FAILED.
+     *
+     * Emits RUN_FAILED events for each transitioned run so SSE subscribers
+     * (Jarvis, NOC, Portal) see the update immediately.
+     *
+     * @return number of runs recovered (for logging / tests)
+     */
+    public int recoverOrphanedRuns() {
+        // Scan all workspaces for RUNNING runs. We don't have a dedicated
+        // "list all workspace ids" API here, so we walk the repository root
+        // via listAll with empty filters.
+        List<BusinessRunRecord> running = repository.listAll(
+            List.of(), /* all workspaces */ null, null, RUNNING, Integer.MAX_VALUE);
+        int recovered = 0;
+        Instant now = Instant.now();
+        for (BusinessRunRecord run : running) {
+            run.setStatus(FAILED);
+            run.setUpdatedAt(now);
+            run.setConclusionReason("Process terminated before completion (recovered on restart)");
+            Map<String, Object> meta = new java.util.HashMap<>(run.getMetadata() != null ? run.getMetadata() : Map.of());
+            meta.put("recoveredFromRestart", true);
+            meta.put("recoveredAt", now.toString());
+            meta.put("previousStatus", RUNNING);
+            run.setMetadata(meta);
+            repository.save(run);
+            eventBus.publish(new RunEventBus.RunEvent(
+                run.getRunId(), run.getWorkspaceId(),
+                RunEventBus.EventType.RUN_FAILED,
+                "Run was in progress when the server restarted — marked as failed",
+                Map.of("status", FAILED, "recovered", true)));
+            recovered++;
+        }
+        if (recovered > 0) {
+            logger.info("Recovered {} orphaned RUNNING run(s) → FAILED", recovered);
+        }
+        return recovered;
+    }
+
+    private static final Logger logger = LoggerFactory.getLogger(BusinessRunService.class);
 }

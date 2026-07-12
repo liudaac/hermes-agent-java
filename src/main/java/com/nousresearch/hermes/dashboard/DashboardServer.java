@@ -531,6 +531,18 @@ public class DashboardServer {
         app.start(host, port);
         running = true;
 
+        // Post-start recovery: sweep any runs left in RUNNING state by a
+        // previous JVM that crashed before completing. Mark them FAILED so
+        // the UI doesn't show them stuck "in progress" forever.
+        try {
+            int recovered = businessRunService.recoverOrphanedRuns();
+            if (recovered > 0) {
+                logger.info("Recovered {} orphaned RUNNING run(s) on startup", recovered);
+            }
+        } catch (Exception e) {
+            logger.warn("Run recovery failed (non-fatal): {}", e.getMessage());
+        }
+
         logger.info("Dashboard server started on http://{}:{}", host, port);
     }
 
