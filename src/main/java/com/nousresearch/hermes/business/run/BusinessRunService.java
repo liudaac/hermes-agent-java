@@ -456,11 +456,13 @@ public class BusinessRunService {
      * @return number of runs recovered (for logging / tests)
      */
     public int recoverOrphanedRuns() {
-        // Scan all workspaces for RUNNING runs. We don't have a dedicated
-        // "list all workspace ids" API here, so we walk the repository root
-        // via listAll with empty filters.
+        // Scan all workspaces for RUNNING runs.
+        List<String> allWorkspaceIds = workspaceService.listWorkspaces()
+            .stream().map(WorkspaceRecord::getWorkspaceId).toList();
+        if (allWorkspaceIds.isEmpty()) return 0;
+
         List<BusinessRunRecord> running = repository.listAll(
-            List.of(), /* all workspaces */ null, null, RUNNING, Integer.MAX_VALUE);
+            allWorkspaceIds, null, null, RUNNING, Integer.MAX_VALUE);
         int recovered = 0;
         Instant now = Instant.now();
         for (BusinessRunRecord run : running) {
