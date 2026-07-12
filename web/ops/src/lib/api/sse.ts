@@ -1,100 +1,25 @@
 /**
- * SSE (Server-Sent Events) stream utilities.
+ * Ops-specific SSE stream factories.
  *
- * The dashboard uses EventSource for one-way streams (log tail, cron runs,
- * compare runs) and fetch+ReadableStream for chunked SSE (chat playground,
- * business run stream).
+ * Generic primitives (bindEventSource / readChunkedSSE / parseSseData)
+ * are re-exported from @hermes/ui. This file wires up endpoint URLs for
+ * the Ops console pages.
  *
- * This module centralizes the parsing logic and re-exports thin wrappers
- * for each stream.
+ * Factories that need custom addEventListener wiring (log tail, cron
+ * run) return bare EventSource; callers attach their own listeners.
+ * Factories that drive page state via onEvent callbacks (business run /
+ * business event stream) pre-bind handlers for convenience.
  */
 
-import { getSessionToken } from "./_base";
+import { getSessionToken, bindEventSource } from "@hermes/ui";
 
-/**
- * Listen to a raw EventSource and dispatch named events.
- *
- * @param es  an open EventSource
- * @param handlers  map of event name → handler; "message" is the default
- */
-export function bindEventSource(
-  es: EventSource,
-  handlers: Record<string, (data: unknown) => void>,
-): void {
-  es.onmessage = (e) => {
-    const data = parseData(e.data);
-    (handlers.message ?? handlers.default)?.(data);
-  };
-  for (const [name, handler] of Object.entries(handlers)) {
-    if (name === "message" || name === "default") continue;
-    es.addEventListener(name, (e: MessageEvent) => {
-      handler(parseData(e.data));
-    });
-  }
-}
-
-function parseData(raw: unknown): unknown {
-  if (typeof raw !== "string") return raw;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { raw };
-  }
-}
-
-/**
- * Read a chunked SSE response (fetch + ReadableStream) and dispatch named
- * events via the callback. Used for chat playground and any POST-based SSE.
- */
-export async function readChunkedSSE(
-  response: Response,
-  onEvent: (event: string, data: unknown) => void,
-  onError?: (err: Error) => void,
-): Promise<void> {
-  if (!response.body) {
-    onError?.(new Error("Response has no body"));
-    return;
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let currentEvent = "message";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (line.startsWith("event:")) {
-          currentEvent = line.slice(6).trim();
-          continue;
-        }
-        if (line.startsWith("data:")) {
-          const raw = line.slice(5).trim();
-          if (raw === "[DONE]") {
-            onEvent("done", {});
-            continue;
-          }
-          try {
-            onEvent(currentEvent, JSON.parse(raw));
-          } catch {
-            onEvent(currentEvent, raw);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    onError?.(e instanceof Error ? e : new Error(String(e)));
-  } finally {
-    reader.releaseLock();
-  }
-}
+// Re-export generics for callers that previously imported them from here.
+export { bindEventSource } from "@hermes/ui";
+export { readChunkedSSE, parseSseData } from "@hermes/ui";
 
 // ── Stream factories ─────────────────────────────────────────────
 
-/** Open a log tail EventSource. */
+/** Open a log tail EventSource. Caller attaches "ready" / "line" listeners. */
 export async function openLogTail(params: {
   file: string;
   level?: string;
@@ -109,7 +34,7 @@ export async function openLogTail(params: {
   return new EventSource(`/api/logs/tail?${qs.toString()}`);
 }
 
-/** Open a cron run stream. */
+/** Open a cron run stream. Caller attaches "run" listeners. */
 export async function openCronRunStream(id: string): Promise<EventSource> {
   const token = await getSessionToken();
   return new EventSource(
@@ -117,7 +42,7 @@ export async function openCronRunStream(id: string): Promise<EventSource> {
   );
 }
 
-/** Open a business run stream. */
+/** Open a business run stream with pre-bound named-event handlers. */
 export function openBusinessRunStream(
   workspaceId: string,
   runId: string,
@@ -141,7 +66,7 @@ export function openBusinessRunStream(
   return es;
 }
 
-/** Open a business event stream. */
+/** Business event shape delivered by /api/v1/business/events/stream. */
 export interface BusinessEvent {
   type: string;
   workspaceId: string;
@@ -149,6 +74,7 @@ export interface BusinessEvent {
   timestamp: string;
 }
 
+/** Open legacy business-event stream with a pre-wired message handler. */
 export function openBusinessEventStream(
   onEvent: (e: BusinessEvent) => void,
   onError?: (err: Event) => void,

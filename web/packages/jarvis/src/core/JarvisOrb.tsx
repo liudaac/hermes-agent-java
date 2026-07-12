@@ -31,13 +31,15 @@ interface JarvisOrbProps {
   form: FormName;
   /** Number of unread items (suggestions + pending approvals) */
   unreadCount: number;
+  /** Highest severity of unread items (drives badge color) */
+  unreadSeverity?: "info" | "warning" | "critical";
   /** Whether the overlay is currently summoned */
   isSummoned: boolean;
   /** Called when the user clicks the orb */
   onToggle: () => void;
 }
 
-export function JarvisOrb({ form, unreadCount, isSummoned, onToggle }: JarvisOrbProps) {
+export function JarvisOrb({ form, unreadCount, unreadSeverity = "info", isSummoned, onToggle }: JarvisOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<JarvisEngine | null>(null);
   const awareness = useContextAwareness();
@@ -182,22 +184,34 @@ export function JarvisOrb({ form, unreadCount, isSummoned, onToggle }: JarvisOrb
         {isSummoned ? "ACTIVE" : "⌘K TAP"}
       </div>
 
-      {/* Unread badge — top-right quadrant */}
-      {unreadCount > 0 && (
-        <div
-          className={[
-            "pointer-events-none absolute right-7 top-7",
-            "flex h-5 min-w-5 items-center justify-center rounded-full",
-            "bg-[oklch(0.65_0.22_30)] px-1.5",
-            "font-mono text-[10px] font-bold leading-none",
-            "text-[oklch(0.98_0.05_85)]",
-            "ring-2 ring-[oklch(0.14_0.015_60)]",
-            "animate-[jarvis-pulse_2s_ease-in-out_infinite]",
-          ].join(" ")}
-        >
-          {unreadCount > 99 ? "99+" : unreadCount}
-        </div>
-      )}
+      {/* Unread badge — top-right quadrant, color-coded by severity */}
+      {unreadCount > 0 && (() => {
+        const badge = unreadSeverity === "critical"
+          ? "bg-[oklch(0.65_0.22_25)] text-[oklch(0.98_0.05_25)]"
+          : unreadSeverity === "warning"
+            ? "bg-[oklch(0.75_0.16_80)] text-[oklch(0.18_0.05_80)]"
+            : "bg-[oklch(0.70_0.15_220)] text-[oklch(0.10_0.03_220)]";
+        const glow = unreadSeverity === "critical"
+          ? "animate-[jarvis-pulse_1.2s_ease-in-out_infinite] 0 0 0 0 oklch(0.65 0.22 25 / 0.7)"
+          : unreadSeverity === "warning"
+            ? "animate-[jarvis-pulse_2s_ease-in-out_infinite] 0 0 0 0 oklch(0.75 0.16 80 / 0.5)"
+            : "animate-[jarvis-pulse_3s_ease-in-out_infinite] 0 0 0 0 oklch(0.70 0.15 220 / 0.4)";
+        return (
+          <div
+            className={[
+              "pointer-events-none absolute right-7 top-7",
+              "flex h-5 min-w-5 items-center justify-center rounded-full",
+              "px-1.5",
+              "font-mono text-[10px] font-bold leading-none",
+              "ring-2 ring-[oklch(0.14_0.015_60)]",
+              badge,
+            ].join(" ")}
+            style={{ boxShadow: glow }}
+          >
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </div>
+        );
+      })()}
 
       {/* Keyframes injected once via a style tag. Using inline <style>
           avoids needing to coordinate with the three SPA theme files. */}

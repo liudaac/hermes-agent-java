@@ -32,6 +32,17 @@ export interface JarvisMessage {
   meta?: Record<string, unknown>;
 }
 
+export interface JarvisSuggestion {
+  id: string;
+  title: string;
+  body: string;
+  linkTo?: string;
+  severity: "info" | "warning" | "critical";
+  createdAt: string;
+  /** Has the user seen (opened panel after received)? */
+  read?: boolean;
+}
+
 /** Public state shape (no setters). Setters live as standalone exports. */
 export interface JarvisState {
   form: FormName;
@@ -44,18 +55,20 @@ export interface JarvisState {
     title: string;
     risk: "low" | "medium" | "high";
   };
+  /** Ring buffer of recent proactive suggestions from the SSE stream. */
+  suggestions: JarvisSuggestion[];
 }
 
 const STORAGE_KEY = "hermes-jarvis-state";
 
 function loadPersisted(): JarvisState {
   if (typeof window === "undefined") {
-    return { form: "core", overlay: "hidden", enabled: true, messages: [] };
+    return { form: "core", overlay: "hidden", enabled: true, messages: [], suggestions: [] };
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { form: "core", overlay: "hidden", enabled: true, messages: [] };
+      return { form: "core", overlay: "hidden", enabled: true, messages: [], suggestions: [] };
     }
     const parsed = JSON.parse(raw) as Partial<JarvisState>;
     return {
@@ -64,9 +77,10 @@ function loadPersisted(): JarvisState {
       overlay: parsed.overlay ?? "hidden",
       enabled: parsed.enabled ?? true,
       messages: [],
+      suggestions: [],
     };
   } catch {
-    return { form: "core", overlay: "hidden", enabled: true, messages: [] };
+    return { form: "core", overlay: "hidden", enabled: true, messages: [], suggestions: [] };
   }
 }
 
@@ -90,6 +104,7 @@ function persist(state: JarvisState): void {
 export const useJarvisStore = create<JarvisState>(() => ({
   ...loadPersisted(),
   messages: [],
+  suggestions: [],
 }));
 
 // Standalone setters (zustand 3.x doesn't compose setters into the
@@ -122,4 +137,24 @@ export const pushMessage = (msg: JarvisMessage) => {
 export const clearMessages = () => useJarvisStore.setState({ messages: [] });
 export const setPendingApproval = (a: JarvisState["pendingApproval"]) => {
   useJarvisStore.setState({ pendingApproval: a });
+};
+
+/**
+ * Push a new suggestion from the SSE stream into the ring buffer.
+ * Caps at 30 to avoid memory bloat. Newest last.
+ */
+export const pushSuggestion = (s: JarvisSuggestion) => {
+  const st = useJarvisStore.getState();
+  const next = [...st.suggestions, s];
+  if (next.length > 30) next.splice(0, next.length - 30);
+  useJarvisStore.setState({ suggestions: next });
+};
+
+/** Mark every suggestion as read (when the user opens the panel). */
+export const markAllSuggestionsRead = () => {
+  const st = useJarvisStore.getState();
+  if (st.suggestions.every((s) => s.read)) return;
+  useJarvisStore.setState({
+    suggestions: st.suggestions.map((s) => ({ ...s, read: true })),
+  });
 };

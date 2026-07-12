@@ -1,5 +1,16 @@
-import { useEffect, useRef, useCallback } from "react";
-import { openBusinessEventStream, type BusinessEvent } from "@/lib/api";
+/**
+ * useSse — NOC convenience hook.
+ *
+ * Subscribes to the legacy business-event stream
+ * (/api/v1/business/events/stream) so existing NOC pages (DLQ, SLA,
+ * Workflow, Human-in-the-loop) keep receiving {type,workspaceId,payload,
+ * timestamp}-shaped events.
+ *
+ * Thin wrapper around useEventSource from @hermes/ui.
+ */
+
+import { useEventSource } from "@hermes/ui";
+import { createBusinessEventStream, type BusinessEvent } from "../lib/api/sse";
 
 interface UseSseOptions {
   onEvent: (event: BusinessEvent) => void;
@@ -8,32 +19,10 @@ interface UseSseOptions {
 }
 
 export function useSse({ onEvent, onError, enabled = true }: UseSseOptions) {
-  const esRef = useRef<EventSource | null>(null);
-
-  const connect = useCallback(() => {
-    if (esRef.current) return;
-    const es = openBusinessEventStream(
-      (evt) => onEvent(evt),
-      (err) => onError?.(err),
-    );
-    esRef.current = es;
-  }, [onEvent, onError]);
-
-  const disconnect = useCallback(() => {
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (enabled) {
-      connect();
-    } else {
-      disconnect();
-    }
-    return () => disconnect();
-  }, [enabled, connect, disconnect]);
-
-  return { connect, disconnect };
+  return useEventSource({
+    enabled,
+    onError,
+    factory: () => createBusinessEventStream(),
+    onMessage: (data) => onEvent(data as BusinessEvent),
+  });
 }

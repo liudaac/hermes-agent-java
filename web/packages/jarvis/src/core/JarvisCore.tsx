@@ -29,6 +29,7 @@ import { useKeyShortcuts } from "../hooks/useKeyShortcuts";
 import { useCrossSpaceSync, broadcastForm } from "../hooks/useCrossSpaceSync";
 import { useJarvisChat } from "../hooks/useJarvisChat";
 import { useJarvisVoice } from "../hooks/useJarvisVoice";
+import { useJarvisSuggestions } from "../hooks/useJarvisSuggestions";
 import { JarvisOrb } from "./JarvisOrb";
 import { JarvisHudPanel } from "../overlay/JarvisHudPanel";
 import { JarvisFullscreen } from "../overlay/JarvisFullscreen";
@@ -82,6 +83,7 @@ export function JarvisCore({
   const overlay = useJarvisStore((s) => s.overlay);
   const messages = useJarvisStore((s) => s.messages);
   const pendingApproval = useJarvisStore((s) => s.pendingApproval);
+  const suggestions = useJarvisStore((s) => s.suggestions);
   const setForm = _setForm;
   const setOverlay = _setOverlay;
 
@@ -90,6 +92,7 @@ export function JarvisCore({
   const { isIdle } = useLongIdle();
   useKeyShortcuts();
   useCrossSpaceSync();
+  useJarvisSuggestions();
 
   // Default handlers: wire to the real backend if callers don't supply
   // their own. This is the path all three SPAs use (they mount
@@ -116,18 +119,22 @@ export function JarvisCore({
     } catch (e) { console.error("Jarvis reject failed", e); }
   });
 
-  // Unread count = pending approval + any jarvis messages added after
-  // the panel was last closed (simple heuristic for v1).
-  const unreadCount = useMemo(() => {
-    let n = pendingApproval ? 1 : 0;
-    if (overlay !== "summoned" && overlay !== "fullscreen") {
-      // count jarvis messages added while the panel was hidden
-      n += messages.filter((m) => m.role === "jarvis" && !m.pending && !m.error).length;
-      // cap at 9 so the badge doesn't look silly
-      n = Math.min(n, 9);
+  // Unread count = pending approval + unread proactive suggestions
+  // (capped at 9 so the badge doesn't look silly).
+  const unread = useMemo(() => {
+    if (overlay === "summoned" || overlay === "fullscreen") {
+      return { count: 0, maxSeverity: "info" as const };
     }
-    return n;
-  }, [pendingApproval, messages, overlay]);
+    let n = pendingApproval ? 1 : 0;
+    let max: "info" | "warning" | "critical" = pendingApproval ? "warning" : "info";
+    for (const s of suggestions) {
+      if (s.read) continue;
+      n++;
+      if (s.severity === "critical") max = "critical";
+      else if (s.severity === "warning" && max !== "critical") max = "warning";
+    }
+    return { count: Math.min(n, 9), maxSeverity: max };
+  }, [pendingApproval, suggestions, overlay]);
 
   // Long-idle: settle into Archive form after 5 min idle (design.md §4.3).
   useEffect(() => {
@@ -187,7 +194,8 @@ export function JarvisCore({
       {!hideOrb && (
         <JarvisOrb
           form={form}
-          unreadCount={unreadCount}
+          unreadCount={unread.count}
+          unreadSeverity={unread.maxSeverity}
           isSummoned={overlay === "summoned" || overlay === "fullscreen"}
           onToggle={() => setOverlay(overlay === "summoned" ? "hidden" : "summoned")}
         />

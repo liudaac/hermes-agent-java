@@ -10,6 +10,7 @@ import { X } from "lucide-react";
 import { useJarvisStore, setOverlay } from "../hooks/useJarvisStore";
 import { useJarvisCore } from "../core/JarvisCore";
 import { ConversationFlow } from "./ConversationFlow";
+import { SuggestionTicker } from "./SuggestionTicker";
 
 interface JarvisFullscreenProps {
   onSubmit: (text: string) => void;
@@ -51,6 +52,7 @@ export function JarvisFullscreen({ onSubmit: _onSubmit, onApprove: _onApprove, o
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <SuggestionTicker />
           <ConversationFlow />
         </div>
       </div>

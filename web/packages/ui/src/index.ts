@@ -33,7 +33,10 @@ export {
   timeAgo,
   isoTimeAgo,
 } from "./lib/format";
-export { fetchJSON, getSessionToken, gatewayFetch, API_BASE } from "./lib/api";
+export { fetchJSON, getSessionToken, waitForSessionToken, gatewayFetch, API_BASE } from "./lib/api";
+export { parseSseData, bindEventSource, readChunkedSSE } from "./lib/sse";
+export { useEventSource } from "./hooks/useEventSource";
+export type { UseEventSourceOptions } from "./hooks/useEventSource";
 
 // ── 2. UI primitives ──────────────────────────────────────────────
 export * from "./components/ui/badge";

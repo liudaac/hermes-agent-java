@@ -22,6 +22,7 @@ import {
 } from "../hooks/useJarvisStore";
 import { useJarvisCore } from "../core/JarvisCore";
 import { ConversationFlow } from "./ConversationFlow";
+import { SuggestionTicker } from "./SuggestionTicker";
 
 interface JarvisHudPanelProps {
   onSubmit: (text: string) => void | Promise<void>;
@@ -256,6 +257,7 @@ export function JarvisHudPanel({
           ref={scrollRef}
           className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-3"
         >
+          <SuggestionTicker />
           <ConversationFlow />
         </div>
 
