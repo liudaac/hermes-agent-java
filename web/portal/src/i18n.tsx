@@ -1,13 +1,29 @@
 /**
- * Portal-local i18n — minimal. Defaults to zh-CN (business users);
- * the EN copy lives next to zh for parity, not for the marketing site.
+ * Portal i18n — flat-key dictionary tailored to the business-H5 UX.
+ *
+ * Implementation notes:
+ *   - Uses the SAME localStorage key ("hermes-locale") as @hermes/ui so that
+ *     language choice persists when the user navigates across portal / ops /
+ *     noc SPAs (full-page reload cross-product).
+ *   - Defaults to zh-CN for the business portal (target audience is Chinese
+ *     SMB operators). Ops/noc default to en, matching their admin-audience.
+ *   - The t() function accepts a flat "dotted.key" and returns the portal
+ *     string. Missing keys fall back to the key itself (fail-loud in dev,
+ *     graceful in prod).
+ *
+ * For shared keys that also exist in ops/noc (common.loading etc.), we
+ * re-use portal's own copy to avoid coupling the portal dict to the
+ * heavier @hermes/ui Translations shape — the portal H5 targets Chinese
+ * SMB users and has a very different vocabulary.
  */
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+
+import { createContext, useContext, useMemo, useState, useCallback, type ReactNode } from "react";
 
 export type Locale = "zh-CN" | "en";
 
 type Dict = Record<string, string>;
 
+// ── zh-CN (default) ─────────────────────────────────────────────
 const zhCN: Dict = {
   "app.name": "数字员工",
   "app.tagline": "我的智能团队",
@@ -83,6 +99,7 @@ const zhCN: Dict = {
   "status.blocked": "已拦截",
 };
 
+// ── en ───────────────────────────────────────────────────────────
 const en: Dict = {
   "app.name": "Hermes Portal",
   "app.tagline": "Your digital team",
@@ -160,6 +177,29 @@ const en: Dict = {
 
 const DICTS: Record<Locale, Dict> = { "zh-CN": zhCN, en };
 
+/** Shared localStorage key so language choice syncs across portal/ops/noc. */
+const STORAGE_KEY = "hermes-locale";
+
+/** Map portal Locale to @hermes/ui Locale (they share the same storage key). */
+function toSharedLocale(l: Locale): "zh" | "en" {
+  return l === "zh-CN" ? "zh" : "en";
+}
+function fromSharedLocale(l: string | null): Locale {
+  return l === "en" ? "en" : "zh-CN";
+}
+
+function getInitialLocale(): Locale {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "en" || stored === "zh" || stored === "zh-CN") {
+      return fromSharedLocale(stored);
+    }
+  } catch {
+    // SSR or privacy mode
+  }
+  return "zh-CN";
+}
+
 interface I18nContextValue {
   locale: Locale;
   setLocale: (l: Locale) => void;
@@ -168,25 +208,27 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-function resolveKey(dict: Dict, key: string): string {
-  if (Object.prototype.hasOwnProperty.call(dict, key)) {
-    const v = dict[key];
-    if (typeof v === "string") return v;
-  }
-  // Fall back to dot-path lookup over the flat dict.
-  return dict[key] ?? key;
-}
-
 export function I18nProvider({ children, initial }: { children: ReactNode; initial?: Locale }) {
-  const [locale, setLocale] = useState<Locale>(initial ?? "zh-CN");
+  const [locale, setLocaleState] = useState<Locale>(initial ?? getInitialLocale());
+
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    try {
+      localStorage.setItem(STORAGE_KEY, toSharedLocale(l));
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const value = useMemo<I18nContextValue>(() => {
     const dict = DICTS[locale];
     return {
       locale,
       setLocale,
-      t: (key: string) => resolveKey(dict, key),
+      t: (key: string) => dict[key] ?? key,
     };
-  }, [locale]);
+  }, [locale, setLocale]);
+
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
