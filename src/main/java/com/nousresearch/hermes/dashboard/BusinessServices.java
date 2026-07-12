@@ -27,6 +27,7 @@ import com.nousresearch.hermes.dashboard.jarvis.JarvisHandler;
 import com.nousresearch.hermes.dashboard.jarvis.ProductQueryService;
 import com.nousresearch.hermes.evalset.EvalSetService;
 import com.nousresearch.hermes.evolution.EvolutionProposalService;
+import com.nousresearch.hermes.evolution.EvolutionScheduler;
 import com.nousresearch.hermes.memory.BusinessMemoryNoteService;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.org.workflow.WorkflowEngine;
@@ -85,6 +86,7 @@ final class BusinessServices {
     final QuickTeamBuilderService quickTeamBuilderService;
     final JarvisHandler jarvisHandler;
     final MetricsCollector metricsCollector;
+    final EvolutionScheduler evolutionScheduler;
 
     private BusinessServices(Builder b) {
         this.workspaceService = b.workspaceService;
@@ -114,6 +116,7 @@ final class BusinessServices {
         this.quickTeamBuilderService = b.quickTeamBuilderService;
         this.jarvisHandler = b.jarvisHandler;
         this.metricsCollector = b.metricsCollector;
+        this.evolutionScheduler = b.evolutionScheduler;
     }
 
     /**
@@ -204,6 +207,10 @@ final class BusinessServices {
         // ── Metrics collector ─────────────────────────────────
         b.metricsCollector = new MetricsCollector(tenantManager);
 
+        // ── Evolution scheduler (daily failure-pattern scan) ──
+        b.evolutionScheduler = new EvolutionScheduler(
+            b.workspaceService, b.businessRunService, b.evolutionProposalService);
+
         logger.info("Business services initialized (workspace={}, scenario={}, run={}, approval={})",
             b.workspaceService != null, b.scenarioService != null,
             b.businessRunService != null, b.businessApprovalService != null);
@@ -243,5 +250,6 @@ final class BusinessServices {
         QuickTeamBuilderService quickTeamBuilderService;
         JarvisHandler jarvisHandler;
         MetricsCollector metricsCollector;
+        EvolutionScheduler evolutionScheduler;
     }
 }

@@ -176,6 +176,7 @@ public class DashboardServer {
     private final com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory ecommerceScenarioFactory;
     private final com.nousresearch.hermes.business.event.BusinessEventBus businessEventBus;
     private final com.nousresearch.hermes.tenant.metrics.MetricsCollector metricsCollector;
+    private final com.nousresearch.hermes.evolution.EvolutionScheduler evolutionScheduler;
 
     // ---- 外部状态供应 ----
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
@@ -269,6 +270,7 @@ public class DashboardServer {
         this.quickTeamBuilderService     = svc.quickTeamBuilderService;
         this.jarvisHandler               = svc.jarvisHandler;
         this.metricsCollector            = svc.metricsCollector;
+        this.evolutionScheduler          = svc.evolutionScheduler;
 
         // ── Cron runs against workspace agents ──────────────
         this.cronHandler = new CronHandler(
@@ -478,6 +480,14 @@ public class DashboardServer {
             logger.warn("Failed to start metrics collector (non-fatal): {}", e.getMessage());
         }
 
+        // Start daily evolution scan (generates improvement proposals from
+        // failure patterns; proposals surface in Portal Insights for review).
+        try {
+            evolutionScheduler.start();
+        } catch (Exception e) {
+            logger.warn("Failed to start evolution scheduler (non-fatal): {}", e.getMessage());
+        }
+
         logger.info("Dashboard server started on http://{}:{}", host, port);
     }
 
@@ -486,9 +496,8 @@ public class DashboardServer {
      */
     public void stop() {
         running = false;
-        try {
-            metricsCollector.stop();
-        } catch (Exception ignored) {}
+        try { metricsCollector.stop(); } catch (Exception ignored) {}
+        try { evolutionScheduler.stop(); } catch (Exception ignored) {}
         if (app != null) {
             app.stop();
         }
