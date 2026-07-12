@@ -22,6 +22,7 @@ import com.nousresearch.hermes.blueprint.TeamBlueprintService;
 import com.nousresearch.hermes.canary.CanaryReleaseService;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.connector.ConnectorRegistry;
+import com.nousresearch.hermes.common.HermesProfile;
 import com.nousresearch.hermes.dashboard.jarvis.ApprovalBridge;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService;
 import com.nousresearch.hermes.dashboard.jarvis.IntentRouter;
@@ -91,6 +92,7 @@ final class BusinessServices {
     final JarvisHandler jarvisHandler;
     final MetricsCollector metricsCollector;
     final EvolutionScheduler evolutionScheduler;
+    final HermesProfile profile;
 
     private BusinessServices(Builder b) {
         this.workspaceService = b.workspaceService;
@@ -123,6 +125,7 @@ final class BusinessServices {
         this.jarvisHandler = b.jarvisHandler;
         this.metricsCollector = b.metricsCollector;
         this.evolutionScheduler = b.evolutionScheduler;
+        this.profile = b.profile;
     }
 
     /**
@@ -131,6 +134,9 @@ final class BusinessServices {
      */
     static BusinessServices build(HermesConfig config, TenantManager tenantManager) {
         Builder b = new Builder();
+
+        // ── Deployment profile ────────────────────────────────
+        b.profile = new HermesProfile();
 
         // ── Core domain services ──────────────────────────────
         b.workspaceService = new WorkspaceService(tenantManager);
@@ -263,5 +269,6 @@ final class BusinessServices {
         JarvisHandler jarvisHandler;
         MetricsCollector metricsCollector;
         EvolutionScheduler evolutionScheduler;
+        HermesProfile profile;
     }
 }
