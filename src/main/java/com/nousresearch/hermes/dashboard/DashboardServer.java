@@ -407,11 +407,27 @@ public class DashboardServer {
      * Issue a short-lived signed token for SSE streams.
      * Format: base64url(expiry).base64url(hmac)
      * Expiry is seconds since epoch; TTL = SSE_TOKEN_TTL_SECONDS (10 min).
+     * This is the legacy admin-scope token (equivalent to allAccess=true).
      */
     String issueSseToken() {
+        return issueSseToken(null, true);
+    }
+
+    /**
+     * Issue a scoped SSE token. The payload is signed and carries:
+     *   expiry|workspaceId|allAccess
+     * where workspaceId may be empty (for allAccess=true tokens) and
+     * allAccess is "1" (true) or "0" (false). The server no longer trusts
+     * ?workspaceId= / ?all= query params when a signed scoped token is
+     * presented; the scope is decoded from the token itself.
+     */
+    String issueSseToken(String workspaceId, boolean allAccess) {
         try {
             long expiry = System.currentTimeMillis() / 1000L + SSE_TOKEN_TTL_SECONDS;
-            String payload = Long.toUnsignedString(expiry);
+            String ws = (workspaceId == null) ? "" : workspaceId;
+            String all = allAccess ? "1" : "0";
+            // payload: <expiry>|<workspace>|<all>
+            String payload = Long.toUnsignedString(expiry) + "|" + ws + "|" + all;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(sseSigningKey, "HmacSHA256"));
             byte[] sig = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
@@ -423,15 +439,18 @@ public class DashboardServer {
         }
     }
 
+    /** Parsed scope from a signed SSE token. */
+    public record SseTokenScope(long expiry, String workspaceId, boolean allAccess, boolean legacy) {}
+
     /**
-     * Constant-time validation of an SSE query token.
-     * Accepts either the new short-lived signed token OR, for backward compatibility,
-     * the permanent sessionToken. The permanent-token path is logged so operators
-     * can migrate clients away from it.
+     * Validate an SSE query token and return its scope. Returns null if invalid.
+     * Accepts three forms:
+     *   1. New scoped signed token: payload contains expiry|ws|all (preferred)
+     *   2. Legacy signed token: payload is only expiry (admin-equivalent)
+     *   3. Permanent sessionToken string (legacy, logged as warning)
      */
-    boolean isValidSseToken(String token) {
-        if (token == null || token.isBlank()) return false;
-        // Fast path: new signed token format
+    SseTokenScope validateSseToken(String token) {
+        if (token == null || token.isBlank()) return null;
         int dot = token.indexOf('.');
         if (dot > 0 && dot < token.length() - 1) {
             try {
@@ -440,25 +459,40 @@ public class DashboardServer {
                 byte[] payload = Base64.getUrlDecoder().decode(payloadB64);
                 byte[] expected = Base64.getUrlDecoder().decode(sigB64);
                 String payloadStr = new String(payload, StandardCharsets.UTF_8);
-                long expiry = Long.parseUnsignedLong(payloadStr);
-                long now = System.currentTimeMillis() / 1000L;
-                if (expiry < now) return false;
                 Mac mac = Mac.getInstance("HmacSHA256");
                 mac.init(new SecretKeySpec(sseSigningKey, "HmacSHA256"));
                 byte[] actual = mac.doFinal(payloadStr.getBytes(StandardCharsets.UTF_8));
-                return MessageDigest.isEqual(expected, actual);
+                if (!MessageDigest.isEqual(expected, actual)) return null;
+
+                long now = System.currentTimeMillis() / 1000L;
+                // Split payload: expiry[|ws[|all]]
+                String[] parts = payloadStr.split("\\|", -1);
+                long expiry = Long.parseUnsignedLong(parts[0]);
+                if (expiry < now) return null;
+                if (parts.length >= 3) {
+                    // New scoped form
+                    String ws = parts[1].isEmpty() ? null : parts[1];
+                    boolean all = "1".equals(parts[2]);
+                    return new SseTokenScope(expiry, ws, all, false);
+                } else {
+                    // Legacy single-expiry form → admin scope
+                    return new SseTokenScope(expiry, null, true, true);
+                }
             } catch (Exception e) {
                 logger.debug("SSE token parse failed: {}", e.getMessage());
-                // fall through
             }
         }
-        // Legacy path: equal to permanent sessionToken (constant-time compare).
-        // TODO: remove after clients migrate to issueSseToken().
-        boolean matches = constantTimeEquals(token, sessionToken);
-        if (matches) {
+        // Permanent-token fallback
+        if (constantTimeEquals(token, sessionToken)) {
             logger.warn("SSE stream authenticated with permanent session token; migrate client to short-lived SSE token");
+            return new SseTokenScope(Long.MAX_VALUE / 1000L, null, true, true);
         }
-        return matches;
+        return null;
+    }
+
+    /** Back-compat: simple validity check used by auth middleware. */
+    boolean isValidSseToken(String token) {
+        return validateSseToken(token) != null;
     }
 
     private static boolean constantTimeEquals(String a, String b) {
@@ -1201,20 +1235,52 @@ public class DashboardServer {
         // the ?token= used for EventSource connections. The token injected into
         // window.__HERMES_SSE_TOKEN__ at page load expires in 10 min; long-lived pages
         // can call this endpoint every 9 minutes to roll.
+        //
+        // Clients may request a scoped token via ?workspaceId=xxx (portal scoped view)
+        // or ?all=true (admin cross-workspace view for ops/noc). If neither is passed
+        // the token defaults to admin scope (back-compat).
         app.get("/api/auth/sse-token", ctx -> {
+            String requestedWs = ctx.queryParam("workspaceId");
+            boolean requestedAll = "true".equalsIgnoreCase(ctx.queryParam("all"));
+            // Validate workspaceId: 2-64 chars, safe character class only
+            // (same rule as WorkspaceService.createWorkspace).
+            String safeWs = null;
+            if (requestedWs != null && !requestedWs.isBlank()) {
+                if (!requestedWs.matches("[a-zA-Z0-9._-]{2,64}")) {
+                    ctx.status(400).json(new JSONObject().fluentPut("error", "invalid workspaceId"));
+                    return;
+                }
+                safeWs = requestedWs;
+            }
+            // If a workspace scope is requested, issue a workspace-scoped token
+            // (no allAccess). Otherwise issue admin-scope token.
+            String token;
+            if (safeWs != null && !requestedAll) {
+                token = issueSseToken(safeWs, false);
+            } else {
+                token = issueSseToken(null, true);
+            }
             ctx.contentType("application/json");
             ctx.result(JSON.toJSONString(new JSONObject()
-                .fluentPut("token", issueSseToken())
-                .fluentPut("expires_in", SSE_TOKEN_TTL_SECONDS)));
+                .fluentPut("token", token)
+                .fluentPut("expires_in", SSE_TOKEN_TTL_SECONDS)
+                .fluentPut("workspaceId", safeWs == null ? "" : safeWs)
+                .fluentPut("all", safeWs == null)));
         });
-        // SSE can't set custom headers, so we read token + workspaceId + allAccess
-        // from query params. The token is verified by the auth middleware
-        // (this route is in the query-token whitelist below).
+        // SSE can't set custom headers, so we only read ?token= from query params.
+        // workspaceId/allAccess are DECODED FROM THE SIGNED TOKEN, not from URL —
+        // this prevents a malicious client from forging scope by tweaking the URL.
         app.get("/api/jarvis/stream", ctx -> {
-            String workspaceId = ctx.queryParam("workspaceId");
-            boolean allAccess = "true".equalsIgnoreCase(ctx.queryParam("all"));
+            String tokenParam = ctx.queryParam("token");
+            SseTokenScope scope = validateSseToken(tokenParam);
+            if (scope == null) {
+                ctx.status(401).json(new JSONObject().fluentPut("error", "invalid or missing SSE token"));
+                return;
+            }
+            final String effectiveWorkspaceId = scope.workspaceId();
+            final boolean effectiveAll = scope.allAccess();
             io.javalin.http.sse.SseHandler sseHandler = new io.javalin.http.sse.SseHandler(
-                client -> jarvisHandler.streamSuggestions(client, workspaceId, allAccess));
+                client -> jarvisHandler.streamSuggestions(client, effectiveWorkspaceId, effectiveAll));
             sseHandler.handle(ctx);
         });
         app.post("/api/jarvis/approval/{approvalId}", jarvisHandler::resolveApproval);
