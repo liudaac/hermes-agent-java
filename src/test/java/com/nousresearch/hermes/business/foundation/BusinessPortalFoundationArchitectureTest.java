@@ -44,7 +44,9 @@ class BusinessPortalFoundationArchitectureTest {
         // scenarios. They live inside business/ but conceptually sit at the same
         // adapter layer as the explicit *Adapter classes above.
         "src/main/java/com/nousresearch/hermes/business/template/TemplateCloneService.java",
-        "src/main/java/com/nousresearch/hermes/business/vertical/ecommerce/EcommerceScenarioFactory.java"
+        "src/main/java/com/nousresearch/hermes/business/vertical/ecommerce/EcommerceScenarioFactory.java",
+        "src/main/java/com/nousresearch/hermes/business/vertical/itops/ITOpsScenarioFactory.java",
+        "src/main/java/com/nousresearch/hermes/business/vertical/customerservice/CustomerServiceScenarioFactory.java"
     );
 
     @Test

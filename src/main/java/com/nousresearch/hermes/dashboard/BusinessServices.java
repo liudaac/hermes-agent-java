@@ -14,6 +14,8 @@ import com.nousresearch.hermes.business.sla.SLAManager;
 import com.nousresearch.hermes.business.template.BusinessTemplateService;
 import com.nousresearch.hermes.business.template.TemplateCloneService;
 import com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory;
+import com.nousresearch.hermes.business.vertical.itops.ITOpsScenarioFactory;
+import com.nousresearch.hermes.business.vertical.customerservice.CustomerServiceScenarioFactory;
 import com.nousresearch.hermes.business.workflow.BusinessWorkflowService;
 import com.nousresearch.hermes.blueprint.QuickTeamBuilderService;
 import com.nousresearch.hermes.blueprint.TeamBlueprintService;
@@ -81,6 +83,8 @@ final class BusinessServices {
     final BusinessWorkflowService workflowService;
     final ConnectorRegistry connectorRegistry;
     final EcommerceScenarioFactory ecommerceScenarioFactory;
+    final ITOpsScenarioFactory itopsScenarioFactory;
+    final CustomerServiceScenarioFactory customerServiceScenarioFactory;
     final BusinessEventBus businessEventBus;
     final ToolApprovalCoordinator toolApprovalCoordinator;
     final QuickTeamBuilderService quickTeamBuilderService;
@@ -111,6 +115,8 @@ final class BusinessServices {
         this.workflowService = b.workflowService;
         this.connectorRegistry = b.connectorRegistry;
         this.ecommerceScenarioFactory = b.ecommerceScenarioFactory;
+        this.itopsScenarioFactory = b.itopsScenarioFactory;
+        this.customerServiceScenarioFactory = b.customerServiceScenarioFactory;
         this.businessEventBus = b.businessEventBus;
         this.toolApprovalCoordinator = b.toolApprovalCoordinator;
         this.quickTeamBuilderService = b.quickTeamBuilderService;
@@ -174,6 +180,10 @@ final class BusinessServices {
             b.businessRunService, b.slaManager);
         b.connectorRegistry = new ConnectorRegistry();
         b.ecommerceScenarioFactory = new EcommerceScenarioFactory(
+            b.workspaceService, b.scenarioService, b.teamBlueprintService);
+        b.itopsScenarioFactory = new ITOpsScenarioFactory(
+            b.workspaceService, b.scenarioService, b.teamBlueprintService);
+        b.customerServiceScenarioFactory = new CustomerServiceScenarioFactory(
             b.workspaceService, b.scenarioService, b.teamBlueprintService);
 
         b.slaManager.setEventBus(b.businessEventBus);
@@ -245,6 +255,8 @@ final class BusinessServices {
         BusinessWorkflowService workflowService;
         ConnectorRegistry connectorRegistry;
         EcommerceScenarioFactory ecommerceScenarioFactory;
+        ITOpsScenarioFactory itopsScenarioFactory;
+        CustomerServiceScenarioFactory customerServiceScenarioFactory;
         BusinessEventBus businessEventBus;
         ToolApprovalCoordinator toolApprovalCoordinator;
         QuickTeamBuilderService quickTeamBuilderService;
