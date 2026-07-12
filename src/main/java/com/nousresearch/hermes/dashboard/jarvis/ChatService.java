@@ -124,11 +124,15 @@ public class ChatService {
         try {
             String result = agent.processMessage(userMessage);
             capture.exception = null; // completed without approval gate
+            String replyText = result == null ? "（agent 未返回内容）" : result.trim();
+            // Detect cross-space navigation hints in the reply so the
+            // front-end can auto-navigate (F10 Jarvis auto cross-page nav).
+            List<CrossSpaceLink> links = detectCrossSpaceLinks(replyText, req.context != null ? req.context.space : null);
             return new ChatReply(
-                result == null ? "（agent 未返回内容）" : result.trim(),
+                replyText,
                 spaceName(req),
                 0.8,
-                List.of(),
+                links,
                 null
             );
         } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
@@ -220,6 +224,70 @@ public class ChatService {
             return req.context.space;
         }
         return "portal";
+    }
+
+    /**
+     * Detect cross-space navigation hints in the agent reply text.
+     *
+     * <p>When the agent says something like "去审批中心看看" or "check the
+     * DLQ in NOC", we extract a {@link CrossSpaceLink} so the front-end
+     * can auto-navigate after showing the reply.
+     *
+     * <p>Rules (keyword-based, no LLM call needed):
+     * <ul>
+     *   <li>审批/approval -> /portal/approvals</li>
+     *   <li>DLQ/死信 -> /noc/dlq</li>
+     *   <li>SLA -> /noc/sla</li>
+     *   <li>运行/run -> /portal/runs</li>
+     *   <li>工作流/workflow -> /noc/workflows</li>
+     *   <li>数字员工/team -> /portal/teams</li>
+     *   <li>模板/template -> /portal/templates</li>
+     *   <li>租户/tenant -> /ops/tenants</li>
+     *   <li>日志/log -> /ops/logs</li>
+     *   <li>配置/config -> /ops/config</li>
+     * </ul>
+     *
+     * @param replyText  the agent's reply
+     * @param currentSpace  the space the user is currently in (skip if same)
+     * @return at most 1 cross-space link (first match), or empty list
+     */
+    private static List<CrossSpaceLink> detectCrossSpaceLinks(String replyText, String currentSpace) {
+        if (replyText == null || replyText.isBlank()) return List.of();
+        String lower = replyText.toLowerCase();
+
+        // (keyword, targetPath, label, targetSpace)
+        String[][] rules = {
+            {"审批", "/portal/approvals", "待审批", "portal"},
+            {"approval", "/portal/approvals", "Approvals", "portal"},
+            {"死信", "/noc/dlq", "死信队列", "noc"},
+            {"dlq", "/noc/dlq", "DLQ", "noc"},
+            {"sla", "/noc/sla", "SLA 监控", "noc"},
+            {"运行记录", "/portal/runs", "我的运行", "portal"},
+            {"recent run", "/portal/runs", "Runs", "portal"},
+            {"工作流", "/noc/workflows", "工作流", "noc"},
+            {"workflow", "/noc/workflows", "Workflows", "noc"},
+            {"数字员工", "/portal/teams", "数字员工", "portal"},
+            {"team", "/portal/teams", "Teams", "portal"},
+            {"场景模板", "/portal/templates", "场景模板", "portal"},
+            {"template", "/portal/templates", "Templates", "portal"},
+            {"租户", "/ops/tenants", "租户管理", "ops"},
+            {"tenant", "/ops/tenants", "Tenants", "ops"},
+            {"日志", "/ops/logs", "日志", "ops"},
+            {"log", "/ops/logs", "Logs", "ops"},
+        };
+
+        for (String[] rule : rules) {
+            String keyword = rule[0];
+            String path = rule[1];
+            String label = rule[2];
+            String targetSpace = rule[3];
+            if (lower.contains(keyword.toLowerCase())) {
+                // Skip if the user is already in the target space.
+                if (targetSpace.equals(currentSpace)) continue;
+                return List.of(new CrossSpaceLink(path, label));
+            }
+        }
+        return List.of();
     }
 
     private static String spaceContextLine(ChatRequest req) {

@@ -1,5 +1,5 @@
 /**
- * useJarvisChat — wire JarvisOverlay to the real backend
+ * useJarvisChat - wire JarvisOverlay to the real backend
  * /api/jarvis/chat endpoint. Submits the user text, waits for the
  * reply, and appends both messages to the store.
  *
@@ -15,6 +15,41 @@ import {
   type JarvisMessage,
 } from "./useJarvisStore";
 import { useContextAwareness } from "./useContextAwareness";
+
+/**
+ * Navigate to a cross-space link. The backend returns paths like
+ * "/portal/approvals" or "/noc/dlq" - we resolve these to the
+ * correct SPA index.html so the browser does a full page load
+ * (each SPA is a separate Vite entry / bundle).
+ *
+ * Path conventions:
+ *   /portal/...  -> /portal/index.html#/...
+ *   /ops/...     -> /ops/index.html#/...
+ *   /noc/...     -> /noc/index.html#/...
+ *   /api/...     -> ignore (not a navigation target)
+ *   other        -> treat as same-SPA path
+ */
+export function navigateToSpace(path: string) {
+  if (!path || !path.startsWith("/")) return;
+
+  // Cross-space paths: /portal/*, /ops/*, /noc/*
+  const spaceMatch = path.match(/^\/(portal|ops|noc)\b(.*)$/);
+  if (spaceMatch) {
+    const [, space, rest] = spaceMatch;
+    // In dev, each SPA has its own port. In prod, they're at
+    // /portal/index.html etc. We use the production path convention;
+    // Vite dev proxy handles /portal/* -> :5175 transparently.
+    const target = `/${space}/index.html${rest || ""}`;
+    window.location.href = target;
+    return;
+  }
+
+  // Same-SPA path (e.g. "/approvals" in portal).
+  // Use hash routing so the SPA router picks it up without reload.
+  if (!path.startsWith("/api/")) {
+    window.location.hash = path;
+  }
+}
 
 export function useJarvisChat() {
   const awareness = useContextAwareness();
@@ -73,6 +108,23 @@ export function useJarvisChat() {
       // If there's a pending approval, surface it via the store.
       if (resp.approval) {
         setPendingApproval(resp.approval);
+      }
+
+      // If the reply includes a cross-space link, auto-navigate
+      // after a short delay so the user can read the reply first.
+      if (resp.crossSpaceLink && resp.crossSpaceLink.to) {
+        const target = resp.crossSpaceLink.to;
+        const label = resp.crossSpaceLink.label ?? "";
+        // Append a subtle "navigating..." hint to the reply.
+        useJarvisStore.setState({
+          messages: useJarvisStore.getState().messages.map((m) =>
+            m.id === jarvisMsg.id
+              ? { ...m, text: m.text + `\n\n→ 正在跳转：${label || target}` }
+              : m,
+          ),
+        });
+        // Navigate after 1.5s so the user sees the reply + hint.
+        setTimeout(() => navigateToSpace(target), 1500);
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);

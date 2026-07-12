@@ -8,6 +8,7 @@
  */
 import { Bell, AlertTriangle, Siren, Info, ExternalLink } from "lucide-react";
 import { useJarvisStore } from "../hooks/useJarvisStore";
+import { navigateToSpace } from "../hooks/useJarvisChat";
 
 const SEVERITY_STYLES: Record<string, {
   icon: typeof Info;
@@ -68,7 +69,18 @@ export function SuggestionTicker() {
               key={s.id}
               href={s.linkTo ?? "#"}
               onClick={(e) => {
-                if (!s.linkTo) e.preventDefault();
+                if (!s.linkTo) {
+                  e.preventDefault();
+                  return;
+                }
+                // Cross-space links (e.g. /noc/dlq) trigger full-page
+                // navigation to the target SPA. Same-SPA links use hash
+                // routing. Let navigateToSpace decide.
+                if (s.linkTo.startsWith("/portal/") || s.linkTo.startsWith("/ops/") || s.linkTo.startsWith("/noc/")) {
+                  e.preventDefault();
+                  navigateToSpace(s.linkTo);
+                }
+                // Otherwise, let the browser handle it (same-SPA anchor).
               }}
               className={[
                 "group flex items-start gap-2 rounded border px-2 py-1.5 text-[11px]",
