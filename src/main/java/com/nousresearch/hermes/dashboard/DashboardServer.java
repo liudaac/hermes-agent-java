@@ -129,7 +129,6 @@ public class DashboardServer {
     private CronHandler cronHandler;
     private final OAuthProvidersHandler oauthProvidersHandler;
     private final AnalyticsHandler analyticsHandler;
-    private final OrgOverviewHandler orgOverviewHandler = new OrgOverviewHandler();
     private final OrgControlCenterHandler orgControlCenterHandler;
     private final JarvisHandler jarvisHandler;
     /** AI 原生组织 API 统一处理器 — 聚合 identity、handoff、auth 等 12 个模块 */
@@ -176,6 +175,7 @@ public class DashboardServer {
     private final com.nousresearch.hermes.connector.ConnectorRegistry connectorRegistry;
     private final com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory ecommerceScenarioFactory;
     private final com.nousresearch.hermes.business.event.BusinessEventBus businessEventBus;
+    private final com.nousresearch.hermes.tenant.metrics.MetricsCollector metricsCollector;
 
     // ---- 外部状态供应 ----
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
@@ -227,11 +227,9 @@ public class DashboardServer {
         this.sessionToken = loadOrCreateSessionToken();
         this.sseSigningKey = generateSigningKey();
 
-        // Initialize handlers
+        // ── Plain HTTP handlers (no business deps) ──────────
         this.configHandler = new ConfigHandler(config);
         this.sessionHandler = new SessionHandler();
-        // Wire AI-native org overview/control center to real tenant data
-        this.orgOverviewHandler.setTenantManager(tenantManager);
         this.orgControlCenterHandler = new OrgControlCenterHandler(tenantManager);
         this.envHandler = new EnvHandler();
         this.logsHandler = new LogsHandler();
@@ -240,114 +238,44 @@ public class DashboardServer {
         this.gatewayHandler = new GatewayHandler();
         this.oauthProvidersHandler = new OAuthProvidersHandler();
         this.analyticsHandler = new AnalyticsHandler();
-        this.workspaceService = new WorkspaceService(tenantManager);
-        this.teamBlueprintService = new TeamBlueprintService(workspaceService);
-        this.scenarioService = new ScenarioService(workspaceService, teamBlueprintService);
-        this.scenarioService.setScenarioIntentAdapter(new com.nousresearch.hermes.scenario.ScenarioIntentAdapter(workspaceService, tenantManager));
-        this.businessApprovalService = new BusinessApprovalService(workspaceService);
-        this.businessRunService = new BusinessRunService(workspaceService, teamBlueprintService, scenarioService);
-        this.businessInsightService = new BusinessInsightService(workspaceService, teamBlueprintService, businessRunService, businessApprovalService);
-        this.promptAssetService = new PromptAssetService(workspaceService);
-        this.evolutionProposalService = new EvolutionProposalService(workspaceService, teamBlueprintService);
-        this.policyService = new PolicyService(workspaceService, teamBlueprintService);
-        this.scenarioService.setPolicyService(policyService, businessApprovalService);
-        this.scenarioService.setBusinessMemoryNoteService(new com.nousresearch.hermes.memory.BusinessMemoryNoteService(workspaceService));
-        // Cron jobs run against workspace agents so they see teams/skills/tools/policy
+
+        // ── Business service graph (extracted to BusinessServices
+        //    to keep this constructor under ~50 lines).
+        BusinessServices svc = BusinessServices.build(config, tenantManager);
+        this.workspaceService            = svc.workspaceService;
+        this.teamBlueprintService        = svc.teamBlueprintService;
+        this.scenarioService             = svc.scenarioService;
+        this.businessApprovalService     = svc.businessApprovalService;
+        this.businessRunService          = svc.businessRunService;
+        this.businessInsightService      = svc.businessInsightService;
+        this.promptAssetService          = svc.promptAssetService;
+        this.evolutionProposalService    = svc.evolutionProposalService;
+        this.policyService               = svc.policyService;
+        this.businessTemplateService     = svc.businessTemplateService;
+        this.templateCloneService        = svc.templateCloneService;
+        this.evalSetService              = svc.evalSetService;
+        this.canaryReleaseService        = svc.canaryReleaseService;
+        this.activeMemoryService         = svc.activeMemoryService;
+        this.businessPortalFoundationFacade = svc.businessPortalFoundationFacade;
+        this.slaManager                  = svc.slaManager;
+        this.deadLetterQueue             = svc.deadLetterQueue;
+        this.approvalAnalytics           = svc.approvalAnalytics;
+        this.humanOverrideService        = svc.humanOverrideService;
+        this.workflowService             = svc.workflowService;
+        this.connectorRegistry           = svc.connectorRegistry;
+        this.ecommerceScenarioFactory    = svc.ecommerceScenarioFactory;
+        this.businessEventBus            = svc.businessEventBus;
+        this.toolApprovalCoordinator     = svc.toolApprovalCoordinator;
+        this.quickTeamBuilderService     = svc.quickTeamBuilderService;
+        this.jarvisHandler               = svc.jarvisHandler;
+        this.metricsCollector            = svc.metricsCollector;
+
+        // ── Cron runs against workspace agents ──────────────
         this.cronHandler = new CronHandler(
             Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"),
             true,
             new com.nousresearch.hermes.dashboard.handlers.AgentCronRunner(config, tenantManager, workspaceService)
         );
-        // Wire tool-level approval coordinator into team runtime
-        var toolApprovalCoordinator = new com.nousresearch.hermes.business.approval.ToolApprovalCoordinator(
-            workspaceService, businessApprovalService);
-        this.scenarioService.getTeamBlueprintRuntime().setToolApprovalCoordinator(toolApprovalCoordinator);
-        this.toolApprovalCoordinator = toolApprovalCoordinator;
-        this.evalSetService = new EvalSetService(workspaceService, scenarioService);
-        this.canaryReleaseService = new CanaryReleaseService(workspaceService, teamBlueprintService);
-        // Wire canary into scenario service for traffic-based version routing + metrics
-        this.scenarioService.setCanaryReleaseService(canaryReleaseService);
-        this.scenarioService.setPlanReflectionService(
-            new PlanReflectionService(new com.nousresearch.hermes.model.ModelClient(config.getModelConfig())));
-        this.quickTeamBuilderService = new QuickTeamBuilderService(
-            new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()));
-        this.businessTemplateService = new com.nousresearch.hermes.business.template.BusinessTemplateService();
-        this.templateCloneService = new com.nousresearch.hermes.business.template.TemplateCloneService(
-            businessTemplateService,
-            workspaceService,
-            promptAssetService,
-            teamBlueprintService,
-            scenarioService);
-        this.activeMemoryService = new BusinessMemoryNoteService(workspaceService);
-        this.businessPortalFoundationFacade = new BusinessPortalAdapterRegistry(
-            workspaceService,
-            tenantManager,
-            promptAssetService
-        ).createFacade();
-        // Extended orchestration services
-        this.businessEventBus = new com.nousresearch.hermes.business.event.BusinessEventBus();
-        this.slaManager = new com.nousresearch.hermes.business.sla.SLAManager(businessRunService, businessApprovalService);
-        this.deadLetterQueue = new com.nousresearch.hermes.business.dlq.DeadLetterQueue();
-        this.approvalAnalytics = new com.nousresearch.hermes.business.analytics.ApprovalAnalytics(businessApprovalService);
-        this.humanOverrideService = new com.nousresearch.hermes.business.humanintheloop.HumanOverrideService(workspaceService, businessRunService);
-        this.workflowService = new com.nousresearch.hermes.business.workflow.BusinessWorkflowService(
-            new WorkflowEngine(java.nio.file.Paths.get(System.getProperty("user.home"), ".hermes", "workflows")),
-            scenarioService, workspaceService, businessRunService, slaManager);
-        this.connectorRegistry = new com.nousresearch.hermes.connector.ConnectorRegistry();
-        this.ecommerceScenarioFactory = new com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory(
-            workspaceService, scenarioService, teamBlueprintService);
-
-        // Wire event bus into services
-        this.slaManager.setEventBus(businessEventBus);
-        this.humanOverrideService.setEventBus(businessEventBus);
-        this.deadLetterQueue.setEventBus(businessEventBus);
-
-        // Bridge run-status events (RunEventBus) onto the global BusinessEventBus so
-        // Jarvis SSE subscribers see real-time run started/completed/failed/approval-needed
-        // events without having to subscribe to a second bus.
-        this.businessRunService.getEventBus().subscribeGlobal(event -> {
-            // Map RunEvent.EventType to a status string the Jarvis/BusinessEvent consumers
-            // already understand (used by BusinessEventSseHandler and Jarvis Suggestions).
-            String status = switch (event.type()) {
-                case RUN_STARTED -> "STARTED";
-                case RUN_COMPLETED -> "COMPLETED";
-                case RUN_FAILED -> "FAILED";
-                case RUN_NEEDS_APPROVAL -> "NEEDS_APPROVAL";
-                case STEP_STARTED, STEP_COMPLETED, STEP_FAILED, STEP_UPDATED -> "STEP";
-            };
-            String msg = event.message() != null ? event.message() : "";
-            businessEventBus.runStatus(event.workspaceId(), event.runId(), status, msg);
-        });
-
-        // ── Jarvis 跨空间对话壳：chat 走 TenantAwareAIAgent.processMessage()，approval 走
-        //    BusinessApprovalService（业务层）+ ToolApprovalCoordinator（工具级），
-        //    stream 订阅 BusinessEventBus + 审批事件流，把工作流/SLA/DLQ/接管/审批
-        //    生命周期事件实时推到 SSE 浮窗，intent 走 ProductQueryService 真实路由
-        this.jarvisHandler = new JarvisHandler(
-            new ChatService(
-                config,
-                tenantManager,
-                toolApprovalCoordinator,
-                businessApprovalService
-            ),
-            new IntentRouter(
-                new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()),
-                new ProductQueryService(
-                    new com.nousresearch.hermes.model.ModelClient(config.getModelConfig()),
-                    businessApprovalService,
-                    businessRunService,
-                    teamBlueprintService,
-                    tenantManager,
-                    deadLetterQueue
-                )
-            ),
-            new ApprovalBridge(businessApprovalService, toolApprovalCoordinator),
-            businessEventBus,
-            businessApprovalService
-        );
-
-        // ---- ACP 集成：初始化 Agent Collaboration Protocol 服务器 ----
-        com.nousresearch.hermes.acp.integration.AcpIntegration acpIntegration = new com.nousresearch.hermes.acp.integration.AcpIntegration();
 
         logger.info("Dashboard session token generated (length: {})", sessionToken.length());
     }
@@ -543,6 +471,13 @@ public class DashboardServer {
             logger.warn("Run recovery failed (non-fatal): {}", e.getMessage());
         }
 
+        // Start periodic metrics collection + alert evaluation.
+        try {
+            metricsCollector.start();
+        } catch (Exception e) {
+            logger.warn("Failed to start metrics collector (non-fatal): {}", e.getMessage());
+        }
+
         logger.info("Dashboard server started on http://{}:{}", host, port);
     }
 
@@ -551,6 +486,9 @@ public class DashboardServer {
      */
     public void stop() {
         running = false;
+        try {
+            metricsCollector.stop();
+        } catch (Exception ignored) {}
         if (app != null) {
             app.stop();
         }
@@ -1117,10 +1055,9 @@ public class DashboardServer {
             }
         });
 
-        // ========== AI原生组织 API ==========
-        app.get("/api/organization/overview", orgOverviewHandler::getOverview);
-        app.get("/api/organization/agents", orgOverviewHandler::getAgents);
-        app.get("/api/organization/health", orgOverviewHandler::getHealth);
+        // Legacy /api/organization/* routes removed in Sprint 4a; superseded by
+        // /api/org/summary and /api/org/control/* endpoints. The OrgOverviewHandler
+        // class is retained for backward-compat programmatic use.
 
         // --- AI-Native Org API (P0-P3 modules) ---
         app.get("/api/org/summary", orgApiHandler::fullOrgSummary);
@@ -1299,6 +1236,23 @@ public class DashboardServer {
         app.get("/api/dashboard/plugins/rescan", ctx -> ctx.json(new JSONObject()
             .fluentPut("ok", true)
             .fluentPut("count", 0)));
+
+        // Prometheus-compatible metrics scrape endpoint.
+        //
+        // Authenticated with the same Bearer token as other /api/ routes
+        // (or with a short-lived SSE token for pull-based scrapers that can't
+        // set custom headers). Response is text/plain in Prometheus 0.0.4
+        // exposition format.
+        app.get("/metrics", ctx -> {
+            ctx.contentType("text/plain; version=0.0.4; charset=utf-8");
+            try {
+                String out = metricsCollector.exportPrometheusMetrics();
+                ctx.result(out);
+            } catch (Exception e) {
+                logger.warn("Failed to export metrics: {}", e.getMessage());
+                ctx.status(500).result("# error exporting metrics");
+            }
+        });
     }
 
     /**
