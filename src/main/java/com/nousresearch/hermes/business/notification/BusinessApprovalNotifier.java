@@ -39,7 +39,7 @@ public final class BusinessApprovalNotifier {
     private static final Logger logger = LoggerFactory.getLogger(BusinessApprovalNotifier.class);
     private static final int MAX_RECENT = 50;
 
-    public enum TargetType { WEBHOOK, FEISHU, DINGTALK }
+    public enum TargetType { WEBHOOK, FEISHU, DINGTALK, EMAIL }
 
     public record NotificationTarget(String id, TargetType type, String url, String label) {}
 
@@ -51,10 +51,27 @@ public final class BusinessApprovalNotifier {
     private final List<Map<String, Object>> recent = new CopyOnWriteArrayList<>();
 
     private final BusinessApprovalService approvalService;
+    private final EmailSender emailSender = new EmailSender();
 
     public BusinessApprovalNotifier(BusinessApprovalService approvalService) {
         this.approvalService = approvalService;
         approvalService.subscribeGlobal(this::handle);
+        // Auto-register an email target if SMTP is configured and a default
+        // recipient is set (NOTIFY_EMAIL_RECIPIENT / ALERT_EMAIL_RECIPIENT).
+        autoRegisterEmailTarget();
+    }
+
+    private void autoRegisterEmailTarget() {
+        if (!emailSender.isConfigured()) return;
+        String recipient = System.getenv().getOrDefault("NOTIFY_EMAIL_RECIPIENT",
+            System.getenv().getOrDefault("ALERT_EMAIL_RECIPIENT",
+            System.getProperty("notify.email.recipient",
+            System.getProperty("alert.email.recipient", ""))));
+        if (recipient.isBlank()) return;
+        NotificationTarget t = new NotificationTarget(
+            "tgt-email-default", TargetType.EMAIL, recipient, "Default email alerts");
+        targets.add(t);
+        logger.info("Auto-registered default email notification target → {}", recipient);
     }
 
     public List<NotificationTarget> listTargets() { return List.copyOf(targets); }
@@ -91,7 +108,13 @@ public final class BusinessApprovalNotifier {
         for (NotificationTarget target : targets) {
             try {
                 String body = renderForTarget(target, notification);
-                send(target.url(), body);
+                if (target.type() == TargetType.EMAIL) {
+                    // url field stores email address for EMAIL targets
+                    String subject = "[Hermes] 高风险审批待处理: " + (event.title() != null ? event.title() : event.approvalId());
+                    emailSender.send(target.url(), subject, body);
+                } else {
+                    send(target.url(), body);
+                }
                 logger.info("Notified {} → {} ({})", target.label(), event.approvalId(), event.title());
             } catch (Exception e) {
                 logger.warn("Notify failed for {}: {}", target.label(), e.getMessage());
@@ -141,6 +164,7 @@ public final class BusinessApprovalNotifier {
             case FEISHU -> renderFeishu(notification);
             case DINGTALK -> renderDingTalk(notification);
             case WEBHOOK -> renderGenericJson(notification);
+            case EMAIL -> renderEmailBody(notification); // url field = email address, body = plain text
         };
     }
 
@@ -170,6 +194,23 @@ public final class BusinessApprovalNotifier {
 
     private static String renderGenericJson(Map<String, Object> n) {
         return toJson(n);
+    }
+
+    private static String renderEmailBody(Map<String, Object> n) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Hermes — 高风险审批待处理\n");
+        sb.append("========================\n\n");
+        sb.append("标题: ").append(n.getOrDefault("title", "")).append("\n");
+        sb.append("审批ID: ").append(n.getOrDefault("approvalId", "")).append("\n");
+        sb.append("工作空间: ").append(n.getOrDefault("workspaceId", "")).append("\n");
+        Object team = n.get("teamId");
+        if (team != null) sb.append("团队: ").append(team).append("\n");
+        Object reason = n.get("reason");
+        if (reason != null) sb.append("风险原因: ").append(reason).append("\n");
+        sb.append("\n请登录 Business Portal 审批中心处理：\n");
+        sb.append("/portal/index.html?page=approvals\n");
+        sb.append("\n时间: ").append(n.getOrDefault("createdAt", "")).append("\n");
+        return sb.toString();
     }
 
     @SuppressWarnings("unchecked")
@@ -218,7 +259,17 @@ public final class BusinessApprovalNotifier {
             try {
                 type = TargetType.valueOf(typeRaw == null ? "WEBHOOK" : typeRaw.toUpperCase());
             } catch (IllegalArgumentException e) {
-                ctx.status(400).json(Map.of("ok", false, "error", "invalid type"));
+                ctx.status(400).json(Map.of("ok", false, "error", "invalid type; expected WEBHOOK|FEISHU|DINGTALK|EMAIL"));
+                return;
+            }
+            // For EMAIL targets, url is the recipient address — basic email shape check
+            if (type == TargetType.EMAIL && !url.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+                ctx.status(400).json(Map.of("ok", false, "error", "url must be a valid email address for EMAIL targets"));
+                return;
+            }
+            // For WEBHOOK targets, require http(s) URL
+            if (type != TargetType.EMAIL && !url.startsWith("http://") && !url.startsWith("https://")) {
+                ctx.status(400).json(Map.of("ok", false, "error", "url must start with http:// or https://"));
                 return;
             }
             var t = notifier.addTarget(type, url, label);
