@@ -3,6 +3,7 @@ package com.nousresearch.hermes.business.run;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.nousresearch.hermes.common.PathIds;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -102,9 +103,6 @@ public class FileBusinessRunRepository {
     }
 
     static String sanitize(String id) {
-        if (id == null || id.isBlank()) {
-            throw new IllegalArgumentException("id is required");
-        }
-        return id.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return PathIds.strictPathSegment(id, "id");
     }
 }
