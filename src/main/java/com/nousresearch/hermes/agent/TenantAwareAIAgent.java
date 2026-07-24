@@ -62,7 +62,7 @@ public class TenantAwareAIAgent {
     private com.nousresearch.hermes.trajectory.TrajectoryCollector trajectoryCollector;
     private com.nousresearch.hermes.learning.LearningPipeline learningPipeline;
     private ReflectionEngine reflectionEngine;
-    
+
     private ConfidenceCalibrator confidenceCalibrator;
     private com.nousresearch.hermes.tools.ToolPerformanceTracker toolPerformanceTracker;
     private CognitiveTraceCollector cognitiveTraceCollector;
@@ -104,7 +104,7 @@ public class TenantAwareAIAgent {
     private static final String MEMORY_REVIEW_PROMPT =
         "Review the conversation above and consider saving to memory if appropriate.\n\n" +
         "Focus on:\n" +
-        "1. Has the user revealed things about themselves — their persona, desires, " +
+        "1. Has the user revealed things about themselves - their persona, desires, " +
         "preferences, or personal details worth remembering?\n" +
         "2. Has the user expressed expectations about how you should behave, their work " +
         "style, or ways they want you to operate?\n\n" +
@@ -122,7 +122,7 @@ public class TenantAwareAIAgent {
 
     private static final String COMBINED_REVIEW_PROMPT =
         "Review the conversation above and consider two things:\n\n" +
-        "**Memory**: Has the user revealed things about themselves — their persona, " +
+        "**Memory**: Has the user revealed things about themselves - their persona, " +
         "desires, preferences, or personal details? Has the user expressed expectations " +
         "about how you should behave, their work style, or ways they want you to operate? " +
         "If so, save using the memory tool.\n\n" +
@@ -341,7 +341,7 @@ public class TenantAwareAIAgent {
             this.governancePolicy = this.tenantContext.getGovernancePolicy();
             this.orgHealthChecker = this.tenantContext.getOrgHealthChecker();
             this.evolutionEngine = this.tenantContext.getEvolutionEngine();
-            // ======== AI原生组织：第三刀——团队与总线注册 ========
+            // ======== AI原生组织：第三刀--团队与总线注册 ========
             // 1) 加入默认团队（singleton team，确保每个 agent 至少有归属）
             // 2) 自动注册到 TenantBus，让队友能 discover 并 message 它
             try {
@@ -411,7 +411,7 @@ public class TenantAwareAIAgent {
         // 4. 确保 Web/Gateway 路径也加载租户自动技能
         ensureAutoSkillsLoaded("web");
 
-        // ======== AI原生组织：第五刀——可观测性 ========
+        // ======== AI原生组织：第五刀--可观测性 ========
         // 开启一次追踪，整次请求的工具调用、错误、决策都会被记录
         com.nousresearch.hermes.org.observe.AgentTrace currentTrace = null;
         if (tenantContext != null) {
@@ -691,7 +691,8 @@ public class TenantAwareAIAgent {
     private String doProcessMessage(String message) {
         userTurnCount++;
 
-        // --- Plugin hook: on_session_start (first user message) ---
+        // --- PRE-LOOP: Plugin hook, system prompt, memory, cognitive trace ---
+
         HookEngine hookEngine = getHookEngine();
         if (hookEngine != null && userTurnCount == 1) {
             Map<String, Object> sessionCtx = new HashMap<>();
@@ -701,7 +702,6 @@ public class TenantAwareAIAgent {
             hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
         }
 
-        // Ensure system prompt is present at the start of conversation
         if (conversationHistory.isEmpty()) {
             conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
         }
@@ -717,7 +717,6 @@ public class TenantAwareAIAgent {
 
         conversationHistory.add(ModelMessage.user(message));
 
-        // Cognitive trace: observe user input
         if (cognitiveTraceCollector != null) {
             cognitiveTraceCollector.observe(userTurnCount, message);
         }
@@ -728,181 +727,19 @@ public class TenantAwareAIAgent {
         }
         autoSaveSession();
 
-        StringBuilder responseBuilder = new StringBuilder();
-        boolean continueLoop = true;
+        // --- LOOP: delegate to LoopExecutor ---
 
-        while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
-            if (!iterationBudget.consume()) {
-                responseBuilder.append("\n[Reached maximum iterations]");
-                break;
-            }
-
-            // ======== AI原生组织：治理检查点 ========
-            if (governancePolicy.isPaused()) {
-                String pauseMsg = "⚠️ Agent paused: " + governancePolicy.getPauseReason()
-                    + "\nPlease review and restart.";
-                responseBuilder.append("\n").append(pauseMsg);
-                break;
-            }
-            if (governancePolicy.isOverBudget()) {
-                logger.warn("Tenant {} agent {} over token budget, using tier: {}",
-                    tenantId, agentId, governancePolicy.getActiveModel());
-            }
-
-            try {
-                // --- Plugin hook: pre_llm_call ---
-                if (hookEngine != null) {
-                    Map<String, Object> preCtx = new HashMap<>();
-                    preCtx.put("messages", new ArrayList<>(conversationHistory));
-                    preCtx.put("session_id", sessionId);
-                    preCtx.put("tenant_id", tenantId);
-                    preCtx.put("turn", userTurnCount);
-                    List<Object> injects = hookEngine.invoke(HookType.PRE_LLM_CALL, preCtx);
-                    for (Object inj : injects) {
-                        if (inj instanceof String s && !s.isEmpty()) {
-                            conversationHistory.add(ModelMessage.system(s));
-                            logger.debug("Plugin injected context into conversation");
-                        }
-                    }
-                }
-
-                // Cognitive trace: orient — form goal/hypothesis before LLM call
-                if (cognitiveTraceCollector != null) {
-                    String goal = "Respond to user turn " + userTurnCount;
-                    String hypothesis = "Based on conversation history, determine next action";
-                    cognitiveTraceCollector.orient(userTurnCount, goal, hypothesis);
-                }
-
-                long llmStart = System.currentTimeMillis();
-                enforceContextBudget();
-                var response = modelClient.chatCompletion(
-                    conversationHistory,
-                    buildToolDefinitions(),
-                    false,
-                    modelParams
-                );
-                long llmDuration = System.currentTimeMillis() - llmStart;
-
-                // Cognitive trace: decide — LLM produced output
-                if (cognitiveTraceCollector != null) {
-                    String action = response.getMessage() != null ? response.getMessage().getContent() : "";
-                    String toolUsed = response.hasToolCalls() && response.getMessage().getToolCalls() != null
-                        ? response.getMessage().getToolCalls().get(0).getFunction().getName()
-                        : null;
-                    cognitiveTraceCollector.decide(userTurnCount, action, toolUsed, llmDuration);
-                }
-
-                // --- Plugin hook: post_llm_call ---
-                if (hookEngine != null) {
-                    Map<String, Object> postCtx = new HashMap<>();
-                    postCtx.put("message", response.getMessage());
-                    postCtx.put("finish_reason", response.getFinishReason());
-                    postCtx.put("session_id", sessionId);
-                    postCtx.put("tenant_id", tenantId);
-                    hookEngine.invoke(HookType.POST_LLM_CALL, postCtx);
-                }
-
-                ModelMessage assistantMessage = response.getMessage();
-                if (assistantMessage == null) {
-                    responseBuilder.append("\n[No response from model]");
-                    break;
-                }
-
-                recordModelUsage(response);
-
-                conversationHistory.add(assistantMessage);
-                autoSaveSession();
-
-                if (response.hasToolCalls()) {
-                    if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
-                        if (responseBuilder.length() > 0) {
-                            responseBuilder.append("\n\n");
-                        }
-                        responseBuilder.append(assistantMessage.getContent());
-                    }
-
-                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
-                    List<ToolCallResult> completedToolResults = new ArrayList<>();
-                    boolean approvalHit = false;
-
-                    for (int toolIdx = 0; toolIdx < toolCalls.size(); toolIdx++) {
-                        ToolCall toolCall = toolCalls.get(toolIdx);
-                        long toolStart = System.currentTimeMillis();
-                        boolean toolOk = true;
-                        String result;
-                        try {
-                            result = executeToolCall(toolCall);
-                        } catch (ToolApprovalRequiredException ex) {
-                            // Save checkpoint and re-throw — caller will resume later
-                            toolOk = false;
-
-                            // Snapshot current state
-                            approvalCheckpoint = new ToolApprovalCheckpoint(
-                                assistantMessage,
-                                new ArrayList<>(toolCalls),
-                                toolIdx,
-                                new ArrayList<>(completedToolResults),
-                                conversationHistory.size(), // history size after assistant message + completed tools
-                                iterationBudget.getRemaining(),
-                                userTurnCount,
-                                false,
-                                null,
-                                null
-                            );
-                            approvalCheckpointActive = true;
-
-                            // Notify callback
-                            if (toolApprovalCallback != null) {
-                                try {
-                                    toolApprovalCallback.accept(ex);
-                                } catch (Exception cbEx) {
-                                    logger.warn("Tool approval callback failed: {}", cbEx.getMessage());
-                                }
-                            }
-
-                            throw ex;
-                        } catch (RuntimeException ex) {
-                            toolOk = false;
-                            throw ex;
-                        } finally {
-                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
-                        }
-                        completedToolResults.add(new ToolCallResult(toolCall.getId(), result));
-                        conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
-
-                        // Cognitive trace: evaluate tool result
-                        if (cognitiveTraceCollector != null) {
-                            cognitiveTraceCollector.evaluate(userTurnCount,
-                                "Tool " + toolCall.getFunction().getName() + " returned: " + result.substring(0, Math.min(100, result.length())));
-                        }
-                    }
-
-                    if (skillNudgeInterval > 0) {
-                        itersSinceSkill++;
-                    }
-
-                    continueLoop = true;
-                } else {
-                    String content = assistantMessage.getContent();
-                    if (content != null && !content.isEmpty()) {
-                        if (responseBuilder.length() > 0) {
-                            responseBuilder.append("\n\n");
-                        }
-                        responseBuilder.append(content);
-                    }
-                    continueLoop = false;
-                }
-
-                if ("stop".equals(response.getFinishReason())) {
-                    continueLoop = false;
-                }
-
-            } catch (Exception e) {
-                logger.error("Error in conversation loop: {}", e.getMessage(), e);
-                responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
-                break;
-            }
+        String loopResponse;
+        try {
+            loopResponse = com.nousresearch.hermes.harness.LoopExecutor.executeOnAgent(
+                this, getEventEmitter());
+        } catch (com.nousresearch.hermes.agent.TenantAwareAIAgent.ToolApprovalRequiredException ex) {
+            throw ex;
         }
+
+        String finalResponse = loopResponse;
+
+        // --- POST-LOOP: persist, confidence, background review, transform ---
 
         persistSession();
 
@@ -911,8 +748,6 @@ public class TenantAwareAIAgent {
             shouldReviewSkills = true;
             itersSinceSkill = 0;
         }
-
-        String finalResponse = responseBuilder.toString();
 
         // Calibrate confidence before returning
         if (confidenceCalibrator != null && !finalResponse.isEmpty()) {
@@ -931,7 +766,7 @@ public class TenantAwareAIAgent {
             spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
         }
 
-        // --- Plugin hook: transform_llm_output ---
+        // Plugin hook: transform_llm_output
         if (hookEngine != null && !finalResponse.isEmpty()) {
             Map<String, Object> outCtx = new HashMap<>();
             outCtx.put("text", finalResponse);
@@ -941,7 +776,6 @@ public class TenantAwareAIAgent {
             for (Object t : transforms) {
                 if (t instanceof String s && !s.isEmpty()) {
                     finalResponse = s;
-                    logger.debug("LLM output transformed by plugin");
                 }
             }
         }
@@ -1053,7 +887,7 @@ public class TenantAwareAIAgent {
                             toolOk = false;
                             recordToolCall(toolCall, false, System.currentTimeMillis() - toolStart);
                             chunkConsumer.accept("\n⏸ [Approval required: " + are.getToolName()
-                                + " — " + are.getReason() + "]\n");
+                                + " - " + are.getReason() + "]\n");
                             persistSession();
                             throw are;
                         } catch (RuntimeException ex) {
@@ -1126,7 +960,7 @@ public class TenantAwareAIAgent {
         // so tokens already used are counted; the NEXT call will be blocked if quota exceeded.
         try {
             if (tenantContext != null && tenantContext.getQuotaManager() != null) {
-                // Don't throw — just add to quota counter via addAndGet. If quota exceeded,
+                // Don't throw - just add to quota counter via addAndGet. If quota exceeded,
                 // next tool/llm call that invokes checkTokenQuota will reject.
                 tenantContext.getQuotaManager()
                     .getStoreIfAvailable()
@@ -1206,13 +1040,13 @@ public class TenantAwareAIAgent {
 
     // ==================== Tool Execution ====================
 
-    private String executeToolCall(ToolCall toolCall) {
+    public String executeToolCall(ToolCall toolCall) {
         String toolName = toolCall.getFunction().getName();
         String arguments = toolCall.getFunction().getArguments();
 
         logger.debug("Executing tool: {} for tenant: {}", toolName, tenantId);
 
-        // ======== AI原生组织：第五刀——可观测性记录 ========
+        // ======== AI原生组织：第五刀--可观测性记录 ========
         long toolStartMs = System.currentTimeMillis();
         if (currentTrace != null) {
             currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolCall(
@@ -1242,7 +1076,7 @@ public class TenantAwareAIAgent {
         if (agentRole != null && !agentRole.getToolApprovalRules().isEmpty()) {
             var approvalCheck = checkToolApproval(toolName, arguments);
             if (approvalCheck.approvalNeeded()) {
-                String msg = "Tool approval required: '" + toolName + "' — " + approvalCheck.reason();
+                String msg = "Tool approval required: '" + toolName + "' - " + approvalCheck.reason();
                 logger.info("Tenant {} agent {} {}", tenantId, agentId, msg);
                 if (currentTrace != null) {
                     currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
@@ -1275,7 +1109,7 @@ public class TenantAwareAIAgent {
                 }
             }
 
-            // AI原生组织：第五刀——记录工具结果到追踪
+            // AI原生组织：第五刀--记录工具结果到追踪
             if (currentTrace != null) {
                 long duration = System.currentTimeMillis() - toolStartMs;
                 currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolResult(
@@ -1293,7 +1127,7 @@ public class TenantAwareAIAgent {
         } catch (Exception e) {
             logger.error("Tool execution failed: {}", toolName, e);
 
-            // AI原生组织：第五刀——记录错误到追踪
+            // AI原生组织：第五刀--记录错误到追踪
             if (currentTrace != null) {
                 currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(
                     toolName + ": " + e.getMessage()));
@@ -1353,7 +1187,7 @@ public class TenantAwareAIAgent {
         this.evolutionEngine = engine;
     }
 
-    // ======== AI原生组织：第三刀——Team-Aware Methods ========
+    // ======== AI原生组织：第三刀--Team-Aware Methods ========
 
     /** Get the team this agent belongs to. */
     public com.nousresearch.hermes.collaboration.TeamRuntime getTeam() {
@@ -1613,7 +1447,7 @@ public class TenantAwareAIAgent {
             }
         }
 
-        // ======== AI原生组织：第三刀——Team 上下文注入 ========
+        // ======== AI原生组织：第三刀--Team 上下文注入 ========
         // 让 Agent 知道自己属于哪个团队、有哪些队友、最近发生了什么
         if (team != null) {
             prompt.append(buildTeamAwarePrompt()).append("\n");
@@ -1783,7 +1617,7 @@ public class TenantAwareAIAgent {
     private void runBackgroundReviewLLM(List<ModelMessage> messages, String prompt) {
         try {
             String reviewMessage = prompt + "\n\nYou can only call memory and skill "
-                + "management tools. Other tools will be denied at runtime — do not "
+                + "management tools. Other tools will be denied at runtime - do not "
                 + "attempt them.";
 
             // Build a conversation digest for context (last 24 messages to bound cost)
@@ -1813,7 +1647,7 @@ public class TenantAwareAIAgent {
             ).withMaxIterations(16);
             SubAgentResult result = reviewAgent.call();
 
-            // Summarize actions for the user — enqueue for next-turn flush
+            // Summarize actions for the user - enqueue for next-turn flush
             if (result != null && result.success) {
                 boolean hasMemory = result.memoriesToSave != null && !result.memoriesToSave.isEmpty();
                 boolean hasInsights = result.insights != null && !result.insights.isEmpty();
@@ -1828,15 +1662,15 @@ public class TenantAwareAIAgent {
                     }
                     String summaryStr = summary.toString();
                     logger.info("Self-improvement review: {}", summaryStr);
-                    // Enqueue for next-turn flush — the chunkConsumer from the
+                    // Enqueue for next-turn flush - the chunkConsumer from the
                     // originating turn has already completed by the time the
                     // background review finishes.
                     pendingReviewSummaries.add("💾 Self-improvement review: " + summaryStr);
                 } else {
-                    logger.debug("Background review completed — nothing to save");
+                    logger.debug("Background review completed - nothing to save");
                 }
             } else {
-                logger.debug("Background review completed — nothing to save");
+                logger.debug("Background review completed - nothing to save");
             }
 
         } catch (Exception e) {
@@ -1957,6 +1791,30 @@ public class TenantAwareAIAgent {
     public String getSessionId() { return sessionId; }
     public TenantContext getTenantContext() { return tenantContext; }
 
+    // ======== Harness accessors (for LoopExecutor) ========
+
+    public List<ModelMessage> getConversationHistory() { return conversationHistory; }
+    public com.nousresearch.hermes.agent.IterationBudget getIterationBudget() { return iterationBudget; }
+    public com.nousresearch.hermes.model.ModelClient getModelClient() { return modelClient; }
+    public com.nousresearch.hermes.tools.TenantAwareToolDispatcher getToolDispatcher() { return toolDispatcher; }
+    public boolean isInterrupted() { return interrupted.get(); }
+    public void incrementItersSinceSkillForHarness() {
+        if (skillNudgeInterval > 0) itersSinceSkill++;
+    }
+    public void recordModelUsageForHarness(com.nousresearch.hermes.model.ChatCompletionResponse response) { recordModelUsage(response); }
+    public void autoSaveSessionForHarness() { autoSaveSession(); }
+    public void recordToolCallForHarness(ToolCall tc, boolean ok, long durationMs) {
+        recordToolCall(tc, ok, durationMs);
+    }
+    public List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitionsForHarness() {
+        return buildToolDefinitions();
+    }
+
+    /** EventEmitter for structured events. Set by AgentHarness when wrapping. */
+    private volatile com.nousresearch.hermes.harness.EventEmitter eventEmitter;
+    public com.nousresearch.hermes.harness.EventEmitter getEventEmitter() { return eventEmitter; }
+    public void setEventEmitter(com.nousresearch.hermes.harness.EventEmitter emitter) { this.eventEmitter = emitter; }
+
     // ======== AI原生组织：角色与治理 ========
 
     public String getAgentId() { return agentId; }
@@ -1976,7 +1834,7 @@ public class TenantAwareAIAgent {
         return role;
     }
 
-    private HookEngine getHookEngine() {
+    public HookEngine getHookEngine() {
         PluginManager pm = PluginManager.getInstance();
         return pm != null ? pm.getHookEngineFacade() : null;
     }
@@ -2198,7 +2056,7 @@ public class TenantAwareAIAgent {
             try {
                 tResult = executeToolCall(toolCall);
             } catch (ToolApprovalRequiredException ex) {
-                // Another tool needs approval — save new checkpoint
+                // Another tool needs approval - save new checkpoint
                 approvalCheckpoint = new ToolApprovalCheckpoint(
                     cp.assistantMessage,
                     new ArrayList<>(cp.toolCalls),
@@ -2394,7 +2252,7 @@ public class TenantAwareAIAgent {
 
         public ToolApprovalRequiredException(String toolName, String toolArguments,
                                               String agentId, String matchedRule, String reason) {
-            super("Tool approval required: " + toolName + " — " + reason);
+            super("Tool approval required: " + toolName + " - " + reason);
             this.toolName = toolName;
             this.toolArguments = toolArguments;
             this.agentId = agentId;
