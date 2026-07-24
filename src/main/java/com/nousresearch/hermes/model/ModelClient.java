@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * Client for interacting with AI model APIs (OpenAI, Anthropic, OpenRouter).
  */
-public class ModelClient {
+public class ModelClient implements com.nousresearch.hermes.harness.ModelProvider {
     private static final Logger logger = LoggerFactory.getLogger(ModelClient.class);
 
     private final HttpClient httpClient;
@@ -646,5 +646,44 @@ public class ModelClient {
                    .replace("\\t", "\t")
                    .replace("\\\"", "\"")
                    .replace("\\\\", "\\");
+    }
+
+    // ===== ModelProvider interface implementation =====
+
+    @Override
+    public com.nousresearch.hermes.model.ChatCompletionResponse chat(
+            java.util.List<com.nousresearch.hermes.model.ModelMessage> messages,
+            java.util.List<com.nousresearch.hermes.model.ToolDefinition> tools,
+            boolean stream,
+            java.util.Map<String, Object> extraParams) {
+        return chatCompletion(messages, tools, stream, extraParams);
+    }
+
+    @Override
+    public com.nousresearch.hermes.model.ChatCompletionResponse chatStream(
+            java.util.List<com.nousresearch.hermes.model.ModelMessage> messages,
+            java.util.List<com.nousresearch.hermes.model.ToolDefinition> tools,
+            java.util.Map<String, Object> params,
+            java.util.function.Consumer<String> onDelta) {
+        return chatCompletion(messages, tools, true, params, onDelta);
+    }
+
+    @Override
+    public float[] embed(String text) {
+        return createEmbedding(text);
+    }
+
+    @Override
+    public boolean supportsModel(String model) {
+        if (model == null) return false;
+        String provider = modelConfig.getProvider();
+        if (provider == null) return true; // default provider accepts all
+        String lower = model.toLowerCase();
+        return switch (provider.toLowerCase()) {
+            case "openai" -> lower.contains("gpt") || lower.contains("o1") || lower.contains("o3") || lower.contains("o4");
+            case "anthropic" -> lower.contains("claude");
+            case "openrouter" -> true; // openrouter routes everything
+            default -> true;
+        };
     }
 }

@@ -173,6 +173,10 @@ public class GatewayServerV2 {
         app.post("/api/chat", this::handleChat);
         app.post("/api/chat/stream", this::handleChatStream);
 
+        // Harness API (Phase A: structured agent event stream)
+        app.get("/api/harness/active", this::handleHarnessActive);
+        app.get("/api/harness/{sessionId}/stream", this::handleHarnessStream);
+
         // S1-3: OpenAI 兼容 API
         OpenAICompatHandler openaiHandler = new OpenAICompatHandler(config, tenantManager);
         app.post("/v1/chat/completions", openaiHandler::handleChatCompletions);
@@ -429,6 +433,65 @@ public class GatewayServerV2 {
         }
 
         ctx.json(tools);
+    }
+
+    // ==================== Harness API ====================
+
+    private void handleHarnessActive(Context ctx) {
+        String tenantId = ctx.queryParam("tenant_id");
+        if (tenantId == null) tenantId = "default";
+        try {
+            var tenant = tenantManager.getOrCreateTenant(tenantId, createDefaultProvisioningRequest());
+            var snapshots = new java.util.ArrayList<java.util.Map<String, Object>>();
+            for (var entry : tenant.getActiveAgents().entrySet()) {
+                var agent = entry.getValue();
+                var debug = agent.getSessionDebugInfo();
+                snapshots.add(java.util.Map.of(
+                    "sessionId", entry.getKey(),
+                    "tenantId", tenantId,
+                    "status", "running",
+                    "debug", debug != null ? debug : java.util.Map.of()
+                ));
+            }
+            ctx.json(java.util.Map.of("harnesses", snapshots, "count", snapshots.size()));
+        } catch (Exception e) {
+            ctx.status(500).json(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    private void handleHarnessStream(Context ctx) throws IOException {
+        var response = ctx.res();
+        response.setCharacterEncoding("UTF-8");
+        response.setContentType("text/event-stream");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("Connection", "keep-alive");
+        ctx.header("X-Accel-Buffering", "no");
+
+        String sessionId = ctx.pathParam("sessionId");
+        String tenantId = ctx.queryParam("tenant_id");
+        if (tenantId == null) tenantId = "default";
+
+        sendSseEvent(ctx, "connected", java.util.Map.of(
+            "sessionId", sessionId,
+            "tenantId", tenantId
+        ));
+
+        // Heartbeat to keep connection alive.
+        // Full event streaming wired in Phase B when AgentHarness
+        // is integrated into the chat flow.
+        try {
+            for (int i = 0; i < 120; i++) {  // max 30 min (120 * 15s)
+                Thread.sleep(15000);
+                sendSseEvent(ctx, "heartbeat", java.util.Map.of(
+                    "timestamp", System.currentTimeMillis()
+                ));
+                response.flushBuffer();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            logger.debug("Harness stream closed: {}", e.getMessage());
+        }
     }
 
     private void handleChat(Context ctx) {
