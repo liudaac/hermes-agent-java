@@ -476,16 +476,48 @@ public class GatewayServerV2 {
             "tenantId", tenantId
         ));
 
-        // Heartbeat to keep connection alive.
-        // Full event streaming wired in Phase B when AgentHarness
-        // is integrated into the chat flow.
+        // Try to find an active agent for this session and wire its events
         try {
-            for (int i = 0; i < 120; i++) {  // max 30 min (120 * 15s)
-                Thread.sleep(15000);
-                sendSseEvent(ctx, "heartbeat", java.util.Map.of(
-                    "timestamp", System.currentTimeMillis()
-                ));
-                response.flushBuffer();
+            var tenant = tenantManager.getOrCreateTenant(tenantId, createDefaultProvisioningRequest());
+            var agent = tenant.getActiveAgents().get(sessionId);
+
+            if (agent != null) {
+                // Create harness wrapper to access emitter
+                var harness = new com.nousresearch.hermes.harness.AgentHarness(
+                    tenant, sessionId, config);
+
+                // Subscribe to harness events -> forward to SSE
+                harness.emitter().subscribe(event -> {
+                    try {
+                        var data = new java.util.HashMap<>(event.data());
+                        data.put("timestamp", event.timestamp());
+                        sendSseEvent(ctx, event.type(), data);
+                        response.flushBuffer();
+                    } catch (Exception ignored) {}
+                });
+
+                // Heartbeat loop + drain pending events
+                for (int i = 0; i < 120; i++) {
+                    Thread.sleep(15000);
+                    for (var event : harness.emitter().drain()) {
+                        var data = new java.util.HashMap<>(event.data());
+                        data.put("timestamp", event.timestamp());
+                        sendSseEvent(ctx, event.type(), data);
+                    }
+                    sendSseEvent(ctx, "heartbeat", java.util.Map.of(
+                        "timestamp", System.currentTimeMillis()
+                    ));
+                    response.flushBuffer();
+                }
+            } else {
+                // No active agent - heartbeat only
+                for (int i = 0; i < 120; i++) {
+                    Thread.sleep(15000);
+                    sendSseEvent(ctx, "heartbeat", java.util.Map.of(
+                        "timestamp", System.currentTimeMillis()
+                    ));
+                    response.flushBuffer();
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -534,12 +566,15 @@ public class GatewayServerV2 {
                 return;
             }
 
-            // 创建或获取 Agent
+            // 创建或获取 Agent (via harness)
             String resolvedSessionId = sessionId != null ? sessionId
                 : UUID.randomUUID().toString();
 
-            // 获取或创建 Agent（租户隔离）
             TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
+
+            // Create harness wrapper for structured event emission
+            com.nousresearch.hermes.harness.AgentHarness harness =
+                new com.nousresearch.hermes.harness.AgentHarness(tenant, resolvedSessionId, config);
 
             // 应用系统提示词：请求传入 > 租户配置 > 默认
             String customSystemPrompt = body.getString("system_prompt");
@@ -547,19 +582,19 @@ public class GatewayServerV2 {
                 customSystemPrompt = tenant.getConfig().getString("agent.system_prompt");
             }
             if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
-                agent.setSystemPrompt(customSystemPrompt);
+                harness.setSystemPrompt(customSystemPrompt);
             }
 
             // 应用模型参数覆盖（如果提供）
             if (body.containsKey("model_params") && body.get("model_params") instanceof com.alibaba.fastjson2.JSONObject mp) {
                 java.util.Map<String, Object> params = new java.util.HashMap<>();
                 mp.forEach((k, v) -> params.put(k, v));
-                agent.setModelParams(params);
+                harness.setModelParams(params);
             }
 
-            // 处理消息
+            // 处理消息 (through harness, which emits structured events)
             long startTime = System.currentTimeMillis();
-            String response = agent.processMessage(message);
+            String response = harness.processMessage(message);
             long duration = System.currentTimeMillis() - startTime;
 
             // 更新租户活动状态
@@ -571,7 +606,7 @@ public class GatewayServerV2 {
             result.put("tenant_id", resolvedTenantId);
             result.put("duration_ms", duration);
             result.put("timestamp", System.currentTimeMillis());
-            result.put("debug", agent.getSessionDebugInfo());
+            result.put("debug", harness.getDebugInfo());
             ctx.status(200).json(result);
 
         } catch (Exception e) {
@@ -629,30 +664,44 @@ public class GatewayServerV2 {
         // 获取或创建 Agent（租户隔离）
         TenantAIAgent agent = tenant.getOrCreateAgent(resolvedSessionId, config);
 
-        // 应用系统提示词：请求传入 > 租户配置 > 默认
+        // Create harness wrapper for structured event emission
+        com.nousresearch.hermes.harness.AgentHarness harness =
+            new com.nousresearch.hermes.harness.AgentHarness(tenant, resolvedSessionId, config);
+
+        // Subscribe to harness events and forward to SSE
+        harness.emitter().subscribe(event -> {
+            try {
+                sendSseEvent(ctx, event.type(), java.util.Map.of(
+                    "content", event.data().getOrDefault("content", ""),
+                    "timestamp", event.timestamp()
+                ));
+            } catch (Exception ignored) {}
+        });
+
+        // 应用系统提示词
         String customSystemPrompt = body.getString("system_prompt");
         if (customSystemPrompt == null || customSystemPrompt.isBlank()) {
             customSystemPrompt = tenant.getConfig().getString("agent.system_prompt");
         }
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
-            agent.setSystemPrompt(customSystemPrompt);
+            harness.setSystemPrompt(customSystemPrompt);
         }
 
-        // 应用模型参数覆盖（如果提供）
+        // 应用模型参数覆盖
         if (body.containsKey("model_params") && body.get("model_params") instanceof com.alibaba.fastjson2.JSONObject mp) {
             java.util.Map<String, Object> params = new java.util.HashMap<>();
             mp.forEach((k, v) -> params.put(k, v));
-            agent.setModelParams(params);
+            harness.setModelParams(params);
         }
 
         try {
-            // True streaming: push each chunk as it arrives from the model
-            agent.processMessageStream(message, chunk -> {
+            // Stream through harness (emits structured events + text deltas)
+            harness.processMessageStream(message, chunk -> {
                 sendSseEvent(ctx, "delta", Map.of("content", chunk));
             });
 
-            // Send debug events (usage + tool calls)
-            Map<String, Object> debug = agent.getSessionDebugInfo();
+            // Send debug events
+            Map<String, Object> debug = harness.getDebugInfo();
             if (debug.containsKey("usage")) {
                 sendSseEvent(ctx, "usage", (Map<String, Object>) debug.get("usage"));
             }
@@ -660,12 +709,7 @@ public class GatewayServerV2 {
                 sendSseEvent(ctx, "tool_chain", Map.of("calls", debug.get("toolCalls")));
             }
 
-            // Send completion event
-            sendSseEvent(ctx, "done", Map.of(
-                "timestamp", System.currentTimeMillis()
-            ));
-
-            // Update activity
+            sendSseEvent(ctx, "done", Map.of("timestamp", System.currentTimeMillis()));
             tenant.updateActivity();
 
         } catch (Exception e) {
