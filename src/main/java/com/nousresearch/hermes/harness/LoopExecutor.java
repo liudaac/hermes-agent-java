@@ -505,4 +505,118 @@ public class LoopExecutor {
             emitter.emit(AgentEvent.CONTEXT_COMPRESSED, Map.of("dropped", dropped));
         }
     }
+
+    // ===== PRE-LOOP: session setup, memory, trace =====
+
+    /**
+     * Pre-loop phase: session hook, system prompt, memory nudge,
+     * cognitive trace, memory card, auto-save.
+     *
+     * @return true if memory review should run after this turn
+     */
+    public static boolean preLoop(TenantAwareAIAgent agent, String message) {
+        agent.userTurnCountIncrement();
+
+        var hookEngine = agent.getHookEngine();
+        if (hookEngine != null && agent.getUserTurnCount() == 1) {
+            Map<String, Object> sessionCtx = new HashMap<>();
+            sessionCtx.put("session_id", agent.getSessionId());
+            sessionCtx.put("tenant_id", agent.getTenantId());
+            sessionCtx.put("message", message);
+            hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
+        }
+
+        if (agent.getConversationHistory().isEmpty()) {
+            agent.getConversationHistory().add(ModelMessage.system(agent.buildSystemPromptForHarness()));
+        }
+
+        boolean shouldReviewMemory = false;
+        if (agent.getMemoryNudgeInterval() > 0) {
+            agent.incrementTurnsSinceMemory();
+            if (agent.getTurnsSinceMemory() >= agent.getMemoryNudgeInterval()) {
+                shouldReviewMemory = true;
+                agent.resetTurnsSinceMemory();
+            }
+        }
+
+        agent.getConversationHistory().add(ModelMessage.user(message));
+
+        if (agent.getCognitiveTraceCollector() != null) {
+            agent.getCognitiveTraceCollector().observe(agent.getUserTurnCount(), message);
+        }
+
+        if (agent.isSmartMemoryCardEnabled() && agent.getMemoryCardIntegrator() != null) {
+            int cardSize = agent.getMemoryCardIntegrator().beforeTurn(
+                agent.getConversationHistory(), message);
+            if (agent.getEvalMetrics() != null) {
+                agent.getEvalMetrics().recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
+            }
+        }
+        agent.autoSaveSessionForHarness();
+
+        return shouldReviewMemory;
+    }
+
+    // ===== POST-LOOP: persist, confidence, review, transform =====
+
+    /**
+     * Post-loop phase: persist session, confidence calibration,
+     * background review spawn, LLM output transform hook.
+     *
+     * @param loopResponse the raw response from the loop
+     * @param shouldReviewMemory whether memory review should run
+     * @return final (possibly transformed) response
+     */
+    public static String postLoop(TenantAwareAIAgent agent, String loopResponse,
+                                   boolean shouldReviewMemory) {
+        agent.persistSessionForHarness();
+
+        boolean shouldReviewSkills = false;
+        if (agent.getSkillNudgeInterval() > 0 &&
+            agent.getItersSinceSkill() >= agent.getSkillNudgeInterval()) {
+            shouldReviewSkills = true;
+            agent.resetItersSinceSkill();
+        }
+
+        String finalResponse = loopResponse;
+
+        // Confidence calibration
+        if (agent.getConfidenceCalibrator() != null && !finalResponse.isEmpty()) {
+            int toolsUsed = agent.countToolsUsedThisTurnForHarness();
+            boolean hasSearch = agent.getConversationHistory().stream()
+                .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
+            var calibrated = agent.getConfidenceCalibrator().calibrate(finalResponse, toolsUsed, hasSearch);
+            if (agent.getEvalMetrics() != null) {
+                agent.getEvalMetrics().recordCalibration(calibrated.action());
+            }
+            if (calibrated.action() != com.nousresearch.hermes.agent.ConfidenceCalibrator.Action.DIRECT) {
+                finalResponse = calibrated.adjustedText();
+            }
+        }
+
+        // Background review
+        if (!finalResponse.isEmpty() && !agent.isInterrupted() &&
+            (shouldReviewMemory || shouldReviewSkills)) {
+            agent.spawnBackgroundReviewForHarness(
+                new ArrayList<>(agent.getConversationHistory()),
+                shouldReviewMemory, shouldReviewSkills);
+        }
+
+        // Plugin hook: transform_llm_output
+        var hookEngine = agent.getHookEngine();
+        if (hookEngine != null && !finalResponse.isEmpty()) {
+            Map<String, Object> outCtx = new HashMap<>();
+            outCtx.put("text", finalResponse);
+            outCtx.put("session_id", agent.getSessionId());
+            outCtx.put("tenant_id", agent.getTenantId());
+            List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_LLM_OUTPUT, outCtx);
+            for (Object t : transforms) {
+                if (t instanceof String s && !s.isEmpty()) {
+                    finalResponse = s;
+                }
+            }
+        }
+
+        return finalResponse;
+    }
 }

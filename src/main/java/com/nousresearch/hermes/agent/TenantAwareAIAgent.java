@@ -4,7 +4,9 @@ import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.GovernancePolicy;
 import com.nousresearch.hermes.collaboration.OrgHealthChecker;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.memory.PromptContextBuilder;
 import com.nousresearch.hermes.model.ModelMessage;
+import com.nousresearch.hermes.monitoring.AgentEvalMetrics;
 import com.nousresearch.hermes.model.ToolCall;
 import com.nousresearch.hermes.plugin.PluginManager;
 import com.nousresearch.hermes.plugin.hook.HookEngine;
@@ -689,98 +691,19 @@ public class TenantAwareAIAgent {
     // ==================== Private Core Logic ====================
 
     private String doProcessMessage(String message) {
-        userTurnCount++;
+        // 1. PRE-LOOP: session hook, system prompt, memory, trace
+        boolean shouldReviewMemory = com.nousresearch.hermes.harness.LoopExecutor.preLoop(this, message);
 
-        // --- PRE-LOOP: Plugin hook, system prompt, memory, cognitive trace ---
-
-        HookEngine hookEngine = getHookEngine();
-        if (hookEngine != null && userTurnCount == 1) {
-            Map<String, Object> sessionCtx = new HashMap<>();
-            sessionCtx.put("session_id", sessionId);
-            sessionCtx.put("tenant_id", tenantId);
-            sessionCtx.put("message", message);
-            hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
-        }
-
-        if (conversationHistory.isEmpty()) {
-            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
-        }
-
-        boolean shouldReviewMemory = false;
-        if (memoryNudgeInterval > 0) {
-            turnsSinceMemory++;
-            if (turnsSinceMemory >= memoryNudgeInterval) {
-                shouldReviewMemory = true;
-                turnsSinceMemory = 0;
-            }
-        }
-
-        conversationHistory.add(ModelMessage.user(message));
-
-        if (cognitiveTraceCollector != null) {
-            cognitiveTraceCollector.observe(userTurnCount, message);
-        }
-
-        if (smartMemoryCardEnabled && memoryCardIntegrator != null) {
-            int cardSize = memoryCardIntegrator.beforeTurn(conversationHistory, message);
-            if (evalMetrics != null) evalMetrics.recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
-        }
-        autoSaveSession();
-
-        // --- LOOP: delegate to LoopExecutor ---
-
+        // 2. LOOP: think -> act -> observe
         String loopResponse;
         try {
-            loopResponse = com.nousresearch.hermes.harness.LoopExecutor.executeOnAgent(
-                this, getEventEmitter());
-        } catch (com.nousresearch.hermes.agent.TenantAwareAIAgent.ToolApprovalRequiredException ex) {
+            loopResponse = com.nousresearch.hermes.harness.LoopExecutor.executeOnAgent(this, getEventEmitter());
+        } catch (ToolApprovalRequiredException ex) {
             throw ex;
         }
 
-        String finalResponse = loopResponse;
-
-        // --- POST-LOOP: persist, confidence, background review, transform ---
-
-        persistSession();
-
-        boolean shouldReviewSkills = false;
-        if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval) {
-            shouldReviewSkills = true;
-            itersSinceSkill = 0;
-        }
-
-        // Calibrate confidence before returning
-        if (confidenceCalibrator != null && !finalResponse.isEmpty()) {
-            int toolsUsed = countToolsUsedThisTurn();
-            boolean hasSearch = conversationHistory.stream()
-                .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
-            var calibrated = confidenceCalibrator.calibrate(finalResponse, toolsUsed, hasSearch);
-            if (evalMetrics != null) evalMetrics.recordCalibration(calibrated.action());
-            if (calibrated.action() != ConfidenceCalibrator.Action.DIRECT) {
-                finalResponse = calibrated.adjustedText();
-            }
-        }
-
-        if (!finalResponse.isEmpty() && !interrupted.get() &&
-            (shouldReviewMemory || shouldReviewSkills)) {
-            spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
-        }
-
-        // Plugin hook: transform_llm_output
-        if (hookEngine != null && !finalResponse.isEmpty()) {
-            Map<String, Object> outCtx = new HashMap<>();
-            outCtx.put("text", finalResponse);
-            outCtx.put("session_id", sessionId);
-            outCtx.put("tenant_id", tenantId);
-            List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_LLM_OUTPUT, outCtx);
-            for (Object t : transforms) {
-                if (t instanceof String s && !s.isEmpty()) {
-                    finalResponse = s;
-                }
-            }
-        }
-
-        return finalResponse;
+        // 3. POST-LOOP: persist, confidence, review, transform
+        return com.nousresearch.hermes.harness.LoopExecutor.postLoop(this, loopResponse, shouldReviewMemory);
     }
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
@@ -1814,6 +1737,29 @@ public class TenantAwareAIAgent {
     private volatile com.nousresearch.hermes.harness.EventEmitter eventEmitter;
     public com.nousresearch.hermes.harness.EventEmitter getEventEmitter() { return eventEmitter; }
     public void setEventEmitter(com.nousresearch.hermes.harness.EventEmitter emitter) { this.eventEmitter = emitter; }
+
+    // ======== Accessors for LoopExecutor preLoop/postLoop ========
+
+    public void userTurnCountIncrement() { userTurnCount++; }
+    public int getUserTurnCount() { return userTurnCount; }
+    public int getMemoryNudgeInterval() { return memoryNudgeInterval; }
+    public int getSkillNudgeInterval() { return skillNudgeInterval; }
+    public void incrementTurnsSinceMemory() { turnsSinceMemory++; }
+    public int getTurnsSinceMemory() { return turnsSinceMemory; }
+    public void resetTurnsSinceMemory() { turnsSinceMemory = 0; }
+    public int getItersSinceSkill() { return itersSinceSkill; }
+    public void resetItersSinceSkill() { itersSinceSkill = 0; }
+    public boolean isSmartMemoryCardEnabled() { return smartMemoryCardEnabled; }
+    public PromptContextBuilder getMemoryCardIntegrator() { return memoryCardIntegrator; }
+    public CognitiveTraceCollector getCognitiveTraceCollector() { return cognitiveTraceCollector; }
+    public ConfidenceCalibrator getConfidenceCalibrator() { return confidenceCalibrator; }
+    public AgentEvalMetrics getEvalMetrics() { return evalMetrics; }
+    public void persistSessionForHarness() { persistSession(); }
+    public String buildSystemPromptForHarness() { return buildSystemPrompt(); }
+    public int countToolsUsedThisTurnForHarness() { return countToolsUsedThisTurn(); }
+    public void spawnBackgroundReviewForHarness(List<ModelMessage> history, boolean mem, boolean skills) {
+        spawnBackgroundReview(history, mem, skills);
+    }
 
     // ======== AI原生组织：角色与治理 ========
 
