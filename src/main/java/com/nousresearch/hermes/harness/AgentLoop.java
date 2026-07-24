@@ -71,7 +71,24 @@ public class AgentLoop {
 
     // ==================== LOOP ====================
 
+    /**
+     * Non-streaming loop.
+     */
     public static String run(AgentContext ctx, EventEmitter emitter) {
+        return run(ctx, emitter, null);
+    }
+
+    /**
+     * Core think->act->observe loop. Optionally streams LLM deltas
+     * through {@code onDelta}.
+     *
+     * @param ctx      agent context
+     * @param emitter  event emitter (null = no structured events)
+     * @param onDelta  streaming callback (null = non-streaming)
+     * @return response text
+     */
+    public static String run(AgentContext ctx, EventEmitter emitter,
+                              java.util.function.Consumer<String> onDelta) {
         var history = ctx.history();
         var budget = ctx.budget();
 
@@ -107,8 +124,15 @@ public class AgentLoop {
 
                 enforceContextBudget(history, emitter);
 
-                var response = ctx.modelClient().chatCompletion(
-                    history, ctx.buildToolDefinitions(), false, ctx.modelParams());
+                // LLM call (streaming or non-streaming)
+                ChatCompletionResponse response;
+                if (onDelta != null) {
+                    response = ctx.modelClient().chatCompletion(
+                        history, ctx.buildToolDefinitions(), true, ctx.modelParams(), onDelta);
+                } else {
+                    response = ctx.modelClient().chatCompletion(
+                        history, ctx.buildToolDefinitions(), false, ctx.modelParams());
+                }
 
                 // Hook: POST_LLM_CALL
                 if (ctx.hookEngine() != null) {

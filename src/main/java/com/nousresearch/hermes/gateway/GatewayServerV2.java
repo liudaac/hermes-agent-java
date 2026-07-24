@@ -509,17 +509,7 @@ public class GatewayServerV2 {
         if (tenantId == null) tenantId = "default";
         try {
             var tenant = tenantManager.getOrCreateTenant(tenantId, createDefaultProvisioningRequest());
-            var snapshots = new java.util.ArrayList<java.util.Map<String, Object>>();
-            for (var entry : tenant.getActiveAgents().entrySet()) {
-                var agent = entry.getValue();
-                var debug = agent.getSessionDebugInfo();
-                snapshots.add(java.util.Map.of(
-                    "sessionId", entry.getKey(),
-                    "tenantId", tenantId,
-                    "status", "running",
-                    "debug", debug != null ? debug : java.util.Map.of()
-                ));
-            }
+            var snapshots = tenant.getHarnessManager().snapshots();
             ctx.json(java.util.Map.of("harnesses", snapshots, "count", snapshots.size()));
         } catch (Exception e) {
             ctx.status(500).json(java.util.Map.of("error", e.getMessage()));

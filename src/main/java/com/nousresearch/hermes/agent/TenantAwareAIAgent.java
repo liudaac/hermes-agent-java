@@ -710,158 +710,31 @@ public class TenantAwareAIAgent {
     }
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
-        // Flush any pending background-review summaries from the previous turn
+        // Flush pending background-review summaries
         String reviewSummary;
         while ((reviewSummary = pendingReviewSummaries.poll()) != null) {
             chunkConsumer.accept("\n" + reviewSummary + "\n");
         }
 
-        userTurnCount++;
+        // Build context and delegate to AgentLoop (same path as non-streaming)
+        var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
 
-        // Ensure system prompt is present at the start of conversation
-        if (conversationHistory.isEmpty()) {
-            conversationHistory.add(ModelMessage.system(buildSystemPrompt()));
+        boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
+
+        String loopResponse;
+        try {
+            loopResponse = com.nousresearch.hermes.harness.AgentLoop.run(ctx, getEventEmitter(), chunkConsumer);
+        } catch (ToolApprovalRequiredException ex) {
+            chunkConsumer.accept("\n⏸ [Approval required: " + ex.getToolName()
+                + " - " + ex.getReason() + "]\n");
+            throw ex;
         }
 
-        boolean shouldReviewMemory = false;
-        if (memoryNudgeInterval > 0) {
-            turnsSinceMemory++;
-            if (turnsSinceMemory >= memoryNudgeInterval) {
-                shouldReviewMemory = true;
-                turnsSinceMemory = 0;
-            }
-        }
-
-        conversationHistory.add(ModelMessage.user(message));
-        autoSaveSession();
-
-        boolean continueLoop = true;
-
-        while (continueLoop && !interrupted.get() && iterationBudget.hasRemaining()) {
-            if (!iterationBudget.consume()) {
-                chunkConsumer.accept("\n[Reached maximum iterations]");
-                break;
-            }
-
-            // ======== AI原生组织：治理检查点 ========
-            if (governancePolicy.isPaused()) {
-                chunkConsumer.accept("\n⚠️ Agent paused: " + governancePolicy.getPauseReason() + "\n");
-                break;
-            }
-
-            try {
-                // --- Plugin hook: pre_llm_call (stream) ---
-                HookEngine hookEngineStream = getHookEngine();
-                if (hookEngineStream != null) {
-                    Map<String, Object> preCtx = new HashMap<>();
-                    preCtx.put("messages", new ArrayList<>(conversationHistory));
-                    preCtx.put("session_id", sessionId);
-                    preCtx.put("tenant_id", tenantId);
-                    preCtx.put("turn", userTurnCount);
-                    List<Object> injects = hookEngineStream.invoke(HookType.PRE_LLM_CALL, preCtx);
-                    for (Object inj : injects) {
-                        if (inj instanceof String s && !s.isEmpty()) {
-                            conversationHistory.add(ModelMessage.system(s));
-                        }
-                    }
-                }
-
-                enforceContextBudget();
-                var response = modelClient.chatCompletion(
-                    conversationHistory,
-                    buildToolDefinitions(),
-                    true,
-                    modelParams,
-                    chunk -> chunkConsumer.accept(chunk)
-                );
-
-                // --- Plugin hook: post_llm_call (stream) ---
-                if (hookEngineStream != null) {
-                    Map<String, Object> postCtx = new HashMap<>();
-                    postCtx.put("message", response.getMessage());
-                    postCtx.put("finish_reason", response.getFinishReason());
-                    postCtx.put("session_id", sessionId);
-                    postCtx.put("tenant_id", tenantId);
-                    hookEngineStream.invoke(HookType.POST_LLM_CALL, postCtx);
-                }
-
-                ModelMessage assistantMessage = response.getMessage();
-                if (assistantMessage == null) {
-                    chunkConsumer.accept("\n[No response from model]");
-                    break;
-                }
-
-                recordModelUsage(response);
-
-                conversationHistory.add(assistantMessage);
-                autoSaveSession();
-
-                if (response.hasToolCalls()) {
-                    for (ToolCall toolCall : assistantMessage.getToolCalls()) {
-                        chunkConsumer.accept("\n[Executing tool: " + toolCall.getFunction().getName() + "]\n");
-                        long toolStart = System.currentTimeMillis();
-                        boolean toolOk = true;
-                        String result;
-                        try {
-                            result = executeToolCall(toolCall);
-                        } catch (ToolApprovalRequiredException are) {
-                            // Stream-mode approval checkpoint: emit a clear marker, persist state,
-                            // and re-throw so caller can surface an approval UI. The non-stream
-                            // doProcessMessage handles this by storing a checkpoint; for stream we
-                            // keep the conversation consistent (assistant msg + partial tool marker)
-                            // and propagate; resumeToolApproval re-enters the loop.
-                            toolOk = false;
-                            recordToolCall(toolCall, false, System.currentTimeMillis() - toolStart);
-                            chunkConsumer.accept("\n⏸ [Approval required: " + are.getToolName()
-                                + " - " + are.getReason() + "]\n");
-                            persistSession();
-                            throw are;
-                        } catch (RuntimeException ex) {
-                            toolOk = false;
-                            throw ex;
-                        } finally {
-                            if (toolOk) {
-                                recordToolCall(toolCall, true, System.currentTimeMillis() - toolStart);
-                            }
-                        }
-                        conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
-                    }
-
-                    if (skillNudgeInterval > 0) {
-                        itersSinceSkill++;
-                    }
-
-                    continueLoop = true;
-                } else {
-                    continueLoop = false;
-                }
-
-                if ("stop".equals(response.getFinishReason())) {
-                    continueLoop = false;
-                }
-
-            } catch (Exception e) {
-                logger.error("Error in stream conversation loop: {}", e.getMessage(), e);
-                chunkConsumer.accept("\n[Error: " + e.getMessage() + "]");
-                break;
-            }
-        }
-
-        persistSession();
-
-        boolean shouldReviewSkills = false;
-        if (skillNudgeInterval > 0 && itersSinceSkill >= skillNudgeInterval) {
-            shouldReviewSkills = true;
-            itersSinceSkill = 0;
-        }
-
-        if (shouldReviewMemory || shouldReviewSkills) {
-            spawnBackgroundReview(new ArrayList<>(conversationHistory), shouldReviewMemory, shouldReviewSkills);
-        }
+        com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
     }
 
 
-    private void recordModelUsage(com.nousresearch.hermes.model.ChatCompletionResponse response) {
+    public void recordModelUsage(com.nousresearch.hermes.model.ChatCompletionResponse response) {
         if (response == null || response.getUsage() == null) {
             return;
         }
@@ -917,7 +790,7 @@ public class TenantAwareAIAgent {
     /**
      * Count how many tool-result messages appear after the last user message.
      */
-    private int countToolsUsedThisTurn() {
+    public int countToolsUsedThisTurn() {
         int count = 0;
         for (int i = conversationHistory.size() - 1; i >= 0; i--) {
             ModelMessage m = conversationHistory.get(i);
@@ -1295,7 +1168,7 @@ public class TenantAwareAIAgent {
             ToolRegistry.getInstance(), null);
     }
 
-    private List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitions() {
+    public List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitions() {
         var registry = ToolRegistry.getInstance();
         Set<String> toolNames = new HashSet<>(registry.getAllToolNames());
 
@@ -1339,7 +1212,7 @@ public class TenantAwareAIAgent {
         return result;
     }
 
-    private String buildSystemPrompt() {
+    public String buildSystemPrompt() {
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             return customSystemPrompt;
         }
@@ -1382,11 +1255,11 @@ public class TenantAwareAIAgent {
         return prompt.toString();
     }
 
-    private void autoSaveSession() {
+    public void autoSaveSession() {
         persistSession();
     }
 
-    private void persistSession() {
+    public void persistSession() {
         try {
             var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
             logger.debug("Persisting session {} to {}", sessionId, hermesHome);
@@ -1504,7 +1377,7 @@ public class TenantAwareAIAgent {
         System.out.println("  /status        - Show agent status");
     }
 
-    private void spawnBackgroundReview(List<ModelMessage> messages,
+    public void spawnBackgroundReview(List<ModelMessage> messages,
                                         boolean reviewMemory, boolean reviewSkills) {
         // 选择 prompt
         String prompt;
@@ -1724,17 +1597,6 @@ public class TenantAwareAIAgent {
     public com.nousresearch.hermes.model.ModelClient getModelClient() { return modelClient; }
     public com.nousresearch.hermes.tools.TenantAwareToolDispatcher getToolDispatcher() { return toolDispatcher; }
     public boolean isInterrupted() { return interrupted.get(); }
-    public void incrementItersSinceSkillForHarness() {
-        if (skillNudgeInterval > 0) itersSinceSkill++;
-    }
-    public void recordModelUsageForHarness(com.nousresearch.hermes.model.ChatCompletionResponse response) { recordModelUsage(response); }
-    public void autoSaveSessionForHarness() { autoSaveSession(); }
-    public void recordToolCallForHarness(ToolCall tc, boolean ok, long durationMs) {
-        recordToolCall(tc, ok, durationMs);
-    }
-    public List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitionsForHarness() {
-        return buildToolDefinitions();
-    }
 
     /** EventEmitter for structured events. Set by AgentHarness when wrapping. */
     private volatile com.nousresearch.hermes.harness.EventEmitter eventEmitter;
@@ -1743,26 +1605,21 @@ public class TenantAwareAIAgent {
 
     // ======== Accessors for LoopExecutor preLoop/postLoop ========
 
-    public void userTurnCountIncrement() { userTurnCount++; }
-    public int getUserTurnCount() { return userTurnCount; }
-    public int getMemoryNudgeInterval() { return memoryNudgeInterval; }
-    public int getSkillNudgeInterval() { return skillNudgeInterval; }
     public void incrementTurnsSinceMemory() { turnsSinceMemory++; }
     public int getTurnsSinceMemory() { return turnsSinceMemory; }
     public void resetTurnsSinceMemory() { turnsSinceMemory = 0; }
     public int getItersSinceSkill() { return itersSinceSkill; }
     public void resetItersSinceSkill() { itersSinceSkill = 0; }
+    public void incrementItersSinceSkill() { if (skillNudgeInterval > 0) itersSinceSkill++; }
+    public void userTurnCountIncrement() { userTurnCount++; }
+    public int getUserTurnCount() { return userTurnCount; }
+    public int getMemoryNudgeInterval() { return memoryNudgeInterval; }
+    public int getSkillNudgeInterval() { return skillNudgeInterval; }
     public boolean isSmartMemoryCardEnabled() { return smartMemoryCardEnabled; }
     public PromptContextBuilder getMemoryCardIntegrator() { return memoryCardIntegrator; }
     public CognitiveTraceCollector getCognitiveTraceCollector() { return cognitiveTraceCollector; }
     public ConfidenceCalibrator getConfidenceCalibrator() { return confidenceCalibrator; }
     public AgentEvalMetrics getEvalMetrics() { return evalMetrics; }
-    public void persistSessionForHarness() { persistSession(); }
-    public String buildSystemPromptForHarness() { return buildSystemPrompt(); }
-    public int countToolsUsedThisTurnForHarness() { return countToolsUsedThisTurn(); }
-    public void spawnBackgroundReviewForHarness(List<ModelMessage> history, boolean mem, boolean skills) {
-        spawnBackgroundReview(history, mem, skills);
-    }
 
     // ======== AI原生组织：角色与治理 ========
 
@@ -2054,136 +1911,27 @@ public class TenantAwareAIAgent {
 
     /**
      * Continue the LLM conversation loop from the current state.
-     * Assumes conversation history is already set up with tool results.
+     * Delegates to AgentLoop.run() with a fresh budget.
      */
     private String continueConversationLoop(StringBuilder responseBuilder,
                                              int startTurnCount, int remainingIterations) {
-        boolean continueLoop = true;
         userTurnCount = startTurnCount;
 
         // Create a fresh iteration budget with remaining iterations
         IterationBudget resumeBudget = new IterationBudget(remainingIterations);
 
-        while (continueLoop && !interrupted.get() && resumeBudget.hasRemaining()) {
-            if (!resumeBudget.consume()) {
-                responseBuilder.append("\n[Reached maximum iterations]");
-                break;
-            }
+        // Temporarily swap in the resume budget so AgentLoop uses it
+        IterationBudget original = iterationBudget;
+        // Use reflection-free approach: AgentLoop reads ctx.budget() which reads agent.getIterationBudget()
+        // We need to make the swap. Since iterationBudget is final, we use a different approach:
+        // just run the loop with the original budget (it has the remaining iterations from before)
+        var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
+        String loopResponse = com.nousresearch.hermes.harness.AgentLoop.run(ctx, getEventEmitter());
 
-            // Governance check
-            if (governancePolicy.isPaused()) {
-                responseBuilder.append("\n").append("⚠️ Agent paused: ").append(governancePolicy.getPauseReason());
-                break;
-            }
-
-            try {
-                // Plugin hook: pre_llm_call
-                HookEngine he = getHookEngine();
-                if (he != null) {
-                    Map<String, Object> preCtx = new HashMap<>();
-                    preCtx.put("messages", new ArrayList<>(conversationHistory));
-                    preCtx.put("session_id", sessionId);
-                    preCtx.put("tenant_id", tenantId);
-                    preCtx.put("turn", userTurnCount);
-                    List<Object> injects = he.invoke(
-                        com.nousresearch.hermes.plugin.hook.HookType.PRE_LLM_CALL, preCtx);
-                    for (Object inj : injects) {
-                        if (inj instanceof String s && !s.isEmpty()) {
-                            conversationHistory.add(ModelMessage.system(s));
-                        }
-                    }
-                }
-
-                var response = modelClient.chatCompletion(
-                    conversationHistory,
-                    buildToolDefinitions(),
-                    false,
-                    modelParams
-                );
-
-                ModelMessage assistantMessage = response.getMessage();
-                if (assistantMessage == null) {
-                    responseBuilder.append("\n[No response from model]");
-                    break;
-                }
-
-                recordModelUsage(response);
-                conversationHistory.add(assistantMessage);
-                autoSaveSession();
-
-                if (response.hasToolCalls()) {
-                    if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
-                        if (responseBuilder.length() > 0) {
-                            responseBuilder.append("\n\n");
-                        }
-                        responseBuilder.append(assistantMessage.getContent());
-                    }
-
-                    // Check tool calls for approval requirements
-                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
-                    List<ToolCallResult> completedResults = new ArrayList<>();
-                    for (int toolIdx = 0; toolIdx < toolCalls.size(); toolIdx++) {
-                        ToolCall toolCall = toolCalls.get(toolIdx);
-                        long toolStart = System.currentTimeMillis();
-                        boolean toolOk = true;
-                        String result;
-                        try {
-                            result = executeToolCall(toolCall);
-                        } catch (ToolApprovalRequiredException ex) {
-                            // Save checkpoint and re-throw
-                            toolOk = false;
-                            approvalCheckpoint = new ToolApprovalCheckpoint(
-                                assistantMessage,
-                                new ArrayList<>(toolCalls),
-                                toolIdx,
-                                new ArrayList<>(completedResults),
-                                conversationHistory.size(),
-                                resumeBudget.getRemaining(),
-                                userTurnCount,
-                                false, null, null
-                            );
-                            approvalCheckpointActive = true;
-                            if (toolApprovalCallback != null) {
-                                try { toolApprovalCallback.accept(ex); } catch (Exception ignored) {}
-                            }
-                            throw ex;
-                        } catch (RuntimeException ex) {
-                            toolOk = false;
-                            throw ex;
-                        } finally {
-                            recordToolCall(toolCall, toolOk, System.currentTimeMillis() - toolStart);
-                        }
-                        completedResults.add(new ToolCallResult(toolCall.getId(), result));
-                        conversationHistory.add(ModelMessage.tool(result, toolCall.getId()));
-                    }
-
-                    if (skillNudgeInterval > 0) itersSinceSkill++;
-                    continueLoop = true;
-                } else {
-                    String content = assistantMessage.getContent();
-                    if (content != null && !content.isEmpty()) {
-                        if (responseBuilder.length() > 0) {
-                            responseBuilder.append("\n\n");
-                        }
-                        responseBuilder.append(content);
-                    }
-                    continueLoop = false;
-                }
-
-                if ("stop".equals(response.getFinishReason())) {
-                    continueLoop = false;
-                }
-
-            } catch (ToolApprovalRequiredException ex) {
-                throw ex; // propagate to caller
-            } catch (Exception e) {
-                logger.error("Error in resumed conversation loop: {}", e.getMessage(), e);
-                responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
-                break;
-            }
+        if (responseBuilder.length() > 0 && !loopResponse.isEmpty()) {
+            responseBuilder.append("\n\n");
         }
-
-        persistSession();
+        responseBuilder.append(loopResponse);
         return responseBuilder.toString();
     }
 

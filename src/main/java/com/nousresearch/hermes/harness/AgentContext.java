@@ -125,20 +125,20 @@ public class AgentContext {
     }
 
     public void recordModelUsage(com.nousresearch.hermes.model.ChatCompletionResponse response) {
-        agent.recordModelUsageForHarness(response);
+        agent.recordModelUsage(response);
     }
 
-    public void autoSaveSession() { agent.autoSaveSessionForHarness(); }
-    public void persistSession() { agent.persistSessionForHarness(); }
-    public String buildSystemPrompt() { return agent.buildSystemPromptForHarness(); }
+    public void autoSaveSession() { agent.autoSaveSession(); }
+    public void persistSession() { agent.persistSession(); }
+    public String buildSystemPrompt() { return agent.buildSystemPrompt(); }
     public List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitions() {
-        return agent.buildToolDefinitionsForHarness();
+        return agent.buildToolDefinitions();
     }
-    public int countToolsUsedThisTurn() { return agent.countToolsUsedThisTurnForHarness(); }
+    public int countToolsUsedThisTurn() { return agent.countToolsUsedThisTurn(); }
     public void spawnBackgroundReview(List<ModelMessage> history, boolean mem, boolean skills) {
-        agent.spawnBackgroundReviewForHarness(history, mem, skills);
+        agent.spawnBackgroundReview(history, mem, skills);
     }
-    public void incrementItersSinceSkill() { agent.incrementItersSinceSkillForHarness(); }
+    public void incrementItersSinceSkill() { agent.incrementItersSinceSkill(); }
 
     // ===== EventEmitter =====
 
