@@ -53,6 +53,7 @@ export { initialHarnessState } from "./types/agent-event";
 export { HarnessStatusPanel } from "./components/harness/HarnessStatusPanel";
 export { ApprovalInline } from "./components/harness/ApprovalInline";
 export { ToolCallTimeline } from "./components/harness/ToolCallTimeline";
+export { HarnessHealth } from "./components/harness/HarnessHealth";
 
 // ── 2. UI primitives ──────────────────────────────────────────────
 export * from "./components/ui/badge";

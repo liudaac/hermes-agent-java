@@ -28,6 +28,28 @@ import { Button } from "@hermes/ui";
 import { Input } from "@hermes/ui";
 import { LiveBadge } from "@/components/LiveBadge";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+
+// Active harness poll hook
+function useActiveHarnesses(tenantId?: string) {
+  const [harnesses, setHarnesses] = useState<Array<{ sessionId: string; tenantId: string; status: string; debug: Record<string, unknown> }>>([]);
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+      const token = localStorage.getItem("hermes:session_token");
+      fetch(`${import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080"}/api/harness/active${qs}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.json())
+        .then((data) => { if (alive && data?.harnesses) setHarnesses(data.harnesses); })
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [tenantId]);
+  return harnesses;
+}
 import { useI18n } from "@/i18n";
 
 const SOURCE_CONFIG: Record<string, { icon: typeof Terminal; color: string }> =
@@ -279,6 +301,7 @@ function SessionRow({
   snippet,
   searchQuery,
   isExpanded,
+  isActive,
   onToggle,
   onDelete,
 }: {
@@ -286,6 +309,7 @@ function SessionRow({
   snippet?: string;
   searchQuery?: string;
   isExpanded: boolean;
+  isActive?: boolean;
   onToggle: () => void;
   onDelete: () => void;
 }) {
@@ -342,6 +366,12 @@ function SessionRow({
                 <Badge variant="success" className="text-[10px] shrink-0">
                   <LiveBadge />
                 </Badge>
+              )}
+              {isActive && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  harness
+                </span>
               )}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -437,6 +467,10 @@ export default function SessionsPage() {
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const { t } = useI18n();
+  const activeHarnesses = useActiveHarnesses();
+
+  // Build a set of active session IDs for quick lookup
+  const activeSessionIds = new Set(activeHarnesses.map((h) => h.sessionId));
 
   const loadSessions = useCallback((p: number) => {
     setLoading(true);
@@ -542,6 +576,19 @@ export default function SessionsPage() {
         </div>
       </div>
 
+      {/* Active harness bar */}
+      {activeHarnesses.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-medium text-emerald-400">
+            {activeHarnesses.length} 个活跃 Agent
+          </span>
+          <span className="text-[10px] text-zinc-500">
+            {activeHarnesses.map((h) => h.sessionId.slice(0, 8)).join(", ")}
+          </span>
+        </div>
+      )}
+
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Clock className="h-8 w-8 mb-3 opacity-40" />
@@ -564,6 +611,7 @@ export default function SessionsPage() {
                 snippet={snippetMap.get(s.id)}
                 searchQuery={search || undefined}
                 isExpanded={expandedId === s.id}
+                isActive={activeSessionIds.has(s.id)}
                 onToggle={() =>
                   setExpandedId((prev) => (prev === s.id ? null : s.id))
                 }

@@ -15,6 +15,7 @@ import { fetchJSON } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
 import { Button } from "@hermes/ui";
 import { Badge } from "@hermes/ui";
+import { HarnessHealth } from "@hermes/ui";
 import { Label } from "@hermes/ui";
 import { Switch } from "@hermes/ui";
 import { useI18n } from "@/i18n";
@@ -390,6 +391,9 @@ export default function OrgControlCenterPage() {
           <RefreshCw className="mr-2 h-4 w-4" /> {t.common.refresh}
         </Button>
       </div>
+
+      {/* Harness health summary */}
+      <HarnessHealth />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
         <Metric icon={Network} label={oc.metrics.tenants} value={overview?.tenants ?? 0} />
