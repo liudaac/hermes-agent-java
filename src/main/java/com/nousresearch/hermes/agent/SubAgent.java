@@ -2,6 +2,7 @@ package com.nousresearch.hermes.agent;
 
 import com.nousresearch.hermes.collaboration.TenantBus;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.harness.ModelProvider;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.model.ModelMessage;
@@ -38,7 +39,7 @@ public class SubAgent implements Callable<SubAgentResult> {
     private final String task;
     private final String context;
     private final HermesConfig config;
-    private final ModelClient modelClient;
+    private final ModelProvider modelProvider;
     private final ToolRegistry toolRegistry;
     private final IterationBudget budget;
     private final List<ModelMessage> conversationHistory;
@@ -53,14 +54,27 @@ public class SubAgent implements Callable<SubAgentResult> {
     private TenantBus bus;  // opt-in tenant bus for inter-agent comms
     private String busAgentId;
     
+    /**
+     * Original constructor - creates its own ModelClient.
+     * Kept for backward compatibility.
+     */
     public SubAgent(String task, String context, HermesConfig config) {
+        this(task, context, config, new ModelClient(config.getModelConfig()));
+    }
+
+    /**
+     * New constructor - accepts an external ModelProvider.
+     * Use this when spawning from AgentContext to share the parent's
+     * model connection (connection pool reuse, no duplicate HTTP clients).
+     */
+    public SubAgent(String task, String context, HermesConfig config, ModelProvider modelProvider) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
         this.task = task;
         this.context = context;
         this.config = config;
-        this.modelClient = new ModelClient(config.getModelConfig());
+        this.modelProvider = modelProvider;
         this.toolRegistry = ToolRegistry.getInstance();
-        this.budget = new IterationBudget(config.getMaxTurns() / 2); // Sub-agents get half budget
+        this.budget = new IterationBudget(config.getMaxTurns() / 2);
         this.conversationHistory = new ArrayList<>();
         this.running = false;
     }
@@ -126,10 +140,11 @@ public class SubAgent implements Callable<SubAgentResult> {
                 
                 // Call model - get tool definitions from registry
                 List<ToolDefinition> toolDefs = buildToolDefinitions();
-                var response = modelClient.chatCompletion(
+                var response = modelProvider.chat(
                     conversationHistory,
                     toolDefs.isEmpty() ? null : toolDefs,
-                    false
+                    false,
+                    null
                 );
                 
                 ModelMessage assistantMessage = response.getMessage();

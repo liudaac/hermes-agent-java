@@ -176,6 +176,8 @@ public class GatewayServerV2 {
         // Harness API (Phase A: structured agent event stream)
         app.get("/api/harness/active", this::handleHarnessActive);
         app.get("/api/harness/{sessionId}/stream", this::handleHarnessStream);
+        app.post("/api/harness/{sessionId}/approve", this::handleHarnessApprove);
+        app.post("/api/harness/{sessionId}/stop", this::handleHarnessStop);
 
         // S1-3: OpenAI 兼容 API
         OpenAICompatHandler openaiHandler = new OpenAICompatHandler(config, tenantManager);
@@ -436,6 +438,71 @@ public class GatewayServerV2 {
     }
 
     // ==================== Harness API ====================
+
+    private void handleHarnessApprove(Context ctx) {
+        try {
+            String sessionId = ctx.pathParam("sessionId");
+            JSONObject body = JSON.parseObject(ctx.body());
+            String toolCallId = body.getString("tool_call_id");
+            String decision = body.getString("decision");
+            String reason = body.getString("reason");
+            String tenantId = body.getString("tenant_id");
+            if (tenantId == null) tenantId = "default";
+
+            if (toolCallId == null || decision == null) {
+                ctx.status(400).json(Map.of("error", "tool_call_id and decision are required"));
+                return;
+            }
+
+            boolean approved = "approve".equalsIgnoreCase(decision);
+
+            // Find the tenant and agent
+            var tenant = tenantManager.getOrCreateTenant(tenantId, createDefaultProvisioningRequest());
+            var agent = tenant.getActiveAgents().get(sessionId);
+
+            if (agent == null) {
+                ctx.status(404).json(Map.of("error", "No active agent for session: " + sessionId));
+                return;
+            }
+
+            // Resume the agent with the approval decision
+            // The agent's processMessage method handles approval resumption internally
+            // via ToolApprovalCoordinator.resumeToolApproval()
+            try {
+                agent.resumeToolApproval(toolCallId, approved, reason);
+                ctx.json(Map.of("ok", true, "sessionId", sessionId,
+                    "decision", decision, "toolCallId", toolCallId));
+            } catch (Exception e) {
+                ctx.status(500).json(Map.of("error", "Failed to resume: " + e.getMessage()));
+            }
+
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private void handleHarnessStop(Context ctx) {
+        try {
+            String sessionId = ctx.pathParam("sessionId");
+            String tenantId = ctx.queryParam("tenant_id");
+            if (tenantId == null) tenantId = "default";
+
+            var tenant = tenantManager.getOrCreateTenant(tenantId, createDefaultProvisioningRequest());
+            var agent = tenant.getActiveAgents().get(sessionId);
+
+            if (agent == null) {
+                ctx.status(404).json(Map.of("error", "No active agent for session: " + sessionId));
+                return;
+            }
+
+            agent.endSession(false);
+            tenant.getActiveAgents().remove(sessionId);
+            ctx.json(Map.of("ok", true, "sessionId", sessionId, "stopped", true));
+
+        } catch (Exception e) {
+            ctx.status(500).json(Map.of("error", e.getMessage()));
+        }
+    }
 
     private void handleHarnessActive(Context ctx) {
         String tenantId = ctx.queryParam("tenant_id");

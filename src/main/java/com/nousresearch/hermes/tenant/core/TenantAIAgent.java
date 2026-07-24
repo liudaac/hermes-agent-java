@@ -141,4 +141,11 @@ public class TenantAIAgent {
     public TenantContext getContext() {
         return context;
     }
+
+    /**
+     * Resume tool approval - delegates to TenantAwareAIAgent
+     */
+    public String resumeToolApproval(String toolCallId, boolean approved, String reason) {
+        return delegate.resumeToolApproval(toolCallId, approved, reason);
+    }
 }
