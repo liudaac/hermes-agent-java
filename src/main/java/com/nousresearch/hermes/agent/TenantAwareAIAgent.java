@@ -691,19 +691,22 @@ public class TenantAwareAIAgent {
     // ==================== Private Core Logic ====================
 
     private String doProcessMessage(String message) {
-        // 1. PRE-LOOP: session hook, system prompt, memory, trace
-        boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(this, message);
+        // Build context (single interface between agent and loop)
+        var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
 
-        // 2. LOOP: think -> act -> observe
+        // 1. PRE-LOOP
+        boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
+
+        // 2. LOOP
         String loopResponse;
         try {
-            loopResponse = com.nousresearch.hermes.harness.AgentLoop.run(this, getEventEmitter());
+            loopResponse = com.nousresearch.hermes.harness.AgentLoop.run(ctx, getEventEmitter());
         } catch (ToolApprovalRequiredException ex) {
             throw ex;
         }
 
-        // 3. POST-LOOP: persist, confidence, review, transform
-        return com.nousresearch.hermes.harness.AgentLoop.postLoop(this, loopResponse, shouldReviewMemory);
+        // 3. POST-LOOP
+        return com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
     }
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {

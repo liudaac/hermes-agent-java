@@ -14,16 +14,11 @@ import java.util.*;
  * The agent loop: PRE -> LOOP -> POST.
  *
  * <p>Three static entry points that together replace the old
- * {@code TenantAwareAIAgent.doProcessMessage()} body:</p>
+ * {@code TenantAwareAIAgent.doProcessMessage()} body.</p>
  *
- * <ol>
- *   <li>{@link #preLoop} - session setup, memory nudge, cognitive trace</li>
- *   <li>{@link #run} - core think→act→observe cycle with structured events</li>
- *   <li>{@link #postLoop} - persist, confidence, background review, transform</li>
- * </ol>
- *
- * <p>Operates directly on {@link TenantAwareAIAgent}'s fields
- * (conversationHistory, iterationBudget) — no duplicate state.</p>
+ * <p>All agent access goes through {@link AgentContext} - AgentLoop
+ * never touches {@link TenantAwareAIAgent} directly. This makes the
+ * loop testable, mockable, and reusable for SubAgent.</p>
  */
 public class AgentLoop {
     private static final Logger logger = LoggerFactory.getLogger(AgentLoop.class);
@@ -32,82 +27,67 @@ public class AgentLoop {
 
     // ==================== PRE-LOOP ====================
 
-    /**
-     * Pre-loop phase: session hook, system prompt, memory nudge,
-     * cognitive trace, memory card, auto-save.
-     *
-     * @return true if memory review should run after this turn
-     */
-    public static boolean preLoop(TenantAwareAIAgent agent, String message) {
-        agent.userTurnCountIncrement();
+    public static boolean preLoop(AgentContext ctx, String message) {
+        ctx.userTurnCountIncrement();
 
-        var hookEngine = agent.getHookEngine();
-        if (hookEngine != null && agent.getUserTurnCount() == 1) {
+        var hookEngine = ctx.hookEngine();
+        if (hookEngine != null && ctx.getUserTurnCount() == 1) {
             Map<String, Object> sessionCtx = new HashMap<>();
-            sessionCtx.put("session_id", agent.getSessionId());
-            sessionCtx.put("tenant_id", agent.getTenantId());
+            sessionCtx.put("session_id", ctx.sessionId());
+            sessionCtx.put("tenant_id", ctx.tenantId());
             sessionCtx.put("message", message);
             hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
         }
 
-        if (agent.getConversationHistory().isEmpty()) {
-            agent.getConversationHistory().add(ModelMessage.system(agent.buildSystemPromptForHarness()));
+        if (ctx.history().isEmpty()) {
+            ctx.history().add(ModelMessage.system(ctx.buildSystemPrompt()));
         }
 
         boolean shouldReviewMemory = false;
-        if (agent.getMemoryNudgeInterval() > 0) {
-            agent.incrementTurnsSinceMemory();
-            if (agent.getTurnsSinceMemory() >= agent.getMemoryNudgeInterval()) {
+        if (ctx.memoryNudgeInterval() > 0) {
+            ctx.incrementTurnsSinceMemory();
+            if (ctx.getTurnsSinceMemory() >= ctx.memoryNudgeInterval()) {
                 shouldReviewMemory = true;
-                agent.resetTurnsSinceMemory();
+                ctx.resetTurnsSinceMemory();
             }
         }
 
-        agent.getConversationHistory().add(ModelMessage.user(message));
+        ctx.history().add(ModelMessage.user(message));
 
-        if (agent.getCognitiveTraceCollector() != null) {
-            agent.getCognitiveTraceCollector().observe(agent.getUserTurnCount(), message);
+        if (ctx.cognitiveTraceCollector() != null) {
+            ctx.cognitiveTraceCollector().observe(ctx.getUserTurnCount(), message);
         }
 
-        if (agent.isSmartMemoryCardEnabled() && agent.getMemoryCardIntegrator() != null) {
-            int cardSize = agent.getMemoryCardIntegrator().beforeTurn(
-                agent.getConversationHistory(), message);
-            if (agent.getEvalMetrics() != null) {
-                agent.getEvalMetrics().recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
+        if (ctx.smartMemoryCardEnabled() && ctx.memoryCardIntegrator() != null) {
+            int cardSize = ctx.memoryCardIntegrator().beforeTurn(ctx.history(), message);
+            if (ctx.evalMetrics() != null) {
+                ctx.evalMetrics().recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
             }
         }
-        agent.autoSaveSessionForHarness();
+        ctx.autoSaveSession();
 
         return shouldReviewMemory;
     }
 
     // ==================== LOOP ====================
 
-    /**
-     * Core think→act→observe loop. Operates directly on the agent's
-     * own conversationHistory and iterationBudget.
-     *
-     * @param agent   the owning agent
-     * @param emitter event emitter (null = no structured events)
-     * @return response text (empty if paused for approval)
-     */
-    public static String run(TenantAwareAIAgent agent, EventEmitter emitter) {
-        var history = agent.getConversationHistory();
-        var budget = agent.getIterationBudget();
+    public static String run(AgentContext ctx, EventEmitter emitter) {
+        var history = ctx.history();
+        var budget = ctx.budget();
 
         StringBuilder responseBuilder = new StringBuilder();
         if (emitter != null) {
             emitter.emit(AgentEvent.LOOP_START, Map.of("budget", budget.getRemaining() + budget.getUsed()));
         }
 
-        while (budget.hasRemaining() && !agent.isInterrupted()) {
+        while (budget.hasRemaining() && !ctx.isInterrupted()) {
             if (!budget.consume()) {
                 responseBuilder.append("\n[Reached maximum iterations]");
                 break;
             }
 
-            if (agent.getGovernancePolicy() != null && agent.getGovernancePolicy().isPaused()) {
-                responseBuilder.append("\n⚠️ Agent paused: ").append(agent.getGovernancePolicy().getPauseReason());
+            if (ctx.governancePolicy() != null && ctx.governancePolicy().isPaused()) {
+                responseBuilder.append("\n⚠️ Agent paused: ").append(ctx.governancePolicy().getPauseReason());
                 break;
             }
 
@@ -117,27 +97,27 @@ public class AgentLoop {
                 }
 
                 // Hook: PRE_LLM_CALL
-                if (agent.getHookEngine() != null) {
+                if (ctx.hookEngine() != null) {
                     Map<String, Object> preCtx = new HashMap<>();
                     preCtx.put("messages", new ArrayList<>(history));
-                    preCtx.put("session_id", agent.getSessionId());
-                    preCtx.put("tenant_id", agent.getTenantId());
-                    agent.getHookEngine().invoke(HookType.PRE_LLM_CALL, preCtx);
+                    preCtx.put("session_id", ctx.sessionId());
+                    preCtx.put("tenant_id", ctx.tenantId());
+                    ctx.hookEngine().invoke(HookType.PRE_LLM_CALL, preCtx);
                 }
 
                 enforceContextBudget(history, emitter);
 
-                var response = agent.getModelClient().chatCompletion(
-                    history, agent.buildToolDefinitionsForHarness(), false, agent.getModelParams());
+                var response = ctx.modelClient().chatCompletion(
+                    history, ctx.buildToolDefinitions(), false, ctx.modelParams());
 
                 // Hook: POST_LLM_CALL
-                if (agent.getHookEngine() != null) {
+                if (ctx.hookEngine() != null) {
                     Map<String, Object> postCtx = new HashMap<>();
                     postCtx.put("message", response.getMessage());
                     postCtx.put("finish_reason", response.getFinishReason());
-                    postCtx.put("session_id", agent.getSessionId());
-                    postCtx.put("tenant_id", agent.getTenantId());
-                    agent.getHookEngine().invoke(HookType.POST_LLM_CALL, postCtx);
+                    postCtx.put("session_id", ctx.sessionId());
+                    postCtx.put("tenant_id", ctx.tenantId());
+                    ctx.hookEngine().invoke(HookType.POST_LLM_CALL, postCtx);
                 }
 
                 if (emitter != null) {
@@ -152,9 +132,9 @@ public class AgentLoop {
                     break;
                 }
 
-                agent.recordModelUsageForHarness(response);
+                ctx.recordModelUsage(response);
                 history.add(assistantMessage);
-                agent.autoSaveSessionForHarness();
+                ctx.autoSaveSession();
 
                 if (response.hasToolCalls()) {
                     if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
@@ -171,7 +151,7 @@ public class AgentLoop {
                         }
 
                         long toolStart = System.currentTimeMillis();
-                        String result = agent.executeToolCall(tc);  // throws ToolApprovalRequiredException
+                        String result = ctx.executeToolCall(tc);
                         long duration = System.currentTimeMillis() - toolStart;
 
                         if (emitter != null) {
@@ -183,7 +163,7 @@ public class AgentLoop {
 
                         history.add(ModelMessage.tool(result, tc.getId()));
                     }
-                    agent.incrementItersSinceSkillForHarness();
+                    ctx.incrementItersSinceSkill();
                 } else {
                     String content = assistantMessage.getContent();
                     if (content != null && !content.isEmpty()) {
@@ -217,31 +197,27 @@ public class AgentLoop {
 
     // ==================== POST-LOOP ====================
 
-    /**
-     * Post-loop phase: persist, confidence calibration, background review,
-     * transform_llm_output hook.
-     */
-    public static String postLoop(TenantAwareAIAgent agent, String loopResponse,
+    public static String postLoop(AgentContext ctx, String loopResponse,
                                    boolean shouldReviewMemory) {
-        agent.persistSessionForHarness();
+        ctx.persistSession();
 
         boolean shouldReviewSkills = false;
-        if (agent.getSkillNudgeInterval() > 0 &&
-            agent.getItersSinceSkill() >= agent.getSkillNudgeInterval()) {
+        if (ctx.skillNudgeInterval() > 0 &&
+            ctx.getItersSinceSkill() >= ctx.skillNudgeInterval()) {
             shouldReviewSkills = true;
-            agent.resetItersSinceSkill();
+            ctx.resetItersSinceSkill();
         }
 
         String finalResponse = loopResponse;
 
         // Confidence calibration
-        if (agent.getConfidenceCalibrator() != null && !finalResponse.isEmpty()) {
-            int toolsUsed = agent.countToolsUsedThisTurnForHarness();
-            boolean hasSearch = agent.getConversationHistory().stream()
+        if (ctx.confidenceCalibrator() != null && !finalResponse.isEmpty()) {
+            int toolsUsed = ctx.countToolsUsedThisTurn();
+            boolean hasSearch = ctx.history().stream()
                 .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
-            var calibrated = agent.getConfidenceCalibrator().calibrate(finalResponse, toolsUsed, hasSearch);
-            if (agent.getEvalMetrics() != null) {
-                agent.getEvalMetrics().recordCalibration(calibrated.action());
+            var calibrated = ctx.confidenceCalibrator().calibrate(finalResponse, toolsUsed, hasSearch);
+            if (ctx.evalMetrics() != null) {
+                ctx.evalMetrics().recordCalibration(calibrated.action());
             }
             if (calibrated.action() != com.nousresearch.hermes.agent.ConfidenceCalibrator.Action.DIRECT) {
                 finalResponse = calibrated.adjustedText();
@@ -249,20 +225,20 @@ public class AgentLoop {
         }
 
         // Background review
-        if (!finalResponse.isEmpty() && !agent.isInterrupted() &&
+        if (!finalResponse.isEmpty() && !ctx.isInterrupted() &&
             (shouldReviewMemory || shouldReviewSkills)) {
-            agent.spawnBackgroundReviewForHarness(
-                new ArrayList<>(agent.getConversationHistory()),
+            ctx.spawnBackgroundReview(
+                new ArrayList<>(ctx.history()),
                 shouldReviewMemory, shouldReviewSkills);
         }
 
         // Plugin hook: transform_llm_output
-        var hookEngine = agent.getHookEngine();
+        var hookEngine = ctx.hookEngine();
         if (hookEngine != null && !finalResponse.isEmpty()) {
             Map<String, Object> outCtx = new HashMap<>();
             outCtx.put("text", finalResponse);
-            outCtx.put("session_id", agent.getSessionId());
-            outCtx.put("tenant_id", agent.getTenantId());
+            outCtx.put("session_id", ctx.sessionId());
+            outCtx.put("tenant_id", ctx.tenantId());
             List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_LLM_OUTPUT, outCtx);
             for (Object t : transforms) {
                 if (t instanceof String s && !s.isEmpty()) {

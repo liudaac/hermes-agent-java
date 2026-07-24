@@ -26,6 +26,7 @@ public class AgentHarness {
     private final TenantAIAgent delegate;
     private final long startedAtMs;
     private final CheckpointStore checkpointStore;
+    private final HermesConfig config;
 
     private volatile LoopState state;
     private volatile EventEmitter emitter;
@@ -41,6 +42,7 @@ public class AgentHarness {
         this.sessionId = sessionId;
         this.startedAtMs = System.currentTimeMillis();
         this.checkpointStore = checkpointStore;
+        this.config = config;
 
         // Try to restore from checkpoint
         int maxIters = config != null ? config.getMaxTurns() : 25;
@@ -69,10 +71,14 @@ public class AgentHarness {
     public String processMessage(String message) {
         currentPhase = "thinking";
         try {
-            // AgentLoop.preLoop + run + postLoop, all operating on the delegate's fields
-            boolean shouldReviewMemory = AgentLoop.preLoop(delegate.getDelegate(), message);
-            String loopResponse = AgentLoop.run(delegate.getDelegate(), emitter);
-            String finalResponse = AgentLoop.postLoop(delegate.getDelegate(), loopResponse, shouldReviewMemory);
+            // Build AgentContext (single interface between agent and loop)
+            var ctx = new AgentContext(delegate.getDelegate(), config);
+
+            // AgentLoop.preLoop + run + postLoop, all through AgentContext
+            boolean shouldReviewMemory = AgentLoop.preLoop(ctx, message);
+            String loopResponse = AgentLoop.run(ctx, emitter);
+            String finalResponse = AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
+
             currentPhase = "idle";
             // Clear checkpoint on successful completion
             if (checkpointStore != null) {
