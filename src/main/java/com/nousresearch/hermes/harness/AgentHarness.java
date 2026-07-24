@@ -25,16 +25,27 @@ public class AgentHarness {
     private final String sessionId;
     private final TenantAIAgent delegate;
     private final long startedAtMs;
+    private final CheckpointStore checkpointStore;
 
     private volatile LoopState state;
     private volatile EventEmitter emitter;
     private volatile String currentPhase = "idle";
 
     public AgentHarness(TenantContext tenantCtx, String sessionId, HermesConfig config) {
+        this(tenantCtx, sessionId, config, null);
+    }
+
+    public AgentHarness(TenantContext tenantCtx, String sessionId, HermesConfig config,
+                        CheckpointStore checkpointStore) {
         this.tenantCtx = tenantCtx;
         this.sessionId = sessionId;
         this.startedAtMs = System.currentTimeMillis();
-        this.state = new LoopState(config != null ? config.getMaxTurns() : 25);
+        this.checkpointStore = checkpointStore;
+
+        // Try to restore from checkpoint
+        int maxIters = config != null ? config.getMaxTurns() : 25;
+        LoopState restored = checkpointStore != null ? checkpointStore.load(sessionId, maxIters) : null;
+        this.state = restored != null ? restored : new LoopState(maxIters);
 
         // Create delegate agent
         this.delegate = config != null
@@ -59,8 +70,16 @@ public class AgentHarness {
             String response = delegate.processMessage(message);
             emitter.emit(AgentEvent.LOOP_END, Map.of("iterations", state.iterationsUsed()));
             currentPhase = "idle";
+            // Clear checkpoint on successful completion
+            if (checkpointStore != null) {
+                checkpointStore.delete(sessionId);
+            }
             return response;
         } catch (Exception e) {
+            // Save checkpoint on failure (for potential recovery)
+            if (checkpointStore != null) {
+                checkpointStore.save(sessionId, state);
+            }
             emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));
             currentPhase = "idle";
             throw e;
@@ -106,7 +125,20 @@ public class AgentHarness {
     public void endSession(boolean completed) {
         delegate.endSession(completed);
         currentPhase = "idle";
+        if (checkpointStore != null && completed) {
+            checkpointStore.delete(sessionId);
+        }
     }
+
+    /** Save checkpoint (called on approval pause or shutdown). */
+    public void saveCheckpoint() {
+        if (checkpointStore != null) {
+            checkpointStore.save(sessionId, state);
+        }
+    }
+
+    /** Get the checkpoint store (if any). */
+    public CheckpointStore checkpointStore() { return checkpointStore; }
 
     /** Stop the harness. */
     public void stop() {

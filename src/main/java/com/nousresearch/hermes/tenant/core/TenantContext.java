@@ -88,6 +88,9 @@ public class TenantContext {
     private volatile SharedBlackboard sharedBlackboard;
     private volatile Instant lastActivity = Instant.now();
 
+    // Harness 管理器（activeAgents 的上层包装，逐步替代）
+    private volatile com.nousresearch.hermes.harness.HarnessManager harnessManager;
+
     // ======== AI原生组织：协作组件 ========
     // 租户内 Agent 角色注册表（agentId → Role）
     private final ConcurrentHashMap<String, AgentRuntimeProfile> agentRoles = new ConcurrentHashMap<>();
@@ -1199,6 +1202,22 @@ public class TenantContext {
 
     public Map<String, TenantAIAgent> getActiveAgents() {
         return new ConcurrentHashMap<>(activeAgents);
+    }
+
+    /**
+     * Get or create the HarnessManager for this tenant.
+     * The HarnessManager wraps activeAgents with structured event emission,
+     * checkpoint persistence, and concurrent limit enforcement.
+     */
+    public com.nousresearch.hermes.harness.HarnessManager getHarnessManager() {
+        if (harnessManager == null) {
+            synchronized (this) {
+                if (harnessManager == null) {
+                    harnessManager = new com.nousresearch.hermes.harness.HarnessManager(this);
+                }
+            }
+        }
+        return harnessManager;
     }
 
     // ============ 工具方法 ============
