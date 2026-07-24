@@ -37,6 +37,22 @@ export { fetchJSON, getSessionToken, waitForSessionToken, gatewayFetch, API_BASE
 export { parseSseData, bindEventSource, readChunkedSSE } from "./lib/sse";
 export { useEventSource } from "./hooks/useEventSource";
 export type { UseEventSourceOptions } from "./hooks/useEventSource";
+export { useHarnessStream } from "./hooks/useHarnessStream";
+export type {
+  AgentEvent,
+  AgentEventType,
+  HarnessState,
+  HarnessStatus,
+  AgentPhase,
+  ToolCallState,
+  HarnessSnapshot,
+} from "./types/agent-event";
+export { initialHarnessState } from "./types/agent-event";
+
+// ── 5. Harness components ────────────────────────────────────────
+export { HarnessStatusPanel } from "./components/harness/HarnessStatusPanel";
+export { ApprovalInline } from "./components/harness/ApprovalInline";
+export { ToolCallTimeline } from "./components/harness/ToolCallTimeline";
 
 // ── 2. UI primitives ──────────────────────────────────────────────
 export * from "./components/ui/badge";
