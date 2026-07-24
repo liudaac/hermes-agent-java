@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { cn } from "@hermes/ui";
+import { portalApi } from "@/api/portal";
 import type { BusinessTeamCard } from "@/api/types-portal";
 
 interface EmployeeCardProps {
@@ -9,7 +11,19 @@ interface EmployeeCardProps {
   to?: string;
 }
 
-function statusClass(status: string | undefined): string {
+interface HarnessInfo {
+  sessionId: string;
+  status: string;
+  phase: string;
+}
+
+function statusClass(status: string | undefined, harness?: HarnessInfo): string {
+  // If we have live harness info, use it
+  if (harness) {
+    if (harness.status === "running") return "busy";
+    if (harness.status === "paused_approval") return "busy";
+    if (harness.status === "error") return "error";
+  }
   const s = (status ?? "").toLowerCase();
   if (s === "online" || s === "active" || s === "ready" || s === "succeeded") return "online";
   if (s === "running" || s === "busy" || s === "executing" || s === "queued") return "busy";
@@ -17,7 +31,13 @@ function statusClass(status: string | undefined): string {
   return "offline";
 }
 
-function statusLabel(status: string | undefined): string {
+function statusLabel(status: string | undefined, harness?: HarnessInfo): string {
+  if (harness) {
+    if (harness.status === "running") return "执行中";
+    if (harness.status === "paused_approval") return "等待审批";
+    if (harness.status === "error") return "异常";
+    if (harness.status === "idle") return "在线";
+  }
   const s = (status ?? "").toLowerCase();
   if (s === "online" || s === "active" || s === "ready" || s === "succeeded") return "在线";
   if (s === "running" || s === "busy" || s === "executing") return "执行中";
@@ -27,19 +47,42 @@ function statusLabel(status: string | undefined): string {
 }
 
 function pickEmoji(name: string): string {
-  // Map name to a soft emoji — gives the card a bit of personality.
   const n = name.length;
   const palette = ["✨", "🌱", "🪴", "🛠", "🧭", "📣", "🧠", "🎯", "📊", "🤝"];
   return palette[n % palette.length] ?? "✨";
 }
 
-/**
- * EmployeeCard — H5 hero card for a digital team member. Big avatar (with a
- * stable per-team emoji), soft status pulse, version count, and a tap-target
- * that fills the whole card.
- */
 export function EmployeeCard({ team, to = `/teams/${team.teamId}` }: EmployeeCardProps) {
+  const [harness, setHarness] = useState<HarnessInfo | undefined>(undefined);
+
+  // Poll active harnesses every 5s to find one matching this team
+  useEffect(() => {
+    let alive = true;
+    const poll = () => {
+      portalApi.getActiveHarnesses()
+        .then((res) => {
+          if (!alive) return;
+          const match = res.harnesses.find((h) =>
+            h.sessionId.includes(team.teamId) ||
+            (h.debug as Record<string, unknown>)?.teamId === team.teamId,
+          );
+          if (match) {
+            setHarness({ sessionId: match.sessionId, status: match.status, phase: "running" });
+          } else {
+            setHarness(undefined);
+          }
+        })
+        .catch(() => {});
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [team.teamId]);
+
   const initials = (team.name ?? "·").trim().slice(0, 2);
+  const sc = statusClass(team.status, harness);
+  const sl = statusLabel(team.status, harness);
+
   return (
     <Link to={to} className="block">
       <GlassCard
@@ -66,8 +109,8 @@ export function EmployeeCard({ team, to = `/teams/${team.teamId}` }: EmployeeCar
                 {team.name}
               </h3>
               <span
-                className={cn("status-dot shrink-0", statusClass(team.status))}
-                aria-label={team.status ?? "unknown"}
+                className={cn("status-dot shrink-0", sc)}
+                aria-label={sl}
               />
             </div>
             <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[var(--color-text-secondary)]">
@@ -79,7 +122,7 @@ export function EmployeeCard({ team, to = `/teams/${team.teamId}` }: EmployeeCar
         <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
           <span className="inline-flex items-center gap-1">
             <Users className="h-3 w-3" />
-            {statusLabel(team.status)}
+            {sl}
           </span>
           <span>v{team.activeVersion} · {team.versionCount} 个版本</span>
         </div>

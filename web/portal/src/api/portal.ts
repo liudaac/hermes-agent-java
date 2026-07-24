@@ -430,4 +430,12 @@ export const portalApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ workspaceId }),
     }),
+
+  // ── Harness API ──
+  getActiveHarnesses: (tenantId?: string) => {
+    const qs = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : "";
+    return fetchJSON<{ harnesses: Array<{ sessionId: string; tenantId: string; status: string; debug: Record<string, unknown> }>; count: number }>(
+      `/api/harness/active${qs}`,
+    );
+  },
 };
