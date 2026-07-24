@@ -60,36 +60,38 @@ public class AgentHarness {
         this.emitter = new EventEmitter(
             tenantCtx.getTenantId(), sessionId, delegate.getSessionId(), bus
         );
+
+        // Wire emitter into the underlying agent so AgentLoop.run() events flow through
+        delegate.setEventEmitter(this.emitter);
     }
 
-    /** Process a user message (delegates to TenantAIAgent). */
+    /** Process a user message through the harness (AgentLoop + structured events). */
     public String processMessage(String message) {
         currentPhase = "thinking";
-        emitter.emit(AgentEvent.LOOP_START, Map.of("budget", state.budget().getRemaining()));
         try {
-            String response = delegate.processMessage(message);
-            emitter.emit(AgentEvent.LOOP_END, Map.of("iterations", state.iterationsUsed()));
+            // AgentLoop.preLoop + run + postLoop, all operating on the delegate's fields
+            boolean shouldReviewMemory = AgentLoop.preLoop(delegate.getDelegate(), message);
+            String loopResponse = AgentLoop.run(delegate.getDelegate(), emitter);
+            String finalResponse = AgentLoop.postLoop(delegate.getDelegate(), loopResponse, shouldReviewMemory);
             currentPhase = "idle";
             // Clear checkpoint on successful completion
             if (checkpointStore != null) {
                 checkpointStore.delete(sessionId);
             }
-            return response;
+            return finalResponse;
         } catch (Exception e) {
             // Save checkpoint on failure (for potential recovery)
             if (checkpointStore != null) {
                 checkpointStore.save(sessionId, state);
             }
-            emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));
             currentPhase = "idle";
             throw e;
         }
     }
 
-    /** Stream a user message (delegates to TenantAIAgent). */
+    /** Stream a user message (delegates to TenantAIAgent for streaming). */
     public void processMessageStream(String message, Consumer<String> onChunk) {
         currentPhase = "thinking";
-        emitter.emit(AgentEvent.LOOP_START, Map.of("budget", state.budget().getRemaining()));
         emitter.subscribe(e -> {
             if (e.type().equals(AgentEvent.LLM_DELTA)) {
                 onChunk.accept((String) e.data().get("content"));
@@ -97,7 +99,6 @@ public class AgentHarness {
         });
         try {
             delegate.processMessageStream(message, onChunk);
-            emitter.emit(AgentEvent.LOOP_END, Map.of());
             currentPhase = "idle";
         } catch (Exception e) {
             emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));

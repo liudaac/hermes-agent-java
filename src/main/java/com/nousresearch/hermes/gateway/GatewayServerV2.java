@@ -549,9 +549,8 @@ public class GatewayServerV2 {
             var agent = tenant.getActiveAgents().get(sessionId);
 
             if (agent != null) {
-                // Create harness wrapper to access emitter
-                var harness = new com.nousresearch.hermes.harness.AgentHarness(
-                    tenant, sessionId, config);
+                // Get harness via HarnessManager (shared pool, concurrent limits)
+                var harness = tenant.getHarnessManager().getOrCreate(sessionId, config);
 
                 // Subscribe to harness events -> forward to SSE
                 harness.emitter().subscribe(event -> {
@@ -641,7 +640,7 @@ public class GatewayServerV2 {
 
             // Create harness wrapper for structured event emission
             com.nousresearch.hermes.harness.AgentHarness harness =
-                new com.nousresearch.hermes.harness.AgentHarness(tenant, resolvedSessionId, config);
+                tenant.getHarnessManager().getOrCreate(resolvedSessionId, config);
 
             // 应用系统提示词：请求传入 > 租户配置 > 默认
             String customSystemPrompt = body.getString("system_prompt");
@@ -733,7 +732,7 @@ public class GatewayServerV2 {
 
         // Create harness wrapper for structured event emission
         com.nousresearch.hermes.harness.AgentHarness harness =
-            new com.nousresearch.hermes.harness.AgentHarness(tenant, resolvedSessionId, config);
+            tenant.getHarnessManager().getOrCreate(resolvedSessionId, config);
 
         // Subscribe to harness events and forward to SSE
         harness.emitter().subscribe(event -> {

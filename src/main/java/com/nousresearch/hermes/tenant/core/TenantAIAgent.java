@@ -148,4 +148,18 @@ public class TenantAIAgent {
     public String resumeToolApproval(String toolCallId, boolean approved, String reason) {
         return delegate.resumeToolApproval(toolCallId, approved, reason);
     }
+
+    /**
+     * Set event emitter - delegates to TenantAwareAIAgent
+     */
+    public void setEventEmitter(com.nousresearch.hermes.harness.EventEmitter emitter) {
+        delegate.setEventEmitter(emitter);
+    }
+
+    /**
+     * Get the underlying TenantAwareAIAgent (for AgentLoop direct access).
+     */
+    public TenantAwareAIAgent getDelegate() {
+        return delegate;
+    }
 }

@@ -24,6 +24,7 @@ public class HarnessManager {
     private final TenantContext tenantCtx;
     private final ConcurrentHashMap<String, AgentHarness> active = new ConcurrentHashMap<>();
     private final int maxConcurrent;
+    private final CheckpointStore checkpointStore;
 
     public HarnessManager(TenantContext tenantCtx) {
         this.tenantCtx = tenantCtx;
@@ -34,6 +35,15 @@ public class HarnessManager {
             }
         } catch (Exception ignored) {}
         this.maxConcurrent = max;
+
+        // Initialize checkpoint store
+        java.nio.file.Path dataDir = java.nio.file.Path.of("data");
+        try {
+            if (tenantCtx.getFileSandbox() != null) {
+                dataDir = tenantCtx.getFileSandbox().getSandboxPath().getParent();
+            }
+        } catch (Exception ignored) {}
+        this.checkpointStore = new CheckpointStore(dataDir);
     }
 
     /** Get or create a harness for the given session. */
@@ -44,7 +54,7 @@ public class HarnessManager {
                     "Max concurrent agents reached: " + maxConcurrent);
             }
             logger.debug("Creating harness for session: {} (active: {})", sid, active.size() + 1);
-            return new AgentHarness(tenantCtx, sid, config);
+            return new AgentHarness(tenantCtx, sid, config, checkpointStore);
         });
     }
 

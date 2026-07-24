@@ -1,7 +1,6 @@
 package com.nousresearch.hermes.harness;
 
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
-import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
@@ -12,150 +11,140 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 
 /**
- * Stateless agent loop: think → act → observe cycle.
+ * The agent loop: PRE -> LOOP -> POST.
  *
- * <p>Extracted from {@code TenantAwareAIAgent.doProcessMessage()}.
- * All state lives in {@link LoopState}; all dependencies are in
- * {@link AgentContext}. AgentLoop itself holds zero state.</p>
+ * <p>Three static entry points that together replace the old
+ * {@code TenantAwareAIAgent.doProcessMessage()} body:</p>
  *
- * <p>Two entry points:
- * <ul>
- *   <li>{@link #run} - start a new turn with a user message</li>
- *   <li>{@link #resume} - continue after an approval decision</li>
- * </ul></p>
+ * <ol>
+ *   <li>{@link #preLoop} - session setup, memory nudge, cognitive trace</li>
+ *   <li>{@link #run} - core think→act→observe cycle with structured events</li>
+ *   <li>{@link #postLoop} - persist, confidence, background review, transform</li>
+ * </ol>
+ *
+ * <p>Operates directly on {@link TenantAwareAIAgent}'s fields
+ * (conversationHistory, iterationBudget) — no duplicate state.</p>
  */
 public class AgentLoop {
     private static final Logger logger = LoggerFactory.getLogger(AgentLoop.class);
 
-    /** Soft context window limit (tokens, ~4 chars/token). */
-    private static final int DEFAULT_CONTEXT_CHARS = 400_000;
+    private AgentLoop() {} // static utility
 
-    private final AgentContext ctx;
-    private final LoopState state;
-    private final EventEmitter emitter;
-
-    public AgentLoop(AgentContext ctx, LoopState state, EventEmitter emitter) {
-        this.ctx = ctx;
-        this.state = state;
-        this.emitter = emitter;
-    }
-
-    // ==================== Run ====================
+    // ==================== PRE-LOOP ====================
 
     /**
-     * Execute one user turn: add user message, run the loop until completion,
-     * pause, or failure.
+     * Pre-loop phase: session hook, system prompt, memory nudge,
+     * cognitive trace, memory card, auto-save.
+     *
+     * @return true if memory review should run after this turn
      */
-    public LoopResult run(String userMessage) {
-        state.setLifecycle(LoopState.Lifecycle.RUNNING);
-        emitter.emit(AgentEvent.LOOP_START, Map.of("budget", state.budget().getRemaining() + state.budget().getUsed()));
+    public static boolean preLoop(TenantAwareAIAgent agent, String message) {
+        agent.userTurnCountIncrement();
 
-        // Hook: ON_SESSION_START (first user message)
-        if (state.userTurnCount() == 0 && ctx.hookEngine() != null) {
-            var sessionCtx = new HashMap<String, Object>();
-            sessionCtx.put("session_id", ctx.sessionId());
-            sessionCtx.put("tenant_id", ctx.tenantId());
-            sessionCtx.put("message", userMessage);
-            ctx.hookEngine().invoke(HookType.ON_SESSION_START, sessionCtx);
+        var hookEngine = agent.getHookEngine();
+        if (hookEngine != null && agent.getUserTurnCount() == 1) {
+            Map<String, Object> sessionCtx = new HashMap<>();
+            sessionCtx.put("session_id", agent.getSessionId());
+            sessionCtx.put("tenant_id", agent.getTenantId());
+            sessionCtx.put("message", message);
+            hookEngine.invoke(HookType.ON_SESSION_START, sessionCtx);
         }
 
-        // Ensure system prompt at start
-        if (state.history().isEmpty()) {
-            state.addToHistory(ModelMessage.system(buildSystemPrompt()));
+        if (agent.getConversationHistory().isEmpty()) {
+            agent.getConversationHistory().add(ModelMessage.system(agent.buildSystemPromptForHarness()));
         }
 
-        state.incrementTurn();
-        state.addToHistory(ModelMessage.user(userMessage));
-
-        // Memory card (smart context injection)
-        if (ctx.smartMemoryCardEnabled() && ctx.memoryCardIntegrator() != null) {
-            ctx.memoryCardIntegrator().beforeTurn(state.history(), userMessage);
+        boolean shouldReviewMemory = false;
+        if (agent.getMemoryNudgeInterval() > 0) {
+            agent.incrementTurnsSinceMemory();
+            if (agent.getTurnsSinceMemory() >= agent.getMemoryNudgeInterval()) {
+                shouldReviewMemory = true;
+                agent.resetTurnsSinceMemory();
+            }
         }
 
-        return executeLoop(null);
+        agent.getConversationHistory().add(ModelMessage.user(message));
+
+        if (agent.getCognitiveTraceCollector() != null) {
+            agent.getCognitiveTraceCollector().observe(agent.getUserTurnCount(), message);
+        }
+
+        if (agent.isSmartMemoryCardEnabled() && agent.getMemoryCardIntegrator() != null) {
+            int cardSize = agent.getMemoryCardIntegrator().beforeTurn(
+                agent.getConversationHistory(), message);
+            if (agent.getEvalMetrics() != null) {
+                agent.getEvalMetrics().recordMemoryQuery(cardSize > 0 ? 1 : 0, cardSize);
+            }
+        }
+        agent.autoSaveSessionForHarness();
+
+        return shouldReviewMemory;
     }
 
-    // ==================== Resume ====================
+    // ==================== LOOP ====================
 
     /**
-     * Resume after an approval decision.
+     * Core think→act→observe loop. Operates directly on the agent's
+     * own conversationHistory and iterationBudget.
+     *
+     * @param agent   the owning agent
+     * @param emitter event emitter (null = no structured events)
+     * @return response text (empty if paused for approval)
      */
-    public LoopResult resume(String toolCallId, boolean approved, String reason) {
-        LoopCheckpoint cp = state.checkpoint();
-        if (cp == null) {
-            return new LoopResult.Failed("No checkpoint to resume from");
-        }
+    public static String run(TenantAwareAIAgent agent, EventEmitter emitter) {
+        var history = agent.getConversationHistory();
+        var budget = agent.getIterationBudget();
 
-        ToolCall pending = cp.pendingToolCall();
-        if (!pending.getId().equals(toolCallId)) {
-            return new LoopResult.Failed("Tool call ID mismatch");
-        }
-
-        state.clearCheckpoint();
-        state.setLifecycle(LoopState.Lifecycle.RUNNING);
-
-        // Execute or reject the pending tool
-        String result;
-        if (approved) {
-            result = executeTool(pending);
-        } else {
-            result = "{\"error\":\"Rejected: " + (reason != null ? reason : "no reason") + "\"}";
-        }
-        state.addToHistory(ModelMessage.tool(result, pending.getId()));
-
-        // Execute remaining tool calls after the pending one
-        for (int i = cp.pendingIndex() + 1; i < cp.toolCalls().size(); i++) {
-            ToolCall tc = cp.toolCalls().get(i);
-            result = executeTool(tc);
-            state.addToHistory(ModelMessage.tool(result, tc.getId()));
-        }
-
-        // Continue the main loop
-        return executeLoop(null);
-    }
-
-    // ==================== Core loop ====================
-
-    private LoopResult executeLoop(String contentPrefix) {
         StringBuilder responseBuilder = new StringBuilder();
-        if (contentPrefix != null && !contentPrefix.isEmpty()) {
-            responseBuilder.append(contentPrefix);
+        if (emitter != null) {
+            emitter.emit(AgentEvent.LOOP_START, Map.of("budget", budget.getRemaining() + budget.getUsed()));
         }
 
-        while (state.budget().hasRemaining() && state.isRunning() && !state.isInterrupted()) {
-            if (!state.budget().consume()) {
+        while (budget.hasRemaining() && !agent.isInterrupted()) {
+            if (!budget.consume()) {
                 responseBuilder.append("\n[Reached maximum iterations]");
                 break;
             }
 
-            // Governance check
-            if (ctx.governancePolicy() != null && ctx.governancePolicy().isPaused()) {
-                state.setLifecycle(LoopState.Lifecycle.PAUSED_GOVERNANCE);
-                responseBuilder.append("\n⚠️ Agent paused: ")
-                    .append(ctx.governancePolicy().getPauseReason());
+            if (agent.getGovernancePolicy() != null && agent.getGovernancePolicy().isPaused()) {
+                responseBuilder.append("\n⚠️ Agent paused: ").append(agent.getGovernancePolicy().getPauseReason());
                 break;
             }
 
             try {
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.PRE_LLM, Map.of("iteration", budget.getUsed()));
+                }
+
                 // Hook: PRE_LLM_CALL
-                emitter.emit(AgentEvent.PRE_LLM, Map.of("iteration", state.budget().getUsed()));
-                invokeHook(HookType.PRE_LLM_CALL);
+                if (agent.getHookEngine() != null) {
+                    Map<String, Object> preCtx = new HashMap<>();
+                    preCtx.put("messages", new ArrayList<>(history));
+                    preCtx.put("session_id", agent.getSessionId());
+                    preCtx.put("tenant_id", agent.getTenantId());
+                    agent.getHookEngine().invoke(HookType.PRE_LLM_CALL, preCtx);
+                }
 
-                enforceContextBudget();
+                enforceContextBudget(history, emitter);
 
-                var response = ctx.modelClient().chatCompletion(
-                    state.history(),
-                    buildToolDefinitions(),
-                    false,
-                    ctx.modelParams()
-                );
+                var response = agent.getModelClient().chatCompletion(
+                    history, agent.buildToolDefinitionsForHarness(), false, agent.getModelParams());
 
                 // Hook: POST_LLM_CALL
-                invokeHook(HookType.POST_LLM_CALL);
-                emitter.emit(AgentEvent.POST_LLM, Map.of(
-                    "finishReason", response.getFinishReason() != null ? response.getFinishReason() : "stop",
-                    "hasToolCalls", response.hasToolCalls()
-                ));
+                if (agent.getHookEngine() != null) {
+                    Map<String, Object> postCtx = new HashMap<>();
+                    postCtx.put("message", response.getMessage());
+                    postCtx.put("finish_reason", response.getFinishReason());
+                    postCtx.put("session_id", agent.getSessionId());
+                    postCtx.put("tenant_id", agent.getTenantId());
+                    agent.getHookEngine().invoke(HookType.POST_LLM_CALL, postCtx);
+                }
+
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.POST_LLM, Map.of(
+                        "finishReason", response.getFinishReason() != null ? response.getFinishReason() : "stop",
+                        "hasToolCalls", response.hasToolCalls()));
+                }
 
                 ModelMessage assistantMessage = response.getMessage();
                 if (assistantMessage == null) {
@@ -163,77 +152,39 @@ public class AgentLoop {
                     break;
                 }
 
-                recordModelUsage(response);
-                state.addToHistory(assistantMessage);
+                agent.recordModelUsageForHarness(response);
+                history.add(assistantMessage);
+                agent.autoSaveSessionForHarness();
 
                 if (response.hasToolCalls()) {
-                    // Append assistant text content
                     if (assistantMessage.getContent() != null && !assistantMessage.getContent().isEmpty()) {
                         if (responseBuilder.length() > 0) responseBuilder.append("\n\n");
                         responseBuilder.append(assistantMessage.getContent());
                     }
 
-                    // Process tool calls
-                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
-                    List<LoopCheckpoint.ToolCallResult> completed = new ArrayList<>();
-
-                    for (int i = 0; i < toolCalls.size(); i++) {
-                        ToolCall tc = toolCalls.get(i);
-
-                        emitter.emit(AgentEvent.PRE_TOOL, Map.of(
-                            "callId", tc.getId(),
-                            "tool", tc.getFunction().getName(),
-                            "args", tc.getFunction().getArguments()
-                        ));
-
-                        // Approval check
-                        if (needsApproval(tc)) {
-                            state.snapshot(assistantMessage, toolCalls, i, completed,
-                                state.budget().getRemaining(), state.userTurnCount());
-                            state.setLifecycle(LoopState.Lifecycle.PAUSED_APPROVAL);
-
-                            emitter.emit(AgentEvent.APPROVAL_NEEDED, Map.of(
+                    for (ToolCall tc : assistantMessage.getToolCalls()) {
+                        if (emitter != null) {
+                            emitter.emit(AgentEvent.PRE_TOOL, Map.of(
                                 "callId", tc.getId(),
                                 "tool", tc.getFunction().getName(),
-                                "risk", assessRisk(tc)
-                            ));
-
-                            // Fire callback
-                            if (ctx.toolApprovalCallback() != null) {
-                                try {
-                                    ctx.toolApprovalCallback().accept(
-                                        new TenantAwareAIAgent.ToolApprovalRequiredException(
-                                            tc.getFunction().getName(),
-                                            tc.getFunction().getArguments(),
-                                            ctx.agentId(),
-                                            "tool-level approval rule",
-                                            "Tool '" + tc.getFunction().getName() + "' requires approval"
-                                        ));
-                                } catch (Exception ignored) {}
-                            }
-
-                            return new LoopResult.Paused(state);
+                                "args", tc.getFunction().getArguments()));
                         }
 
-                        // Execute tool
                         long toolStart = System.currentTimeMillis();
-                        String result = executeTool(tc);
+                        String result = agent.executeToolCall(tc);  // throws ToolApprovalRequiredException
                         long duration = System.currentTimeMillis() - toolStart;
 
-                        emitter.emit(AgentEvent.POST_TOOL, Map.of(
-                            "callId", tc.getId(),
-                            "ok", !result.contains("\"error\""),
-                            "durationMs", duration
-                        ));
+                        if (emitter != null) {
+                            emitter.emit(AgentEvent.POST_TOOL, Map.of(
+                                "callId", tc.getId(),
+                                "ok", !result.contains("\"error\""),
+                                "durationMs", duration));
+                        }
 
-                        completed.add(new LoopCheckpoint.ToolCallResult(tc.getId(), result));
-                        state.addToHistory(ModelMessage.tool(result, tc.getId()));
+                        history.add(ModelMessage.tool(result, tc.getId()));
                     }
-
-                    state.incrementItersSinceSkill();
-                    // Continue loop (LLM sees tool results)
+                    agent.incrementItersSinceSkillForHarness();
                 } else {
-                    // No tool calls = final response
                     String content = assistantMessage.getContent();
                     if (content != null && !content.isEmpty()) {
                         if (responseBuilder.length() > 0) responseBuilder.append("\n\n");
@@ -242,236 +193,107 @@ public class AgentLoop {
                     break;
                 }
 
-                if ("stop".equals(response.getFinishReason())) {
-                    break;
-                }
+                if ("stop".equals(response.getFinishReason())) break;
 
             } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
                 throw ex;
             } catch (Exception e) {
                 logger.error("Error in loop: {}", e.getMessage(), e);
-                emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));
-                state.setLifecycle(LoopState.Lifecycle.FAILED);
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));
+                }
                 responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
                 break;
             }
         }
 
-        state.setLifecycle(LoopState.Lifecycle.IDLE);
-        emitter.emit(AgentEvent.LOOP_END, Map.of(
-            "iterations", state.budget().getUsed(),
-            "messages", state.historySize()
-        ));
-
-        return new LoopResult.Completed(responseBuilder.toString());
+        if (emitter != null) {
+            emitter.emit(AgentEvent.LOOP_END, Map.of(
+                "iterations", budget.getUsed(),
+                "messages", history.size()));
+        }
+        return responseBuilder.toString();
     }
 
-    // ==================== Tool execution ====================
+    // ==================== POST-LOOP ====================
 
-    private String executeTool(ToolCall toolCall) {
-        String toolName = toolCall.getFunction().getName();
-        String arguments = toolCall.getFunction().getArguments();
-        logger.debug("Executing tool: {} for tenant: {}", toolName, ctx.tenantId());
+    /**
+     * Post-loop phase: persist, confidence calibration, background review,
+     * transform_llm_output hook.
+     */
+    public static String postLoop(TenantAwareAIAgent agent, String loopResponse,
+                                   boolean shouldReviewMemory) {
+        agent.persistSessionForHarness();
 
-        // Role permission check
-        if (ctx.role() != null) {
-            if (!ctx.role().getAllowedTools().isEmpty()
-                    && !ctx.role().getAllowedTools().contains(toolName)) {
-                return "{\"error\":\"Access denied: '" + toolName
-                    + "' not allowed for role '" + ctx.role().getRoleName() + "'\"}";
+        boolean shouldReviewSkills = false;
+        if (agent.getSkillNudgeInterval() > 0 &&
+            agent.getItersSinceSkill() >= agent.getSkillNudgeInterval()) {
+            shouldReviewSkills = true;
+            agent.resetItersSinceSkill();
+        }
+
+        String finalResponse = loopResponse;
+
+        // Confidence calibration
+        if (agent.getConfidenceCalibrator() != null && !finalResponse.isEmpty()) {
+            int toolsUsed = agent.countToolsUsedThisTurnForHarness();
+            boolean hasSearch = agent.getConversationHistory().stream()
+                .anyMatch(m -> m.getContent() != null && m.getContent().contains("Search results"));
+            var calibrated = agent.getConfidenceCalibrator().calibrate(finalResponse, toolsUsed, hasSearch);
+            if (agent.getEvalMetrics() != null) {
+                agent.getEvalMetrics().recordCalibration(calibrated.action());
             }
-            if (ctx.role().getDeniedTools().contains(toolName)) {
-                return "{\"error\":\"Access denied: '" + toolName
-                    + "' is denied for role '" + ctx.role().getRoleName() + "'\"}";
+            if (calibrated.action() != com.nousresearch.hermes.agent.ConfidenceCalibrator.Action.DIRECT) {
+                finalResponse = calibrated.adjustedText();
             }
         }
 
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
-                .readValue(arguments, Map.class);
+        // Background review
+        if (!finalResponse.isEmpty() && !agent.isInterrupted() &&
+            (shouldReviewMemory || shouldReviewSkills)) {
+            agent.spawnBackgroundReviewForHarness(
+                new ArrayList<>(agent.getConversationHistory()),
+                shouldReviewMemory, shouldReviewSkills);
+        }
 
-            if (ctx.toolDispatcher() != null) {
-                return ctx.toolDispatcher().dispatch(toolName, args);
+        // Plugin hook: transform_llm_output
+        var hookEngine = agent.getHookEngine();
+        if (hookEngine != null && !finalResponse.isEmpty()) {
+            Map<String, Object> outCtx = new HashMap<>();
+            outCtx.put("text", finalResponse);
+            outCtx.put("session_id", agent.getSessionId());
+            outCtx.put("tenant_id", agent.getTenantId());
+            List<Object> transforms = hookEngine.invoke(HookType.TRANSFORM_LLM_OUTPUT, outCtx);
+            for (Object t : transforms) {
+                if (t instanceof String s && !s.isEmpty()) {
+                    finalResponse = s;
+                }
             }
-
-            // Fallback to global registry
-            var entry = com.nousresearch.hermes.tools.ToolRegistry.getInstance()
-                .getAllTools().stream()
-                .filter(t -> t.getName().equals(toolName))
-                .findFirst().orElse(null);
-            if (entry != null) {
-                return entry.getHandler().apply(args);
-            }
-            return "{\"error\":\"Unknown tool: " + toolName + "\"}";
-
-        } catch (Exception e) {
-            logger.error("Tool execution failed: {}", toolName, e);
-            return "{\"error\":\"Execution failed: " + e.getMessage() + "\"}";
         }
-    }
 
-    // ==================== Approval check ====================
-
-    private boolean needsApproval(ToolCall tc) {
-        String toolName = tc.getFunction().getName();
-        if (ctx.role() == null || ctx.role().getToolApprovalRules().isEmpty()) {
-            return false;
-        }
-        String argsStr = tc.getFunction().getArguments() != null
-            ? tc.getFunction().getArguments().toLowerCase() : "";
-
-        for (String rule : ctx.role().getToolApprovalRules()) {
-            if (rule == null || rule.isBlank()) continue;
-            String n = rule.trim().toLowerCase();
-
-            if ("always".equals(n)) return true;
-            if (("high-risk".equals(n) || "high-risk-tools".equals(n)) && isHighRisk(toolName)) return true;
-            if (("external".equals(n) || "external-tools".equals(n)) && isExternal(toolName)) return true;
-            if (n.startsWith("tool:") && toolName.toLowerCase().equals(n.substring(5).trim())) return true;
-            if (n.startsWith("contains:") && argsStr.contains(n.substring(9).trim())) return true;
-        }
-        return false;
-    }
-
-    private String assessRisk(ToolCall tc) {
-        String name = tc.getFunction().getName().toLowerCase();
-        if (name.contains("exec") || name.contains("delete") || name.contains("remove")) return "HIGH";
-        if (name.contains("write") || name.contains("send")) return "MEDIUM";
-        return "LOW";
-    }
-
-    private static boolean isHighRisk(String name) {
-        String l = name.toLowerCase();
-        return l.contains("exec") || l.contains("delete") || l.contains("remove")
-            || l.contains("write") || l.contains("send_") || l.contains("post");
-    }
-
-    private static boolean isExternal(String name) {
-        String l = name.toLowerCase();
-        return l.contains("send") || l.contains("email") || l.contains("post")
-            || l.contains("browser") || l.contains("web_fetch");
+        return finalResponse;
     }
 
     // ==================== Helpers ====================
 
-    private void invokeHook(HookType type) {
-        if (ctx.hookEngine() == null) return;
-        var hookCtx = new HashMap<String, Object>();
-        hookCtx.put("messages", new ArrayList<>(state.history()));
-        hookCtx.put("session_id", ctx.sessionId());
-        hookCtx.put("tenant_id", ctx.tenantId());
-        hookCtx.put("turn", state.userTurnCount());
-        ctx.hookEngine().invoke(type, hookCtx);
-    }
-
-    private void enforceContextBudget() {
+    private static void enforceContextBudget(List<ModelMessage> history, EventEmitter emitter) {
         int totalChars = 0;
-        for (ModelMessage m : state.history()) {
+        for (ModelMessage m : history) {
             if (m.getContent() != null) totalChars += m.getContent().length();
         }
-        if (totalChars <= DEFAULT_CONTEXT_CHARS) return;
+        int limit = 400_000;
+        if (totalChars <= limit) return;
 
-        int target = (int) (DEFAULT_CONTEXT_CHARS * 0.75);
+        int target = (int) (limit * 0.75);
         int dropped = 0;
-        int i = 1; // preserve system (index 0)
-        while (totalChars > target && state.history().size() > 6 && i < state.history().size() - 4) {
-            ModelMessage m = state.history().remove(i);
+        int i = 1;
+        while (totalChars > target && history.size() > 6 && i < history.size() - 4) {
+            ModelMessage m = history.remove(i);
             totalChars -= m.getContent() == null ? 0 : m.getContent().length();
             dropped++;
         }
-        if (dropped > 0) {
+        if (dropped > 0 && emitter != null) {
             emitter.emit(AgentEvent.CONTEXT_COMPRESSED, Map.of("dropped", dropped));
-            logger.info("Enforced context budget, dropped {} messages", dropped);
         }
-    }
-
-    private void recordModelUsage(ChatCompletionResponse response) {
-        if (response == null || response.getUsage() == null) return;
-        var usage = response.getUsage();
-        long total = usage.getTotalTokens() > 0 ? usage.getTotalTokens()
-            : usage.getPromptTokens() + usage.getCompletionTokens();
-
-        // Update quota
-        if (ctx.quotaManager() != null) {
-            try {
-                ctx.quotaManager().getStoreIfAvailable()
-                    .ifPresent(store -> store.addAndGetDailyTokens(total));
-            } catch (Exception e) {
-                logger.debug("Failed to update quota: {}", e.getMessage());
-            }
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitions() {
-        var registry = com.nousresearch.hermes.tools.ToolRegistry.getInstance();
-        Set<String> toolNames = new HashSet<>(registry.getAllToolNames());
-
-        // Tenant security policy filter
-        if (ctx.tenantContext() != null) {
-            var allowed = ctx.tenantContext().getSecurityPolicy().getAllowedTools();
-            var denied = ctx.tenantContext().getSecurityPolicy().getDeniedTools();
-            if (!allowed.isEmpty()) toolNames.retainAll(allowed);
-            toolNames.removeAll(denied);
-        }
-
-        // Role filter
-        if (ctx.role() != null) {
-            if (!ctx.role().getAllowedTools().isEmpty())
-                toolNames.retainAll(ctx.role().getAllowedTools());
-            if (!ctx.role().getDeniedTools().isEmpty())
-                toolNames.removeAll(ctx.role().getDeniedTools());
-        }
-
-        List<Map<String, Object>> defs = registry.getDefinitions(toolNames, false);
-        List<com.nousresearch.hermes.model.ToolDefinition> result = new ArrayList<>();
-        for (Map<String, Object> def : defs) {
-            Map<String, Object> function = (Map<String, Object>) def.get("function");
-            if (function != null) {
-                result.add(com.nousresearch.hermes.model.ToolDefinition.builder()
-                    .name((String) function.get("name"))
-                    .description((String) function.get("description"))
-                    .parameters((Map<String, Object>) function.get("parameters"))
-                    .build());
-            }
-        }
-        return result;
-    }
-
-    private String buildSystemPrompt() {
-        String custom = ctx.customSystemPrompt();
-        if (custom != null && !custom.isBlank()) return custom;
-
-        StringBuilder prompt = new StringBuilder();
-        prompt.append(Constants.DEFAULT_AGENT_IDENTITY).append("\n\n");
-        prompt.append(Constants.MEMORY_GUIDANCE).append("\n\n");
-        prompt.append(Constants.TOOL_USE_ENFORCEMENT_GUIDANCE).append("\n\n");
-        prompt.append(Constants.EXECUTION_DISCIPLINE_GUIDANCE).append("\n\n");
-        prompt.append(Constants.SESSION_SEARCH_GUIDANCE).append("\n\n");
-        prompt.append(Constants.SKILLS_GUIDANCE).append("\n\n");
-
-        if (ctx.memoryStore() != null) {
-            String memCtx = ctx.memoryStore().getSystemPromptSnapshot();
-            if (!memCtx.isEmpty()) prompt.append(memCtx).append("\n\n");
-        }
-
-        if (ctx.toolPerformanceTracker() != null) {
-            String hints = ctx.toolPerformanceTracker().buildHintBlock();
-            if (!hints.isEmpty()) prompt.append(hints).append("\n");
-        }
-
-        if (ctx.evolutionEngine() != null) {
-            String evoCtx = ctx.evolutionEngine().buildEvolutionPrompt(ctx.agentId());
-            if (!evoCtx.isBlank() && !evoCtx.trim().equals("# Self-Evolution Context")) {
-                prompt.append(evoCtx).append("\n");
-            }
-        }
-
-        if (ctx.team() != null) {
-            prompt.append(ctx.team().describeForPrompt()).append("\n");
-        }
-
-        return prompt.toString();
     }
 }
