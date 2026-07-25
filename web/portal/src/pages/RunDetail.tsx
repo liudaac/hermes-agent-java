@@ -45,7 +45,7 @@ export default function RunDetail() {
   }, [isActive, workspaceId, runId]);
 
   const handleApprove = async (approved: boolean) => {
-    if (!run?.runId || !harness.pendingApproval) return;
+    if (!run?.runId || !harness.pendingApproval || !workspaceId) return;
     try {
       await fetch(`${GATEWAY_URL}/api/harness/${run.runId}/approve`, {
         method: "POST",
@@ -55,6 +55,9 @@ export default function RunDetail() {
           decision: approved ? "approve" : "reject",
         }),
       });
+      // Refresh run state
+      const res = await portalApi.getBusinessRun(workspaceId, runId!);
+      setRun(res.run);
     } catch (e) {
       setError(String(e));
     }

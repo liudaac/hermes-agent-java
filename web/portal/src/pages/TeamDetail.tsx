@@ -4,43 +4,35 @@ import { portalApi } from "@/api/portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { Users, Activity as ActivityIcon } from "lucide-react";
 
 export default function TeamDetail() {
   const { teamId } = useParams();
+  const { workspaceId } = useWorkspace();
   const [blueprint, setBlueprint] = useState<any | null>(null);
   const [team, setTeam] = useState<any | null>(null);
   const [recentRuns, setRecentRuns] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!teamId) return;
+    if (!teamId || !workspaceId) return;
     let alive = true;
-    let mountedWorkspace: string | null = null;
 
     (async () => {
       try {
-        const home = await portalApi.getBusinessHome();
-        if (!alive) return;
-        const ws = home.workspaceId ?? home.workspaces?.[0]?.workspaceId;
-        if (!ws) {
-          setError("找不到工作区");
-          return;
-        }
-        mountedWorkspace = ws;
-
         // Team basic info from list.
-        const teamsRes = await portalApi.getBusinessTeams(ws);
+        const teamsRes = await portalApi.getBusinessTeams(workspaceId);
         if (alive) {
           setTeam((teamsRes.teams ?? []).find((t) => t.teamId === teamId) ?? null);
         }
 
         // Full blueprint (members, etc.).
-        const bp = await portalApi.getBusinessTeamBlueprint(ws, teamId);
+        const bp = await portalApi.getBusinessTeamBlueprint(workspaceId, teamId);
         if (alive) setBlueprint(bp);
 
         // Recent runs for this team.
-        const runsRes = await portalApi.getBusinessRuns(ws, 10);
+        const runsRes = await portalApi.getBusinessRuns(workspaceId, 10);
         if (alive) {
           setRecentRuns(
             (runsRes.runs ?? []).filter((r) => r.teamId === teamId).slice(0, 6),
@@ -53,9 +45,8 @@ export default function TeamDetail() {
 
     return () => {
       alive = false;
-      void mountedWorkspace;
     };
-  }, [teamId]);
+  }, [teamId, workspaceId]);
 
   return (
     <AuroraBackground>

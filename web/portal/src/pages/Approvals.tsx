@@ -10,31 +10,22 @@ import { Inbox, Check, X } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { formatRelativeTime } from "@hermes/ui";
 import { cn } from "@hermes/ui";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export default function Approvals() {
   const { t } = useI18n();
+  const { workspaceId } = useWorkspace();
   const [data, setData] = useState<BusinessApprovalRecord[] | null>(null);
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!workspaceId) return;
     let alive = true;
-    // First we need a workspaceId — derive it from /home.
     portalApi
-      .getBusinessHome()
-      .then((home) => {
-        if (!alive) return;
-        const ws = home.workspaceId ?? home.workspaces?.[0]?.workspaceId;
-        if (!ws) {
-          setError("找不到工作区");
-          return;
-        }
-        setWorkspaceId(ws);
-        return portalApi.getBusinessApprovals(ws, "PENDING");
-      })
+      .getBusinessApprovals(workspaceId, "PENDING")
       .then((res) => {
-        if (!alive || !res) return;
+        if (!alive) return;
         const v = res as BusinessApprovalsResponse;
         setData(v.approvals ?? []);
       })
@@ -44,7 +35,7 @@ export default function Approvals() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [workspaceId]);
 
   const decide = async (approval: BusinessApprovalRecord, decision: "approve" | "reject") => {
     if (!approval.approvalId || !workspaceId) return;
@@ -70,6 +61,15 @@ export default function Approvals() {
   return (
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
+        <header className="mb-5">
+          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+            {t("nav.approvals")}
+          </h1>
+          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+            需要你处理的审批事项
+          </p>
+        </header>
+
         {error && (
           <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
             <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
@@ -86,6 +86,9 @@ export default function Approvals() {
           <GlassCard tone="default" className="flex flex-col items-center gap-3 py-10 text-center">
             <Inbox className="h-7 w-7 text-[var(--color-text-muted)]" />
             <p className="text-[14px] text-[var(--color-text-secondary)]">{t("approvals.empty")}</p>
+            <p className="text-[12px] text-[var(--color-text-muted)]">
+              没有待处理审批，喝杯咖啡 ☕
+            </p>
           </GlassCard>
         ) : (
           <div className="space-y-3">

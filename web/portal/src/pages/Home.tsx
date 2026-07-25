@@ -19,11 +19,13 @@ import { EmployeeCard } from "@/components/EmployeeCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
 import { useI18n } from "@/i18n";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@hermes/ui";
 import { formatNumber, formatRelativeTime } from "@hermes/ui";
 
 export default function Home() {
   const { t } = useI18n();
+  const { workspaceId } = useWorkspace();
   const [home, setHome] = useState<BusinessHomeResponse | null>(null);
   const [teams, setTeams] = useState<BusinessTeamCard[] | null>(null);
   const [scenarios, setScenarios] = useState<BusinessScenarioRecord[] | null>(null);
@@ -58,7 +60,7 @@ export default function Home() {
 
   // Once we know the workspaceId, load scenarios.
   useEffect(() => {
-    const ws = home?.workspaceId ?? home?.workspaces?.[0]?.workspaceId;
+    const ws = workspaceId ?? home?.workspaceId ?? home?.workspaces?.[0]?.workspaceId;
     if (!ws) return;
     let alive = true;
     portalApi
@@ -72,7 +74,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [home?.workspaceId, home?.workspaces]);
+  }, [workspaceId, home?.workspaceId, home?.workspaces]);
 
   const greeting = pickGreeting();
   const summary = home?.summary;
