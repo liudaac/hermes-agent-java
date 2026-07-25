@@ -48,6 +48,7 @@ public class ToolInitializerV2 {
         
         // Sub-agents
         new SubAgentTool().register(registry);
+        AgentDelegateTool.register(registry);
         
         // RL Training
         new RLTrainingTool().register(registry);

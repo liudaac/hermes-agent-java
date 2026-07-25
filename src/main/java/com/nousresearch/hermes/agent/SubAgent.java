@@ -2,6 +2,7 @@ package com.nousresearch.hermes.agent;
 
 import com.nousresearch.hermes.collaboration.TenantBus;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.harness.ForkMode;
 import com.nousresearch.hermes.harness.ModelProvider;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
@@ -44,6 +45,9 @@ public class SubAgent implements Callable<SubAgentResult> {
     private final IterationBudget budget;
     private final List<ModelMessage> conversationHistory;
     
+    // Forked history (pre-seeded from parent, before system prompt)
+    private List<ModelMessage> forkedHistory = null;
+
     // Optional overrides for specialized forks
     private Set<String> toolWhitelist = null;
     private String systemPromptOverride = null;
@@ -91,6 +95,60 @@ public class SubAgent implements Callable<SubAgentResult> {
         return this;
     }
 
+    /**
+     * Fork from a parent agent's conversation history.
+     *
+     * <p>After this call, the sub-agent's conversation will start with
+     * the forked history (optionally compressed), followed by the
+     * sub-agent's own system prompt and task.</p>
+     *
+     * @param parentHistory  the parent agent's conversation history
+     * @param mode           how much history to fork
+     */
+    public SubAgent forkFrom(List<ModelMessage> parentHistory, ForkMode mode) {
+        if (parentHistory == null || parentHistory.isEmpty()) {
+            return this; // nothing to fork
+        }
+
+        switch (mode) {
+            case FULL -> {
+                // Deep copy: new ModelMessage objects
+                this.forkedHistory = new ArrayList<>(parentHistory.size());
+                for (ModelMessage m : parentHistory) {
+                    this.forkedHistory.add(copyMessage(m));
+                }
+            }
+            case COMPRESSED -> {
+                // Copy, then run ContextManager compression on the copy
+                List<ModelMessage> copy = new ArrayList<>(parentHistory.size());
+                for (ModelMessage m : parentHistory) {
+                    copy.add(copyMessage(m));
+                }
+                var cm = new com.nousresearch.hermes.harness.ContextManager();
+                cm.enforce(copy, null);
+                this.forkedHistory = copy;
+            }
+            case CLEAN -> {
+                // No fork, just use context string (existing behavior)
+                this.forkedHistory = null;
+            }
+        }
+        return this;
+    }
+
+    private static ModelMessage copyMessage(ModelMessage src) {
+        String role = src.getRole();
+        if ("system".equals(role)) return ModelMessage.system(src.getContent());
+        if ("user".equals(role)) return ModelMessage.user(src.getContent());
+        if ("assistant".equals(role)) {
+            var msg = ModelMessage.assistant(src.getContent());
+            if (src.getToolCalls() != null) msg.setToolCalls(src.getToolCalls());
+            return msg;
+        }
+        if ("tool".equals(role)) return ModelMessage.tool(src.getContent(), src.getToolCallId());
+        return ModelMessage.system(src.getContent()); // fallback
+    }
+
     /** Restrict the sub-agent to a specific set of tools (whitelist). */
     public SubAgent withToolWhitelist(Set<String> tools) {
         this.toolWhitelist = tools != null ? new java.util.HashSet<>(tools) : null;
@@ -117,9 +175,22 @@ public class SubAgent implements Callable<SubAgentResult> {
         try {
             logger.info("[SubAgent {}] Starting task: {}", id, task.substring(0, Math.min(50, task.length())));
             
+            // Seed from forked history if available
+            if (forkedHistory != null && !forkedHistory.isEmpty()) {
+                // Remove the parent's system prompt (first message) - we'll add our own
+                int start = 0;
+                if ("system".equals(forkedHistory.get(0).getRole())) {
+                    start = 1;
+                }
+                for (int i = start; i < forkedHistory.size(); i++) {
+                    conversationHistory.add(copyMessage(forkedHistory.get(i)));
+                }
+                logger.debug("[SubAgent {}] Forked {} messages from parent", id, forkedHistory.size() - start);
+            }
+            
             // Build system prompt for sub-agent
             String systemPrompt = buildSystemPrompt();
-            conversationHistory.add(ModelMessage.system(systemPrompt));
+            conversationHistory.add(0, ModelMessage.system(systemPrompt));
             
             // Add context if provided
             if (context != null && !context.isEmpty()) {

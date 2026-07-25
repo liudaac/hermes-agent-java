@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.tools;
 
+import com.nousresearch.hermes.tools.impl.AgentDelegateTool;
 import com.nousresearch.hermes.tools.impl.BrowserToolV2;
 import com.nousresearch.hermes.tools.impl.CodeTool;
 import com.nousresearch.hermes.tools.impl.FileTool;
@@ -79,6 +80,7 @@ public class ToolInitializer {
         // Register sub-agent tools
         try {
             SubAgentTool.register(registry);
+            AgentDelegateTool.register(registry);
             logger.debug("Registered sub-agent tools");
         } catch (Exception e) {
             logger.warn("Failed to register sub-agent tools: {}", e.getMessage());
