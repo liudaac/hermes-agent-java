@@ -1,24 +1,17 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import { GlassCard } from "@/components/GlassCard";
 import { cn } from "@hermes/ui";
-import { portalApi } from "@/api/portal";
 import type { BusinessTeamCard } from "@/api/types-portal";
+import type { HarnessInfo } from "@/hooks/useActiveHarnesses";
 
 interface EmployeeCardProps {
   team: BusinessTeamCard;
   to?: string;
-}
-
-interface HarnessInfo {
-  sessionId: string;
-  status: string;
-  phase: string;
+  harness?: HarnessInfo;
 }
 
 function statusClass(status: string | undefined, harness?: HarnessInfo): string {
-  // If we have live harness info, use it
   if (harness) {
     if (harness.status === "running") return "busy";
     if (harness.status === "paused_approval") return "busy";
@@ -52,33 +45,7 @@ function pickEmoji(name: string): string {
   return palette[n % palette.length] ?? "✨";
 }
 
-export function EmployeeCard({ team, to = `/teams/${team.teamId}` }: EmployeeCardProps) {
-  const [harness, setHarness] = useState<HarnessInfo | undefined>(undefined);
-
-  // Poll active harnesses every 5s to find one matching this team
-  useEffect(() => {
-    let alive = true;
-    const poll = () => {
-      portalApi.getActiveHarnesses()
-        .then((res) => {
-          if (!alive) return;
-          const match = res.harnesses.find((h) =>
-            h.sessionId.includes(team.teamId) ||
-            (h.debug as Record<string, unknown>)?.teamId === team.teamId,
-          );
-          if (match) {
-            setHarness({ sessionId: match.sessionId, status: match.status, phase: "running" });
-          } else {
-            setHarness(undefined);
-          }
-        })
-        .catch(() => {});
-    };
-    poll();
-    const timer = setInterval(poll, 5000);
-    return () => { alive = false; clearInterval(timer); };
-  }, [team.teamId]);
-
+export function EmployeeCard({ team, to = `/teams/${team.teamId}`, harness }: EmployeeCardProps) {
   const initials = (team.name ?? "·").trim().slice(0, 2);
   const sc = statusClass(team.status, harness);
   const sl = statusLabel(team.status, harness);

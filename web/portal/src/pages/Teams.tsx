@@ -6,10 +6,12 @@ import { EmployeeCard } from "@/components/EmployeeCard";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { useI18n } from "@/i18n";
+import { useActiveHarnesses } from "@/hooks/useActiveHarnesses";
 import { Users, Plus } from "lucide-react";
 
 export default function Teams() {
   const { t } = useI18n();
+  const { findForTeam } = useActiveHarnesses();
   const [teams, setTeams] = useState<BusinessTeamCard[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,7 +86,7 @@ export default function Teams() {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {teams.map((team) => (
-              <EmployeeCard key={team.teamId} team={team} />
+              <EmployeeCard key={team.teamId} team={team} harness={findForTeam(team.teamId)} />
             ))}
           </div>
         )}

@@ -5,11 +5,9 @@ import type { BusinessRunRecord, BusinessRunStep } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
-import { formatRelativeTime, useHarnessStream } from "@hermes/ui";
+import { formatRelativeTime, useHarnessStream, gatewayFetch } from "@hermes/ui";
 import { ToolCallTimeline, ApprovalInline } from "@hermes/ui";
 import { Clock, Zap, Users, CheckCircle2, Circle, Loader2, AlertTriangle } from "lucide-react";
-
-const GATEWAY_URL = import.meta.env.VITE_HERMES_GATEWAY_URL ?? "http://127.0.0.1:8080";
 
 export default function RunDetail() {
   const { workspaceId, runId } = useParams();
@@ -47,7 +45,7 @@ export default function RunDetail() {
   const handleApprove = async (approved: boolean) => {
     if (!run?.runId || !harness.pendingApproval || !workspaceId) return;
     try {
-      await fetch(`${GATEWAY_URL}/api/harness/${run.runId}/approve`, {
+      await gatewayFetch(`/api/harness/${run.runId}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -58,8 +56,8 @@ export default function RunDetail() {
       // Refresh run state
       const res = await portalApi.getBusinessRun(workspaceId, runId!);
       setRun(res.run);
-    } catch (e) {
-      setError(String(e));
+    } catch (e: any) {
+      setError(String(e?.message ?? e));
     }
   };
 
