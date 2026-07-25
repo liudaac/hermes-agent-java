@@ -1,25 +1,29 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Home as HomeIcon } from "lucide-react";
 import { cn } from "@hermes/ui";
 
 interface TopBarProps {
   title: string;
   subtitle?: string;
-  /** Show a back button — uses history.back() by default. */
+  /** Show a back button - uses history.back() by default. */
   back?: boolean | string;
   right?: ReactNode;
   /** Make the bar transparent until scrolled (hero overlay style). */
   transparent?: boolean;
+  /** Show a link back to the root hub. Default: true. */
+  showHub?: boolean;
   className?: string;
 }
 
 /**
- * TopBar — H5-style sticky header. Two flavors:
+ * TopBar - H5-style sticky header. Two flavors:
  *   - default: solid glass-strong, used for content pages
  *   - transparent: floats over hero, transitions to glass-strong on scroll
+ *
+ * Always includes a Hub link (top-right) for cross-product navigation.
  */
-export function TopBar({ title, subtitle, back, right, transparent = false, className }: TopBarProps) {
+export function TopBar({ title, subtitle, back, right, transparent = false, showHub = true, className }: TopBarProps) {
   const navigate = useNavigate();
 
   return (
@@ -28,7 +32,6 @@ export function TopBar({ title, subtitle, back, right, transparent = false, clas
         "sticky top-0 z-30",
         "border-b border-[oklch(0.35_0.02_50_/_0.4)]",
         transparent ? "glass" : "glass-strong",
-        // iOS notch safe-area.
         "pt-[env(safe-area-inset-top)]",
         className,
       )}
@@ -59,6 +62,16 @@ export function TopBar({ title, subtitle, back, right, transparent = false, clas
           )}
         </div>
         {right && <div className="flex items-center gap-1.5">{right}</div>}
+        {showHub && (
+          <a
+            href="/"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[oklch(0.30_0.02_50_/_0.4)] hover:text-[var(--color-text-secondary)] active:scale-95 transition"
+            aria-label="返回 Hub"
+            title="返回 Hub"
+          >
+            <HomeIcon className="h-4 w-4" />
+          </a>
+        )}
       </div>
     </header>
   );

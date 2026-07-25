@@ -14,7 +14,7 @@
  * The particle canvas is 110×110, centered inside a 160×160 touch target
  * so the click area is generous without bloating the HUD itself.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { JarvisEngine } from "./JarvisEngine";
 import { setOverlay as _setOverlay } from "../hooks/useJarvisStore";
@@ -25,6 +25,8 @@ import { HudRing } from "../hud/HudRing";
 import { CenterCore } from "../hud/CenterCore";
 import { Scanline } from "../hud/Scanline";
 import type { FormName } from "./JarvisFSM";
+
+const ONBOARDED_KEY = "hermes:jarvis:onboarded";
 
 interface JarvisOrbProps {
   /** Current active form (core/sphere/helix/...) */
@@ -43,6 +45,23 @@ export function JarvisOrb({ form, unreadCount, unreadSeverity = "info", isSummon
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<JarvisEngine | null>(null);
   const awareness = useContextAwareness();
+  const [showHint, setShowHint] = useState(false);
+
+  // First-use onboarding tooltip
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(ONBOARDED_KEY)) {
+        const timer = setTimeout(() => setShowHint(true), 1500);
+        return () => clearTimeout(timer);
+      }
+    } catch {}
+  }, []);
+
+  const handleToggle = () => {
+    setShowHint(false);
+    try { localStorage.setItem(ONBOARDED_KEY, "1"); } catch {}
+    onToggle();
+  };
 
   // Mount particle engine on the orb canvas.
   useEffect(() => {
@@ -75,7 +94,7 @@ export function JarvisOrb({ form, unreadCount, unreadSeverity = "info", isSummon
     <button
       type="button"
       aria-label={isSummoned ? "收起 Jarvis" : "召唤 Jarvis (⌘K)"}
-      onClick={onToggle}
+      onClick={handleToggle}
       className={[
         "group fixed bottom-5 right-5 z-50 h-[160px] w-[160px]",
         "focus:outline-none",
@@ -216,6 +235,29 @@ export function JarvisOrb({ form, unreadCount, unreadSeverity = "info", isSummon
       {/* Keyframes injected once via a style tag. Using inline <style>
           avoids needing to coordinate with the three SPA theme files. */}
       <style>{ORB_KEYFRAMES}</style>
+      {/* First-use onboarding tooltip */}
+      {showHint && (
+        <div
+          className={[
+            "pointer-events-none absolute bottom-[170px] right-0",
+            "w-max max-w-[220px] rounded-2xl",
+            "glass-strong border border-[oklch(0.75_0.15_200_/_0.4)]",
+            "px-4 py-3 text-[12px] leading-relaxed text-[var(--color-text-primary,#e8e6e1)]",
+            "shadow-lg",
+            "animate-[jarvis-fadein_0.4s_ease-out]",
+          ].join(" ")}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <Sparkles className="h-3.5 w-3.5 text-[oklch(0.78_0.14_200)]" />
+            <span className="font-semibold tracking-wide">Jarvis</span>
+          </div>
+          <p className="text-[var(--color-text-secondary,#a09d96)]">
+            点这里或按 ⌘K 召唤我，随时可以问问题、审批任务、查看状态。
+          </p>
+          {/* Arrow pointing down */}
+          <div className="absolute -bottom-1.5 right-[70px] h-3 w-3 rotate-45 glass-strong border-r border-b border-[oklch(0.75_0.15_200_/_0.4)]" />
+        </div>
+      )}
     </button>
   );
 }
@@ -232,5 +274,9 @@ const ORB_KEYFRAMES = `
 @keyframes jarvis-pulse {
   0%, 100% { transform: scale(1);   box-shadow: 0 0 0 0 oklch(0.65 0.22 30 / 0.6); }
   50%      { transform: scale(1.08); box-shadow: 0 0 0 6px oklch(0.65 0.22 30 / 0); }
+}
+@keyframes jarvis-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 `;

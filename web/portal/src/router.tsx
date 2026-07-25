@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { TopBar } from "@/components/TopBar";
+import { PageSkeleton } from "@/components/Skeleton";
 import { useI18n } from "@/i18n";
 import { JarvisCore } from "@hermes/jarvis";
 
@@ -15,11 +16,13 @@ const RunDetail = lazy(() => import("@/pages/RunDetail"));
 const Insights = lazy(() => import("@/pages/Insights"));
 
 function PageFallback() {
-  return (
-    <div className="flex h-[60vh] items-center justify-center text-[12px] tracking-[0.2em] uppercase text-[var(--color-text-muted)]">
-      ...
-    </div>
-  );
+  const location = useLocation();
+  // Pick skeleton variant based on route
+  if (location.pathname.startsWith("/runs/") ) return <PageSkeleton variant="detail" />;
+  if (location.pathname.startsWith("/teams/")) return <PageSkeleton variant="detail" />;
+  if (location.pathname.startsWith("/templates")) return <PageSkeleton variant="cards" />;
+  if (location.pathname.startsWith("/teams")) return <PageSkeleton variant="cards" />;
+  return <PageSkeleton variant="list" />;
 }
 
 /**

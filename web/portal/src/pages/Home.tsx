@@ -86,9 +86,17 @@ export default function Home() {
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-8 sm:pt-12">
         {/* ── Hero ─────────────────────────────────────────── */}
         <header className="mb-6 sm:mb-8">
-          <p className="text-[12px] font-medium tracking-[0.18em] text-[var(--color-text-muted)] uppercase">
-            {greeting}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] font-medium tracking-[0.18em] text-[var(--color-text-muted)] uppercase">
+              {greeting}
+            </p>
+            <a
+              href="/"
+              className="text-[10px] tracking-[0.15em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition"
+            >
+              ← Hub
+            </a>
+          </div>
           <h1 className="mt-1.5 font-display text-[34px] sm:text-[44px] leading-[1.05] font-medium text-[var(--color-text-primary)]">
             {t("home.heroTitle")}
           </h1>
