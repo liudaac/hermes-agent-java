@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { portalApi } from "@/api/portal";
 import type { BusinessInsightsResponse, BusinessInsightRecord } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
+import { ErrorCard } from "@/components/ErrorCard";
 import { Lightbulb } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
@@ -12,16 +13,18 @@ export default function Insights() {
   const [data, setData] = useState<BusinessInsightRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
+  const loadData = useCallback(() => {
+    setData(null);
+    setError(null);
     portalApi
       .getBusinessInsights()
-      .then((res: BusinessInsightsResponse) => alive && setData(res.insights ?? []))
-      .catch((e) => alive && setError(String(e?.message ?? e)));
-    return () => {
-      alive = false;
-    };
+      .then((res: BusinessInsightsResponse) => setData(res.insights ?? []))
+      .catch((e) => setError(String(e?.message ?? e)));
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   return (
     <AuroraBackground>
@@ -35,11 +38,7 @@ export default function Insights() {
           </p>
         </header>
 
-        {error && (
-          <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
-            <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
-          </GlassCard>
-        )}
+        {error && <ErrorCard message={error} onRetry={loadData} />}
 
         {!data ? (
           <div className="space-y-3">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { portalApi } from "@/api/portal";
 import type {
   BusinessApprovalRecord,
@@ -6,6 +6,7 @@ import type {
 } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
+import { ErrorCard } from "@/components/ErrorCard";
 import { Inbox, Check, X } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { formatRelativeTime } from "@hermes/ui";
@@ -19,23 +20,31 @@ export default function Approvals() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!workspaceId) return;
-    let alive = true;
+    setData(null);
+    setError(null);
     portalApi
       .getBusinessApprovals(workspaceId, "PENDING")
       .then((res) => {
-        if (!alive) return;
         const v = res as BusinessApprovalsResponse;
         setData(v.approvals ?? []);
       })
       .catch((e) => {
-        if (alive) setError(String(e?.message ?? e));
+        setError(String(e?.message ?? e));
       });
-    return () => {
-      alive = false;
-    };
   }, [workspaceId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Auto-refresh every 30s
+  useEffect(() => {
+    if (!workspaceId) return;
+    const timer = setInterval(loadData, 30_000);
+    return () => clearInterval(timer);
+  }, [workspaceId, loadData]);
 
   const decide = async (approval: BusinessApprovalRecord, decision: "approve" | "reject") => {
     if (!approval.approvalId || !workspaceId) return;
@@ -70,11 +79,7 @@ export default function Approvals() {
           </p>
         </header>
 
-        {error && (
-          <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
-            <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
-          </GlassCard>
-        )}
+        {error && <ErrorCard message={error} onRetry={loadData} />}
 
         {!data ? (
           <div className="space-y-3">
