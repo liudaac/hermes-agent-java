@@ -122,7 +122,7 @@ public class AgentLoop {
                     ctx.hookEngine().invoke(HookType.PRE_LLM_CALL, preCtx);
                 }
 
-                enforceContextBudget(history, emitter);
+                enforceContextBudget(ctx, history, emitter);
 
                 // LLM call (streaming or non-streaming)
                 ChatCompletionResponse response;
@@ -276,24 +276,14 @@ public class AgentLoop {
 
     // ==================== Helpers ====================
 
-    private static void enforceContextBudget(List<ModelMessage> history, EventEmitter emitter) {
-        int totalChars = 0;
-        for (ModelMessage m : history) {
-            if (m.getContent() != null) totalChars += m.getContent().length();
-        }
-        int limit = 400_000;
-        if (totalChars <= limit) return;
-
-        int target = (int) (limit * 0.75);
-        int dropped = 0;
-        int i = 1;
-        while (totalChars > target && history.size() > 6 && i < history.size() - 4) {
-            ModelMessage m = history.remove(i);
-            totalChars -= m.getContent() == null ? 0 : m.getContent().length();
-            dropped++;
-        }
-        if (dropped > 0 && emitter != null) {
-            emitter.emit(AgentEvent.CONTEXT_COMPRESSED, Map.of("dropped", dropped));
+    private static void enforceContextBudget(AgentContext ctx, List<ModelMessage> history,
+                                              EventEmitter emitter) {
+        var cm = new ContextManager();
+        var stats = cm.enforce(history, emitter);
+        if (stats.anythingDone()) {
+            logger.debug("Context managed: shielded={}, summarized={}, truncated={}, tokens~{}",
+                stats.toolResultsShielded(), stats.messagesSummarized(),
+                stats.messagesTruncated(), stats.finalTokenEstimate());
         }
     }
 }
