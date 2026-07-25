@@ -71,6 +71,11 @@ public class AgentLoop {
 
     // ==================== LOOP ====================
 
+    /** Max retries for transient LLM errors within a single iteration. */
+    private static final int MAX_TRANSIENT_RETRIES = 3;
+    private static final long BASE_BACKOFF_MS = 1_000;
+    private static final long MAX_BACKOFF_MS = 30_000;
+
     /**
      * Non-streaming loop.
      */
@@ -81,6 +86,17 @@ public class AgentLoop {
     /**
      * Core think->act->observe loop. Optionally streams LLM deltas
      * through {@code onDelta}.
+     *
+     * <p>Error handling follows a 4-category strategy:</p>
+     * <ul>
+     *   <li><b>TRANSIENT</b> (timeout, 429, 5xx) - retry LLM call with
+     *       exponential backoff (max {@value #MAX_TRANSIENT_RETRIES} retries)</li>
+     *   <li><b>LLM_RECOVERABLE</b> (bad tool args, parse error) - feed error
+     *       back as a tool message so the model can self-correct</li>
+     *   <li><b>USER_FIXABLE</b> (permission denied, file not found) -
+     *       structured error with recovery suggestion, break</li>
+     *   <li><b>FATAL</b> - log, emit ERROR event, break</li>
+     * </ul>
      *
      * @param ctx      agent context
      * @param emitter  event emitter (null = no structured events)
@@ -124,14 +140,24 @@ public class AgentLoop {
 
                 enforceContextBudget(ctx, history, emitter);
 
-                // LLM call (streaming or non-streaming)
-                ChatCompletionResponse response;
-                if (onDelta != null) {
-                    response = ctx.modelClient().chatCompletion(
-                        history, ctx.buildToolDefinitions(), true, ctx.modelParams(), onDelta);
-                } else {
-                    response = ctx.modelClient().chatCompletion(
-                        history, ctx.buildToolDefinitions(), false, ctx.modelParams());
+                // LLM call with transient retry
+                ChatCompletionResponse response = callModelWithRetry(ctx, history, onDelta, emitter);
+                if (response == null) {
+                    // LLM_RECOVERABLE: error fed back as tool message, continue loop
+                    continue;
+                }
+                if (!response.isSuccess() && response.getError() != null) {
+                    // Non-retryable LLM error (USER_FIXABLE or FATAL)
+                    var cat = LoopErrorClassifier.classify(response.getError());
+                    if (emitter != null) {
+                        emitter.emit(AgentEvent.ERROR, Map.of(
+                            "message", response.getError(),
+                            "category", cat.name(),
+                            "retryable", false));
+                    }
+                    responseBuilder.append("\n[Error (").append(cat).append("): ")
+                        .append(response.getError()).append("]");
+                    break;
                 }
 
                 // Hook: POST_LLM_CALL
@@ -175,7 +201,19 @@ public class AgentLoop {
                         }
 
                         long toolStart = System.currentTimeMillis();
-                        String result = ctx.executeToolCall(tc);
+                        String result;
+                        try {
+                            result = ctx.executeToolCall(tc);
+                        } catch (Exception toolEx) {
+                            result = handleToolException(tc, toolEx, history, emitter);
+                            if (result == null) {
+                                // USER_FIXABLE or FATAL: error already emitted, break
+                                responseBuilder.append("\n⚠️ Tool '")
+                                    .append(tc.getFunction().getName())
+                                    .append("' failed: ").append(toolEx.getMessage());
+                                throw toolEx; // re-throw to outer catch for break
+                            }
+                        }
                         long duration = System.currentTimeMillis() - toolStart;
 
                         if (emitter != null) {
@@ -202,11 +240,25 @@ public class AgentLoop {
             } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
                 throw ex;
             } catch (Exception e) {
-                logger.error("Error in loop: {}", e.getMessage(), e);
+                var cat = LoopErrorClassifier.classify(e);
+                logger.error("Error in loop ({}): {}", cat, e.getMessage(), e);
+
                 if (emitter != null) {
-                    emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));
+                    emitter.emit(AgentEvent.ERROR, Map.of(
+                        "message", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(),
+                        "category", cat.name(),
+                        "retryable", cat.isRetryable()));
                 }
-                responseBuilder.append("\n[Error: ").append(e.getMessage()).append("]");
+
+                if (cat == ErrorCategory.USER_FIXABLE) {
+                    responseBuilder.append("\n⚠️ [").append(cat).append("] ")
+                        .append(e.getMessage())
+                        .append("\n💡 This may require user action (check permissions, resources, or configuration).");
+                } else {
+                    responseBuilder.append("\n[Error (").append(cat).append("): ")
+                        .append(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName())
+                        .append("]");
+                }
                 break;
             }
         }
@@ -217,6 +269,143 @@ public class AgentLoop {
                 "messages", history.size()));
         }
         return responseBuilder.toString();
+    }
+
+    // ==================== LLM Call with Retry ====================
+
+    /**
+     * Call the model, retrying transient errors with exponential backoff.
+     *
+     * @return the response, or null if an LLM_RECOVERABLE error was fed back
+     *         as a tool message (caller should continue the loop)
+     */
+    private static ChatCompletionResponse callModelWithRetry(
+            AgentContext ctx, List<ModelMessage> history,
+            java.util.function.Consumer<String> onDelta,
+            EventEmitter emitter) {
+
+        for (int attempt = 0; attempt <= MAX_TRANSIENT_RETRIES; attempt++) {
+            ChatCompletionResponse response;
+            if (onDelta != null) {
+                response = ctx.modelClient().chatCompletion(
+                    history, ctx.buildToolDefinitions(), true, ctx.modelParams(), onDelta);
+            } else {
+                response = ctx.modelClient().chatCompletion(
+                    history, ctx.buildToolDefinitions(), false, ctx.modelParams());
+            }
+
+            // Success
+            if (response.isSuccess() || response.getError() == null) {
+                return response;
+            }
+
+            var cat = LoopErrorClassifier.classify(response.getError());
+
+            // LLM_RECOVERABLE: feed error back as tool message for self-correction
+            if (cat == ErrorCategory.LLM_RECOVERABLE) {
+                logger.warn("LLM recoverable error (attempt {}): {}", attempt + 1, response.getError());
+                // Add assistant placeholder + tool error feedback so model can self-correct
+                history.add(ModelMessage.assistant(
+                    "I encountered an error: " + response.getError()));
+                history.add(ModelMessage.tool(
+                    "{\"error\": \"" + escapeJson(response.getError()) + "\", "
+                    + "\"hint\": \"Please correct the issue and try again.\"}",
+                    "error_feedback_" + attempt));
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.ERROR, Map.of(
+                        "message", response.getError(),
+                        "category", "LLM_RECOVERABLE",
+                        "retryable", true,
+                        "fedBackToModel", true));
+                }
+                return null; // signal: continue loop
+            }
+
+            // TRANSIENT: retry with backoff
+            if (cat == ErrorCategory.TRANSIENT && attempt < MAX_TRANSIENT_RETRIES) {
+                long delay = Math.min(BASE_BACKOFF_MS * (1L << attempt), MAX_BACKOFF_MS);
+                logger.warn("Transient LLM error (attempt {}/{}), retrying in {}ms: {}",
+                    attempt + 1, MAX_TRANSIENT_RETRIES + 1, delay, response.getError());
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.ERROR, Map.of(
+                        "message", response.getError(),
+                        "category", "TRANSIENT",
+                        "retry", attempt + 1,
+                        "retryable", true));
+                }
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return response; // return error, let caller handle
+                }
+                continue;
+            }
+
+            // USER_FIXABLE or FATAL (or TRANSIENT exhausted): return error response
+            return response;
+        }
+
+        // Should not reach here, but just in case
+        return ChatCompletionResponse.error("LLM call failed after " + (MAX_TRANSIENT_RETRIES + 1) + " attempts");
+    }
+
+    // ==================== Tool Exception Handler ====================
+
+    /**
+     * Handle an exception from tool execution.
+     *
+     * @return tool result string to add to history, or null if the error
+     *         is not recoverable within the loop (caller should break)
+     */
+    private static String handleToolException(ToolCall tc, Exception ex,
+                                               List<ModelMessage> history,
+                                               EventEmitter emitter) {
+        var cat = LoopErrorClassifier.classify(ex);
+
+        if (cat == ErrorCategory.LLM_RECOVERABLE) {
+            // Feed error back as tool result so model can self-correct
+            logger.warn("Tool '{}' failed with LLM-recoverable error: {}",
+                tc.getFunction().getName(), ex.getMessage());
+            if (emitter != null) {
+                emitter.emit(AgentEvent.ERROR, Map.of(
+                    "message", ex.getMessage(),
+                    "category", "LLM_RECOVERABLE",
+                    "tool", tc.getFunction().getName(),
+                    "fedBackToModel", true));
+            }
+            return "{\"error\": \"" + escapeJson(ex.getMessage()) + "\", "
+                + "\"hint\": \"Check the tool call parameters and try again.\"}";
+
+        } else if (cat == ErrorCategory.TRANSIENT) {
+            // Transient tool error - feed back and let model decide whether to retry
+            logger.warn("Tool '{}' failed with transient error: {}",
+                tc.getFunction().getName(), ex.getMessage());
+            if (emitter != null) {
+                emitter.emit(AgentEvent.ERROR, Map.of(
+                    "message", ex.getMessage(),
+                    "category", "TRANSIENT",
+                    "tool", tc.getFunction().getName(),
+                    "retryable", true));
+            }
+            return "{\"error\": \"transient: " + escapeJson(ex.getMessage()) + "\", "
+                + "\"hint\": \"This may be a temporary issue. You may retry the tool call.\"}";
+
+        } else {
+            // USER_FIXABLE or FATAL: not recoverable in-loop
+            return null;
+        }
+    }
+
+    // ==================== Helpers ====================
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     // ==================== POST-LOOP ====================
