@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles, Play, Loader2 } from "lucide-react";
 import { portalApi } from "@/api/portal";
@@ -15,33 +15,36 @@ export default function Templates() {
   const [data, setData] = useState<BusinessScenarioRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const [selectedScenario, setSelectedScenario] = useState<BusinessScenarioRecord | null>(null);
+  const [userInput, setUserInput] = useState("");
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     if (!workspaceId) return;
-    let alive = true;
+    setData(null);
+    setError(null);
     portalApi
       .getBusinessScenarios(workspaceId)
       .then((res: BusinessScenariosResponse) => {
-        if (alive) setData(res.scenarios ?? []);
+        setData(res.scenarios ?? []);
       })
       .catch((e) => {
-        if (alive) setError(String(e?.message ?? e));
+        setError(String(e?.message ?? e));
       });
-    return () => {
-      alive = false;
-    };
   }, [workspaceId]);
 
-  const launchScenario = async (scenario: BusinessScenarioRecord) => {
-    if (!workspaceId || !scenario.scenarioId) return;
-    setLaunchingId(scenario.scenarioId);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const launchScenario = async () => {
+    if (!workspaceId || !selectedScenario?.scenarioId) return;
+    setLaunchingId(selectedScenario.scenarioId);
     try {
       const res = await portalApi.executeBusinessScenario(
         workspaceId,
-        scenario.scenarioId,
-        "",
+        selectedScenario.scenarioId,
+        userInput.trim(),
       );
-      // Navigate to run detail
       const runId = (res as { runId?: string; run?: { runId?: string } }).runId
         ?? (res as { run?: { runId?: string } }).run?.runId;
       if (runId) {
@@ -55,6 +58,88 @@ export default function Templates() {
     }
   };
 
+  // ── Launch modal ──
+  if (selectedScenario) {
+    return (
+      <AuroraBackground>
+        <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
+          <GlassCard tone="strong" grain className="mb-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.70_0.14_210_/_0.3)] to-[oklch(0.70_0.16_280_/_0.2)] text-[18px]">
+                ✨
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-[22px] font-medium leading-tight">
+                  {selectedScenario.name}
+                </h2>
+                {selectedScenario.description && (
+                  <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                    {selectedScenario.description}
+                  </p>
+                )}
+              </div>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="mb-4">
+            <label className="mb-2 block text-[13px] font-semibold text-[var(--color-text-primary)]">
+              描述你的任务
+            </label>
+            <p className="mb-3 text-[12px] text-[var(--color-text-muted)]">
+              告诉数字员工你具体需要做什么，越详细越好
+            </p>
+            <textarea
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              placeholder="例如：帮我分析上周的销售数据，找出下滑的原因..."
+              rows={4}
+              className="w-full resize-none rounded-xl border border-[oklch(0.35_0.02_50_/_0.5)] bg-[oklch(0.20_0.01_50_/_0.5)] px-4 py-3 text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[oklch(0.78_0.16_70)]"
+              autoFocus
+            />
+          </GlassCard>
+
+          {error && (
+            <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+                <button
+                  onClick={() => { setError(null); launchScenario(); }}
+                  className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+                >
+                  重试
+                </button>
+              </div>
+            </GlassCard>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => { setSelectedScenario(null); setUserInput(""); setLaunchingId(null); }}
+              className="rounded-xl px-5 py-3 text-[14px] font-medium text-[var(--color-text-secondary)] hover:bg-[oklch(0.30_0.02_50_/_0.3)] transition"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={launchScenario}
+              disabled={launchingId === selectedScenario.scenarioId}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-text-primary)] py-3 text-[14px] font-semibold text-[var(--color-bg-0)] active:scale-[0.98] transition disabled:opacity-60"
+            >
+              {launchingId === selectedScenario.scenarioId ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {launchingId === selectedScenario.scenarioId ? "启动中..." : "启动"}
+            </button>
+          </div>
+        </div>
+      </AuroraBackground>
+    );
+  }
+
+  // ── Template list ──
   return (
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
@@ -69,7 +154,15 @@ export default function Templates() {
 
         {error && (
           <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
-            <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+              <button
+                onClick={loadData}
+                className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+              >
+                重试
+              </button>
+            </div>
           </GlassCard>
         )}
 
@@ -120,15 +213,10 @@ export default function Templates() {
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => launchScenario(s)}
-                    disabled={launchingId === s.scenarioId}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition disabled:opacity-60"
+                    onClick={() => { setSelectedScenario(s); setError(null); }}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
                   >
-                    {launchingId === s.scenarioId ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Play className="h-3.5 w-3.5" />
-                    )}
+                    <Play className="h-3.5 w-3.5" />
                     启动
                   </button>
                 </div>

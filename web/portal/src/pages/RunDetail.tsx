@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { portalApi } from "@/api/portal";
 import type { BusinessRunRecord, BusinessRunStep } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
+import { ErrorCard } from "@/components/ErrorCard";
 import { formatRelativeTime, useHarnessStream, gatewayFetch } from "@hermes/ui";
 import { ToolCallTimeline, ApprovalInline } from "@hermes/ui";
 import { Clock, Zap, Users, CheckCircle2, Circle, Loader2, AlertTriangle } from "lucide-react";
@@ -13,6 +14,8 @@ export default function RunDetail() {
   const { workspaceId, runId } = useParams();
   const [run, setRun] = useState<BusinessRunRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completedToast, setCompletedToast] = useState(false);
+  const prevActiveRef = useRef(false);
 
   // Subscribe to harness stream when run is active
   const isActive = run?.status === "running" || run?.status === "queued";
@@ -21,14 +24,30 @@ export default function RunDetail() {
     { tenantId: workspaceId },
   );
 
+  // Detect transition from active -> completed
   useEffect(() => {
+    if (prevActiveRef.current && !isActive && run) {
+      const isTerminal = run.status === "succeeded" || run.status === "failed" || run.status === "cancelled";
+      if (isTerminal) {
+        setCompletedToast(true);
+        setTimeout(() => setCompletedToast(false), 5000);
+      }
+    }
+    prevActiveRef.current = isActive;
+  }, [isActive, run?.status]);
+
+  const reload = () => {
     if (!workspaceId || !runId) return;
-    let alive = true;
+    setError(null);
     portalApi
       .getBusinessRun(workspaceId, runId)
-      .then((res) => { if (alive) setRun(res.run); })
-      .catch((e) => alive && setError(String(e?.message ?? e)));
-    return () => { alive = false; };
+      .then((res) => { setRun(res.run); })
+      .catch((e) => setError(String(e?.message ?? e)));
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId, runId]);
 
   // Auto-refresh when running
@@ -63,12 +82,26 @@ export default function RunDetail() {
 
   return (
     <AuroraBackground>
+      {/* Completion toast */}
+      {completedToast && run && (
+        <div className="fixed top-4 left-1/2 z-50 -translate-x-1/2 animate-[jarvis-fadein_0.3s_ease-out]">
+          <div className={[
+            "flex items-center gap-3 rounded-2xl px-5 py-3 shadow-lg",
+            run.status === "succeeded"
+              ? "bg-[oklch(0.72_0.14_145_/_0.95)] text-[oklch(0.18_0.04_145)]"
+              : "bg-[oklch(0.68_0.20_25_/_0.95)] text-[oklch(0.98_0.05_25)]",
+          ].join(" ")}>
+            {run.status === "succeeded"
+              ? <CheckCircle2 className="h-5 w-5" />
+              : <AlertTriangle className="h-5 w-5" />}
+            <span className="text-[14px] font-semibold">
+              {run.status === "succeeded" ? "任务完成" : "任务失败"}
+            </span>
+          </div>
+        </div>
+      )}
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
-        {error && (
-          <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
-            <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
-          </GlassCard>
-        )}
+        {error && <ErrorCard message={error} onRetry={reload} />}
 
         {!run ? (
           <div className="shimmer h-40 rounded-2xl" />

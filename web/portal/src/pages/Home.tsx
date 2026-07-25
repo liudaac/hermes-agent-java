@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Sparkles, ArrowRight, AlertTriangle, Inbox, Wand2, Plus, Activity as ActivityIcon,
-  ChevronRight,
+  ChevronRight, Rocket,
 } from "lucide-react";
 import { portalApi } from "@/api/portal";
 import type {
@@ -288,6 +288,15 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      {/* Floating quick-start button */}
+      <Link
+        to="/templates"
+        className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-bg-0)] shadow-xl active:scale-90 transition hover:scale-105"
+        aria-label="新建任务"
+      >
+        <Rocket className="h-6 w-6" />
+      </Link>
     </AuroraBackground>
   );
 }
