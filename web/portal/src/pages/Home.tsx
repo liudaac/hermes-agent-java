@@ -22,6 +22,8 @@ import { useI18n } from "@/i18n";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useActiveHarnesses } from "@/hooks/useActiveHarnesses";
 import { cn } from "@hermes/ui";
+
+const ONBOARDED_KEY = "hermes:portal:onboarded";
 import { formatNumber, formatRelativeTime } from "@hermes/ui";
 
 export default function Home() {
@@ -33,6 +35,21 @@ export default function Home() {
   const [scenarios, setScenarios] = useState<BusinessScenarioRecord[] | null>(null);
   const [pending, setPending] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // First-use onboarding
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(ONBOARDED_KEY)) {
+        setShowOnboarding(true);
+      }
+    } catch {}
+  }, []);
+
+  const dismissOnboarding = () => {
+    setShowOnboarding(false);
+    try { localStorage.setItem(ONBOARDED_KEY, "1"); } catch {}
+  };
 
   useEffect(() => {
     let alive = true;
@@ -106,6 +123,42 @@ export default function Home() {
             {t("home.heroSubtitle")}
           </p>
         </header>
+
+        {/* ── First-use onboarding ──────────────────────────── */}
+        {showOnboarding && (
+          <GlassCard tone="accent" grain className="mb-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[oklch(0.78_0.16_70_/_0.25)]">
+                <Sparkles className="h-5 w-5 text-[oklch(0.88_0.12_70)]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+                  欢迎使用 Hermes
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                  这是你的数字员工工作台。选一个场景模板，启动任务，AI 员工就会自动工作。
+                  你可以随时审批、查看进度、获取洞察。
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Link
+                    to="/templates"
+                    onClick={dismissOnboarding}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+                  >
+                    <Rocket className="h-3.5 w-3.5" />
+                    选个场景试试
+                  </Link>
+                  <button
+                    onClick={dismissOnboarding}
+                    className="rounded-full px-4 py-2 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[oklch(0.30_0.02_50_/_0.3)] transition"
+                  >
+                    以后再说
+                  </button>
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        )}
 
         {error && (
           <GlassCard tone="default" className="mb-4 border border-[oklch(0.68_0.20_25_/_0.35)]">

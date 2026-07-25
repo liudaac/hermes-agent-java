@@ -5,6 +5,7 @@ import { portalApi } from "@/api/portal";
 import type { BusinessScenariosResponse, BusinessScenarioRecord } from "@/api/types-portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
+import { SearchBar } from "@/components/SearchBar";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useI18n } from "@/i18n";
 
@@ -17,6 +18,7 @@ export default function Templates() {
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<BusinessScenarioRecord | null>(null);
   const [userInput, setUserInput] = useState("");
+  const [search, setSearch] = useState("");
 
   const loadData = useCallback(() => {
     if (!workspaceId) return;
@@ -143,7 +145,7 @@ export default function Templates() {
   return (
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
-        <header className="mb-5">
+        <header className="mb-4">
           <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
             {t("templates.title")}
           </h1>
@@ -151,6 +153,12 @@ export default function Templates() {
             {t("templates.subtitle")}
           </p>
         </header>
+
+        {data && data.length > 0 && (
+          <div className="mb-4">
+            <SearchBar value={search} onChange={setSearch} placeholder="搜索场景..." />
+          </div>
+        )}
 
         {error && (
           <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
@@ -184,7 +192,13 @@ export default function Templates() {
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {data.map((s) => (
+            {data
+              .filter((s) => {
+                if (!search.trim()) return true;
+                const q = search.toLowerCase();
+                return `${s.name ?? ""} ${s.description ?? ""}`.toLowerCase().includes(q);
+              })
+              .map((s) => (
               <GlassCard
                 key={s.scenarioId}
                 tone="default"

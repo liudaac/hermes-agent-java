@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { portalApi } from "@/api/portal";
 import type { BusinessRunsResponse, BusinessRunRecord } from "@/api/types-portal";
@@ -6,20 +6,32 @@ import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
 import { ErrorCard } from "@/components/ErrorCard";
+import { SearchBar } from "@/components/SearchBar";
 import { useI18n } from "@/i18n";
+import { cn } from "@hermes/ui";
 import { formatRelativeTime } from "@hermes/ui";
 import { Activity as ActivityIcon, Inbox, Play } from "lucide-react";
+
+const STATUS_FILTERS = [
+  { key: "all", label: "全部" },
+  { key: "running", label: "执行中" },
+  { key: "succeeded", label: "已完成" },
+  { key: "failed", label: "失败" },
+  { key: "waiting_approval", label: "待审批" },
+] as const;
 
 export default function Runs() {
   const { t } = useI18n();
   const [data, setData] = useState<BusinessRunRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const loadData = useCallback(() => {
     setData(null);
     setError(null);
     portalApi
-      .getBusinessRuns(undefined, 30)
+      .getBusinessRuns(undefined, 50)
       .then((res: BusinessRunsResponse) => setData(res.runs ?? []))
       .catch((e) => setError(String(e?.message ?? e)));
   }, []);
@@ -28,13 +40,32 @@ export default function Runs() {
     loadData();
   }, [loadData]);
 
-  // Group runs by date
-  const grouped = data ? groupByDate(data) : null;
+  // Auto-refresh every 30s
+  useEffect(() => {
+    const timer = setInterval(loadData, 30_000);
+    return () => clearInterval(timer);
+  }, [loadData]);
+
+  // Filter + search
+  const filtered = useMemo(() => {
+    if (!data) return null;
+    return data.filter((r) => {
+      if (statusFilter !== "all" && (r.status ?? "").toLowerCase() !== statusFilter) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const hay = `${r.taskTitle ?? ""} ${r.scenario ?? ""} ${r.runId ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [data, search, statusFilter]);
+
+  const grouped = filtered ? groupByDate(filtered) : null;
 
   return (
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
-        <header className="mb-5">
+        <header className="mb-4">
           <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
             {t("nav.runs")}
           </h1>
@@ -43,30 +74,50 @@ export default function Runs() {
           </p>
         </header>
 
+        {/* Search + filter */}
+        <div className="mb-4 space-y-2">
+          <SearchBar value={search} onChange={setSearch} placeholder="搜索运行..." />
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium transition",
+                  statusFilter === f.key
+                    ? "bg-[var(--color-text-primary)] text-[var(--color-bg-0)]"
+                    : "bg-[oklch(0.30_0.02_50_/_0.4)] text-[var(--color-text-secondary)]",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {error && <ErrorCard message={error} onRetry={loadData} />}
 
-        {!data && !error ? (
+        {!filtered && !error ? (
           <div className="space-y-2">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="shimmer h-16 rounded-2xl" />
             ))}
           </div>
-        ) : data && data.length === 0 ? (
+        ) : filtered && filtered.length === 0 ? (
           <GlassCard tone="accent" grain className="flex flex-col items-center gap-3 py-10 text-center">
             <Inbox className="h-7 w-7 text-[var(--color-accent)]" />
             <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
-              {t("runs.empty")}
+              {search || statusFilter !== "all" ? "没有匹配的运行" : t("runs.empty")}
             </p>
-            <p className="text-[12px] text-[var(--color-text-secondary)]">
-              从场景模板启动你的第一个任务
-            </p>
-            <Link
-              to="/templates"
-              className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
-            >
-              <Play className="h-3.5 w-3.5" />
-              选个场景
-            </Link>
+            {!search && statusFilter === "all" && (
+              <Link
+                to="/templates"
+                className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+              >
+                <Play className="h-3.5 w-3.5" />
+                选个场景
+              </Link>
+            )}
           </GlassCard>
         ) : grouped ? (
           <div className="space-y-5">
