@@ -1,10 +1,12 @@
 package com.nousresearch.hermes.tenant.core;
 
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.config.ModelRoute;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -184,5 +186,187 @@ class TenantConfigModelConfigTest {
         assertNotNull(config.resolveBaseUrl("ollama"));
         // Unknown provider falls back to openrouter
         assertNotNull(config.resolveBaseUrl("unknown-provider"));
+    }
+
+    // ============ B2: model_routes tests ============
+
+    @Test
+    @Order(13)
+    @DisplayName("getModelRoutes returns empty list when not configured")
+    void getModelRoutes_empty() {
+        assertTrue(config.getModelRoutes().isEmpty());
+    }
+
+    @Test
+    @Order(14)
+    @DisplayName("getModelRoutes reads tenant model_routes config")
+    void getModelRoutes_tenantConfig() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "fast", "model", "gpt-4o-mini", "provider", "openai"),
+            Map.of("alias", "smart", "model", "claude-3.5-sonnet", "provider", "anthropic")
+        ));
+
+        List<ModelRoute> routes = config.getModelRoutes();
+        assertEquals(2, routes.size());
+        assertEquals("fast", routes.get(0).getAlias());
+        assertEquals("gpt-4o-mini", routes.get(0).getModel());
+        assertEquals("openai", routes.get(0).getProvider());
+        assertEquals("smart", routes.get(1).getAlias());
+        assertEquals("claude-3.5-sonnet", routes.get(1).getModel());
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("resolveModelRoute finds tenant route by alias")
+    void resolveModelRoute_tenantMatch() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "fast", "model", "gpt-4o-mini", "provider", "openai")
+        ));
+
+        ModelRoute route = config.resolveModelRoute("fast");
+        assertNotNull(route);
+        assertEquals("gpt-4o-mini", route.getModel());
+        assertEquals("openai", route.getProvider());
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("resolveModelRoute is case-insensitive")
+    void resolveModelRoute_caseInsensitive() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "Smart", "model", "claude-3.5-sonnet", "provider", "anthropic")
+        ));
+
+        assertNotNull(config.resolveModelRoute("smart"));
+        assertNotNull(config.resolveModelRoute("SMART"));
+        assertNotNull(config.resolveModelRoute("Smart"));
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("resolveModelRoute falls back to platform routes")
+    void resolveModelRoute_platformFallback() {
+        List<ModelRoute> platformRoutes = List.of(
+            new ModelRoute("fast", "gpt-4o-mini", "openai", null),
+            new ModelRoute("smart", "claude-3.5-sonnet", "anthropic", null)
+        );
+
+        // Tenant has no model_routes -> should find in platform
+        ModelRoute route = config.resolveModelRoute("fast", platformRoutes);
+        assertNotNull(route);
+        assertEquals("gpt-4o-mini", route.getModel());
+    }
+
+    @Test
+    @Order(18)
+    @DisplayName("resolveModelRoute tenant override takes priority over platform")
+    void resolveModelRoute_tenantOverride() {
+        // Platform defines "fast" as gpt-4o-mini
+        List<ModelRoute> platformRoutes = List.of(
+            new ModelRoute("fast", "gpt-4o-mini", "openai", null)
+        );
+
+        // Tenant overrides "fast" as claude-3-5-haiku
+        config.set("model_routes", List.of(
+            Map.of("alias", "fast", "model", "claude-3-5-haiku", "provider", "anthropic")
+        ));
+
+        ModelRoute route = config.resolveModelRoute("fast", platformRoutes);
+        assertNotNull(route);
+        assertEquals("claude-3-5-haiku", route.getModel());  // tenant wins
+        assertEquals("anthropic", route.getProvider());
+    }
+
+    @Test
+    @Order(19)
+    @DisplayName("resolveModelRoute returns null when no match")
+    void resolveModelRoute_noMatch() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "fast", "model", "gpt-4o-mini", "provider", "openai")
+        ));
+
+        assertNull(config.resolveModelRoute("nonexistent"));
+        assertNull(config.resolveModelRoute("nonexistent", List.of()));
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("resolveModelConfig by alias builds full ModelConfig with API key")
+    void resolveModelConfig_byAlias() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "smart", "model", "claude-3.5-sonnet", "provider", "anthropic")
+        ));
+        config.setSecret("ANTHROPIC_API_KEY", "sk-ant-xxx");
+
+        HermesConfig.ModelConfig mc = config.resolveModelConfig("smart");
+        assertEquals("anthropic", mc.getProvider());
+        assertEquals("claude-3.5-sonnet", mc.getName());
+        assertEquals("sk-ant-xxx", mc.getApiKey());
+        assertEquals("https://api.anthropic.com/v1", mc.getBaseUrl());
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("resolveModelConfig falls back to platform routes then tenant default")
+    void resolveModelConfig_fallbackChain() {
+        List<ModelRoute> platformRoutes = List.of(
+            new ModelRoute("cheap", "deepseek-chat", "deepseek", null)
+        );
+
+        // "cheap" is only in platform routes
+        HermesConfig.ModelConfig mc = config.resolveModelConfig("cheap", platformRoutes);
+        assertEquals("deepseek", mc.getProvider());
+        assertEquals("deepseek-chat", mc.getName());
+        assertEquals("https://api.deepseek.com/v1", mc.getBaseUrl());
+
+        // Unknown alias -> falls back to tenant default (openrouter)
+        mc = config.resolveModelConfig("unknown", platformRoutes);
+        assertEquals("openrouter", mc.getProvider());
+        assertEquals("anthropic/claude-3.5-sonnet", mc.getName());
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("resolveModelConfig with null alias returns tenant default")
+    void resolveModelConfig_nullAlias() {
+        HermesConfig.ModelConfig mc = config.resolveModelConfig(null);
+        assertEquals("openrouter", mc.getProvider());
+        assertEquals("anthropic/claude-3.5-sonnet", mc.getName());
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("getAllModelAliases merges tenant + platform without duplicates")
+    void getAllModelAliases_merged() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "fast", "model", "gpt-4o-mini", "provider", "openai"),
+            Map.of("alias", "local", "model", "qwen2.5:72b", "provider", "ollama")
+        ));
+        List<ModelRoute> platformRoutes = List.of(
+            new ModelRoute("fast", "gpt-4o-mini", "openai", null),  // duplicate
+            new ModelRoute("smart", "claude-3.5-sonnet", "anthropic", null),  // unique
+            new ModelRoute("cheap", "deepseek-chat", "deepseek", null)  // unique
+        );
+
+        List<String> aliases = config.getAllModelAliases(platformRoutes);
+        assertEquals(4, aliases.size());  // fast, local, smart, cheap (no dup)
+        assertTrue(aliases.contains("fast"));
+        assertTrue(aliases.contains("local"));
+        assertTrue(aliases.contains("smart"));
+        assertTrue(aliases.contains("cheap"));
+    }
+
+    @Test
+    @Order(24)
+    @DisplayName("resolveModelConfig uses route base_url when set")
+    void resolveModelConfig_routeBaseUrl() {
+        config.set("model_routes", List.of(
+            Map.of("alias", "proxy", "model", "gpt-4o", "provider", "openai",
+                   "base-url", "https://my-proxy.example.com/v1")
+        ));
+        config.setSecret("OPENAI_API_KEY", "sk-xxx");
+
+        HermesConfig.ModelConfig mc = config.resolveModelConfig("proxy");
+        assertEquals("https://my-proxy.example.com/v1", mc.getBaseUrl());
     }
 }

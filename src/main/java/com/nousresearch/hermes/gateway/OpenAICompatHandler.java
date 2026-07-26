@@ -76,20 +76,8 @@ public class OpenAICompatHandler {
             }
 
             // S1-3: model_routes 别名解析
-            // 优先级：session /model > model_routes > global
+            // B2: 优先 tenant model_routes，fallback platform (HermesConfig) model_routes
             // 这里没有 session 概念（OpenAI 兼容 API 是无状态的），所以只用 model_routes > global
-            ModelRoute route = config.resolveModelRoute(modelAlias, null);
-            String actualModel = route != null ? route.getModel() : modelAlias;
-
-            // 安全日志：只记录别名和实际模型，绝不记录 api_key
-            logger.info("OpenAI compat request: alias={}, model={}", modelAlias, actualModel);
-
-            // 提取最后一条 user message
-            String lastUserMessage = extractLastUserMessage(messages);
-            if (lastUserMessage == null) {
-                ctx.status(400).json(errorResponse("No user message found"));
-                return;
-            }
 
             // 解析租户（从 header 或 body，默认 default）
             String tenantId = ctx.header("X-Tenant-Id");
@@ -98,6 +86,21 @@ public class OpenAICompatHandler {
 
             TenantContext tenant = tenantManager.getOrCreateTenant(
                 tenantId, createDefaultProvisioningRequest());
+
+            // B2: tenant model_routes > platform model_routes
+            ModelRoute route = tenant.getConfig().resolveModelRoute(
+                modelAlias, config.getModelRoutes());
+            String actualModel = route != null ? route.getModel() : modelAlias;
+
+            // 安全日志：只记录别名和实际模型，绝不记录 api_key
+            logger.info("OpenAI compat request: tenant={}, alias={}, model={}", tenantId, modelAlias, actualModel);
+
+            // 提取最后一条 user message
+            String lastUserMessage = extractLastUserMessage(messages);
+            if (lastUserMessage == null) {
+                ctx.status(400).json(errorResponse("No user message found"));
+                return;
+            }
 
             if (!tenant.isActive()) {
                 ctx.status(403).json(errorResponse("Tenant is not active"));
@@ -169,19 +172,32 @@ public class OpenAICompatHandler {
      * <p>列出所有可用模型别名 + global default。</p>
      */
     public void handleListModels(Context ctx) {
+        // B2: 解析租户（从 header，默认 default）
+        String tenantId = ctx.header("X-Tenant-Id");
+        if (tenantId == null) tenantId = "default";
+        TenantContext tenant = tenantManager.getOrLoadTenant(tenantId);
+
         JSONObject result = new JSONObject();
         result.put("object", "list");
 
         JSONArray data = new JSONArray();
 
-        // model_routes 别名
-        for (ModelRoute route : config.getModelRoutes()) {
-            JSONObject model = new JSONObject();
-            model.put("id", route.getAlias());
-            model.put("object", "model");
-            model.put("created", System.currentTimeMillis() / 1000);
-            model.put("owned_by", route.getProvider() != null ? route.getProvider() : "hermes");
-            data.add(model);
+        // B2: tenant model_routes 优先
+        List<ModelRoute> tenantRoutes = tenant != null
+            ? tenant.getConfig().getModelRoutes()
+            : Collections.emptyList();
+        List<ModelRoute> platformRoutes = config.getModelRoutes();
+
+        for (ModelRoute route : tenantRoutes) {
+            data.add(modelEntry(route));
+        }
+        // B2: platform model_routes（去重，跳过 tenant 已覆盖的别名）
+        Set<String> tenantAliases = new HashSet<>();
+        for (ModelRoute r : tenantRoutes) tenantAliases.add(r.getAlias());
+        for (ModelRoute route : platformRoutes) {
+            if (!tenantAliases.contains(route.getAlias())) {
+                data.add(modelEntry(route));
+            }
         }
 
         // global default 也列出来
@@ -194,6 +210,15 @@ public class OpenAICompatHandler {
 
         result.put("data", data);
         ctx.status(200).json(result);
+    }
+
+    private JSONObject modelEntry(ModelRoute route) {
+        JSONObject model = new JSONObject();
+        model.put("id", route.getAlias());
+        model.put("object", "model");
+        model.put("created", System.currentTimeMillis() / 1000);
+        model.put("owned_by", route.getProvider() != null ? route.getProvider() : "hermes");
+        return model;
     }
 
     // ============ 辅助方法 ============

@@ -553,6 +553,152 @@ public class TenantConfig {
 
     // ============ B1: 租户级模型配置 ============
 
+    /** Convert any value to String, returning null for null values. */
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    /**
+     * B2: Parse tenant-level model_routes from config.
+     *
+     * <p>Format (in tenant config.yaml):</p>
+     * <pre>{@code
+     * model_routes:
+     *   - alias: fast
+     *     model: gpt-4o-mini
+     *     provider: openai
+     *   - alias: smart
+     *     model: claude-3.5-sonnet
+     *     provider: anthropic
+     * }</pre>
+     *
+     * @return list of tenant-level model routes (may be empty)
+     */
+    @SuppressWarnings("unchecked")
+    public List<com.nousresearch.hermes.config.ModelRoute> getModelRoutes() {
+        Object raw = get("model_routes");
+        if (!(raw instanceof List<?> list)) {
+            return Collections.emptyList();
+        }
+        List<com.nousresearch.hermes.config.ModelRoute> routes = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> map)) continue;
+            String alias = stringValue(map.get("alias"));
+            String model = stringValue(map.get("model"));
+            String provider = stringValue(map.get("provider"));
+            String baseUrl = stringValue(map.get("base-url"));
+            if (alias != null && !alias.isBlank() && model != null && !model.isBlank()) {
+                routes.add(new com.nousresearch.hermes.config.ModelRoute(alias, model, provider, baseUrl));
+            }
+        }
+        return routes;
+    }
+
+    /**
+     * B2: Resolve a model route by alias.
+     *
+     * <p>Searches tenant model_routes first, then falls back to the given
+     * platform (global) model_routes. Returns null if no match.</p>
+     *
+     * @param alias the alias to resolve (case-insensitive)
+     * @param platformRoutes global model_routes from HermesConfig (may be empty)
+     * @return matching ModelRoute, or null if not found
+     */
+    public com.nousresearch.hermes.config.ModelRoute resolveModelRoute(
+            String alias,
+            List<com.nousresearch.hermes.config.ModelRoute> platformRoutes) {
+        if (alias == null || alias.isBlank()) {
+            return null;
+        }
+        // 1. Tenant model_routes (tenant override)
+        for (var route : getModelRoutes()) {
+            if (route.getAlias().equalsIgnoreCase(alias)) {
+                return route;
+            }
+        }
+        // 2. Platform model_routes (global default)
+        if (platformRoutes != null) {
+            for (var route : platformRoutes) {
+                if (route.getAlias().equalsIgnoreCase(alias)) {
+                    return route;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * B2: Convenience method - resolve route using only tenant routes (no platform fallback).
+     */
+    public com.nousresearch.hermes.config.ModelRoute resolveModelRoute(String alias) {
+        return resolveModelRoute(alias, null);
+    }
+
+    /**
+     * B2: Resolve a ModelConfig by alias, combining model_routes + buildModelConfig().
+     *
+     * <p>Resolution order:</p>
+     * <ol>
+     *   <li>Tenant model_routes alias match -> use route's model/provider/base_url</li>
+     *   <li>Platform model_routes alias match -> use route's model/provider/base_url</li>
+     *   <li>No match -> return tenant default buildModelConfig()</li>
+     * </ol>
+     *
+     * <p>API key is always resolved from TenantConfig.resolveApiKey() based on
+     * the route's provider, never from the route itself.</p>
+     *
+     * @param alias the alias to resolve (may be null)
+     * @param platformRoutes global model_routes for fallback (may be null)
+     * @return resolved ModelConfig (never null)
+     */
+    public HermesConfig.ModelConfig resolveModelConfig(
+            String alias,
+            List<com.nousresearch.hermes.config.ModelRoute> platformRoutes) {
+        com.nousresearch.hermes.config.ModelRoute route = resolveModelRoute(alias, platformRoutes);
+
+        if (route != null) {
+            String provider = route.getProvider() != null ? route.getProvider() : getModelProvider();
+            String apiKey = resolveApiKey(provider);
+            String baseUrl = route.getBaseUrl();
+            if (baseUrl == null || baseUrl.isBlank()) {
+                baseUrl = resolveBaseUrl(provider);
+            }
+            return new HermesConfig.ModelConfig(provider, route.getModel(), apiKey, baseUrl);
+        }
+
+        // No route match -> use default tenant config
+        return buildModelConfig();
+    }
+
+    /**
+     * B2: Convenience overload - resolve without platform routes.
+     */
+    public HermesConfig.ModelConfig resolveModelConfig(String alias) {
+        return resolveModelConfig(alias, null);
+    }
+
+    /**
+     * B2: Get all available model aliases (tenant + platform).
+     *
+     * @param platformRoutes global model_routes (may be null)
+     * @return list of all aliases, tenant routes first
+     */
+    public List<String> getAllModelAliases(
+            List<com.nousresearch.hermes.config.ModelRoute> platformRoutes) {
+        List<String> aliases = new ArrayList<>();
+        for (var route : getModelRoutes()) {
+            aliases.add(route.getAlias());
+        }
+        if (platformRoutes != null) {
+            for (var route : platformRoutes) {
+                if (!aliases.contains(route.getAlias())) {
+                    aliases.add(route.getAlias());
+                }
+            }
+        }
+        return aliases;
+    }
+
     /**
      * Build a {@link HermesConfig.ModelConfig} from this tenant's configuration.
      *
