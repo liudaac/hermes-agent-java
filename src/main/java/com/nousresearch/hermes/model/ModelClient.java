@@ -16,6 +16,13 @@ import java.util.Map;
 
 /**
  * Client for interacting with AI model APIs (OpenAI, Anthropic, OpenRouter).
+ *
+ * <p>Can be constructed in two ways:</p>
+ * <ul>
+ *   <li>{@link #ModelClient(HermesConfig.ModelConfig)} - raw config, no quota enforcement</li>
+ *   <li>{@link #ModelClient(com.nousresearch.hermes.tenant.core.TenantContext)} -
+ *       tenant-aware, resolves model config from TenantConfig and enforces quota</li>
+ * </ul>
  */
 public class ModelClient implements com.nousresearch.hermes.harness.ModelProvider {
     private static final Logger logger = LoggerFactory.getLogger(ModelClient.class);
@@ -23,11 +30,64 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
     private final HttpClient httpClient;
     private final HermesConfig.ModelConfig modelConfig;
 
+    // B1: Tenant-aware fields (null when constructed with raw ModelConfig)
+    private final String tenantId;
+    private final com.nousresearch.hermes.tenant.quota.TenantQuotaManager quotaManager;
+
+    /**
+     * Original constructor - creates a ModelClient from a raw ModelConfig.
+     * No quota enforcement.
+     */
     public ModelClient(HermesConfig.ModelConfig config) {
         this.modelConfig = config;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
             .build();
+        this.tenantId = null;
+        this.quotaManager = null;
+    }
+
+    /**
+     * B1: Tenant-aware constructor - resolves model config from TenantConfig
+     * and wires quota enforcement.
+     *
+     * @param tenantContext the tenant context (must be active)
+     */
+    public ModelClient(com.nousresearch.hermes.tenant.core.TenantContext tenantContext) {
+        this(tenantContext, null);
+    }
+
+    /**
+     * B1: Tenant-aware constructor with global fallback.
+     *
+     * <p>Resolves model config from TenantConfig, falling back to the given
+     * global HermesConfig for any missing values. Wires quota enforcement
+     * from the tenant's QuotaManager.</p>
+     *
+     * @param tenantContext the tenant context (must be active)
+     * @param globalConfig  global HermesConfig for fallback values (may be null)
+     */
+    public ModelClient(com.nousresearch.hermes.tenant.core.TenantContext tenantContext,
+                       HermesConfig globalConfig) {
+        if (tenantContext == null) {
+            throw new IllegalArgumentException("TenantContext must not be null");
+        }
+        this.tenantId = tenantContext.getTenantId();
+        this.quotaManager = tenantContext.getQuotaManager();
+
+        HermesConfig.ModelConfig resolved;
+        if (globalConfig != null) {
+            resolved = tenantContext.getConfig().buildModelConfig(globalConfig);
+        } else {
+            resolved = tenantContext.getConfig().buildModelConfig();
+        }
+        this.modelConfig = resolved;
+        this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
+
+        logger.debug("ModelClient initialized for tenant={} provider={} model={}",
+            tenantId, resolved.getProvider(), resolved.getName());
     }
 
     /**
@@ -62,6 +122,16 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             boolean stream,
             Map<String, Object> extraParams,
             java.util.function.Consumer<String> onChunk) {
+
+        // B1: Pre-call quota check (tenant-aware only)
+        if (quotaManager != null) {
+            try {
+                quotaManager.checkRequestQuota();
+            } catch (com.nousresearch.hermes.tenant.quota.QuotaExceededException e) {
+                logger.warn("Tenant {} request quota exceeded: {}", tenantId, e.getMessage());
+                return ChatCompletionResponse.error("Quota exceeded: " + e.getMessage());
+            }
+        }
 
         try {
             JSONObject requestJson = new JSONObject();
@@ -103,9 +173,13 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
 
             String body = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
             if (stream) {
-                return parseStreamResponse(body);
+                ChatCompletionResponse resp = parseStreamResponse(body);
+                recordTokenUsage(resp);
+                return resp;
             }
-            return parseChatCompletionResponse(body);
+            ChatCompletionResponse resp = parseChatCompletionResponse(body);
+            recordTokenUsage(resp);
+            return resp;
 
         } catch (Exception e) {
             logger.error("Error in chat completion: {}", e.getMessage(), e);
@@ -685,5 +759,37 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             case "openrouter" -> true; // openrouter routes everything
             default -> true;
         };
+    }
+
+    // ===== B1: Quota enforcement =====
+
+    /**
+     * Record token usage from a completed API call to the tenant's quota manager.
+     * No-op when this ModelClient was constructed without a TenantContext.
+     */
+    private void recordTokenUsage(ChatCompletionResponse response) {
+        if (quotaManager == null || response == null) {
+            return;
+        }
+        ChatCompletionResponse.TokenUsage usage = response.getUsage();
+        if (usage == null) {
+            return;
+        }
+        long totalTokens = usage.getTotalTokens();
+        if (totalTokens <= 0) {
+            totalTokens = usage.getPromptTokens() + usage.getCompletionTokens();
+        }
+        if (totalTokens > 0) {
+            try {
+                quotaManager.checkTokenQuota(totalTokens);
+            } catch (com.nousresearch.hermes.tenant.quota.QuotaExceededException e) {
+                logger.warn("Tenant {} token quota exceeded after call: {} tokens, msg={}",
+                    tenantId, totalTokens, e.getMessage());
+                // Don't fail the response - the call already succeeded.
+                // The next call will be blocked by checkRequestQuota().
+            }
+            logger.debug("Tenant {} usage: +{} tokens (prompt={}, completion={})",
+                tenantId, totalTokens, usage.getPromptTokens(), usage.getCompletionTokens());
+        }
     }
 }

@@ -227,11 +227,12 @@ public class TenantAwareAIAgent {
         this.tenantContext = context;
         this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
         toolDispatcher.setNegotiator(tenantContext.getNegotiator());
+        // B1: Resolve model config from TenantConfig (tenant-scoped), fallback to global HermesConfig
+        this.modelClient = new com.nousresearch.hermes.model.ModelClient(context, this.config);
         // Wire tool call prelude for explainability + dry-run + graceful reject
         this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
-            new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig())));
+            this.modelClient));
 
-        this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
         initPromptContextBuilder();
@@ -305,20 +306,24 @@ public class TenantAwareAIAgent {
         TenantManager manager = initializeDefaultTenant ? ensureTenantManager() : null;
         if (manager != null) {
             this.tenantContext = manager.getOrCreateTenant(tenantId, createDefaultRequest());
+            // B1: tenant-aware ModelClient
+            this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.tenantContext, this.config);
+            this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
+            if (tenantContext != null) {
+                toolDispatcher.setNegotiator(tenantContext.getNegotiator());
+            }
+            this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
+                this.modelClient));
         } else {
             // Fallback for non-tenant mode
             this.tenantContext = null;
-        this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
-        if (tenantContext != null) {
-            toolDispatcher.setNegotiator(tenantContext.getNegotiator());
-        }
-        // Wire tool call prelude for explainability + dry-run + graceful reject
-        this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
-            new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig())));
+            this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
+            this.toolDispatcher = new TenantAwareToolDispatcher(null, ToolRegistry.getInstance());
+            this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
+                this.modelClient));
         }
 
         // 初始化核心组件
-        this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.config.getModelConfig());
         this.iterationBudget = new IterationBudget(this.config.getMaxTurns());
         this.memoryManager = new com.nousresearch.hermes.memory.MemoryManager(tenantId);
         initPromptContextBuilder();

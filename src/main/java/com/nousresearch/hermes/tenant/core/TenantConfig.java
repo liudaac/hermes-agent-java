@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.nousresearch.hermes.config.HermesConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -548,5 +549,114 @@ public class TenantConfig {
     
     public boolean isMemoryEnabled() {
         return getBoolean("memory.memory_enabled", false);
+    }
+
+    // ============ B1: 租户级模型配置 ============
+
+    /**
+     * Build a {@link HermesConfig.ModelConfig} from this tenant's configuration.
+     *
+     * <p>Resolution order for API key:
+     * <ol>
+     *   <li>{@code secrets.env} → {@code API_KEY} (tenant-specific secret)</li>
+     *   <li>{@code config.yaml} → {@code model.api_key}</li>
+     *   <li>{@code HermesConfig} global default (caller responsibility)</li>
+     * </ol>
+     *
+     * <p>Resolution order for base_url:
+     * <ol>
+     *   <li>{@code config.yaml} → {@code model.base_url} (if non-blank)</li>
+     *   <li>Provider-specific default (hardcoded fallback)</li>
+     * </ol>
+     *
+     * @return a ModelConfig suitable for constructing a {@code ModelClient}
+     */
+    public HermesConfig.ModelConfig buildModelConfig() {
+        String provider = getModelProvider();
+        String modelName = getModelName();
+        String apiKey = resolveApiKey(provider);
+        String baseUrl = resolveBaseUrl(provider);
+        return new HermesConfig.ModelConfig(provider, modelName, apiKey, baseUrl);
+    }
+
+    /**
+     * Build a ModelConfig from this tenant's configuration, falling back to
+     * the given global {@link HermesConfig} for any missing values.
+     *
+     * @param global the global HermesConfig for fallback
+     * @return a resolved ModelConfig (tenant values take priority)
+     */
+    public HermesConfig.ModelConfig buildModelConfig(HermesConfig global) {
+        HermesConfig.ModelConfig globalMc = global.getModelConfig();
+        String provider = getString("model.provider", globalMc.getProvider());
+        String modelName = getString("model.model", globalMc.getName());
+        String apiKey = resolveApiKey(provider);
+        if (apiKey == null || apiKey.isBlank()) {
+            apiKey = globalMc.getApiKey();
+        }
+        String baseUrl = getString("model.base_url", "");
+        if (baseUrl.isBlank()) {
+            baseUrl = globalMc.getBaseUrl();
+        }
+        return new HermesConfig.ModelConfig(provider, modelName, apiKey, baseUrl);
+    }
+
+    /**
+     * Resolve API key for a given provider.
+     *
+     * <p>Checks (in order):
+     * <ol>
+     *   <li>{@code secrets.env} → {@code {PROVIDER}_API_KEY} (e.g. OPENAI_API_KEY)</li>
+     *   <li>{@code secrets.env} → {@code API_KEY} (generic fallback)</li>
+     *   <li>{@code config.yaml} → {@code model.api_key} (only when provider == default)</li>
+     * </ol>
+     *
+     * @param provider the provider ID (e.g. "openai", "anthropic")
+     * @return the API key, or {@code null} if not found
+     */
+    public String resolveApiKey(String provider) {
+        // 1. Provider-specific key in secrets.env
+        String envKey = provider.toUpperCase().replace("-", "_") + "_API_KEY";
+        String key = getSecret(envKey);
+        if (key != null && !key.isBlank()) return key;
+
+        // 2. Generic API_KEY in secrets.env
+        key = getSecret("API_KEY");
+        if (key != null && !key.isBlank()) return key;
+
+        // 3. config.yaml model.api_key (only when provider matches tenant's default)
+        if (provider.equalsIgnoreCase(getModelProvider())) {
+            key = getString("model.api_key");
+            if (key != null && !key.isBlank()) return key;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve base URL for a given provider.
+     *
+     * @param provider the provider ID
+     * @return the base URL (never null; falls back to provider default)
+     */
+    public String resolveBaseUrl(String provider) {
+        String configured = getString("model.base_url", "");
+        if (!configured.isBlank()) return configured;
+        return getDefaultBaseUrl(provider);
+    }
+
+    private static String getDefaultBaseUrl(String provider) {
+        if (provider == null) return "https://openrouter.ai/api/v1";
+        return switch (provider.toLowerCase()) {
+            case "openai" -> "https://api.openai.com/v1";
+            case "anthropic" -> "https://api.anthropic.com/v1";
+            case "openrouter" -> "https://openrouter.ai/api/v1";
+            case "deepseek" -> "https://api.deepseek.com/v1";
+            case "doubao" -> "https://ark.cn-beijing.volces.com/api/v3";
+            case "moonshot" -> "https://api.moonshot.cn/v1";
+            case "minimax" -> "https://api.minimax.chat/v1";
+            case "ollama", "ollama-local" -> "http://localhost:11434/v1";
+            default -> "https://openrouter.ai/api/v1";
+        };
     }
 }
