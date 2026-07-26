@@ -108,7 +108,8 @@ public class DashboardServer {
         "/api/model/info",
         "/api/dashboard/themes",
         "/api/dashboard/plugins",
-        "/api/dashboard/plugins/rescan"
+        "/api/dashboard/plugins/rescan",
+        "/api/v1/health"
     );
     /** 本地回环地址集合 — 用于 Host 头校验 */
     private final Set<String> loopbackHosts = Set.of("localhost", "127.0.0.1", "::1");
@@ -534,6 +535,45 @@ public class DashboardServer {
 
             // Auth middleware for /api/ routes
             String path = ctx.path();
+
+            // D1: API Key auth for /api/v1/ integration routes (business systems)
+            // Only apply to Integration Gateway paths (not existing /api/v1/workspaces/* etc.)
+            if (path.startsWith("/api/v1/agents") || path.startsWith("/api/v1/tasks")
+                || path.startsWith("/api/v1/tenants") || path.startsWith("/api/v1/webhooks")
+                || path.startsWith("/api/v1/systems") || path.equals("/api/v1/health")) {
+
+                // Health check is public
+                if (path.equals("/api/v1/health")) {
+                    return; // skip auth for health check
+                }
+
+                String auth = ctx.header("Authorization");
+                // Allow sessionToken as fallback (for existing dashboard users)
+                String expectedSession = "Bearer " + sessionToken;
+                if (auth != null && constantTimeEquals(auth, expectedSession)) {
+                    return; // sessionToken auth passed
+                }
+
+                // API Key auth for business systems
+                if (auth != null && auth.startsWith("Bearer ak_")) {
+                    String apiKey = auth.substring(7);
+                    var registry = com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getRegistry();
+                    if (registry != null) {
+                        var system = registry.verifyApiKey(apiKey);
+                        if (system != null) {
+                            ctx.attribute("businessSystem", system);
+                            return;
+                        }
+                    }
+                    ctx.status(401).result("{\"error\":\"Invalid API key\"}");
+                    ctx.skipRemainingHandlers();
+                    return;
+                }
+                ctx.status(401).result("{\"error\":\"Authentication required\"}");
+                ctx.skipRemainingHandlers();
+                return;
+            }
+
             if (path.startsWith("/api/") && !publicApiPaths.contains(path) && !path.startsWith("/api/plugins/")) {
                 String auth = ctx.header("Authorization");
                 String expected = "Bearer " + sessionToken;
@@ -665,6 +705,50 @@ public class DashboardServer {
         app.get("/api/admin/cache/stats", adminConfigHandler::getCacheStats);
         // Billing
         app.get("/api/admin/tenants/{tenantId}/billing", adminConfigHandler::getBillingSummary);
+
+        // D1-D4: Integration Gateway API for business systems
+        // Auth: Bearer ak_xxx (API Key, not sessionToken)
+        com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.initialize();
+        if (com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.isAvailable()) {
+            var integrationHandler = new com.nousresearch.hermes.gateway.integration.IntegrationGatewayHandler(
+                tenantManager,
+                com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getTaskQueue(),
+                com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getWebhookDispatcher());
+            // Messages
+            app.post("/api/v1/agents/{agentId}/messages", integrationHandler::sendMessage);
+            app.get("/api/v1/agents", integrationHandler::listAgents);
+            app.get("/api/v1/agents/{agentId}/sessions", integrationHandler::listSessions);
+            // Tasks
+            app.post("/api/v1/tasks", integrationHandler::submitTask);
+            app.get("/api/v1/tasks/{taskId}", integrationHandler::getTask);
+            app.post("/api/v1/tasks/{taskId}/cancel", integrationHandler::cancelTask);
+            // Usage & Billing
+            app.get("/api/v1/tenants/{tenantId}/usage", integrationHandler::getUsage);
+            app.get("/api/v1/tenants/{tenantId}/billing", integrationHandler::getBilling);
+            // Webhooks
+            app.post("/api/v1/webhooks", integrationHandler::registerWebhook);
+            app.get("/api/v1/webhooks", integrationHandler::listWebhooks);
+            // Health
+            app.get("/api/v1/health", integrationHandler::healthCheck);
+            // Admin: register business system
+            app.post("/api/v1/systems", ctx -> {
+                var reg = com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getRegistry();
+                var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
+                var system = reg.register(
+                    body.getString("systemId"),
+                    body.getString("displayName"),
+                    body.getString("tenantId"),
+                    body.getString("workspaceId"),
+                    body.getString("scopes"));
+                ctx.status(201).json(new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("systemId", system.systemId())
+                    .fluentPut("apiKey", system.apiKey())
+                    .fluentPut("displayName", system.displayName()));
+            });
+            logger.info("Integration Gateway API registered (/api/v1/*)");
+        } else {
+            logger.warn("Integration Gateway not available (DB not configured) - /api/v1/ routes disabled");
+        }
 
         // Environment variables API
         app.get("/api/env", envHandler::getEnvVars);

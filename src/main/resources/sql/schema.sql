@@ -137,3 +137,69 @@ INSERT INTO platform_model_route (alias, model, provider, base_url, sort_order) 
 ('smart', 'claude-3.5-sonnet',    'anthropic', NULL, 2),
 ('cheap', 'deepseek-chat',        'deepseek',  NULL, 3)
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
+
+-- ============================================================
+-- P0: 业务系统接入网关
+-- ============================================================
+
+-- 业务系统注册
+CREATE TABLE IF NOT EXISTS business_system (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    system_id       VARCHAR(64)  NOT NULL,
+    display_name    VARCHAR(128) NOT NULL,
+    api_key         VARCHAR(128) NOT NULL,
+    tenant_id       VARCHAR(64)  NOT NULL,
+    workspace_id    VARCHAR(64)  DEFAULT NULL,
+    allowed_scopes  VARCHAR(256) DEFAULT 'read,write',
+    webhook_url     VARCHAR(512) DEFAULT NULL,
+    webhook_secret  VARCHAR(128) DEFAULT NULL,
+    is_active       TINYINT(1)   DEFAULT 1,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_system_id (system_id),
+    UNIQUE KEY uk_api_key (api_key),
+    INDEX idx_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 异步任务
+CREATE TABLE IF NOT EXISTS async_task (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    task_id         VARCHAR(64)  NOT NULL,
+    tenant_id       VARCHAR(64)  NOT NULL,
+    system_id       VARCHAR(64)  NOT NULL,
+    workspace_id    VARCHAR(64)  NOT NULL,
+    agent_id        VARCHAR(64)  NOT NULL,
+    session_id      VARCHAR(64)  DEFAULT NULL,
+    input           TEXT         NOT NULL,
+    status          VARCHAR(16)  DEFAULT 'PENDING',
+    result          TEXT         DEFAULT NULL,
+    error           TEXT         DEFAULT NULL,
+    priority        INT          DEFAULT 0,
+    timeout_seconds INT          DEFAULT 300,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at      TIMESTAMP    NULL,
+    completed_at    TIMESTAMP    NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_task_id (task_id),
+    INDEX idx_tenant_status (tenant_id, status),
+    INDEX idx_system (system_id),
+    INDEX idx_status_priority (status, priority, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Webhook 订阅
+CREATE TABLE IF NOT EXISTS webhook_subscription (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    tenant_id       VARCHAR(64)  NOT NULL,
+    system_id       VARCHAR(64)  NOT NULL,
+    url             VARCHAR(512) NOT NULL,
+    events          VARCHAR(512) NOT NULL,
+    secret          VARCHAR(128) NOT NULL,
+    is_active       TINYINT(1)   DEFAULT 1,
+    failure_count   INT          DEFAULT 0,
+    last_success    TIMESTAMP    NULL,
+    last_failure    TIMESTAMP    NULL,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    INDEX idx_tenant_events (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
