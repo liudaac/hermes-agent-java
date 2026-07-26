@@ -1,1525 +1,411 @@
 # Hermes Agent Java
 
-Java implementation of Hermes Agent - a self-improving AI agent with tool calling capabilities and multi-tenant isolation.
+**AI 驱动的业务自动化平台 —— 多租户、多模型、可观测、可编排**
 
-## Project Overview
+Hermes Agent Java 是一个面向企业级云端部署的 AI Agent harness 底座，支持业务系统通过标准化 API 接入，实现 AI 驱动的业务流程自动化。
 
-Hermes Agent Java is a production-grade AI agent platform featuring:
-- **Multi-Model Support**: OpenAI, Anthropic, OpenRouter, and local endpoints
-- **Tool System**: 40+ built-in tools with MCP protocol support
-- **Multi-Tenant Architecture**: Complete resource isolation between tenants
-- **Sandbox Security**: File, process, network, and memory sandboxing
-- **Gateway**: Multi-platform messaging (Telegram, Discord, Slack, Feishu, QQ)
-- **Skills System**: Self-improving skills from experience
-- **/learn Command**: Standards-guided skill distillation from any source (URLs, dirs, conversation, notes)
-- **/curator Command**: Background umbrella-building consolidation + automatic lifecycle management
-- **/journey Command**: Visualize learned skills and memories as a learning timeline
-- **Learning Graph**: skill × memory relationship graph with REST API + ASCII renderer
-- **Background Self-Improvement**: Forked LLM reviews each turn for memory updates and skill patches
-- **Approval System**: Multi-mode human-in-the-loop for terminal/file/code/browser/skill-install operations
+## 核心能力
 
----
+### 🏢 多租户隔离
 
-## System Architecture
+每个租户拥有独立的模型配置、API Key、配额、计费和审计日志。
 
-### Overall Architecture Diagram
+| 能力 | 说明 |
+|------|------|
+| 模型配置隔离 | 每租户独立 provider / model / base_url / temperature |
+| 多 Provider API Key | 同时配置 OpenAI + Anthropic + DeepSeek 等多个 Key |
+| BROK 混合密钥 | `key_source: tenant`（自带）/ `platform`（代付）/ `hybrid`（默认） |
+| model_routes 混合路由 | 平台预定义别名（fast/smart/cheap）+ 租户可覆盖 |
+| ProviderCatalog 白名单 | 8 个内置 provider，平台控制可用列表 |
+| 配额 + 限流 | 请求次数 / token 用量 / 每秒速率，三层防护 |
+| 计费记录 | JSONL / MySQL 双模式，含 model / tokens / cost / sessionId |
+| 配置校验 | `validateModelConfig()` 一步检查 provider / key / key_source / model |
 
-```mermaid
-graph TB
-    subgraph "External Layer"
-        Users[Users/Clients]
-        Platforms[Message Platforms<br/>Discord/Telegram/Feishu/QQ]
-        ExternalAPIs[External APIs<br/>OpenAI/Anthropic/Brave]
-    end
+### 🌐 中心化配置存储
 
-    subgraph "Gateway Layer"
-        Gateway[GatewayServer<br/>HTTP WebSocket Service]
-        AuthFilter[TenantAuthFilter<br/>Tenant Authentication]
-        RateLimiter[API Rate Limiter<br/>Tenant-level Throttling]
-        
-        subgraph "Platform Adapters"
-            FeishuAdapter[FeishuAdapter]
-            TelegramAdapter[TelegramAdapter]
-            DiscordAdapter[DiscordAdapter]
-            QQBotAdapter[QQBotAdapter]
-        end
-    end
+MySQL 持久化 + 30s TTL 热更新，多实例部署配置实时同步。
 
-    subgraph "Core Engine"
-        Agent[HermesAgentV2<br/>Core Agent Engine]
-        ModelClient[ModelClient<br/>LLM Client]
-        SessionMgr[SessionManager<br/>Session Management]
-        
-        subgraph "Model Transports"
-            OpenAI[OpenAITransport]
-            Anthropic[AnthropicTransport]
-            Bedrock[BedrockTransport]
-            OpenRouter[OpenRouterTransport]
-        end
-    end
+| 组件 | 说明 |
+|------|------|
+| ConfigRepository | 接口抽象（LocalConfigRepository + MysqlConfigRepository） |
+| ConfigCache | 30s TTL 缓存 + invalidate + 轮询 `updated_at` |
+| DataSourceFactory | HikariCP 连接池（`-Ddb.url` / `-Ddb.username` / `-Ddb.password`） |
+| Admin API | 24 个 HTTP 端点管理租户配置（不需要 SSH 改文件） |
+| SecretStore | 接口抽象（FileSecretStore / InMemorySecretStore / VaultSecretStore / MysqlSecretStore） |
+| BillingRepository | 接口抽象（JsonlBillingRepository / MysqlBillingRepository） |
 
-    subgraph "Tool System"
-        ToolRegistry[ToolRegistry<br/>Tool Registry Center]
-        ToolInit[ToolInitializerV2<br/>Tool Initializer]
-        
-        subgraph "Built-in Tools"
-            FileTool[FileTool<br/>File Operations]
-            CodeTool[CodeTool<br/>Code Execution]
-            Browser[BrowserToolV2<br/>Browser Control]
-            WebSearch[WebSearchToolV2<br/>Web Search]
-            Terminal[TerminalTool<br/>Terminal Execution]
-            GitTool[GitTool<br/>Version Control]
-            MCPTool[MCPTool<br/>MCP Protocol]
-            SubAgent[SubAgentTool<br/>Sub-Agent]
-        end
-        
-        subgraph "Platform Tools"
-            FeishuTool[FeishuDocTool<br/>Feishu Docs]
-            DiscordTool[DiscordTool<br/>Discord]
-            QQTool[QQBotTool<br/>QQ Bot]
-        end
-    end
+### 🔌 业务系统接入
 
-    subgraph "Multi-Tenant System"
-        TenantMgr[TenantManager<br/>Tenant Manager]
-        TenantCtx[TenantContext<br/>Tenant Context]
-        
-        subgraph "Resource Isolation"
-            FileSandbox[TenantFileSandbox<br/>File Sandbox]
-            ProcessSandbox[ProcessSandbox<br/>Process Sandbox]
-            CgroupSandbox[CgroupProcessSandbox<br/>Cgroup Sandbox]
-            NetworkSandbox[NetworkSandbox<br/>Network Sandbox]
-            StorageQuota[StorageQuotaEnforcer<br/>Storage Quota]
-            MemoryPool[TenantMemoryPool<br/>Memory Pool]
-            ThreadPool[TenantThreadPool<br/>Thread Pool Isolation]
-        end
-        
-        subgraph "Tenant Management"
-            Config[TenantConfig<br/>Tenant Config]
-            Quota[TenantQuotaManager<br/>Resource Quota]
-            Security[TenantSecurityPolicy<br/>Security Policy]
-            Audit[TenantAuditLogger<br/>Audit Logger]
-            SkillMgr[TenantSkillManager<br/>Skill Manager]
-            MemoryMgr[TenantMemoryManager<br/>Memory Manager]
-        end
-        
-        subgraph "Monitoring"
-            Metrics[TenantMetrics<br/>Metrics Collection]
-            ResourceMonitor[TenantResourceMonitor<br/>Resource Monitor]
-        end
-    end
-
-    subgraph "Storage Layer"
-        LocalFS["Local File System<br/>sandbox/{tenantId}/"]
-        GitRepos[Git Repositories]
-        MCPServers[MCP Servers]
-    end
-
-    %% Connections
-    Users -->|HTTP/WebSocket| Gateway
-    Platforms -->|Webhook| Gateway
-    
-    Gateway --> AuthFilter
-    AuthFilter --> RateLimiter
-    RateLimiter --> Agent
-    
-    Gateway --> FeishuAdapter & TelegramAdapter & DiscordAdapter & QQBotAdapter
-    
-    Agent --> ModelClient
-    ModelClient --> OpenAI & Anthropic & Bedrock & OpenRouter
-    ModelClient --> ExternalAPIs
-    
-    Agent --> ToolRegistry
-    Agent --> SessionMgr
-    ToolRegistry --> ToolInit
-    ToolInit --> FileTool & CodeTool & Browser & WebSearch & Terminal & GitTool & MCPTool & SubAgent
-    ToolInit --> FeishuTool & DiscordTool & QQTool
-    
-    Agent --> TenantMgr
-    TenantMgr --> TenantCtx
-    TenantCtx --> FileSandbox & ProcessSandbox & CgroupSandbox & NetworkSandbox & StorageQuota & MemoryPool & ThreadPool
-    TenantCtx --> Config & Quota & Security & Audit & SkillMgr & MemoryMgr
-    TenantCtx --> Metrics & ResourceMonitor
-    
-    FileSandbox --> LocalFS
-    ProcessSandbox --> LocalFS
-    Terminal --> LocalFS
-    GitTool --> GitRepos
-    MCPTool --> MCPServers
-```
-
----
-
-## Tenant Isolation Architecture
-
-### Multi-Layer Isolation Model
-
-```mermaid
-graph TB
-    subgraph "Physical Layer"
-        JVM[JVM Process]
-        OS[Operating System]
-        Hardware[Hardware Resources]
-    end
-
-    subgraph "Tenant Isolation Layer"
-        direction TB
-        
-        subgraph "Tenant A"
-            TA_Config[Independent Config]
-            TA_FS[File Sandbox<br/>/sandbox/tenant-a/]
-            TA_Process[Process Sandbox<br/>Resource Limits]
-            TA_Cgroup[Cgroup Sandbox<br/>CPU/Memory Limits]
-            TA_Network[Network Sandbox<br/>Whitelist Control]
-            TA_Thread[Thread Pool<br/>10 threads max]
-            TA_Storage[Storage Quota<br/>1GB limit]
-            TA_Memory[Memory Pool<br/>256MB limit]
-        end
-        
-        subgraph "Tenant B"
-            TB_Config[Independent Config]
-            TB_FS[File Sandbox<br/>/sandbox/tenant-b/]
-            TB_Process[Process Sandbox<br/>Resource Limits]
-            TB_Cgroup[Cgroup Sandbox<br/>CPU/Memory Limits]
-            TB_Network[Network Sandbox<br/>Whitelist Control]
-            TB_Thread[Thread Pool<br/>10 threads max]
-            TB_Storage[Storage Quota<br/>1GB limit]
-            TB_Memory[Memory Pool<br/>256MB limit]
-        end
-        
-        subgraph "Tenant C"
-            TC_Config[Independent Config]
-            TC_FS[File Sandbox<br/>/sandbox/tenant-c/]
-            TC_Process[Process Sandbox<br/>Resource Limits]
-            TC_Cgroup[Cgroup Sandbox<br/>CPU/Memory Limits]
-            TC_Network[Network Sandbox<br/>Whitelist Control]
-            TC_Thread[Thread Pool<br/>10 threads max]
-            TC_Storage[Storage Quota<br/>1GB limit]
-            TC_Memory[Memory Pool<br/>256MB limit]
-        end
-    end
-
-    subgraph "Shared Resources (Read-Only)"
-        Shared_Model[Model Client<br/>Shared Connection Pool]
-        Shared_Tool[Tool Registry<br/>Read-Only Shared]
-        Shared_Platform[Platform Adapters<br/>Multiplexed]
-    end
-
-    %% Isolation boundaries
-    TA_FS -.->|Complete Isolation| TB_FS
-    TA_FS -.->|Complete Isolation| TC_FS
-    TA_Process -.->|Command Whitelist| TB_Process
-    TA_Cgroup -.->|cgroups v2| TB_Cgroup
-    TA_Network -.->|Independent Policy| TB_Network
-    
-    %% Resource usage
-    TenantA -->|Uses| TA_FS & TA_Process & TA_Cgroup & TA_Network & TA_Thread & TA_Storage & TA_Memory
-    TenantB -->|Uses| TB_FS & TB_Process & TB_Cgroup & TB_Network & TB_Thread & TB_Storage & TB_Memory
-    TenantC -->|Uses| TC_FS & TC_Process & TC_Cgroup & TC_Network & TC_Thread & TC_Storage & TC_Memory
-    
-    %% Shared access
-    TenantA & TenantB & TenantC -->|Shared Access| Shared_Model & Shared_Tool & Shared_Platform
-```
-
-### Resource Sandbox Detailed Architecture
-
-```mermaid
-graph LR
-    subgraph "Resource Sandbox Architecture"
-        Core[TenantContext<br/>Tenant Context]
-        
-        subgraph "Sandbox Components"
-            direction TB
-            
-            FileSB[File Sandbox
-            - Path Restriction
-            - Permission Control
-            - Symbolic Link Check
-            - Directory Depth Limit]
-            
-            ProcessSB[Process Sandbox
-            - Command Whitelist/Blacklist
-            - Timeout Control
-            - Environment Sanitization
-            - Working Directory Limit]
-            
-            CgroupSB[Cgroup Sandbox
-            - CPU Limit
-            - Memory Limit
-            - PID Limit
-            - Linux cgroups v2]
-            
-            NetworkSB[Network Sandbox
-            - URL Whitelist/Blacklist
-            - Rate Limiting
-            - Protocol Limit
-            - Connection Timeout]
-            
-            StorageSB[Storage Quota
-            - Write Check
-            - Stream Tracking
-            - Periodic Scan
-            - Alert Mechanism]
-            
-            MemorySB[Memory Pool
-            - TrackedByteBuffer
-            - Quota Enforcement
-            - Garbage Collection
-            - Statistics]
-            
-            ThreadSB[Thread Pool
-            - Bounded Queue
-            - Named Threads
-            - Statistics Monitoring
-            - Graceful Shutdown]
-        end
-        
-        subgraph "Configuration"
-            Config[TenantConfig
-            - config.json]
-            
-            Policy[SecurityPolicy
-            - Security Rules]
-            
-            QuotaConfig[Quota Config
-            - Resource Limits]
-        end
-        
-        subgraph "Monitoring"
-            Metrics[TenantMetrics
-            - Resource Usage Metrics]
-            
-            Audit[TenantAuditLogger
-            - Operation Audit]
-            
-            Monitor[TenantResourceMonitor
-            - Real-time Monitoring]
-        end
-    end
-
-    Core --> FileSB & ProcessSB & CgroupSB & NetworkSB & StorageSB & MemorySB & ThreadSB
-    Config & Policy & QuotaConfig --> Core
-    FileSB & ProcessSB & CgroupSB & NetworkSB & StorageSB & MemorySB & ThreadSB --> Metrics
-    Core --> Audit
-    Metrics --> Monitor
-```
-
----
-
-## Key Logic Flow Sequence Diagrams
-
-### 1. Tenant Creation Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Client as Client
-    participant Gateway as GatewayServer
-    participant Auth as TenantAuthFilter
-    participant TenantMgr as TenantManager
-    participant Context as TenantContext
-    participant FileSB as TenantFileSandbox
-    participant ProcessSB as ProcessSandbox
-    participant CgroupSB as CgroupProcessSandbox
-    participant NetworkSB as NetworkSandbox
-    participant Storage as StorageQuotaEnforcer
-    participant ThreadPool as TenantThreadPool
-    participant MemoryPool as TenantMemoryPool
-    participant Config as TenantConfig
-    participant Audit as TenantAuditLogger
-
-    Client->>Gateway: POST /api/tenants<br/>TenantProvisioningRequest
-    
-    Gateway->>Auth: Verify Admin Token
-    Auth-->>Gateway: Verification Passed
-    
-    Gateway->>TenantMgr: provisionTenant(request)
-    
-    TenantMgr->>Config: Create Config Directory<br/>/tenants/{tenantId}/
-    Config-->>TenantMgr: Config Created
-    
-    TenantMgr->>Context: new TenantContext(request)
-    
-    par Initialize Sandbox Components
-        Context->>FileSB: Init File Sandbox<br/>sandboxRoot={tenantDir}
-        FileSB-->>Context: File Sandbox Ready
-        
-        Context->>ProcessSB: Init Process Sandbox<br/>commandWhitelist/blacklist
-        ProcessSB-->>Context: Process Sandbox Ready
-        
-        Context->>CgroupSB: Init Cgroup Sandbox<br/>CPU/Memory/PID Limits
-        CgroupSB-->>Context: Cgroup Sandbox Ready
-        
-        Context->>NetworkSB: Init Network Sandbox<br/>hostWhitelist/blacklist
-        NetworkSB-->>Context: Network Sandbox Ready
-        
-        Context->>Storage: Init Storage Quota<br/>maxStorageBytes
-        Storage-->>Context: Storage Quota Ready
-        
-        Context->>ThreadPool: Init Thread Pool<br/>coreThreads/maxThreads
-        ThreadPool-->>Context: Thread Pool Ready
-        
-        Context->>MemoryPool: Init Memory Pool<br/>maxMemoryBytes
-        MemoryPool-->>Context: Memory Pool Ready
-    end
-    
-    Context-->>TenantMgr: TenantContext Created
-    
-    TenantMgr->>Audit: Record Tenant Creation Log
-    
-    TenantMgr-->>Gateway: Tenant Instance
-    Gateway-->>Client: 201 Created<br/>TenantResponse
-```
-
-### 2. Tool Execution Flow (With Resource Limits)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Agent as HermesAgentV2
-    participant ToolReg as ToolRegistry
-    participant Tool as Tool Implementation
-    participant TenantCtx as TenantContext
-    participant Auth as Permission Check
-    participant Quota as Quota Check
-    participant Sandbox as Sandbox Execution
-    participant Audit as AuditLogger
-
-    Agent->>ToolReg: Parse Tool Call<br/>executeTool(toolCall)
-    ToolReg-->>Agent: Tool Instance
-    
-    Agent->>Tool: execute(args, context)
-    
-    Tool->>TenantCtx: Get Tenant Context
-    TenantCtx-->>Tool: TenantContext
-    
-    Tool->>Auth: Check Permission<br/>securityPolicy.allowXXX()
-    
-    alt Permission Check Failed
-        Auth-->>Tool: SecurityException
-        Tool-->>Agent: ToolResult.error
-    else Permission Check Passed
-        Auth-->>Tool: Allow Execution
-        
-        Tool->>Quota: Check Quota<br/>quotaManager.checkQuota()
-        
-        alt Quota Exceeded
-            Quota-->>Tool: QuotaExceededException
-            Tool-->>Agent: ToolResult.error
-        else Quota Available
-            Quota-->>Tool: Quota Available
-            
-            Tool->>Sandbox: Execute in Sandbox
-            
-            alt File Operation Required
-                Sandbox->>Sandbox: TenantFileSandbox<br/>Check Path Validity
-            end
-            
-            alt Command Execution Required
-                Sandbox->>Sandbox: ProcessSandbox/CgroupSandbox<br/>Check Command Whitelist + Timeout
-            end
-            
-            alt Network Request Required
-                Sandbox->>Sandbox: NetworkSandbox<br/>Check URL Whitelist + Rate Limit
-            end
-            
-            alt Storage Write Required
-                Sandbox->>Sandbox: StorageQuotaEnforcer<br/>Check Storage Quota
-            end
-            
-            alt Memory Allocation Required
-                Sandbox->>Sandbox: TenantMemoryPool<br/>Check Memory Quota
-            end
-            
-            Sandbox-->>Tool: Execution Result
-            
-            Tool->>Audit: Record Operation Log
-            Tool-->>Agent: ToolResult.success
-        end
-    end
-```
-
-### 3. Process Sandbox Execution Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Caller as Caller
-    participant ProcessSB as ProcessSandbox
-    participant Config as ProcessSandboxConfig
-    participant Validator as Command Validator
-    participant Timeout as Timeout Wrapper
-    participant CgroupSB as CgroupProcessSandbox
-    participant Process as ProcessBuilder
-    participant cgroups as Linux cgroups
-    participant Result as ProcessResult
-
-    Caller->>ProcessSB: exec(command, options)
-    
-    ProcessSB->>Config: Get Config
-    Config-->>ProcessSB: whitelist/blacklist<br/>workDirectory
-    
-    ProcessSB->>Validator: Validate Command
-    Validator->>Validator: Extract Command Name
-    Validator->>Validator: Check Blacklist
-    
-    alt Blacklist Hit
-        Validator-->>ProcessSB: Reject Execution
-        ProcessSB-->>Caller: ProcessSandboxException
-    else Blacklist Check Passed
-        Validator->>Validator: Check Whitelist
-        
-        alt Whitelist Non-Empty & Not Matched
-            Validator-->>ProcessSB: Reject Execution
-            ProcessSB-->>Caller: ProcessSandboxException
-        else Whitelist Check Passed
-            Validator-->>ProcessSB: Command Validated
-            
-            ProcessSB->>Timeout: Wrap Timeout Control
-            
-            alt Linux & Timeout Set
-                Timeout->>Timeout: Add timeout Command<br/>timeout -s SIGTERM {seconds}
-            end
-            
-            alt Cgroup Available
-                Timeout->>CgroupSB: Execute with Cgroup
-                CgroupSB->>cgroups: Write Cgroup Limits<br/>memory/cpu/pid
-                cgroups-->>CgroupSB: Cgroup Configured
-                CgroupSB->>Process: Start Process
-            else No Cgroup
-                Timeout->>Process: Create Process
-            end
-            
-            Process->>Process: Set Working Directory
-            Process->>Process: Sanitize Environment
-            Process->>Process: Start Process
-            
-            alt Timeout Set
-                Process->>Process: Wait for Timeout
-                Process->>Process: Send SIGTERM on Timeout
-            end
-            
-            Process-->>Timeout: Process Ended
-            Timeout-->>ProcessSB: Return Result
-            
-            ProcessSB->>Result: Package Result
-            Result-->>ProcessSB: ProcessResult
-            ProcessSB-->>Caller: Return Result
-        end
-    end
-```
-
-### 4. Network Sandbox Request Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Caller as Caller
-    participant NetworkSB as NetworkSandbox
-    participant Policy as NetworkPolicy
-    participant Matcher as URL Matcher
-    participant RateLimit as RateLimiter
-    participant HttpClient as HttpClient
-    participant Target as Target Server
-
-    Caller->>NetworkSB: get/post(url, body)
-    
-    NetworkSB->>Policy: Get Network Policy
-    Policy-->>NetworkSB: whitelist/blacklist<br/>maxRequestsPerSecond
-    
-    NetworkSB->>NetworkSB: Parse URL<br/>Extract Protocol/Host/Port
-    
-    alt Protocol Check Failed
-        NetworkSB-->>Caller: NetworkSandboxException<br/>Protocol Not Allowed
-    else Protocol Check Passed
-        NetworkSB->>Matcher: Match Host
-        Matcher->>Matcher: Check Blacklist<br/>localhost, 127.0.0.*, 10.*.*.*
-        
-        alt Blacklist Hit
-            Matcher-->>NetworkSB: Reject Access
-            NetworkSB-->>Caller: NetworkSandboxException<br/>Access Denied
-        else Blacklist Check Passed
-            Matcher->>Matcher: Check Whitelist<br/>*.github.com, *.openai.com
-            
-            alt Whitelist Non-Empty & Not Matched
-                Matcher-->>NetworkSB: Reject Access
-                NetworkSB-->>Caller: NetworkSandboxException<br/>Not in Whitelist
-            else Whitelist Check Passed
-                Matcher-->>NetworkSB: Allow Access
-                
-                NetworkSB->>RateLimit: Check Rate Limit
-                
-                alt Rate Limit Exceeded
-                    RateLimit-->>NetworkSB: Reject
-                    NetworkSB-->>Caller: NetworkSandboxException<br/>Too Many Requests
-                else Rate Check Passed
-                    RateLimit-->>NetworkSB: Allow
-                    RateLimit->>RateLimit: Counter +1
-                    
-                    NetworkSB->>HttpClient: Send HTTP Request
-                    HttpClient->>Target: HTTP Request
-                    Target-->>HttpClient: HTTP Response
-                    HttpClient-->>NetworkSB: HttpResponse
-                    NetworkSB-->>Caller: Return Response
-                end
-            end
-        end
-    end
-```
-
-### 5. Storage Quota Check Flow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Caller as Caller
-    participant Storage as StorageQuotaEnforcer
-    participant Quota as QuotaConfig
-    participant Monitor as Usage Monitor
-    participant FileSystem as File System
-
-    Caller->>Storage: writeFile(path, data)
-    
-    Storage->>Quota: Get Quota Config
-    Quota-->>Storage: maxStorageBytes
-    
-    Storage->>Storage: Calculate Data Size<br/>data.length
-    
-    Storage->>Monitor: Get Current Usage
-    Monitor->>FileSystem: Scan Tenant Directory
-    FileSystem-->>Monitor: Current Usage Size
-    Monitor-->>Storage: currentUsage
-    
-    Storage->>Storage: Calculate Total After Write<br/>currentUsage + newSize
-    
-    alt Exceeds Quota
-        Storage-->>Caller: QuotaExceededException<br/>Insufficient Storage
-    else Within Quota
-        Storage->>FileSystem: Write File
-        FileSystem-->>Storage: Write Success
-        
-        Storage->>Monitor: Update Usage<br/>currentUsage += newSize
-        
-        alt Usage Near Quota Threshold (90%)
-            Monitor->>Monitor: Trigger Alert
-        end
-        
-        Storage-->>Caller: Write Success
-    end
-
-    %% Streaming Write Scenario
-    Note over Caller,FileSystem: Streaming Write Scenario
-    
-    Caller->>Storage: createOutputStream(path, expectedSize)
-    
-    Storage->>Quota: Check Expected Size
-    Quota-->>Storage: Quota Available
-    
-    Storage-->>Caller: OutputStream Wrapper
-    
-    loop Data Write
-        Caller->>Storage: write(chunk)
-        Storage->>Monitor: Track Write Amount
-        Monitor->>FileSystem: Actual Write
-    end
-    
-    Caller->>Storage: close()
-    Storage->>Monitor: Final Usage Update
-    Storage-->>Caller: Complete
-```
-
----
-
-## Class Diagram
-
-### Core Class Relationships
-
-```mermaid
-classDiagram
-    class HermesAgentV2 {
-        -ConfigManager config
-        -ApprovalSystem approvalSystem
-        -ToolRegistry toolRegistry
-        -SessionManager sessionManager
-        -GatewayServer gatewayServer
-        +start()
-        +runInteractive()
-        -registerAdapters()
-        -processMessage(String)
-    }
-
-    class TenantManager {
-        -ConcurrentHashMap~String,TenantContext~ tenants
-        +provisionTenant(request)
-        +getTenant(tenantId)
-        +destroyTenant(tenantId)
-        +listTenants()
-    }
-
-    class TenantContext {
-        -String tenantId
-        -Path tenantDir
-        -AtomicReference~State~ state
-        -ReentrantReadWriteLock lifecycleLock
-        -TenantConfig config
-        -TenantFileSandbox fileSandbox
-        -ProcessSandbox processSandbox
-        -CgroupProcessSandbox cgroupSandbox
-        -NetworkSandbox networkSandbox
-        -StorageQuotaEnforcer storageQuota
-        -TenantMemoryPool memoryPool
-        -TenantThreadPool threadPool
-        -TenantQuotaManager quotaManager
-        -TenantAuditLogger auditLogger
-        -TenantSecurityPolicy securityPolicy
-        -TenantMetrics metrics
-        +exec(List~String~, ProcessOptions)
-        +httpGet(String)
-        +httpPost(String, String)
-        +allocateMemory(int)
-        +freeMemory(ByteBuffer)
-        +createAgent(String)
-        +destroy(boolean)
-        +suspend(String)
-        +resume()
-    }
-
-    class ToolRegistry {
-        -Map~String,ToolEntry~ tools
-        -Map~String,Function~ toolsetChecks
-        +register(ToolEntry)
-        +deregister(String)
-        +dispatch(String, Map)
-        +getDefinitions(Set~String~, boolean)
-        +getAllToolNames()
-        +getAllTools()
-    }
-
-    class ToolEntry {
-        -String name
-        -String toolset
-        -String description
-        -Map~String,Object~ schema
-        -Function~Map,String~ handler
-        +execute(Map, TenantContext)
-        +getSchema()
-        +getName()
-    }
-
-    class ProcessSandbox {
-        -TenantContext context
-        -ProcessSandboxConfig config
-        +exec(List~String~, ProcessOptions)
-        -isCommandAllowed(String)
-        -sanitizeEnvironment(Map)
-        -buildRestrictedProcess(List, ProcessOptions)
-    }
-
-    class CgroupProcessSandbox {
-        -TenantContext context
-        -ProcessSandboxConfig config
-        -Path cgroupPath
-        +initialize()
-        +exec(List~String~, ProcessOptions)
-        +destroy()
-        +isCgroupV2Available()
-    }
-
-    class NetworkSandbox {
-        -NetworkPolicy policy
-        -RateLimiter rateLimiter
-        -HttpClient httpClient
-        +get(String)
-        +post(String, String)
-        +execute(HttpRequest)
-        -isHostAllowed(String)
-    }
-
-    class TenantFileSandbox {
-        -String tenantId
-        -Path sandboxRoot
-        +readFile(Path)
-        +writeFile(Path, byte[])
-        +resolvePath(String)
-        -validatePath(Path)
-    }
-
-    class StorageQuotaEnforcer {
-        -TenantQuota quota
-        -Path tenantDirectory
-        +writeFile(Path, byte[])
-        +createOutputStream(Path, long)
-        +canWrite(long)
-        -scanDirectoryUsage()
-    }
-
-    class TenantMemoryPool {
-        -String tenantId
-        -long maxMemoryBytes
-        -AtomicLong usedMemory
-        -List~TrackedByteBuffer~ activeBuffers
-        +allocate(int)
-        +free(TrackedByteBuffer)
-        +getStats()
-    }
-
-    class TenantThreadPool {
-        -String tenantId
-        -ThreadPoolExecutor executor
-        +submit(Runnable)
-        +getStatistics()
-        +shutdown()
-    }
-
-    class ModelClient {
-        -HermesConfig config
-        -OkHttpClient httpClient
-        +chatCompletion(List~ModelMessage~, List~Map~, boolean)
-        -parseCompletionResponse(JSONObject)
-        +testConnection()
-    }
-
-    class GatewayServer {
-        -int port
-        -HermesConfig config
-        -Map~String,PlatformAdapter~ adapters
-        +start()
-        +stop()
-        +registerAdapter(PlatformAdapter)
-        -handleRequest(HttpExchange)
-    }
-
-    class TenantQuotaManager {
-        -Path tenantDir
-        -TenantQuota quota
-        -AtomicInteger dailyRequestCount
-        -AtomicLong dailyTokenCount
-        +checkQuota()
-        +checkConcurrentAgents(int)
-        +checkStorageQuota(long)
-        +recordRequest(int)
-        +recordTokens(int)
-    }
-
-    class TenantSecurityPolicy {
-        -Set~String~ allowedTools
-        -Set~String~ deniedTools
-        -NetworkPolicy networkPolicy
-        -boolean allowCodeExecution
-        +checkPermission(String, Map)
-        +isHostAllowed(String)
-        +isCommandAllowed(String)
-    }
-
-    class TenantAuditLogger {
-        -Path logDirectory
-        -BlockingQueue~AuditEvent~ eventQueue
-        +log(AuditEventType, Map)
-        +queryLogs(Instant, Instant)
-        +exportLogs(Path)
-    }
-
-    class ProcessSandboxConfig {
-        -Set~String~ commandWhitelist
-        -Set~String~ commandBlacklist
-        -Path workDirectory
-        -int defaultTimeoutSeconds
-        +defaultConfig()
-    }
-
-    class NetworkPolicy {
-        -Set~Pattern~ hostWhitelist
-        -Set~Pattern~ hostBlacklist
-        -int maxRequestsPerSecond
-        -int connectTimeoutSeconds
-        +defaultPolicy()
-    }
-
-    class TenantQuota {
-        -long maxMemoryBytes
-        -long maxStorageBytes
-        -int maxRequestsPerMinute
-        -int maxConcurrentAgents
-        -int maxToolCallsPerSession
-    }
-
-    HermesAgentV2 --> TenantManager
-    HermesAgentV2 --> ToolRegistry
-    HermesAgentV2 --> GatewayServer
-    HermesAgentV2 --> ModelClient
-    
-    TenantManager --> TenantContext
-    ToolRegistry --> ToolEntry
-    
-    TenantContext --> ProcessSandbox
-    TenantContext --> CgroupProcessSandbox
-    TenantContext --> NetworkSandbox
-    TenantContext --> TenantFileSandbox
-    TenantContext --> StorageQuotaEnforcer
-    TenantContext --> TenantMemoryPool
-    TenantContext --> TenantThreadPool
-    TenantContext --> TenantQuotaManager
-    TenantContext --> TenantSecurityPolicy
-    TenantContext --> TenantAuditLogger
-    
-    ProcessSandbox --> ProcessSandboxConfig
-    CgroupProcessSandbox --> ProcessSandboxConfig
-    NetworkSandbox --> NetworkPolicy
-    TenantContext --> TenantQuota
-    TenantSecurityPolicy --> NetworkPolicy
-```
-
----
-
-## Deployment Architecture
-
-```mermaid
-graph TB
-    subgraph "Client Layer"
-        WebUI[Web UI]
-        CLI[CLI Client]
-        Mobile[Mobile App]
-    end
-
-    subgraph "Load Balancer"
-        LB[Nginx/ALB
-        - SSL Termination
-        - Load Balancing
-        - Static Resource Cache]
-    end
-
-    subgraph "Hermes Agent Cluster"
-        Node1[Hermes Node 1
-        - GatewayServer
-        - TenantManager
-        - Agent Engine
-        - Resource Sandbox]
-        
-        Node2[Hermes Node 2
-        - GatewayServer
-        - TenantManager
-        - Agent Engine
-        - Resource Sandbox]
-        
-        Node3[Hermes Node 3
-        - GatewayServer
-        - TenantManager
-        - Agent Engine
-        - Resource Sandbox]
-    end
-
-    subgraph "Shared Storage"
-        NFS["NFS/EFS<br/>- Tenant File Persistence<br/>- /sandbox/{tenantId}/"]
-        
-        Redis[Redis Cluster
-        - Session Cache
-        - Rate Limit Counter
-        - Distributed Lock]
-        
-        DB[(PostgreSQL
-        - Tenant Metadata
-        - Audit Logs
-        - Configuration)]
-    end
-
-    subgraph "External Services"
-        OpenAI[OpenAI API]
-        Anthropic[Anthropic API]
-        Search[Search APIs
-        - Brave/Tavily]
-        MCP[MCP Servers]
-    end
-
-    subgraph "Monitoring"
-        Prometheus[Prometheus
-        - Metrics Collection]
-        Grafana[Grafana
-        - Visualization Dashboard]
-        ELK[ELK Stack
-        - Log Analysis]
-        Jaeger[Jaeger
-        - Distributed Tracing]
-    end
-
-    WebUI & CLI & Mobile --> LB
-    LB --> Node1 & Node2 & Node3
-    
-    Node1 & Node2 & Node3 --> NFS
-    Node1 & Node2 & Node3 --> Redis
-    Node1 & Node2 & Node3 --> DB
-    
-    Node1 & Node2 & Node3 --> OpenAI & Anthropic & Search & MCP
-    
-    Node1 & Node2 & Node3 --> Prometheus
-    Node1 & Node2 & Node3 --> ELK
-    Node1 & Node2 & Node3 --> Jaeger
-    Prometheus --> Grafana
-```
-
----
-
-## Project Structure
-
-```
-hermes-agent-java/
-├── pom.xml                          # Maven configuration
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/nousresearch/hermes/
-│   │   │       ├── HermesAgentV2.java           # Main entry point
-│   │   │       ├── agent/
-│   │   │       │   ├── AIAgent.java             # Core agent implementation
-│   │   │       │   ├── ConversationLoop.java    # Conversation management
-│   │   │       │   ├── IterationBudget.java     # Iteration tracking
-│   │   │       │   ├── PromptBuilder.java       # System prompt assembly
-│   │   │       │   ├── MemoryManager.java       # Memory management
-│   │   │       │   └── ContextCompressor.java   # Context compression
-│   │   │       ├── gateway/
-│   │   │       │   ├── GatewayServer.java       # Gateway entry point
-│   │   │       │   ├── GatewayConfig.java       # Gateway configuration
-│   │   │       │   ├── SessionManager.java      # Session management
-│   │   │       │   └── platforms/               # Platform adapters
-│   │   │       │       ├── PlatformAdapter.java
-│   │   │       │       ├── FeishuAdapterV2.java
-│   │   │       │       ├── TelegramAdapter.java
-│   │   │       │       ├── DiscordAdapter.java
-│   │   │       │       └── QQBotAdapter.java
-│   │   │       ├── tools/
-│   │   │       │   ├── ToolRegistry.java        # Tool registration
-│   │   │       │   ├── ToolEntry.java           # Tool metadata
-│   │   │       │   ├── ToolInitializerV2.java   # Tool initialization
-│   │   │       │   └── impl/                    # Tool implementations
-│   │   │       │       ├── FileTool.java
-│   │   │       │       ├── CodeTool.java
-│   │   │       │       ├── BrowserToolV2.java
-│   │   │       │       ├── WebSearchToolV2.java
-│   │   │       │       ├── TerminalTool.java
-│   │   │       │       ├── GitTool.java
-│   │   │       │       ├── MCPTool.java
-│   │   │       │       ├── SubAgentTool.java
-│   │   │       │       ├── FeishuDocTool.java
-│   │   │       │       ├── DiscordTool.java
-│   │   │       │       └── impl/web/            # Web search backends
-│   │   │       │           ├── WebSearchBackend.java
-│   │   │       │           ├── BraveBackend.java
-│   │   │       │           ├── TavilyBackend.java
-│   │   │       │           └── FirecrawlBackend.java
-│   │   │       ├── tenant/                      # Multi-tenant system
-│   │   │       │   ├── core/
-│   │   │       │   │   ├── TenantContext.java       # Tenant runtime context
-│   │   │       │   │   ├── TenantManager.java       # Tenant lifecycle management
-│   │   │       │   │   ├── TenantConfig.java        # Tenant configuration
-│   │   │       │   │   ├── TenantQuotaManager.java  # Resource quota management
-│   │   │       │   │   ├── TenantSecurityPolicy.java # Security policy
-│   │   │       │   │   ├── TenantAuditLogger.java   # Audit logging
-│   │   │       │   │   ├── TenantSessionManager.java # Session management
-│   │   │       │   │   ├── TenantMemoryManager.java # Memory management
-│   │   │       │   │   ├── TenantSkillManager.java  # Skill management
-│   │   │       │   │   ├── TenantToolRegistry.java  # Tenant tool registry
-│   │   │       │   │   ├── TenantAIAgent.java       # Tenant AI agent
-│   │   │       │   │   └── TenantResourceMonitor.java # Resource monitoring
-│   │   │       │   ├── sandbox/                 # Resource isolation
-│   │   │       │   │   ├── ProcessSandbox.java      # Process sandbox
-│   │   │       │   │   ├── CgroupProcessSandbox.java # Cgroup-based sandbox
-│   │   │       │   │   ├── NetworkSandbox.java      # Network sandbox
-│   │   │       │   │   ├── TenantFileSandbox.java   # File sandbox
-│   │   │       │   │   ├── StorageQuotaEnforcer.java # Storage quota
-│   │   │       │   │   ├── TenantMemoryPool.java    # Memory pool
-│   │   │       │   │   ├── TenantThreadPool.java    # Thread pool
-│   │   │       │   │   ├── RestrictedHttpClient.java # Restricted HTTP
-│   │   │       │   │   ├── ProcessSandboxConfig.java # Process config
-│   │   │       │   │   ├── NetworkPolicy.java       # Network policy
-│   │   │       │   │   └── ProcessOptions.java      # Process options
-│   │   │       │   ├── tools/                   # Tenant-aware tools
-│   │   │       │   │   ├── TenantAwareCodeTool.java
-│   │   │       │   │   └── TenantAwareSkillTool.java
-│   │   │       │   ├── metrics/                 # Metrics collection
-│   │   │       │   │   ├── TenantMetrics.java
-│   │   │       │   │   ├── TenantMetricsMBean.java
-│   │   │       │   │   └── MetricsCollector.java
-│   │   │       │   └── audit/                   # Audit system
-│   │   │       │       ├── AuditEvent.java
-│   │   │       │       └── AuditEventType.java
-│   │   │       ├── model/
-│   │   │       │   ├── ModelClient.java         # LLM client
-│   │   │       │   ├── ModelMessage.java        # Message types
-│   │   │       │   └── ToolCall.java            # Tool call structure
-│   │   │       ├── config/
-│   │   │       │   ├── ConfigManager.java       # Configuration management
-│   │   │       │   ├── HermesConfig.java        # Hermes configuration
-│   │   │       │   └── Constants.java           # Constants
-│   │   │       ├── skills/
-│   │   │       │   ├── SkillManager.java        # Skill CRUD + archive/restore
-│   │   │       │   ├── LearnPromptBuilder.java  # /learn prompt + AUTHORING_STANDARDS
-│   │   │       │   ├── LearnCommandRegistrar.java # /learn slash command
-│   │   │       │   ├── BackgroundReviewPrompts.java # Memory/skill review prompts
-│   │   │       │   ├── CuratorJob.java          # Two-layer skill lifecycle
-│   │   │       │   ├── CuratorReviewPrompts.java # LLM umbrella-building prompt
-│   │   │       │   ├── CuratorRunReport.java    # run.json + REPORT.md
-│   │   │       │   ├── CuratorCommandRegistrar.java # /curator slash command
-│   │   │       │   ├── LearningGraphService.java # Skill × memory graph
-│   │   │       │   ├── LearningGraphRenderer.java # ASCII timeline + JSON frame
-│   │   │       │   ├── LearningGraphMutations.java # Node CRUD + pin/unpin
-│   │   │       │   ├── JourneyCommandRegistrar.java # /journey slash command
-│   │   │       │   ├── SkillProvenanceService.java # Agent/Bundled/Hub provenance
-│   │   │       │   ├── SkillBundleService.java  # Skill packaging
-│   │   │       │   ├── PreVerifyHook.java       # Pre-merge verification
-│   │   │       │   ├── FineTuneExporter.java    # Trajectory → training data
-│   │   │       │   ├── AchievementService.java  # Tenant achievement tracking
-│   │   │       │   └── SkillHubClient.java      # Skill hub client
-│   │   │       ├── memory/                      # Memory subsystem
-│   │   │       │   ├── MemoryManager.java       # MEMORY.md + USER.md (delimiter §)
-│   │   │       │   ├── MemoryRetriever.java     # Top-K retrieval
-│   │   │       │   ├── ActiveMemoryRecord.java
-│   │   │       │   ├── PromptContextBuilder.java # Inject memory into system prompt
-│   │   │       │   └── ...
-│   │   │       ├── learning/                    # Insight extraction
-│   │   │       │   ├── LearningPipeline.java    # Unified extraction pipeline
-│   │   │       │   ├── InsightExtractor.java
-│   │   │       │   ├── KnowledgeExtractor.java
-│   │   │       │   ├── CuriosityEngine.java     # Proactive exploration
-│   │   │       │   └── ...
-│   │   │       └── util/
-│   │   │           ├── SafeWriter.java          # Safe stdio wrapper
-│   │   │           └── JsonUtils.java           # JSON utilities
-│   │   └── resources/
-│   │       └── default-config.yaml
-│   └── test/
-│       └── java/com/nousresearch/hermes/
-│           ├── ConfigTest.java
-│           ├── ToolRegistryTest.java
-│           └── tenant/sandbox/
-│               ├── NetworkSandboxTest.java
-│               ├── ProcessSandboxTest.java
-│               ├── TenantFileSandboxTest.java
-│               ├── TenantMemoryPoolTest.java
-│               └── ProcessSandboxIntegrationTest.java
-├── scripts/
-│   └── install.sh
-├── monitoring/
-│   └── prometheus/
-│       ├── prometheus.yml
-│       └── rules/
-│           └── tenant-alerts.yml
-├── web/                             # Web UI
-├── ui-tui/                          # Terminal UI
-└── docs/
-    └── DEPLOYMENT.md
-```
-
----
-
-## Self-Improvement & Skill Distillation
-
-Hermes is a self-improving agent — the skills it learns persist across sessions and get
-automatically consolidated over time. Three layers:
-
-### `/learn` — Skill Distillation
-
-Distill a reusable skill from anything you describe. The agent gathers the sources
-with its existing tools and authors the skill via standards-guided prompts.
-
-```bash
-# Learn from a directory
-/learn /path/to/source/dir focus on the auth flow, skip deprecated endpoints
-
-# Learn from a URL
-/learn https://example.com/api-docs
-
-# Learn from a conversation (no args)
-/learn
-
-# Learn from a workflow
-/learn the GitHub PR review pattern we just did
-```
-
-The `/learn` command:
-1. Parses the request (sources + requirements)
-2. Builds a prompt with embedded **AUTHORING_STANDARDS** (name rules, frontmatter schema, body section order, Hermes-tool framing, quality bar)
-3. Injects the prompt into the live agent's input
-4. The agent reads sources with `read_file` / `web_extract`, then authors the skill via `skill_create` / `skill_write_file`
-
-**Distilled skill lands in `~/.hermes/skills/<name>/SKILL.md`** with optional `references/`, `templates/`, `scripts/` subdirectories.
-
-### Background Self-Improvement
-
-After every turn, the agent forks a SubAgent with a memory+skill tool whitelist and asks
-it to review the conversation for:
-- **Memory updates**: user persona, preferences, durable facts → saved to MEMORY.md / USER.md
-- **Skill patches**: style/workflow corrections, new techniques → patched into existing skills
-
-The summary is queued and surfaced at the start of the next turn:
-```
-💾 Self-improvement review: 2 memory update(s), 1 insight(s)
-```
-
-Review prompts (`memory`, `skill`, `combined`) live in `BackgroundReviewPrompts.java`.
-
-### `/curator` — Skill Library Maintenance
-
-Two-layer skill lifecycle management:
-
-```bash
-/curator status                                # Last run info
-/curator run                                   # Deterministic transitions only
-/curator run --consolidate                     # Include LLM umbrella-building
-/curator run --dry-run                         # Preview without mutations
-/curator restore <name>                        # Restore an archived skill
-/curator pause | resume                        # Scheduler control
-```
-
-**Layer 1 — Deterministic** (no LLM):
-- 30 days unused → `STALE`
-- 90 days unused → `ARCHIVED` (recoverable, never deleted)
-- Pinned skills skipped
-- Skills referenced by cron jobs skipped
-
-**Layer 2 — LLM Umbrella-Building** (opt-in via `--consolidate`):
-- Forks a SubAgent with `skill_list`/`skill_get`/`skill_patch`/`skill_create`/`skill_write_file` whitelist
-- Identifies prefix clusters → merges narrow skills into class-level umbrellas
-- Demotes session-specific content to `references/`/`templates/`/`scripts/`
-- Rewrites cron job skill references automatically
-- Writes `~/.hermes/logs/curator/{timestamp}/run.json` + `REPORT.md`
-
-### `/journey` — Learning Timeline Visualization
-
-```bash
-/journey                          # ASCII timeline chart
-/journey --json                   # Raw graph data
-/journey delete <node-id>         # Archive a skill / delete a memory
-/journey edit <node-id> <content> # Update a skill or memory
-/journey pin <node-id>            # Protect from archive
-/journey unpin <node-id>          # Remove protection
-```
-
-Renders a date-row bar chart with proportional skill/memory bars colored by
-category, plus a cumulative trajectory sparkline. UTF-8 terminals use
-`●━◆·✦` glyphs; ASCII terminals use `=+.*^` fallback.
-
-Memory node id format: `memory:<source>:<index>` where source is `memory`
-(MEMORY.md) or `user` (USER.md).
-
-### Learning Graph
-
-A skill × memory relationship graph backing `/journey` and the dashboard:
-
-```bash
-# REST API
-GET    /api/learning/graph              # Full graph + timeline frame
-GET    /api/learning/node/{id}          # Inspect a node
-DELETE /api/learning/node/{id}          # Delete/archive
-PUT    /api/learning/node/{id}          # Edit content
-POST   /api/learning/node/{id}/pin      # Pin
-POST   /api/learning/node/{id}/unpin    # Unpin
-```
-
-Edge types: `USAGE` (memory→skill), `DEPENDENCY`, `EVOLUTION` (skill grew from skill),
-`SIMILARITY` (Jaccard on tags + name containment boost).
-
-### Skill CRUD Tools
-
-The agent manages skills through these tools (registered in `SkillTool.java`):
-
-| Tool | Description |
-|---|---|
-| `skill_create` | Create a new skill with SKILL.md + metadata |
-| `skill_get` | Load a skill by name |
-| `skill_search` / `skill_list` | Find skills by query / category |
-| `skill_update` | Replace skill content wholesale |
-| `skill_patch` | Incremental old_string → new_string replacement |
-| `skill_write_file` | Write a support file under a skill |
-| `skill_remove_file` | Remove a support file (SKILL.md protected) |
-| `skill_delete` | Archive a skill (recoverable via `/curator restore`) |
-| `skill_invoke` | Run a skill's procedure |
-
----
-
-## Approval System
-
-`ApprovalSystem` provides defense-in-depth human-in-the-loop control over
-high-risk tool calls. Multi-mode:
-
-- **AUTO** — auto-approve (default for low-risk)
-- **PROMPT** — prompt the user (default for medium-risk)
-- **REQUIRE** — require explicit approval (high-risk)
-- **DENY** — hard-deny (very high-risk)
-
-Approval channels:
-- **Console** — terminal y/n prompt
-- **IM** — `/approve <id>` via Feishu/Telegram/Discord/QQ
-- **Dashboard** — three-color approval queue in the web UI
-
-Approval types: `terminal`, `file_write`, `file_delete`, `code`, `browser`,
-`subagent`, `skill_install`. Each has its own default mode and danger
-patterns. State persists for 30 minutes per session (same approval doesn't
-re-prompt within the same task).
-
----
-
-## Quick Start
-
-### Build
-
-```bash
-# Build with Maven
-mvn clean package
-
-# Run tests
-mvn test
-```
-
-### Run CLI Mode
-
-```bash
-# Run interactive mode
-java -jar target/hermes-agent-java-0.1.0.jar
-
-# With custom config
-java -jar target/hermes-agent-java-0.1.0.jar --config /path/to/config.yaml
-
-# Slash commands (in interactive mode)
-/help
-/learn <description>
-/curator run --consolidate
-/journey
-```
-
-### Run Gateway Mode
-
-```bash
-# Start gateway server
-java -jar target/hermes-agent-java-0.1.0.jar gateway
-
-# With custom port
-java -jar target/hermes-agent-java-0.1.0.jar gateway --port 8080
-```
-
-### Environment Variables
-
-```bash
-# Required for LLM
-export OPENAI_API_KEY=sk-...
-export OPENROUTER_API_KEY=sk-...
-
-# Optional platform integrations
-export FEISHU_APP_ID=cli_...
-export FEISHU_APP_SECRET=...
-export TELEGRAM_BOT_TOKEN=...
-export DISCORD_BOT_TOKEN=...
-
-# Optional search backends
-export BRAVE_API_KEY=...
-export TAVILY_API_KEY=...
-```
-
----
-
-## Configuration
-
-Configuration is loaded from `~/.hermes/config.yaml`:
-
-```yaml
-model:
-  provider: openrouter
-  model: anthropic/claude-3.5-sonnet
-  api_key: ${OPENROUTER_API_KEY}
-  base_url: https://openrouter.ai/api/v1
-
-tools:
-  enabled:
-    - web_search
-    - terminal
-    - file_operations
-    - browser
-    - code_execution
-
-gateway:
-  port: 8080
-  enabled_platforms:
-    - telegram
-    - feishu
-    - discord
-
-sandbox:
-  process:
-    command_whitelist:
-      - git
-      - python3
-      - node
-      - npm
-      - mvn
-    command_blacklist:
-      - rm
-      - mkfs
-      - dd
-      - sudo
-  network:
-    host_whitelist:
-      - "*.github.com"
-      - "*.openai.com"
-      - "api.openrouter.ai"
-    host_blacklist:
-      - "localhost"
-      - "127.0.0.*"
-      - "10.*.*.*"
-      - "192.168.*.*"
-    max_requests_per_second: 10
-  quota:
-    max_storage_bytes: 1073741824  # 1GB
-    max_memory_bytes: 268435456     # 256MB
-    max_concurrent_agents: 5
-```
-
----
-
-## Tenant Isolation Features
-
-### File System Isolation
-
-- **Path Restriction**: All file operations restricted to tenant's sandbox directory
-- **Symbolic Link Check**: Prevents symlink escape attacks
-- **Directory Depth Limit**: Maximum 10 levels of directory nesting
-- **Storage Quota**: Configurable per-tenant storage limit
-
-### Process Isolation
-
-- **Command Whitelist/Blacklist**: Controls allowed system commands
-- **Timeout Control**: Automatic process termination after timeout
-- **Environment Sanitization**: Removes sensitive environment variables
-- **Cgroup Support**: Linux cgroups v2 for resource limiting (CPU, memory, PIDs)
-
-### Network Isolation
-
-- **Protocol Restriction**: Only HTTP/HTTPS allowed by default
-- **Host Whitelist/Blacklist**: Fine-grained host access control
-- **Rate Limiting**: Per-tenant request rate limiting
-- **Connection Timeout**: Prevents long-hanging connections
-
-### Memory Isolation
-
-- **TrackedByteBuffer**: Monitored memory allocation
-- **Memory Pool**: Per-tenant memory quota
-- **Automatic Cleanup**: Garbage collection tracking
-
-### Thread Isolation
-
-- **Bounded Queue**: Prevents thread exhaustion
-- **Named Threads**: Easy identification and monitoring
-- **Graceful Shutdown**: Clean thread pool termination
-
----
-
-## Monitoring and Observability
-
-### Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `tenant.active` | Gauge | Active tenant count |
-| `tenant.requests.total` | Counter | Total tenant requests |
-| `tenant.requests.rate` | Rate | Request rate per second |
-| `tenant.quota.usage` | Gauge | Quota usage percentage |
-| `tenant.storage.bytes` | Gauge | Storage usage in bytes |
-| `tenant.memory.bytes` | Gauge | Memory usage in bytes |
-| `tenant.tool.calls` | Counter | Tool call count |
-| `tenant.audit.events` | Counter | Audit event count |
-| `tenant.security.violations` | Counter | Security violation count |
-
-### JMX MBeans
+标准化的 REST API + Java SDK，业务系统 3 行代码接入。
 
 ```java
-// Access tenant metrics via JMX
-TenantMetricsMBean metrics = tenantContext.getMetrics();
-long memoryUsage = metrics.getUsedMemoryBytes();
-int activeAgents = metrics.getActiveAgentCount();
-double quotaUsage = metrics.getQuotaUsagePercent();
+HermesClient client = HermesClient.builder()
+    .baseUrl("http://hermes:8080")
+    .apiKey("ak_xxx")
+    .build();
+
+// 同步发消息
+String reply = client.sendMessage("agent-1", "查询今天的订单").reply();
+
+// 异步任务
+String taskId = client.submitTask("agent-1", "生成月度报告").taskId();
+TaskStatus status = client.getTask(taskId);
 ```
 
-### Prometheus Integration
+**Integration Gateway API（12 端点）：**
 
-```yaml
-# prometheus.yml
-scrape_configs:
-  - job_name: 'hermes-agent'
-    static_configs:
-      - targets: ['localhost:8080']
-    metrics_path: '/metrics'
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/agents/{id}/messages` | POST | 发消息给 Agent |
+| `/api/v1/agents` | GET | 列出可用 Agent |
+| `/api/v1/agents/{id}/sessions` | GET | 列出会话 |
+| `/api/v1/tasks` | POST | 提交异步任务 |
+| `/api/v1/tasks/{id}` | GET | 查任务状态 |
+| `/api/v1/tasks/{id}/cancel` | POST | 取消任务 |
+| `/api/v1/tenants/{id}/usage` | GET | 查用量 |
+| `/api/v1/tenants/{id}/billing` | GET | 查计费 |
+| `/api/v1/webhooks` | POST/GET | 注册/列出回调 |
+| `/api/v1/systems` | POST | 注册业务系统 |
+| `/api/v1/health` | GET | 健康检查 |
+
+**认证方式：**
+- API Key（`Bearer ak_xxx`）—— 业务系统
+- JWT（`Bearer jwt_xxx`）—— 人类用户（HS256 无状态）
+- sessionToken —— 管理员（兼容模式）
+
+**RBAC 4 角色：**
+| 角色 | 读 | 写 | 管理 | Portal UI |
+|------|---|---|------|-----------|
+| ADMIN | ✅ | ✅ | ✅ | ✅ |
+| OPERATOR | ✅ | ✅ | ❌ | ✅ |
+| VIEWER | ✅ | ❌ | ❌ | ✅ |
+| API_ONLY | ✅ | ✅ | ❌ | ❌ |
+
+### ⚡ 执行引擎
+
+| 能力 | 说明 |
+|------|------|
+| TenantAwareAIAgent | 多租户感知的 Agent 运行时 |
+| TenantAwareToolDispatcher | 8 关卡安全执行流水线（Hook → Permission → Prelude → Approval → Negotiator → Dispatch → PostHook → Transform） |
+| ApprovalSystem | 4 模式（AUTO/PROMPT/REQUIRE/DENY）+ IM/Portal/控制台三通道 |
+| HookEngine | 17 个 HookType 覆盖工具/LLM/API/会话/子 Agent |
+| AsyncTaskQueue | 4 worker 线程池 + MySQL 持久化 + FOR UPDATE SKIP LOCKED |
+| ModelChain | 多模型编排（plan → execute → review） |
+| ModelRoutingPolicy | 角色 → 模型别名映射（planner→smart, executor→fast） |
+| WebhookDispatcher | HMAC-SHA256 签名 + 3 次指数退避重试 + 自动禁用 |
+
+### 🔗 Connector 生态
+
+3 个内置 Connector，通过 Connector 接口可自定义扩展：
+
+| Connector | 操作 | 说明 |
+|-----------|------|------|
+| HttpConnector | GET/POST/PUT/DELETE | 通用 HTTP API，支持 auth header + API Key |
+| SqlConnector | query/execute/tables | JDBC 数据库，DDL 阻断 + SELECT-only 查询 |
+| WebhookConnector | send/notify | 发出 webhook，HMAC 签名 |
+
+### 📊 可观测性
+
+| 能力 | 说明 |
+|------|------|
+| BusinessMetricsCollector | 4 维度指标（tenant / model / agent / system） |
+| Prometheus 导出 | `/metrics` 端点，带 label 维度 |
+| ExecutionTrace | 执行链路追踪（span + attributes + duration） |
+| TraceStore | 10k 内存 ring buffer + API 查询 |
+| TenantAuditLogger | 审计日志（合规用） |
+
+### 🔄 版本管理 + 灰度发布
+
+| 能力 | 说明 |
+|------|------|
+| ConfigVersionService | 配置快照 + 回滚 + 审计轨迹 |
+| CanaryDeploymentManager | 三策略灰度（IMMEDIATE / PERCENTAGE / EXPLICIT） |
+| 会话粘性 | 同 sessionId 始终走同一配置（hash-based） |
+| 渐进发布 | promote（10% → 50% → 100%）+ autoRollback |
+
+## 快速开始
+
+### 1. 构建
+
+```bash
+mvn clean package -DskipTests
 ```
 
----
+### 2. 启动（LOCAL 模式，单实例）
 
-## API Endpoints
-
-### Tenant Management
-
-```
-POST   /api/v1/tenants              # Create tenant
-GET    /api/v1/tenants/:id          # Get tenant info
-DELETE /api/v1/tenants/:id          # Delete tenant
-POST   /api/v1/tenants/:id/suspend  # Suspend tenant
-POST   /api/v1/tenants/:id/resume   # Resume tenant
+```bash
+java -jar target/hermes-agent-java.jar
 ```
 
-### Resource Quota
+### 3. 启动（CLUSTER 模式，多实例 + MySQL）
 
-```
-GET    /api/v1/tenants/:id/quota    # Get quota
-PUT    /api/v1/tenants/:id/quota    # Update quota
-GET    /api/v1/tenants/:id/usage    # Get usage stats
-```
-
-### Security Policy
-
-```
-GET    /api/v1/tenants/:id/security # Get security policy
-PUT    /api/v1/tenants/:id/security # Update security policy
+```bash
+java -Dhermes.profile=cluster \
+     -Ddb.url=jdbc:mysql://localhost:3306/hermes \
+     -Ddb.username=hermes \
+     -Ddb.password=secret \
+     -Djwt.secret=your-jwt-secret \
+     -jar target/hermes-agent-java.jar
 ```
 
-### Audit Logs
+### 4. 初始化数据库
+
+```bash
+mysql -u root -p hermes < src/main/resources/sql/schema.sql
+```
+
+### 5. 注册业务系统
+
+```bash
+curl -X POST http://localhost:8080/api/v1/systems \
+  -H "Content-Type: application/json" \
+  -d '{"systemId":"erp","displayName":"ERP System","tenantId":"default"}'
+
+# 返回：{"systemId":"erp","apiKey":"ak_xxx","displayName":"ERP System"}
+```
+
+### 6. 发消息给 Agent
+
+```bash
+curl -X POST http://localhost:8080/api/v1/agents/agent-1/messages \
+  -H "Authorization: Bearer ak_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"查询今天的订单"}'
+```
+
+### 7. 提交异步任务
+
+```bash
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "Authorization: Bearer ak_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"agentId":"agent-1","input":"生成月度报告","priority":1}'
+```
+
+### 8. 注册 Webhook 回调
+
+```bash
+curl -X POST http://localhost:8080/api/v1/webhooks \
+  -H "Authorization: Bearer ak_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://erp.com/hermes-callback","events":["task.completed"],"secret":"whsec_xxx"}'
+```
+
+## 数据库表结构
+
+| 表 | 用途 |
+|---|------|
+| `tenant_model_config` | 租户模型配置（provider/model/apiKey/base_url/key_source） |
+| `tenant_api_key` | 租户 API Key（per-provider，明文） |
+| `tenant_model_route` | 租户 model_routes（别名路由） |
+| `platform_model_route` | 平台预定义 model_routes |
+| `platform_provider` | Provider Catalog（8 内置 provider） |
+| `platform_api_key` | 平台代付 API Key 池 |
+| `tenant_quota` | 租户配额（含 onExceed/degrade） |
+| `billing_record` | 计费记录（per-call） |
+| `business_system` | 业务系统注册（API Key 认证） |
+| `async_task` | 异步任务（PENDING→RUNNING→COMPLETED/FAILED） |
+| `webhook_subscription` | Webhook 订阅 |
+| `user_account` | 用户账户 |
+| `workspace_member` | 工作区成员关系（RBAC） |
+| `config_version` | 配置版本快照 |
+
+## API Key 解析链
 
 ```
-GET    /api/v1/tenants/:id/audit           # Get audit logs
-GET    /api/v1/tenants/:id/audit/export    # Export audit logs
+resolveApiKey(provider):
+  1. secrets.env / tenant_api_key: {PROVIDER}_API_KEY  (e.g. OPENAI_API_KEY)
+  2. secrets.env / tenant_api_key: API_KEY              (通用兜底)
+  3. config.yaml: model.api_key                          (仅当 provider == 默认)
+  4. Platform Key: -Dplatform.{PROVIDER}_API_KEY         (代付，hybrid 模式)
+  5. null → 抛异常
 ```
 
----
+## 四层模型配置体系
 
-## Security Considerations
+```
+Layer 4: Request    | temperature / max_tokens          (单次调用)
+Layer 3: Session    | ModelOverride                      (会话级，不存 api_key)
+Layer 2: Tenant     | model.* + model_routes + secrets    (核心改造层)
+Layer 1: Platform   | ProviderCatalog + 预定义 routes     (全局)
+```
 
-### Threat Model and Mitigations
+解析优先级：Request > Session ModelOverride > Tenant model_routes > Tenant model.* > Platform
 
-| Threat | Mitigation |
-|--------|------------|
-| Path Traversal | Path validation + sandbox root restriction |
-| Symlink Escape | Symbolic link resolution check |
-| Command Injection | Command whitelist + parameter validation |
-| Environment Leak | Environment variable sanitization |
-| SSRF | URL whitelist + blacklist filtering |
-| Resource Exhaustion | Quota enforcement + timeout control |
-| Privilege Escalation | cgroups + seccomp (planned) |
+## 多模型编排示例
 
-### Security Best Practices
+```java
+ModelChain chain = ModelChain.builder()
+    .plan("你是规划师，将任务分解为步骤")           // 用 "smart" 别名 (Claude)
+    .execute("你是执行者，使用工具执行每个步骤")      // 用 "fast" 别名 (GPT-4o-mini)
+    .review("你是审查员，检查结果并提出改进建议")     // 用 "smart" 别名 (Claude)
+    .build();
 
-1. **Use Whitelist Mode**: Explicitly allow commands and hosts
-2. **Enable Audit Logging**: Record all sandbox operations
-3. **Set Reasonable Limits**: Configure appropriate quotas
-4. **Monitor Alerts**: Set up alerts for quota violations
-5. **Regular Reviews**: Periodically review whitelist configurations
+String result = chain.execute(tenantConfig, globalConfig, input, tools);
+```
 
----
+## 灰度发布示例
+
+```java
+// 开始灰度：10% 流量用新配置
+canaryManager.startCanary("tenant-A", "ver_123",
+    CanaryDeploymentManager.Strategy.PERCENTAGE, 10, true, 5);
+
+// 提升到 50%
+canaryManager.promote("tenant-A", 50);
+
+// 全量发布
+canaryManager.complete("tenant-A");
+
+// 或回滚
+canaryManager.abort("tenant-A", "error rate too high");
+```
+
+## 项目结构
+
+```
+src/main/java/com/nousresearch/hermes/
+├── agent/                 # Agent 运行时
+│   ├── TenantAwareAIAgent       # 多租户 Agent
+│   ├── ModelChain               # 多模型编排 (F1)
+│   └── ModelRoutingPolicy        # 角色→模型映射 (F1)
+├── auth/                  # 用户身份与权限 (D5-D6)
+│   ├── UserAccount              # 用户实体 + Role 枚举
+│   ├── UserRbacService          # MySQL 用户/成员管理
+│   └── JwtService               # JWT 签发/校验
+├── billing/               # 计费 (B4)
+│   ├── TenantUsageRecord        # 计费记录
+│   ├── TenantBillingService     # 计费服务
+│   └── repository/              # BillingRepository 接口 + 实现
+├── business/              # 业务场景
+│   └── event/                   # BusinessEventBus
+├── collaboration/         # 多 Agent 协作
+│   ├── ScenarioOrchestrator
+│   └── AgentRuntimeProfile
+├── config/                # 配置
+│   ├── HermesConfig             # 全局配置
+│   ├── ModelRoute               # 模型路由
+│   ├── repository/              # ConfigRepository + MySQL + Cache (C1-C7)
+│   │   ├── ConfigRepository       # 接口
+│   │   ├── LocalConfigRepository  # 文件实现
+│   │   ├── MysqlConfigRepository # MySQL 实现
+│   │   ├── ConfigCache           # TTL 热更新
+│   │   └── DataSourceFactory     # HikariCP
+│   └── versioning/              # 版本管理 + 灰度 (P3)
+│       ├── ConfigVersion          # 版本快照
+│       ├── ConfigVersionService   # 快照/回滚/审计
+│       └── CanaryDeploymentManager # 灰度发布
+├── connector/             # Connector 生态 (E3)
+│   ├── Connector                 # 接口
+│   ├── ConnectorRegistry
+│   └── builtin/
+│       ├── HttpConnector          # 通用 HTTP
+│       ├── SqlConnector           # JDBC 数据库
+│       └── WebhookConnector       # 发出 webhook
+├── dashboard/             # Web 服务
+│   ├── DashboardServer          # Javalin 路由
+│   └── handlers/
+│       ├── AdminConfigHandler    # Admin API (C4)
+│       └── IntegrationGatewayHandler # 业务系统 API (D2)
+├── gateway/               # API 网关
+│   ├── OpenAICompatHandler      # OpenAI 兼容 API
+│   └── integration/             # 业务系统接入 (D1-D4)
+│       ├── BusinessSystem        # 业务系统实体
+│       ├── BusinessSystemRegistry # API Key 认证
+│       ├── AsyncTask            # 异步任务
+│       ├── AsyncTaskQueue       # 线程池队列
+│       ├── AgentTaskProcessor   # Agent 桥接 (E1)
+│       ├── WebhookDispatcher    # 事件推送 (D4)
+│       ├── IntegrationGatewayHandler # REST API
+│       └── IntegrationBootstrap  # 启动初始化
+├── model/                 # 模型客户端
+│   ├── ModelClient              # LLM API 客户端
+│   ├── ChatCompletionResponse
+│   └── ModelMessage
+├── observability/         # 可观测性 (F2)
+│   ├── BusinessMetricsCollector # 4 维度指标
+│   ├── ExecutionTrace           # 执行链路
+│   └── TraceStore               # ring buffer
+├── platform/              # 平台级
+│   ├── ProviderCatalog          # Provider 白名单 (B3)
+│   └── secret/                  # SecretStore 接口 (B7)
+│       ├── SecretStore            # 接口
+│       ├── FileSecretStore        # 文件实现
+│       ├── InMemorySecretStore   # 内存实现
+│       ├── MysqlSecretStore       # MySQL 实现 (C5)
+│       └── VaultSecretStore       # Vault stub
+├── sdk/                   # Java SDK (D7)
+│   └── HermesClient             # 3 行代码接入
+├── tenant/                # 多租户
+│   ├── core/
+│   │   ├── TenantConfig         # 租户配置（model/routes/quota/secrets）
+│   │   ├── TenantContext        # 租户上下文
+│   │   └── TenantManager       # 租户管理器
+│   └── quota/                   # 配额管理
+│       ├── TenantQuota          # 配额实体
+│       └── TenantQuotaManager  # 配额检查
+└── tools/                # 工具系统
+    ├── ToolRegistry
+    ├── TenantAwareToolDispatcher # 8 关卡安全流水线
+    └── ToolCallPrelude           # 工具调用前奏
+```
+
+## 技术栈
+
+| 组件 | 技术 |
+|------|------|
+| 语言 | Java 21 |
+| Web 框架 | Javalin 6 |
+| 数据库 | MySQL 8.x（兼容 H2 测试） |
+| 连接池 | HikariCP 5.1 |
+| JSON | FastJSON2 |
+| 模板 | Pebble |
+| 构建 | Maven |
+| 测试 | JUnit 5 + H2（MySQL 兼容模式） |
+
+## 测试
+
+```bash
+# 全量测试
+mvn test
+
+# 测试统计：833 tests, 0 failures, 0 errors
+```
+
+## 部署拓扑
+
+```
+                    ┌─────────────────────────┐
+                    │    Load Balancer (NLB)   │
+                    └────────────┬────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+     ┌────────┴───────┐ ┌───────┴────────┐ ┌──────┴────────┐
+     │ Hermes Node 1  │ │ Hermes Node 2   │ │ Hermes Node 3  │
+     │ (CLUSTER mode) │ │ (CLUSTER mode)  │ │ (CLUSTER mode) │
+     └───────┬────────┘ └───────┬─────────┘ └───────┬────────┘
+             │                  │                   │
+             │     ┌───────────┴──────────────┐    │
+             │     │  MySQL (config + billing)│    │
+             │     │  + HikariCP pool         │    │
+             │     └──────────────────────────┘    │
+             │                                       │
+     ┌───────┴───────────────────────────────────────┘
+     │
+     │     ┌──────────────────────────┐
+     │     │  业务系统 A (ERP)        │
+     │     │  HermesClient SDK        │
+     │     │  -> ak_xxx 认证          │
+     │     └──────────────────────────┘
+     │
+     │     ┌──────────────────────────┐
+     │     │  业务系统 B (电商平台)    │
+     │     │  HermesClient SDK        │
+     │     │  -> ak_yyy 认证          │
+     │     └──────────────────────────┘
+```
 
 ## License
 
-MIT License - See LICENSE file
-
----
-
-## Contributing
-
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
-
----
-
-*Last updated: 2026-07-06*
-*Version: 0.2.0*
+Copyright © 2024-2026 NousResearch. All rights reserved.
