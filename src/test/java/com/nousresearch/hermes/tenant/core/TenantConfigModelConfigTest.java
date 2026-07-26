@@ -369,4 +369,68 @@ class TenantConfigModelConfigTest {
         HermesConfig.ModelConfig mc = config.resolveModelConfig("proxy");
         assertEquals("https://my-proxy.example.com/v1", mc.getBaseUrl());
     }
+
+    // ============ B3: Provider Catalog integration ============
+
+    @Test
+    @Order(25)
+    @DisplayName("isProviderValid returns true for default provider")
+    void isProviderValid_default() {
+        // default provider is "openrouter" which is in the catalog
+        assertTrue(config.isProviderValid());
+    }
+
+    @Test
+    @Order(26)
+    @DisplayName("isProviderValid returns false for unknown provider")
+    void isProviderValid_unknown() {
+        config.set("model.provider", "unknown-provider");
+        assertFalse(config.isProviderValid());
+    }
+
+    @Test
+    @Order(27)
+    @DisplayName("isProviderValid returns true for all catalog providers")
+    void isProviderValid_allCatalogProviders() {
+        for (String provider : List.of(
+                "openai", "anthropic", "openrouter", "deepseek",
+                "doubao", "moonshot", "minimax", "ollama")) {
+            config.set("model.provider", provider);
+            assertTrue(config.isProviderValid(),
+                "Provider " + provider + " should be valid");
+        }
+    }
+
+    @Test
+    @Order(28)
+    @DisplayName("resolveBaseUrl uses catalog default")
+    void resolveBaseUrl_usesCatalog() {
+        config.set("model.provider", "deepseek");
+        assertEquals("https://api.deepseek.com/v1", config.resolveBaseUrl("deepseek"));
+    }
+
+    @Test
+    @Order(29)
+    @DisplayName("custom catalog can be injected")
+    void customCatalogInjection() {
+        // Save original catalog
+        var original = com.nousresearch.hermes.platform.ProviderCatalog.withDefaults();
+        try {
+            var custom = com.nousresearch.hermes.platform.ProviderCatalog.builder()
+                .add("my-provider", "My Provider", "https://my.api.com/v1",
+                    true, true, java.util.List.of())
+                .build();
+            TenantConfig.setSharedCatalog(custom);
+
+            config.set("model.provider", "my-provider");
+            assertTrue(config.isProviderValid());
+            assertEquals("https://my.api.com/v1", config.resolveBaseUrl("my-provider"));
+
+            // Standard providers should not be valid with custom catalog
+            config.set("model.provider", "openai");
+            assertFalse(config.isProviderValid());
+        } finally {
+            TenantConfig.setSharedCatalog(original);
+        }
+    }
 }

@@ -553,6 +553,34 @@ public class TenantConfig {
 
     // ============ B1: 租户级模型配置 ============
 
+    /** B3: Platform provider catalog (lazy, shared singleton). */
+    private static volatile com.nousresearch.hermes.platform.ProviderCatalog sharedCatalog;
+
+    /** B3: Get or initialize the shared provider catalog. */
+    private static com.nousresearch.hermes.platform.ProviderCatalog getSharedCatalog() {
+        if (sharedCatalog == null) {
+            synchronized (TenantConfig.class) {
+                if (sharedCatalog == null) {
+                    sharedCatalog = com.nousresearch.hermes.platform.ProviderCatalog.withDefaults();
+                }
+            }
+        }
+        return sharedCatalog;
+    }
+
+    /** B3: Override the shared catalog (for testing or custom init). */
+    public static void setSharedCatalog(com.nousresearch.hermes.platform.ProviderCatalog catalog) {
+        sharedCatalog = catalog;
+    }
+
+    /**
+     * B3: Validate that the configured provider is in the platform catalog.
+     * @return true if the provider is registered, false otherwise
+     */
+    public boolean isProviderValid() {
+        return getSharedCatalog().isRegistered(getModelProvider());
+    }
+
     /** Convert any value to String, returning null for null values. */
     private static String stringValue(Object value) {
         return value == null ? null : value.toString();
@@ -781,28 +809,15 @@ public class TenantConfig {
 
     /**
      * Resolve base URL for a given provider.
+     * Uses the platform ProviderCatalog for defaults.
      *
      * @param provider the provider ID
-     * @return the base URL (never null; falls back to provider default)
+     * @return the base URL (never null; falls back to catalog default then openrouter)
      */
     public String resolveBaseUrl(String provider) {
         String configured = getString("model.base_url", "");
         if (!configured.isBlank()) return configured;
-        return getDefaultBaseUrl(provider);
-    }
-
-    private static String getDefaultBaseUrl(String provider) {
-        if (provider == null) return "https://openrouter.ai/api/v1";
-        return switch (provider.toLowerCase()) {
-            case "openai" -> "https://api.openai.com/v1";
-            case "anthropic" -> "https://api.anthropic.com/v1";
-            case "openrouter" -> "https://openrouter.ai/api/v1";
-            case "deepseek" -> "https://api.deepseek.com/v1";
-            case "doubao" -> "https://ark.cn-beijing.volces.com/api/v3";
-            case "moonshot" -> "https://api.moonshot.cn/v1";
-            case "minimax" -> "https://api.minimax.chat/v1";
-            case "ollama", "ollama-local" -> "http://localhost:11434/v1";
-            default -> "https://openrouter.ai/api/v1";
-        };
+        // B3: Use ProviderCatalog for default URL
+        return getSharedCatalog().getDefaultBaseUrlOrFallback(provider);
     }
 }
