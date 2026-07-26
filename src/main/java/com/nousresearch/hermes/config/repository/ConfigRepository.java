@@ -1,0 +1,106 @@
+package com.nousresearch.hermes.config.repository;
+
+import com.nousresearch.hermes.config.ModelRoute;
+import com.nousresearch.hermes.platform.ProviderCatalog;
+import com.nousresearch.hermes.tenant.quota.TenantQuota;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Centralized config repository abstraction.
+ *
+ * <p>Decouples config storage from file-based approach. Enables MySQL
+ * (or other DB) backends for multi-instance deployments with hot reload.</p>
+ *
+ * <p>Implementations:</p>
+ * <ul>
+ *   <li>{@link LocalConfigRepository} - reads/writes local files (default)</li>
+ *   <li>MysqlConfigRepository - reads/writes MySQL (cluster mode)</li>
+ * </ul>
+ */
+public interface ConfigRepository {
+
+    // ============ Model Config ============
+
+    /**
+     * Load tenant model configuration values.
+     * Returns a map compatible with TenantConfig's internal representation.
+     */
+    Map<String, Object> loadModelConfig(String tenantId);
+
+    /**
+     * Save tenant model configuration.
+     */
+    void saveModelConfig(String tenantId, Map<String, Object> config);
+
+    /**
+     * Get the last-updated timestamp for a tenant's config (epoch millis).
+     * Used for cache invalidation via polling.
+     */
+    long getConfigVersion(String tenantId);
+
+    // ============ API Keys ============
+
+    /**
+     * Load all API keys for a tenant.
+     * @return map of provider -> apiKey
+     */
+    Map<String, String> loadApiKeys(String tenantId);
+
+    /**
+     * Save a single API key for a tenant.
+     */
+    void saveApiKey(String tenantId, String provider, String apiKey);
+
+    /**
+     * Remove an API key.
+     */
+    void removeApiKey(String tenantId, String provider);
+
+    // ============ Model Routes ============
+
+    /**
+     * Load tenant-level model routes.
+     */
+    List<ModelRoute> loadModelRoutes(String tenantId);
+
+    /**
+     * Save (upsert) a tenant model route.
+     */
+    void saveModelRoute(String tenantId, ModelRoute route);
+
+    /**
+     * Remove a tenant model route by alias.
+     */
+    void removeModelRoute(String tenantId, String alias);
+
+    // ============ Quota ============
+
+    /**
+     * Load tenant quota.
+     */
+    TenantQuota loadQuota(String tenantId);
+
+    /**
+     * Save tenant quota.
+     */
+    void saveQuota(String tenantId, TenantQuota quota);
+
+    // ============ Platform ============
+
+    /**
+     * Load the platform provider catalog.
+     */
+    ProviderCatalog loadProviderCatalog();
+
+    /**
+     * Load platform-level model routes (predefined aliases).
+     */
+    List<ModelRoute> loadPlatformModelRoutes();
+
+    /**
+     * Load platform-managed API key for a provider (代付 key).
+     */
+    String loadPlatformApiKey(String provider);
+}
