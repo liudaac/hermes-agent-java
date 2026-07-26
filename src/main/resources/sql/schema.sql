@@ -235,3 +235,21 @@ CREATE TABLE IF NOT EXISTS workspace_member (
     UNIQUE KEY uk_workspace_user (workspace_id, user_id),
     INDEX idx_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- P3: Config versioning
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS config_version (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    version_id      VARCHAR(64)  NOT NULL,
+    tenant_id       VARCHAR(64)  NOT NULL,
+    version_number  INT          NOT NULL,
+    config_json     TEXT         NOT NULL,
+    changed_by      VARCHAR(64)  DEFAULT NULL,
+    change_reason   VARCHAR(256) DEFAULT NULL,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_version_id (version_id),
+    INDEX idx_tenant_version (tenant_id, version_number)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
