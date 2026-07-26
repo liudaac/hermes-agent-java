@@ -746,6 +746,36 @@ public class DashboardServer {
                     .fluentPut("displayName", system.displayName()));
             });
             logger.info("Integration Gateway API registered (/api/v1/*)");
+
+            // E1: Wire AgentTaskProcessor to AsyncTaskQueue
+            var webhookDispatcher = com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getWebhookDispatcher();
+            var taskProcessor = new com.nousresearch.hermes.gateway.integration.AgentTaskProcessor(
+                tenantManager, webhookDispatcher);
+            com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.setTaskProcessor(taskProcessor);
+            logger.info("AgentTaskProcessor wired to AsyncTaskQueue");
+
+            // E2: Subscribe to BusinessEventBus for webhook dispatching
+            try {
+                var eventBus = businessEventBus;
+                eventBus.subscribe(event -> {
+                    try {
+                        String tenantId = event.workspaceId() != null ? event.workspaceId() : "default";
+                        String eventType = "business." + event.type();
+                        webhookDispatcher.dispatch(tenantId, eventType,
+                            com.alibaba.fastjson2.JSON.toJSONString(java.util.Map.of(
+                                "eventType", event.type(),
+                                "workspaceId", event.workspaceId() != null ? event.workspaceId() : "",
+                                "entityId", event.entityId() != null ? event.entityId() : "",
+                                "timestamp", System.currentTimeMillis()
+                            )));
+                    } catch (Exception e) {
+                        logger.debug("BusinessEvent webhook dispatch failed: {}", e.getMessage());
+                    }
+                });
+                logger.info("BusinessEventBus subscribed for webhook dispatching");
+            } catch (Exception e) {
+                logger.debug("BusinessEventBus subscription skipped: {}", e.getMessage());
+            }
         } else {
             logger.warn("Integration Gateway not available (DB not configured) - /api/v1/ routes disabled");
         }
