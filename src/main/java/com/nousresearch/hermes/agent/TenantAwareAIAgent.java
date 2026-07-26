@@ -229,6 +229,7 @@ public class TenantAwareAIAgent {
         toolDispatcher.setNegotiator(tenantContext.getNegotiator());
         // B1: Resolve model config from TenantConfig (tenant-scoped), fallback to global HermesConfig
         this.modelClient = new com.nousresearch.hermes.model.ModelClient(context, this.config);
+        this.modelClient.setSessionId(this.sessionId); // B4: billing traceability
         // Wire tool call prelude for explainability + dry-run + graceful reject
         this.toolDispatcher.setToolCallPrelude(new com.nousresearch.hermes.tools.ToolCallPrelude(
             this.modelClient));
@@ -308,6 +309,7 @@ public class TenantAwareAIAgent {
             this.tenantContext = manager.getOrCreateTenant(tenantId, createDefaultRequest());
             // B1: tenant-aware ModelClient
             this.modelClient = new com.nousresearch.hermes.model.ModelClient(this.tenantContext, this.config);
+            this.modelClient.setSessionId(this.sessionId); // B4: billing traceability
             this.toolDispatcher = new TenantAwareToolDispatcher(tenantContext, ToolRegistry.getInstance());
             if (tenantContext != null) {
                 toolDispatcher.setNegotiator(tenantContext.getNegotiator());

@@ -33,6 +33,14 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
     // B1: Tenant-aware fields (null when constructed with raw ModelConfig)
     private final String tenantId;
     private final com.nousresearch.hermes.tenant.quota.TenantQuotaManager quotaManager;
+    // B4: Billing service (null when no tenant context)
+    private final com.nousresearch.hermes.billing.TenantBillingService billingService;
+    // B4: Tenant context reference for billing file path
+    private final transient com.nousresearch.hermes.tenant.core.TenantContext tenantContextRef;
+    // B5: Rate limiter (null when no tenant context)
+    private final com.nousresearch.hermes.tenant.sandbox.RateLimiter rateLimiter;
+    // Session ID for billing traceability
+    private volatile String sessionId;
 
     /**
      * Original constructor - creates a ModelClient from a raw ModelConfig.
@@ -45,6 +53,9 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             .build();
         this.tenantId = null;
         this.quotaManager = null;
+        this.billingService = null;
+        this.tenantContextRef = null;
+        this.rateLimiter = null;
     }
 
     /**
@@ -74,6 +85,7 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
         }
         this.tenantId = tenantContext.getTenantId();
         this.quotaManager = tenantContext.getQuotaManager();
+        this.tenantContextRef = tenantContext;
 
         HermesConfig.ModelConfig resolved;
         if (globalConfig != null) {
@@ -86,8 +98,24 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             .connectTimeout(Duration.ofSeconds(30))
             .build();
 
-        logger.debug("ModelClient initialized for tenant={} provider={} model={}",
-            tenantId, resolved.getProvider(), resolved.getName());
+        // B4: Initialize billing service
+        this.billingService = new com.nousresearch.hermes.billing.TenantBillingService();
+
+        // B5: Initialize rate limiter from tenant quota
+        int rps = tenantContext.getQuotaManager().getQuota().getRequestsPerSecond();
+        this.rateLimiter = rps > 0
+            ? new com.nousresearch.hermes.tenant.sandbox.RateLimiter(rps)
+            : null;
+
+        logger.debug("ModelClient initialized for tenant={} provider={} model={} rps={}",
+            tenantId, resolved.getProvider(), resolved.getName(), rps);
+    }
+
+    /**
+     * B5: Set the session ID for billing traceability.
+     */
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     /**
@@ -130,6 +158,15 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             } catch (com.nousresearch.hermes.tenant.quota.QuotaExceededException e) {
                 logger.warn("Tenant {} request quota exceeded: {}", tenantId, e.getMessage());
                 return ChatCompletionResponse.error("Quota exceeded: " + e.getMessage());
+            }
+        }
+
+        // B5: Rate limit check (tenant-aware only)
+        if (rateLimiter != null) {
+            if (!rateLimiter.tryAcquire()) {
+                logger.warn("Tenant {} rate limited (rps={})", tenantId,
+                    rateLimiter.getMaxRequestsPerSecond());
+                return ChatCompletionResponse.error("Rate limit exceeded. Please retry.");
             }
         }
 
@@ -785,11 +822,24 @@ public class ModelClient implements com.nousresearch.hermes.harness.ModelProvide
             } catch (com.nousresearch.hermes.tenant.quota.QuotaExceededException e) {
                 logger.warn("Tenant {} token quota exceeded after call: {} tokens, msg={}",
                     tenantId, totalTokens, e.getMessage());
-                // Don't fail the response - the call already succeeded.
-                // The next call will be blocked by checkRequestQuota().
             }
             logger.debug("Tenant {} usage: +{} tokens (prompt={}, completion={})",
                 tenantId, totalTokens, usage.getPromptTokens(), usage.getCompletionTokens());
+
+            // B4: Write billing record
+            if (billingService != null && tenantContextRef != null) {
+                try {
+                    billingService.record(
+                        tenantContextRef,
+                        modelConfig.getName(),
+                        modelConfig.getProvider(),
+                        usage.getPromptTokens(),
+                        usage.getCompletionTokens(),
+                        sessionId);
+                } catch (Exception e) {
+                    logger.debug("Billing record failed for tenant={}: {}", tenantId, e.getMessage());
+                }
+            }
         }
     }
 }
