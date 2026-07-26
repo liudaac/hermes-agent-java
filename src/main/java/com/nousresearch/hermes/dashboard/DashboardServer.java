@@ -636,6 +636,36 @@ public class DashboardServer {
         // Model info
         app.get("/api/model/info", configHandler::getModelInfo);
 
+        // C4: Admin API for tenant model configuration
+        AdminConfigHandler adminConfigHandler = new AdminConfigHandler(
+            new com.nousresearch.hermes.config.repository.LocalConfigRepository(
+                com.nousresearch.hermes.config.Constants.getHermesHome()),
+            null);  // no cache in local mode; Admin API creates cache in cluster mode
+        // Tenant model config
+        app.get("/api/admin/tenants/{tenantId}/config", adminConfigHandler::getModelConfig);
+        app.put("/api/admin/tenants/{tenantId}/config", adminConfigHandler::updateModelConfig);
+        app.patch("/api/admin/tenants/{tenantId}/config", adminConfigHandler::patchModelConfig);
+        // API Keys
+        app.get("/api/admin/tenants/{tenantId}/keys", adminConfigHandler::listApiKeys);
+        app.put("/api/admin/tenants/{tenantId}/keys/{provider}", adminConfigHandler::setApiKey);
+        app.delete("/api/admin/tenants/{tenantId}/keys/{provider}", adminConfigHandler::deleteApiKey);
+        // Model Routes
+        app.get("/api/admin/tenants/{tenantId}/routes", adminConfigHandler::listModelRoutes);
+        app.put("/api/admin/tenants/{tenantId}/routes/{alias}", adminConfigHandler::setModelRoute);
+        app.delete("/api/admin/tenants/{tenantId}/routes/{alias}", adminConfigHandler::deleteModelRoute);
+        // Quota
+        app.get("/api/admin/tenants/{tenantId}/quota", adminConfigHandler::getQuota);
+        app.put("/api/admin/tenants/{tenantId}/quota", adminConfigHandler::updateQuota);
+        // Platform
+        app.get("/api/admin/platform/providers", adminConfigHandler::listProviders);
+        app.get("/api/admin/platform/routes", adminConfigHandler::listPlatformRoutes);
+        // Cache management
+        app.post("/api/admin/cache/invalidate", adminConfigHandler::invalidateCache);
+        app.post("/api/admin/cache/invalidate/{tenantId}", adminConfigHandler::invalidateCache);
+        app.get("/api/admin/cache/stats", adminConfigHandler::getCacheStats);
+        // Billing
+        app.get("/api/admin/tenants/{tenantId}/billing", adminConfigHandler::getBillingSummary);
+
         // Environment variables API
         app.get("/api/env", envHandler::getEnvVars);
         app.put("/api/env", envHandler::setEnvVar);
