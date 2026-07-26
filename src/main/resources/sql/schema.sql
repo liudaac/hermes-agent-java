@@ -203,3 +203,35 @@ CREATE TABLE IF NOT EXISTS webhook_subscription (
     PRIMARY KEY (id),
     INDEX idx_tenant_events (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- D5: User + RBAC
+-- ============================================================
+
+-- 用户账户
+CREATE TABLE IF NOT EXISTS user_account (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id         VARCHAR(64)  NOT NULL,
+    email           VARCHAR(128) DEFAULT NULL,
+    display_name    VARCHAR(128) DEFAULT NULL,
+    sso_subject     VARCHAR(128) DEFAULT NULL,
+    is_active       TINYINT(1)   DEFAULT 1,
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_id (user_id),
+    UNIQUE KEY uk_email (email),
+    INDEX idx_sso_subject (sso_subject)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 工作区成员关系
+CREATE TABLE IF NOT EXISTS workspace_member (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    workspace_id    VARCHAR(64)  NOT NULL,
+    user_id         VARCHAR(64)  NOT NULL,
+    role            VARCHAR(16)  NOT NULL DEFAULT 'viewer',
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_workspace_user (workspace_id, user_id),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
