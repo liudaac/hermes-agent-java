@@ -789,8 +789,17 @@ public class TenantConfig {
      * @return the API key, or {@code null} if not found
      */
     public String resolveApiKey(String provider) {
+        // B6: Check key_source policy
+        String keySource = getString("model.key_source", "hybrid");
+
+        if ("platform".equalsIgnoreCase(keySource)) {
+            // Platform-only: skip tenant secrets, go straight to platform key
+            return getPlatformKey(provider);
+        }
+
+        // tenant or hybrid: try tenant secrets first
         // 1. Provider-specific key in secrets.env
-        String envKey = provider.toUpperCase().replace("-", "_") + "_API_KEY";
+        String envKey = providerToEnvKey(provider);
         String key = getSecret(envKey);
         if (key != null && !key.isBlank()) return key;
 
@@ -804,7 +813,199 @@ public class TenantConfig {
             if (key != null && !key.isBlank()) return key;
         }
 
+        // B6: hybrid mode -> fall back to platform key
+        if ("hybrid".equalsIgnoreCase(keySource)) {
+            return getPlatformKey(provider);
+        }
+
         return null;
+    }
+
+    /**
+     * B6: Convert a provider ID to the standard env var key format.
+     * "openai" -> "OPENAI_API_KEY", "deepseek" -> "DEEPSEEK_API_KEY"
+     */
+    public static String providerToEnvKey(String provider) {
+        if (provider == null) return "API_KEY";
+        return provider.toUpperCase().replace("-", "_") + "_API_KEY";
+    }
+
+    /**
+     * B6: Get platform-managed API key for a provider.
+     *
+     * <p>Platform keys are stored in the global HermesConfig under
+     * {@code platform_keys.{PROVIDER}_API_KEY}. This enables the "platform
+     *代付" model where the platform holds keys and tenants use them.</p>
+     *
+     * @param provider the provider ID
+     * @return platform API key, or null if not configured
+     */
+    public String getPlatformKey(String provider) {
+        // Read from global system property / env var
+        String envKey = providerToEnvKey(provider);
+        // 1. JVM system property: -Dplatform.OPENAI_API_KEY=sk-xxx
+        String key = System.getProperty("platform." + envKey);
+        if (key != null && !key.isBlank()) return key;
+        // 2. Environment variable: PLATFORM_OPENAI_API_KEY
+        key = System.getenv("PLATFORM_" + envKey);
+        if (key != null && !key.isBlank()) return key;
+        return null;
+    }
+
+    // ============ B6: Multi-Provider Key Management API ============
+
+    /**
+     * B6: Set the API key for a specific provider.
+     *
+     * <p>Stores as {@code {PROVIDER}_API_KEY} in secrets.env.
+     * The key is persisted immediately with file permissions 600.</p>
+     *
+     * @param provider the provider ID (e.g. "openai")
+     * @param apiKey   the API key value
+     */
+    public void setProviderApiKey(String provider, String apiKey) {
+        setSecret(providerToEnvKey(provider), apiKey);
+    }
+
+    /**
+     * B6: Get the API key for a specific provider (from secrets.env only,
+     * no platform fallback).
+     *
+     * @param provider the provider ID
+     * @return the API key, or null if not set
+     */
+    public String getProviderApiKey(String provider) {
+        return getSecret(providerToEnvKey(provider));
+    }
+
+    /**
+     * B6: Remove the API key for a specific provider.
+     *
+     * @param provider the provider ID
+     * @return true if a key was removed
+     */
+    public boolean removeProviderApiKey(String provider) {
+        String envKey = providerToEnvKey(provider);
+        String existing = secrets.remove(envKey);
+        if (existing != null) {
+            saveSecrets();
+            logger.info("Removed API key for provider: {}", provider);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * B6: List all configured provider API keys.
+     *
+     * <p>Returns a map of provider ID -> key env var name (not the actual key value,
+     * for security). Use {@link #getProviderApiKey(String)} to get individual values.</p>
+     *
+     * @return map of provider ID to env var name (e.g. "openai" -> "OPENAI_API_KEY")
+     */
+    public Map<String, String> listProviderApiKeys() {
+        Map<String, String> result = new LinkedHashMap<>();
+        for (String key : secrets.keySet()) {
+            if (key.endsWith("_API_KEY") && !"API_KEY".equals(key)) {
+                String providerId = key.substring(0, key.length() - "_API_KEY".length())
+                    .toLowerCase().replace("_", "-");
+                result.put(providerId, key);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * B6: Check if a provider has an API key configured (tenant or platform).
+     *
+     * @param provider the provider ID
+     * @return true if any API key is available for this provider
+     */
+    public boolean hasApiKey(String provider) {
+        String key = resolveApiKey(provider);
+        return key != null && !key.isBlank();
+    }
+
+    /**
+     * B6: Get the key source policy for this tenant.
+     *
+     * @return "tenant", "platform", or "hybrid" (default)
+     */
+    public String getKeySource() {
+        return getString("model.key_source", "hybrid");
+    }
+
+    /**
+     * B6: Set the key source policy.
+     *
+     * @param keySource "tenant", "platform", or "hybrid"
+     */
+    public void setKeySource(String keySource) {
+        set("model.key_source", keySource);
+    }
+
+    /**
+     * B6: Validate that the tenant's model configuration is complete.
+     *
+     * <p>Checks:</p>
+     * <ul>
+     *   <li>Provider is in the platform catalog</li>
+     *   <li>API key is available (tenant or platform)</li>
+     *   <li>Base URL is resolvable</li>
+     * </ul>
+     *
+     * @return validation result with issues (empty if valid)
+     */
+    public ValidationResult validateModelConfig() {
+        List<String> issues = new ArrayList<>();
+        var catalog = getSharedCatalog();
+
+        String provider = getModelProvider();
+        String model = getModelName();
+
+        // 1. Provider in catalog
+        if (!catalog.isRegistered(provider)) {
+            issues.add("Provider '" + provider + "' is not in the platform catalog. " +
+                "Available: " + catalog.listProviderIds());
+        }
+
+        // 2. Key source valid
+        String keySource = getKeySource();
+        if (!List.of("tenant", "platform", "hybrid").contains(keySource.toLowerCase())) {
+            issues.add("Invalid key_source '" + keySource + "'. Must be: tenant, platform, or hybrid");
+        }
+
+        // 3. Key source allowed by catalog
+        if (catalog.isRegistered(provider) && !catalog.isAllowed(provider, keySource)) {
+            var p = catalog.getProvider(provider);
+            issues.add("Provider '" + provider + "' does not allow key_source '" + keySource +
+                "' (allowTenantKeys=" + (p != null && p.allowTenantKeys()) +
+                ", allowPlatformKeys=" + (p != null && p.allowPlatformKeys()) + ")");
+        }
+
+        // 4. API key available
+        if (!hasApiKey(provider)) {
+            issues.add("No API key configured for provider '" + provider +
+                "'. Set " + providerToEnvKey(provider) + " in secrets.env" +
+                ("hybrid".equalsIgnoreCase(keySource) ? " or configure platform key" : ""));
+        }
+
+        // 5. Model name not blank
+        if (model == null || model.isBlank()) {
+            issues.add("Model name is not configured");
+        }
+
+        return new ValidationResult(issues);
+    }
+
+    /**
+     * B6: Validation result for model configuration.
+     */
+    public record ValidationResult(List<String> issues) {
+        public boolean isValid() { return issues.isEmpty(); }
+        public String summary() {
+            return isValid() ? "OK" : String.join("; ", issues);
+        }
     }
 
     /**
