@@ -722,6 +722,8 @@ public class DashboardServer {
             app.post("/api/v1/tasks", integrationHandler::submitTask);
             app.get("/api/v1/tasks/{taskId}", integrationHandler::getTask);
             app.post("/api/v1/tasks/{taskId}/cancel", integrationHandler::cancelTask);
+            app.post("/api/v1/tasks/{taskId}/interrupt", integrationHandler::interruptTask);
+            app.get("/api/v1/tasks/{taskId}/status", integrationHandler::getTaskChainStatus);
             // Usage & Billing
             app.get("/api/v1/tenants/{tenantId}/usage", integrationHandler::getUsage);
             app.get("/api/v1/tenants/{tenantId}/billing", integrationHandler::getBilling);

@@ -9,6 +9,9 @@ import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * E1: Bridges AsyncTaskQueue to TenantAIAgent.
  *
@@ -24,6 +27,9 @@ import org.slf4j.LoggerFactory;
  * <p>Chain mode is triggered when tenant config has {@code chain_mode: true}
  * or when the task input starts with {@code [chain]}.</p>
  *
+ * <p>Supports interruption: call {@link #interruptChain(String)} with the task ID
+ * to stop a running chain between phases/steps.</p>
+ *
  * <p>Also dispatches webhook events on completion/failure.</p>
  */
 public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
@@ -33,6 +39,9 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
     private final TenantManager tenantManager;
     private final WebhookDispatcher webhookDispatcher;
     private final HermesConfig globalConfig;
+
+    /** Active chains keyed by taskId, for interruption support */
+    private final Map<String, ModelChain> activeChains = new ConcurrentHashMap<>();
 
     public AgentTaskProcessor(TenantManager tenantManager,
                               WebhookDispatcher webhookDispatcher) {
@@ -68,6 +77,8 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
                 logger.info("Task {} using chain mode (planner->executor->reviewer)", task.taskId());
                 ModelChain chain = ModelChain.builder().buildDefault()
                     .withContext(task.tenantId(), task.sessionId(), task.agentId());
+                activeChains.put(task.taskId(), chain);
+
                 var tools = agent.getDelegate().buildToolDefinitions();
                 ModelChain.ChainResult chainResult = chain.execute(tenantConfig, globalConfig, task.input(), tools);
                 reply = chainResult.output();
@@ -103,6 +114,21 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
 
             return reply;
 
+        } catch (ModelChain.ChainInterruptedException e) {
+            logger.info("Task {} chain was interrupted", task.taskId());
+            // Dispatch interruption webhook
+            if (webhookDispatcher != null) {
+                try {
+                    webhookDispatcher.dispatch(task.tenantId(), "task.interrupted",
+                        com.alibaba.fastjson2.JSON.toJSONString(java.util.Map.of(
+                            "taskId", task.taskId(),
+                            "agentId", task.agentId(),
+                            "status", "INTERRUPTED",
+                            "message", e.getMessage()
+                        )));
+                } catch (Exception ignored) {}
+            }
+            throw e;
         } catch (Exception e) {
             // E2: Dispatch task.failed webhook
             if (webhookDispatcher != null) {
@@ -117,7 +143,33 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
                 } catch (Exception ignored) {}
             }
             throw e;
+        } finally {
+            activeChains.remove(task.taskId());
         }
+    }
+
+    /**
+     * Interrupt a running chain by task ID.
+     * The current phase/step will complete, but no further ones will start.
+     *
+     * @param taskId the task ID to interrupt
+     * @return true if a chain was found and interrupted, false if not found
+     */
+    public boolean interruptChain(String taskId) {
+        ModelChain chain = activeChains.get(taskId);
+        if (chain != null && !chain.isInterrupted()) {
+            chain.interrupt();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if a chain is currently running for the given task ID.
+     */
+    public boolean isChainRunning(String taskId) {
+        ModelChain chain = activeChains.get(taskId);
+        return chain != null && !chain.isInterrupted();
     }
 
     /**

@@ -43,6 +43,7 @@ public class IntegrationGatewayHandler {
     private final AsyncTaskQueue taskQueue;
     private final WebhookDispatcher webhookDispatcher;
     private com.nousresearch.hermes.config.HermesConfig globalConfig;
+    private AgentTaskProcessor taskProcessor;
 
     public IntegrationGatewayHandler(TenantManager tenantManager,
                                      AsyncTaskQueue taskQueue,
@@ -54,6 +55,13 @@ public class IntegrationGatewayHandler {
 
     public void setGlobalConfig(com.nousresearch.hermes.config.HermesConfig config) {
         this.globalConfig = config;
+    }
+
+    /**
+     * Wire the AgentTaskProcessor for chain interruption support.
+     */
+    public void setTaskProcessor(AgentTaskProcessor processor) {
+        this.taskProcessor = processor;
     }
 
     // ============ Messages ============
@@ -234,10 +242,66 @@ public class IntegrationGatewayHandler {
             ctx.status(409).json(Map.of("error", "Task cannot be cancelled (may already be terminal)"));
             return;
         }
+
+        // Also interrupt running chain if active
+        if (taskProcessor != null) {
+            taskProcessor.interruptChain(taskId);
+        }
+
         ctx.json(Map.of("taskId", taskId, "status", "CANCELLED"));
 
         webhookDispatcher.dispatch(taskQueue.get(taskId).tenantId(), "task.cancelled",
             JSON.toJSONString(Map.of("taskId", taskId)));
+    }
+
+    /**
+     * POST /api/v1/tasks/{taskId}/interrupt - interrupt a running chain.
+     *
+     * <p>Unlike cancel (which marks the task as CANCELLED in DB),
+     * interrupt specifically targets the running ModelChain, causing it
+     * to stop between phases/steps. The task status remains RUNNING
+     * until the worker thread catches the interruption and updates it.</p>
+     */
+    public void interruptTask(Context ctx) {
+        BusinessSystem system = ctx.attribute("businessSystem");
+        String taskId = ctx.pathParam("taskId");
+
+        if (taskProcessor == null) {
+            ctx.status(503).json(Map.of("error", "Task processor not available"));
+            return;
+        }
+
+        boolean found = taskProcessor.interruptChain(taskId);
+        if (found) {
+            ctx.json(Map.of(
+                "taskId", taskId,
+                "status", "INTERRUPTING",
+                "message", "Chain will stop at the next checkpoint"
+            ));
+            webhookDispatcher.dispatch(system.tenantId(), "task.interrupting",
+                JSON.toJSONString(Map.of("taskId", taskId)));
+        } else {
+            ctx.status(404).json(Map.of(
+                "error", "No active chain found for task " + taskId,
+                "hint", "The task may not be in chain mode or may have already completed"
+            ));
+        }
+    }
+
+    /**
+     * GET /api/v1/tasks/{taskId}/status - check if chain is running.
+     */
+    public void getTaskChainStatus(Context ctx) {
+        String taskId = ctx.pathParam("taskId");
+        if (taskProcessor == null) {
+            ctx.status(503).json(Map.of("error", "Task processor not available"));
+            return;
+        }
+        boolean running = taskProcessor.isChainRunning(taskId);
+        ctx.json(Map.of(
+            "taskId", taskId,
+            "chainRunning", running
+        ));
     }
 
     // = Usage & Billing ============

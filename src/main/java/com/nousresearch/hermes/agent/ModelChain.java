@@ -40,9 +40,36 @@ public class ModelChain {
     private String sessionId;
     private String agentId;
 
+    // Interrupt control: checked between phases and between steps
+    private volatile boolean interrupted = false;
+
     private ModelChain(List<ChainStep> steps) {
         this.steps = List.copyOf(steps);
         this.accumulatedContext = new ArrayList<>();
+    }
+
+    /**
+     * Interrupt the chain execution. The current phase/step will complete,
+     * but no further phases or steps will start.
+     */
+    public void interrupt() {
+        this.interrupted = true;
+        logger.info("Chain interrupted (tenant={}, agent={})", tenantId, agentId);
+    }
+
+    public boolean isInterrupted() {
+        return interrupted;
+    }
+
+    /**
+     * Check interruption flag, throw if interrupted.
+     * Called between phases and between execution steps.
+     */
+    private void checkInterrupted() {
+        if (interrupted) {
+            throw new ChainInterruptedException(
+                "Chain execution interrupted by user request");
+        }
     }
 
     /**
@@ -114,6 +141,9 @@ public class ModelChain {
         plannerSpan.complete();
         logPhase("planner", plan.goal(), plan.isPassthrough() ? "[passthrough]" : plan.steps().size() + " steps");
 
+        // Check interruption between phases
+        checkInterrupted();
+
         // ---- Phase 2: Executor ----
         ExecutionTrace.TraceSpan executorSpan = trace.addSpan("executor", "agent_message");
         Map<String, String> stepOutputs = new LinkedHashMap<>();
@@ -132,6 +162,9 @@ public class ModelChain {
         executorSpan.complete();
         logPhase("executor", "completed", executorResult.substring(0, Math.min(executorResult.length(), 200)));
 
+        // Check interruption before reviewer
+        checkInterrupted();
+
         // ---- Phase 3: Reviewer (with retry loop) ----
         String finalResult = executorResult;
         int totalRetries = 0;
@@ -142,6 +175,9 @@ public class ModelChain {
             int attempt = 0;
 
             while (attempt <= maxRetries) {
+                // Check interruption before each review attempt
+                checkInterrupted();
+
                 ExecutionPlan.ReviewResult review = runReviewer(
                     tenantConfig, globalConfig, reviewerStep, plan, stepOutputs);
 
@@ -320,6 +356,9 @@ public class ModelChain {
         String lastOutput = "";
 
         for (ExecutionPlan.PlanStep step : plan.steps()) {
+            // Check interruption between steps
+            checkInterrupted();
+
             // Check dependencies are done
             if (step.hasDependencies()) {
                 for (String depId : step.dependsOn()) {
@@ -648,5 +687,14 @@ public class ModelChain {
     @FunctionalInterface
     public interface OutputTransform {
         String apply(String output, List<Map<String, Object>> context);
+    }
+
+    /**
+     * Thrown when chain execution is interrupted via {@link #interrupt()}.
+     */
+    public static class ChainInterruptedException extends RuntimeException {
+        public ChainInterruptedException(String message) {
+            super(message);
+        }
     }
 }
