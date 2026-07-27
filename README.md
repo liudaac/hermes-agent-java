@@ -61,7 +61,9 @@ TaskStatus status = client.getTask(taskId);
 | `/api/v1/agents/{id}/sessions` | GET | 列出会话 |
 | `/api/v1/tasks` | POST | 提交异步任务 |
 | `/api/v1/tasks/{id}` | GET | 查任务状态 |
-| `/api/v1/tasks/{id}/cancel` | POST | 取消任务 |
+| `/api/v1/tasks/{id}/cancel` | POST | 取消任务（DB + 中断 chain） |
+| `/api/v1/tasks/{id}/interrupt` | POST | 中断运行中的 chain |
+| `/api/v1/tasks/{id}/status` | GET | 查 chain 运行状态 |
 | `/api/v1/tenants/{id}/usage` | GET | 查用量 |
 | `/api/v1/tenants/{id}/billing` | GET | 查计费 |
 | `/api/v1/webhooks` | POST/GET | 注册/列出回调 |
@@ -234,14 +236,50 @@ Layer 1: Platform   | ProviderCatalog + 预定义 routes     (全局)
 
 ## 多模型编排示例
 
+**快速使用（默认 chain，schema-aware prompt）：**
+
+```java
+ModelChain chain = ModelChain.builder().buildDefault();
+// planner(prompt=null -> schema-aware) -> executor -> reviewer
+
+ChainResult result = chain.execute(tenantConfig, globalConfig, input, tools);
+// result.output()  -> 最终输出
+// result.traceId() -> 追踪 ID
+// result.plan()    -> ExecutionPlan (goal/steps/successCriteria)
+```
+
+**自定义 prompt：**
+
 ```java
 ModelChain chain = ModelChain.builder()
-    .plan("你是规划师，将任务分解为步骤")           // 用 "smart" 别名 (Claude)
-    .execute("你是执行者，使用工具执行每个步骤")      // 用 "fast" 别名 (GPT-4o-mini)
-    .review("你是审查员，检查结果并提出改进建议")     // 用 "smart" 别名 (Claude)
+    .plan("你是规划师，将任务分解为步骤")           // "smart" 别名 (Claude)
+    .execute("你是执行者，使用工具执行每个步骤")      // "fast" 别名 (GPT-4o-mini)
+    .review("你是审查员，检查结果并提出改进建议")     // "smart" 别名 (Claude)
     .build();
+```
 
-String result = chain.execute(tenantConfig, globalConfig, input, tools);
+**中断运行中的 chain：**
+
+```java
+// 后端
+taskProcessor.interruptChain(taskId);  // 当前步骤完成后停
+
+// API
+curl -X POST http://hermes:8080/api/v1/tasks/task-123/interrupt \
+  -H "Authorization: Bearer ak_xxx"
+```
+
+**触发 chain 模式：**
+
+```bash
+# 方式 1: [chain] 前缀
+curl -X POST http://hermes:8080/api/v1/agents/agent-1/messages \
+  -H "Authorization: Bearer ak_xxx" \
+  -d '{"message":"[chain] 分析日志并总结错误"}'
+
+# 方式 2: tenant config
+# config.yaml:
+# chain_mode: true
 ```
 
 ## 灰度发布示例
@@ -314,7 +352,7 @@ src/main/java/com/nousresearch/hermes/
 │       ├── BusinessSystemRegistry # API Key 认证
 │       ├── AsyncTask            # 异步任务
 │       ├── AsyncTaskQueue       # 线程池队列
-│       ├── AgentTaskProcessor   # Agent 桥接 (E1)
+│       ├── AgentTaskProcessor   # Agent 桥接 + chain 路由 + 中断 (E1)
 │       ├── WebhookDispatcher    # 事件推送 (D4)
 │       ├── IntegrationGatewayHandler # REST API
 │       └── IntegrationBootstrap  # 启动初始化
@@ -369,7 +407,7 @@ src/main/java/com/nousresearch/hermes/
 # 全量测试
 mvn test
 
-# 测试统计：833 tests, 0 failures, 0 errors
+# 测试统计：853 tests, 0 failures, 0 errors
 ```
 
 ## 部署拓扑
@@ -384,6 +422,10 @@ mvn test
      ┌────────┴───────┐ ┌───────┴────────┐ ┌──────┴────────┐
      │ Hermes Node 1  │ │ Hermes Node 2   │ │ Hermes Node 3  │
      │ (CLUSTER mode) │ │ (CLUSTER mode)  │ │ (CLUSTER mode) │
+     │ - API + Web    │ │ - API + Web    │ │ - API + Web    │
+     │ - Portal SPA   │ │ - Portal SPA   │ │ - Portal SPA   │
+     │ - Ops SPA      │ │ - Ops SPA      │ │ - Ops SPA      │
+     │ - NOC SPA      │ │ - NOC SPA      │ │ - NOC SPA      │
      └───────┬────────┘ └───────┬─────────┘ └───────┬────────┘
              │                  │                   │
              │     ┌───────────┴──────────────┐    │
@@ -405,6 +447,29 @@ mvn test
      │     │  -> ak_yyy 认证          │
      │     └──────────────────────────┘
 ```
+
+## 前端 SPA
+
+三个独立 SPA + 一个超薄 hub，各自独立 build 产物：
+
+| SPA | 端口 | 路径 | 视觉风格 | 说明 |
+|-----|------|------|---------|------|
+| Hub | 5174 | `web/` | 极简卡片 | 三产品入口 |
+| Portal | 5175 | `web/portal/` | oklch 暖色 H5 | 业务前店（数字员工、任务、审批） |
+| Ops | 5176 | `web/ops/` | dark teal | 控制台（租户、模型、对比） |
+| NOC | 5177 | `web/noc/` | amber 告警风 | 运维控制中心（SLA、DLQ、Trace） |
+
+```bash
+# 构建
+npm run build:all
+
+# 开发
+npm run dev   # concurrently 跑 4 个端口
+```
+
+**编排可视化页面：**
+- Portal `/runs/:ws/:id` -> ChainPlanCard 组件（目标、步骤、完成标准、阶段追踪）
+- NOC `/traces/:traceId` -> span 时间线（planner/executor/reviewer/retry 分组）
 
 ## License
 
