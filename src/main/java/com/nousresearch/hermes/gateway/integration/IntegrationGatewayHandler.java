@@ -44,6 +44,7 @@ public class IntegrationGatewayHandler {
     private final WebhookDispatcher webhookDispatcher;
     private com.nousresearch.hermes.config.HermesConfig globalConfig;
     private AgentTaskProcessor taskProcessor;
+    private com.nousresearch.hermes.cluster.ClusterRouter clusterRouter;
 
     public IntegrationGatewayHandler(TenantManager tenantManager,
                                      AsyncTaskQueue taskQueue,
@@ -62,6 +63,14 @@ public class IntegrationGatewayHandler {
      */
     public void setTaskProcessor(AgentTaskProcessor processor) {
         this.taskProcessor = processor;
+    }
+
+    /**
+     * Wire the ClusterRouter for multi-instance sticky routing.
+     * When set, sync requests may be forwarded to the target node.
+     */
+    public void setClusterRouter(com.nousresearch.hermes.cluster.ClusterRouter router) {
+        this.clusterRouter = router;
     }
 
     // ============ Messages ============
@@ -86,6 +95,26 @@ public class IntegrationGatewayHandler {
             String tenantId = system.tenantId();
             if (workspaceId == null) workspaceId = system.workspaceId() != null
                 ? system.workspaceId() : tenantId;
+
+            // Cluster routing: check if this node should handle the request
+            if (clusterRouter != null && clusterRouter.isEnabled()) {
+                java.util.Map<String, String> pathParams = Map.of("agentId", agentId);
+                java.util.Map<String, String> queryParams = new java.util.HashMap<>();
+                ctx.queryParamMap().forEach((k, v) -> { if (v != null && !v.isEmpty()) queryParams.put(k, v.get(0)); });
+                String routingKey = com.nousresearch.hermes.cluster.ClusterRouter.extractRoutingKey(
+                    pathParams, queryParams, ctx.body(), tenantId);
+
+                if (routingKey != null && !clusterRouter.shouldHandleLocally(routingKey)) {
+                    String targetNode = clusterRouter.resolveRoute(routingKey);
+                    logger.info("Forwarding sendMessage to node={} (key={})", targetNode, routingKey);
+                    java.util.Map<String, String> headers = new java.util.HashMap<>();
+                    ctx.headerMap().forEach(headers::put);
+                    var response = clusterRouter.forward(targetNode, "POST", ctx.req().getRequestURI(),
+                        headers, ctx.body());
+                    ctx.status(response.statusCode()).result(response.body());
+                    return;
+                }
+            }
 
             TenantContext tenant = tenantManager.getOrCreateTenant(tenantId,
                 new TenantProvisioningRequest(tenantId, "system"));
@@ -271,7 +300,25 @@ public class IntegrationGatewayHandler {
             return;
         }
 
+        // Try local interrupt first
         boolean found = taskProcessor.interruptChain(taskId);
+
+        // If not local and cluster routing enabled, try forwarding
+        if (!found && clusterRouter != null && clusterRouter.isEnabled()) {
+            // Route by taskId - the node that started the task should have the chain
+            String routingKey = "task:" + taskId;
+            String targetNode = clusterRouter.resolveRoute(routingKey);
+            if (!targetNode.equals(clusterRouter.resolveRoute("self"))) {
+                logger.info("Forwarding interrupt to node={} (taskId={})", targetNode, taskId);
+                java.util.Map<String, String> headers = new java.util.HashMap<>();
+                ctx.headerMap().forEach(headers::put);
+                var response = clusterRouter.forward(targetNode, "POST", ctx.req().getRequestURI(),
+                    headers, ctx.body());
+                ctx.status(response.statusCode()).result(response.body());
+                return;
+            }
+        }
+
         if (found) {
             ctx.json(Map.of(
                 "taskId", taskId,
