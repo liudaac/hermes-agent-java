@@ -1,49 +1,267 @@
+# ============================================================
 # Hermes Agent Java - Default Configuration
+# ============================================================
+# This file is loaded as the platform-level (global) config.
+# Per-tenant config overrides these values.
+#
+# Startup:
+#   LOCAL (default):   java -jar hermes-agent-java.jar
+#   CLUSTER:           java -Dhermes.profile=cluster -Ddb.url=... -jar hermes-agent-java.jar
+# ============================================================
 
+# ---- Model (platform default) ----
+# Each tenant can override via tenant config.yaml or Admin API
 model:
-  provider: openrouter
-  model: anthropic/claude-3.5-sonnet
-  # api_key: Set via OPENROUTER_API_KEY env var
-  # base_url: Optional override
+  provider: openrouter                    # openrouter | openai | anthropic | deepseek | volcengine | azure | bedrock | ollama
+  model: anthropic/claude-3.5-sonnet      # default model name
+  # api_key: Set via env var or SecretStore (see below)
+  # base_url: Optional provider URL override
+  temperature: 0.7
+  max_tokens: 4096
+  key_source: hybrid                      # tenant (use own key) | platform (use platform key) | hybrid (tenant first, fallback platform)
 
+# ---- Model Routes (platform-level aliases) ----
+# Tenants can override these aliases in their own model_routes
+# Aliases are used by ModelChain: planner->smart, executor->fast, reviewer->smart
+model_routes:
+  - alias: smart
+    model: anthropic/claude-3.5-sonnet
+    provider: openrouter
+    # base_url: optional
+  - alias: fast
+    model: gpt-4o-mini
+    provider: openrouter
+  - alias: cheap
+    model: deepseek/deepseek-chat
+    provider: openrouter
+
+# ---- Platform Provider Catalog ----
+# Controls which providers are available. Tenants can only use listed providers.
+platform:
+  providers:
+    - id: openrouter
+      display_name: OpenRouter
+      base_url: https://openrouter.ai/api/v1
+    - id: openai
+      display_name: OpenAI
+      base_url: https://api.openai.com/v1
+    - id: anthropic
+      display_name: Anthropic
+      base_url: https://api.anthropic.com/v1
+    - id: deepseek
+      display_name: DeepSeek
+      base_url: https://api.deepseek.com/v1
+    - id: volcengine
+      display_name: VolcEngine (火山引擎)
+      base_url: https://ark.cn-beijing.volces.com/api/v3
+    - id: azure
+      display_name: Azure OpenAI
+      # base_url: https://{your-resource}.openai.azure.com
+    - id: bedrock
+      display_name: AWS Bedrock
+    - id: ollama
+      display_name: Ollama (local)
+      base_url: http://localhost:11434/v1
+
+  # Platform-level API keys (for hybrid/platform key_source)
+  # Preferred: set via env var OPENROUTER_API_KEY, OPENAI_API_KEY, etc.
+  # Or via SecretStore (see below)
+  # api_keys:
+  #   openrouter: ${OPENROUTER_API_KEY}
+  #   openai: ${OPENAI_API_KEY}
+
+# ---- Agent Runtime ----
 agent:
-  max_turns: 90
-  gateway_timeout: 300
-  gateway_timeout_warning: 60
-  restart_drain_timeout: 30
+  max_turns: 90                           # max tool-call iterations per message
+  gateway_timeout: 300                    # seconds before gateway kills the request
+  gateway_timeout_warning: 60             # seconds before warning
+  restart_drain_timeout: 30               # seconds to drain on restart
 
+# ---- ModelChain (multi-model orchestration) ----
+# When enabled, tasks/messages route through planner->executor->reviewer
+# Trigger per-request: prepend "[chain]" to the message
+# Trigger per-tenant: set chain_mode: true in tenant config
+chain_mode: false                         # platform default (tenants can override)
+chain:
+  max_retries: 2                          # reviewer retry attempts before giving up
+  # Default model aliases per phase (override in tenant model_routes)
+  planner_alias: smart                    # uses model_routes["smart"]
+  executor_alias: fast                    # uses model_routes["fast"]
+  reviewer_alias: smart                   # uses model_routes["smart"]
+
+# ---- Tools ----
 tools:
   enabled:
     - web_search
     - terminal
     - file_operations
+    - code
+    - browser
   # disabled: []
 
-display:
-  busy_input_mode: queue
-  # spinner: dots
+# ---- Approval System ----
+# Controls when human approval is required for tool calls
+approval:
+  default_mode: AUTO                      # AUTO | PROMPT | REQUIRE | DENY
+  session_approval_ttl: 1800              # seconds (30 min) - approved tools skip re-approval
+  timeout: 300                            # seconds to wait for human decision
+  # Danger patterns are always DENY (hardcoded):
+  #   rm -rf, mkfs, > /dev/sda, dd if=, curl|sh, wget|sh, eval, exec
+  # Notification channels:
+  channels:
+    - console                             # stdin/stdout prompt
+    # - portal                             # Portal dashboard approvals
+    # - feishu                             # Feishu IM approval
+    # - webhook                            # External webhook approval
 
-timezone: Asia/Shanghai
+# ---- Tenant Quota (platform defaults) ----
+# Each tenant gets these limits unless overridden
+quota:
+  max_requests_per_day: 10000
+  max_tokens_per_day: 5000000
+  max_tool_calls_per_session: 200
+  rate_limit_per_second: 10               # requests per second
+  on_exceed: reject                       # reject | degrade (degrade = lower max_tokens)
 
-# Gateway configuration
+# ---- Async Task Queue ----
+task_queue:
+  worker_threads: 4
+  poll_interval_ms: 2000                  # worker poll interval
+  default_timeout: 300                    # default task timeout (seconds)
+  max_timeout: 3600                       # max allowed timeout
+
+# ---- Webhook Dispatcher ----
+webhook:
+  max_retries: 3                          # retry count on non-2xx response
+  retry_backoff_ms: 1000                  # initial backoff (exponential: 1s, 2s, 4s)
+  timeout_ms: 10000                       # HTTP timeout for webhook delivery
+  signature_algorithm: HMAC-SHA256        # signature algorithm
+  auto_disable_after_failures: 5          # auto-disable subscription after N consecutive failures
+
+# ---- JWT Authentication (for human users) ----
+jwt:
+  secret: ${JWT_SECRET}                   # set via env var or -Djwt.secret
+  # issuer: hermes
+  # expiry: 86400                          # seconds (24h default)
+
+# ---- Connectors (built-in) ----
+connectors:
+  http:
+    enabled: true
+    timeout_ms: 30000
+  sql:
+    enabled: true
+    block_ddl: true                       # block DDL statements (CREATE/DROP/ALTER)
+  webhook:
+    enabled: true
+
+# ---- Observability ----
+observability:
+  trace_store_capacity: 10000             # in-memory trace ring buffer size
+  metrics_collection_interval_s: 30       # metrics collection interval
+  prometheus_enabled: true                # expose /metrics endpoint
+  # audit_log: true                       # tenant audit logging
+
+# ---- Config Versioning + Canary ----
+versioning:
+  enabled: true                           # enable config snapshot/rollback
+  max_versions: 50                        # max snapshots per tenant
+canary:
+  default_strategy: IMMEDIATE             # IMMEDIATE | PERCENTAGE | EXPLICIT
+  auto_rollback_threshold: 0.1            # error rate threshold for auto-rollback (0.1 = 10%)
+  session_sticky: true                    # same sessionId always uses same config version
+
+# ---- SecretStore ----
+# Controls how API keys and secrets are stored
+secret_store:
+  type: file                              # file | mysql | vault | memory
+  # For file mode (default):
+  file_path: secrets.env                  # relative to tenant dir or absolute
+  # For mysql mode:
+  # table: tenant_api_key
+  # For vault mode:
+  # vault_url: http://vault:8200
+  # vault_path: hermes
+
+# ---- Database (CLUSTER mode) ----
+# Only used when -Dhermes.profile=cluster
+# In LOCAL mode, file-based storage is used
+database:
+  url: jdbc:mysql://localhost:3306/hermes
+  username: hermes
+  password: ${DB_PASSWORD}
+  pool_size: 10                           # HikariCP connection pool size
+
+# ---- Redis (CLUSTER mode, optional) ----
+# Enables: RedisQuotaStore, RedisApprovalStore, RedisRateLimitStore
+# redis:
+#   url: redis://localhost:6379
+#   password: ${REDIS_PASSWORD}
+
+# ---- Gateway (IM platforms) ----
 gateway:
   enabled_platforms: []
   # - telegram
   # - discord
   # - feishu
+  # - qqbot
+  # - wecom
 
-# Terminal configuration
+# ---- Terminal ----
 terminal:
-  backend: local
+  backend: local                          # local | docker
   timeout: 300
   # docker_image: hermes-agent:latest
 
-# Memory configuration
+# ---- Memory ----
 memory:
   enabled: true
   # mode: local
 
-# Skills configuration
+# ---- Skills ----
 skills:
   auto_create: true
   auto_update: true
+
+# ---- Display ----
+display:
+  busy_input_mode: queue                  # queue | drop
+  # spinner: dots
+
+# ---- Timezone ----
+timezone: Asia/Shanghai
+
+# ============================================================
+# Tenant Config Example (per-tenant override)
+# ============================================================
+# Place in tenants/{tenantId}/config/config.yaml
+#
+# model:
+#   provider: openai
+#   model: gpt-4o
+#   api_key: ${TENANT_OPENAI_API_KEY}
+#   key_source: tenant                     # use tenant's own key
+#
+# model_routes:
+#   - alias: smart
+#     model: gpt-4o
+#     provider: openai
+#   - alias: fast
+#     model: gpt-4o-mini
+#     provider: openai
+#
+# chain_mode: true                         # enable chain for all tasks
+#
+# quota:
+#   max_requests_per_day: 1000
+#   max_tokens_per_day: 500000
+#
+# approval:
+#   default_mode: PROMPT                   # require approval for risky tools
+#
+# webhook:
+#   subscriptions:
+#     - url: https://erp.com/hermes-callback
+#       events: [task.completed, task.failed, chain.plan, task.interrupted]
+#       secret: whsec_xxx
+# ============================================================
