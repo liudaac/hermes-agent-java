@@ -134,8 +134,9 @@ public class HermesConfig {
      * Apply environment variable overrides.
      */
     private void applyEnvOverrides() {
-        // API keys
-        String apiKey = System.getenv("OPENROUTER_API_KEY");
+        // API keys - try VOLC_API_KEY first (cloud default), then OPENROUTER_API_KEY
+        String apiKey = System.getenv("VOLC_API_KEY");
+        if (apiKey == null) apiKey = System.getenv("OPENROUTER_API_KEY");
         if (apiKey != null) {
             setNested("model.api_key", apiKey);
         }
@@ -194,7 +195,11 @@ public class HermesConfig {
 
     public String getApiKey() {
         if (apiKeyOverride != null) return apiKeyOverride;
-        return getNested("model.api_key", System.getenv("OPENROUTER_API_KEY"));
+        String key = getNested("model.api_key", null);
+        if (key != null) return key;
+        key = System.getenv("VOLC_API_KEY");
+        if (key != null) return key;
+        return System.getenv("OPENROUTER_API_KEY");
     }
 
     public int getMaxTurns() {
@@ -658,8 +663,10 @@ public class HermesConfig {
         return switch (provider.toLowerCase()) {
             case "openai" -> "https://api.openai.com/v1";
             case "anthropic" -> "https://api.anthropic.com/v1";
+            case "volcengine" -> "https://ark.cn-beijing.volces.com/api/v3";
+            case "deepseek" -> "https://api.deepseek.com/v1";
             case "openrouter" -> "https://openrouter.ai/api/v1";
-            default -> "https://openrouter.ai/api/v1";
+            default -> "https://ark.cn-beijing.volces.com/api/v3";
         };
     }
 

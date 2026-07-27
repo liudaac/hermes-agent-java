@@ -12,28 +12,30 @@
 # ---- Model (platform default) ----
 # Each tenant can override via tenant config.yaml or Admin API
 model:
-  provider: openrouter                    # openrouter | openai | anthropic | deepseek | volcengine | azure | bedrock | ollama
-  model: anthropic/claude-3.5-sonnet      # default model name
-  # api_key: Set via env var or SecretStore (see below)
-  # base_url: Optional provider URL override
+  provider: volcengine                     # volcengine | openrouter | openai | anthropic | deepseek | azure | bedrock | ollama
+  model: deepseek-v3-250324                # default model (火山引擎模型 ID)
+  api_key: ${VOLC_API_KEY}                 # set via env var VOLC_API_KEY
+  base_url: https://ark.cn-beijing.volces.com/api/v3
   temperature: 0.7
   max_tokens: 4096
-  key_source: hybrid                      # tenant (use own key) | platform (use platform key) | hybrid (tenant first, fallback platform)
+  key_source: hybrid                       # tenant (use own key) | platform (use platform key) | hybrid (tenant first, fallback platform)
 
 # ---- Model Routes (platform-level aliases) ----
 # Tenants can override these aliases in their own model_routes
 # Aliases are used by ModelChain: planner->smart, executor->fast, reviewer->smart
 model_routes:
   - alias: smart
-    model: anthropic/claude-3.5-sonnet
-    provider: openrouter
-    # base_url: optional
+    model: deepseek-v3-250324
+    provider: volcengine
+    base_url: https://ark.cn-beijing.volces.com/api/v3
   - alias: fast
-    model: gpt-4o-mini
-    provider: openrouter
+    model: deepseek-v3-250324
+    provider: volcengine
+    base_url: https://ark.cn-beijing.volces.com/api/v3
   - alias: cheap
-    model: deepseek/deepseek-chat
-    provider: openrouter
+    model: deepseek-v3-250324
+    provider: volcengine
+    base_url: https://ark.cn-beijing.volces.com/api/v3
 
 # ---- Platform Provider Catalog ----
 # Controls which providers are available. Tenants can only use listed providers.
