@@ -1,5 +1,8 @@
 package com.nousresearch.hermes.gateway.integration;
 
+import com.nousresearch.hermes.agent.ModelChain;
+import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.tenant.core.TenantConfig;
 import com.nousresearch.hermes.tenant.core.TenantContext;
 import com.nousresearch.hermes.tenant.core.TenantManager;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
@@ -13,9 +16,13 @@ import org.slf4j.LoggerFactory;
  * <ol>
  *   <li>Resolves the tenant context</li>
  *   <li>Gets or creates the agent</li>
- *   <li>Calls agent.processMessage(input)</li>
+ *   <li>If chain mode is enabled, routes through ModelChain (planner->executor->reviewer)</li>
+ *   <li>Otherwise calls agent.processMessage(input) directly</li>
  *   <li>Returns the reply as the task result</li>
  * </ol>
+ *
+ * <p>Chain mode is triggered when tenant config has {@code chain_mode: true}
+ * or when the task input starts with {@code [chain]}.</p>
  *
  * <p>Also dispatches webhook events on completion/failure.</p>
  */
@@ -25,11 +32,19 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
 
     private final TenantManager tenantManager;
     private final WebhookDispatcher webhookDispatcher;
+    private final HermesConfig globalConfig;
 
     public AgentTaskProcessor(TenantManager tenantManager,
                               WebhookDispatcher webhookDispatcher) {
+        this(tenantManager, webhookDispatcher, null);
+    }
+
+    public AgentTaskProcessor(TenantManager tenantManager,
+                              WebhookDispatcher webhookDispatcher,
+                              HermesConfig globalConfig) {
         this.tenantManager = tenantManager;
         this.webhookDispatcher = webhookDispatcher;
+        this.globalConfig = globalConfig;
     }
 
     @Override
@@ -45,7 +60,19 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
             var agent = tenant.getOrCreateAgent(task.agentId());
             tenant.updateActivity();
 
-            String reply = agent.processMessage(task.input());
+            String reply;
+            TenantConfig tenantConfig = tenant.getConfig();
+
+            if (shouldUseChain(task, tenantConfig)) {
+                // Chain mode: planner -> executor -> reviewer
+                logger.info("Task {} using chain mode (planner->executor->reviewer)", task.taskId());
+                ModelChain chain = ModelChain.builder().buildDefault();
+                var tools = agent.getDelegate().buildToolDefinitions();
+                reply = chain.execute(tenantConfig, globalConfig, task.input(), tools);
+            } else {
+                // Direct mode: single model call
+                reply = agent.processMessage(task.input());
+            }
 
             // E2: Dispatch task.completed webhook
             if (webhookDispatcher != null) {
@@ -79,5 +106,31 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
             }
             throw e;
         }
+    }
+
+    /**
+     * Determine whether to use ModelChain for this task.
+     *
+     * <p>Triggers:</p>
+     * <ul>
+     *   <li>Tenant config has {@code chain_mode: true}</li>
+     *   <li>Task input starts with {@code [chain]} prefix</li>
+     * </ul>
+     */
+    private boolean shouldUseChain(AsyncTask task, TenantConfig config) {
+        // [chain] prefix in input forces chain mode
+        if (task.input() != null && task.input().strip().startsWith("[chain]")) {
+            return true;
+        }
+
+        // Tenant config flag
+        if (config != null) {
+            Object chainMode = config.get("chain_mode");
+            if (Boolean.TRUE.equals(chainMode) || "true".equals(String.valueOf(chainMode))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
