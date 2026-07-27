@@ -6,6 +6,8 @@ import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { StatusPill } from "@/components/StatusPill";
 import { ErrorCard } from "@/components/ErrorCard";
+import { ChainPlanCard } from "@/components/ChainPlanCard";
+import type { ChainPlanData, TraceData } from "@/components/ChainPlanCard";
 import { formatRelativeTime, useHarnessStream, gatewayFetch } from "@hermes/ui";
 import { ToolCallTimeline, ApprovalInline } from "@hermes/ui";
 import { Clock, Zap, Users, CheckCircle2, Circle, Loader2, AlertTriangle } from "lucide-react";
@@ -16,6 +18,8 @@ export default function RunDetail() {
   const [error, setError] = useState<string | null>(null);
   const [completedToast, setCompletedToast] = useState(false);
   const prevActiveRef = useRef(false);
+  const [chainPlan, setChainPlan] = useState<ChainPlanData | null>(null);
+  const [traceData, setTraceData] = useState<TraceData | null>(null);
 
   // Subscribe to harness stream when run is active
   const isActive = run?.status === "running" || run?.status === "queued";
@@ -41,8 +45,34 @@ export default function RunDetail() {
     setError(null);
     portalApi
       .getBusinessRun(workspaceId, runId)
-      .then((res) => { setRun(res.run); })
+      .then((res) => {
+        setRun(res.run);
+        // Check if run metadata contains chain data
+        const meta = res.run?.metadata as Record<string, unknown> | undefined;
+        if (meta?.chainPlan) {
+          setChainPlan(meta.chainPlan as ChainPlanData);
+        } else if (meta?.chainMode) {
+          // Chain mode but plan not in metadata - fetch trace if traceId exists
+          const traceId = meta.traceId as string | undefined;
+          if (traceId) fetchTrace(traceId);
+        }
+      })
       .catch((e) => setError(String(e?.message ?? e)));
+  };
+
+  const fetchTrace = async (traceId: string) => {
+    
+    try {
+      const res = await fetch(`/api/traces/${traceId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTraceData(data);
+      }
+    } catch {
+      // silent
+    } finally {
+      
+    }
   };
 
   useEffect(() => {
@@ -55,7 +85,12 @@ export default function RunDetail() {
     if (!isActive || !workspaceId || !runId) return;
     const timer = setInterval(() => {
       portalApi.getBusinessRun(workspaceId, runId)
-        .then((res) => setRun(res.run))
+        .then((res) => {
+          setRun(res.run);
+          const meta = res.run?.metadata as Record<string, unknown> | undefined;
+          if (meta?.chainPlan) setChainPlan(meta.chainPlan as ChainPlanData);
+          if (meta?.traceId) fetchTrace(meta.traceId as string);
+        })
         .catch(() => {});
     }, 5000);
     return () => clearInterval(timer);
@@ -142,6 +177,14 @@ export default function RunDetail() {
                 </div>
               )}
             </GlassCard>
+
+            {/* Chain plan visualization (if chain mode) */}
+            {chainPlan && (
+              <ChainPlanCard
+                plan={chainPlan}
+                trace={traceData}
+              />
+            )}
 
             {/* Real-time execution flow (when active) */}
             {isActive && harness.toolCalls.length > 0 && (
