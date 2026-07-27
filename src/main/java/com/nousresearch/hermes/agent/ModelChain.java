@@ -5,6 +5,8 @@ import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelClient;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolDefinition;
+import com.nousresearch.hermes.observability.ExecutionTrace;
+import com.nousresearch.hermes.observability.TraceStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,33 +35,58 @@ public class ModelChain {
     private final List<ChainStep> steps;
     private final List<Map<String, Object>> accumulatedContext;
 
+    private TraceStore traceStore;
+    private String tenantId;
+    private String sessionId;
+    private String agentId;
+
     private ModelChain(List<ChainStep> steps) {
         this.steps = List.copyOf(steps);
         this.accumulatedContext = new ArrayList<>();
     }
 
     /**
+     * Set trace store for observability. When set, each chain execution
+     * creates an ExecutionTrace with spans for planner/executor/reviewer phases.
+     */
+    public ModelChain withTraceStore(TraceStore traceStore) {
+        this.traceStore = traceStore;
+        return this;
+    }
+
+    /**
+     * Set tenant/session/agent context for trace attribution.
+     */
+    public ModelChain withContext(String tenantId, String sessionId, String agentId) {
+        this.tenantId = tenantId;
+        this.sessionId = sessionId;
+        this.agentId = agentId;
+        return this;
+    }
+
+    /**
      * Execute the chain with structured plan + retry loop.
      *
-     * <p>Flow:</p>
-     * <ol>
-     *   <li><b>Planner</b>: build ExecutionPlan from user input + tool list</li>
-     *   <li><b>Executor</b>: if plan is passthrough, single-turn chat;
-     *       otherwise execute each PlanStep in order, respecting dependsOn</li>
-     *   <li><b>Reviewer</b>: check successCriteria, retry failed steps up to maxRetries</li>
-     * </ol>
+     * <p>Returns {@link ChainResult} containing the output string, traceId,
+     * and the full ExecutionPlan for API exposure.</p>
      *
      * @param tenantConfig the tenant config for model resolution
      * @param globalConfig  global config for fallback
      * @param initialInput  the user's original message
      * @param tools         available tools for execution steps
-     * @return the final output (reviewer-approved, or last attempt if retries exhausted)
+     * @return ChainResult with output, traceId, and plan
      */
-    public String execute(com.nousresearch.hermes.tenant.core.TenantConfig tenantConfig,
+    public ChainResult execute(com.nousresearch.hermes.tenant.core.TenantConfig tenantConfig,
                           HermesConfig globalConfig,
                           String initialInput,
                           List<ToolDefinition> tools) {
         accumulatedContext.add(Map.of("input", initialInput));
+
+        // Create execution trace for observability
+        ExecutionTrace trace = new ExecutionTrace(
+            tenantId != null ? tenantId : "unknown",
+            sessionId != null ? sessionId : "chain",
+            agentId != null ? agentId : "chain");
 
         // Find steps by role
         ChainStep plannerStep = findStepByRole("planner");
@@ -68,35 +95,49 @@ public class ModelChain {
 
         // If no role-based steps, fall back to legacy sequential execution
         if (plannerStep == null && executorStep == null && reviewerStep == null) {
-            return executeLegacy(tenantConfig, globalConfig, initialInput, tools);
+            String result = executeLegacy(tenantConfig, globalConfig, initialInput, tools);
+            trace.complete();
+            if (traceStore != null) traceStore.store(trace);
+            return new ChainResult(result, trace.getTraceId(), null, trace);
         }
 
         // ---- Phase 1: Planner ----
+        ExecutionTrace.TraceSpan plannerSpan = trace.addSpan("planner", "model_call");
         String plannerPrompt = plannerStep != null
             ? plannerStep.systemPrompt()
             : PlannerPrompt.buildSystemPrompt(tools);
 
         ExecutionPlan plan = runPlanner(tenantConfig, globalConfig, plannerStep, plannerPrompt, initialInput, tools);
+        plannerSpan.addAttribute("goal", plan.goal());
+        plannerSpan.addAttribute("stepCount", plan.isPassthrough() ? 0 : plan.steps().size());
+        plannerSpan.addAttribute("passthrough", plan.isPassthrough());
+        plannerSpan.complete();
         logPhase("planner", plan.goal(), plan.isPassthrough() ? "[passthrough]" : plan.steps().size() + " steps");
 
         // ---- Phase 2: Executor ----
+        ExecutionTrace.TraceSpan executorSpan = trace.addSpan("executor", "agent_message");
         Map<String, String> stepOutputs = new LinkedHashMap<>();
         String executorResult;
 
         if (plan.isPassthrough()) {
-            // No decomposition needed - executor handles original input directly
             executorResult = runExecutorSingle(tenantConfig, globalConfig, executorStep, initialInput, tools);
             stepOutputs.put("passthrough", executorResult);
+            executorSpan.addAttribute("mode", "passthrough");
         } else {
-            // Execute each PlanStep in order
-            executorResult = runExecutorSteps(tenantConfig, globalConfig, executorStep, plan, tools, stepOutputs);
+            executorResult = runExecutorSteps(tenantConfig, globalConfig, executorStep, plan, tools, stepOutputs, trace);
+            executorSpan.addAttribute("mode", "multi-step");
+            executorSpan.addAttribute("stepCount", plan.steps().size());
         }
+        executorSpan.addAttribute("outputLength", executorResult.length());
+        executorSpan.complete();
         logPhase("executor", "completed", executorResult.substring(0, Math.min(executorResult.length(), 200)));
 
         // ---- Phase 3: Reviewer (with retry loop) ----
         String finalResult = executorResult;
+        int totalRetries = 0;
 
         if (reviewerStep != null && !plan.isPassthrough()) {
+            ExecutionTrace.TraceSpan reviewerSpan = trace.addSpan("reviewer", "model_call");
             int maxRetries = DEFAULT_MAX_RETRIES;
             int attempt = 0;
 
@@ -108,18 +149,21 @@ public class ModelChain {
                     review.approved() ? "APPROVED" : "RETRY: " + review.retryStepIds());
 
                 if (review.approved()) {
+                    reviewerSpan.addAttribute("approved", true);
                     finalResult = buildFinalOutput(plan, stepOutputs, review);
                     break;
                 }
 
                 if (!review.needsRetry() || attempt >= maxRetries) {
-                    // Retries exhausted or no steps to retry
+                    reviewerSpan.addAttribute("approved", false);
+                    reviewerSpan.addAttribute("retriesExhausted", true);
                     finalResult = buildFinalOutput(plan, stepOutputs, review);
                     break;
                 }
 
                 // Retry failed steps
                 attempt++;
+                totalRetries++;
                 List<String> retryIds = review.retryStepIds();
                 logger.info("Retrying {} steps (attempt {}/{})", retryIds.size(), attempt, maxRetries);
 
@@ -127,22 +171,74 @@ public class ModelChain {
                     ExecutionPlan.PlanStep step = plan.findStep(stepId);
                     if (step == null) continue;
 
-                    // Find the reviewer feedback for this step
                     String feedback = review.stepReviews().stream()
                         .filter(s -> stepId.equals(s.stepId()))
                         .map(ExecutionPlan.StepReview::feedback)
                         .findFirst()
                         .orElse("");
 
+                    ExecutionTrace.TraceSpan retrySpan = trace.addSpan("retry:" + stepId, "model_call");
                     String retryOutput = runExecutorStep(tenantConfig, globalConfig, executorStep,
                         plan, step, stepOutputs, feedback, tools);
                     stepOutputs.put(stepId, retryOutput);
+                    retrySpan.addAttribute("stepId", stepId);
+                    retrySpan.addAttribute("feedback", feedback);
+                    retrySpan.complete();
                 }
             }
+            reviewerSpan.addAttribute("totalRetries", totalRetries);
+            reviewerSpan.complete();
         }
 
+        trace.complete();
+        if (traceStore != null) traceStore.store(trace);
+
         accumulatedContext.add(Map.of("finalResult", finalResult));
-        return finalResult;
+        return new ChainResult(finalResult, trace.getTraceId(), plan, trace);
+    }
+
+    /**
+     * Result of a chain execution.
+     *
+     * @param output   the final output string
+     * @param traceId  trace ID for querying execution progress via /api/traces/{traceId}
+     * @param plan     the ExecutionPlan from planner (null if legacy mode)
+     * @param trace    the full ExecutionTrace object with all spans
+     */
+    public record ChainResult(
+            String output,
+            String traceId,
+            ExecutionPlan plan,
+            ExecutionTrace trace
+    ) {
+        /**
+         * API-friendly representation for HTTP response.
+         */
+        public Map<String, Object> toApi() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("output", output);
+            m.put("traceId", traceId);
+            if (plan != null) {
+                m.put("goal", plan.goal());
+                m.put("stepCount", plan.isPassthrough() ? 0 : plan.steps().size());
+                m.put("passthrough", plan.isPassthrough());
+                if (!plan.isPassthrough()) {
+                    m.put("steps", plan.steps().stream().map(s -> Map.of(
+                        "id", s.id(),
+                        "action", s.action(),
+                        "tool", s.tool() != null ? s.tool() : "",
+                        "dependsOn", s.dependsOn() != null ? s.dependsOn() : List.of()
+                    )).toList());
+                }
+                m.put("successCriteria", plan.successCriteria());
+            }
+            if (trace != null) {
+                m.put("status", trace.getStatus());
+                m.put("durationMs", trace.getDurationMs());
+                m.put("spanCount", trace.getSpans().size());
+            }
+            return m;
+        }
     }
 
     // ============ Phase implementations ============
@@ -215,7 +311,8 @@ public class ModelChain {
                                     ChainStep executorStep,
                                     ExecutionPlan plan,
                                     List<ToolDefinition> tools,
-                                    Map<String, String> stepOutputs) {
+                                    Map<String, String> stepOutputs,
+                                    ExecutionTrace trace) {
         String executorSystemPrompt = executorStep != null && executorStep.systemPrompt() != null
             ? executorStep.systemPrompt()
             : "You are a task executor. Execute each step precisely. Use the specified tool when provided.";
@@ -234,9 +331,15 @@ public class ModelChain {
                 }
             }
 
+            ExecutionTrace.TraceSpan stepSpan = trace.addSpan("step:" + step.id(), "tool_call");
+            stepSpan.addAttribute("action", step.action());
+            stepSpan.addAttribute("tool", step.tool() != null ? step.tool() : "reasoning");
+
             String output = runExecutorStep(tenantConfig, globalConfig, executorStep,
                 plan, step, stepOutputs, null, tools);
             stepOutputs.put(step.id(), output);
+            stepSpan.addAttribute("outputLength", output.length());
+            stepSpan.complete();
             lastOutput = output;
         }
 

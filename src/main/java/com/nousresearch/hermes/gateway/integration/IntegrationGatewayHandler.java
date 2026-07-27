@@ -92,9 +92,26 @@ public class IntegrationGatewayHandler {
             if (useChain) {
                 logger.info("Sync message using chain mode for agent={}", agentId);
                 com.nousresearch.hermes.agent.ModelChain chain =
-                    com.nousresearch.hermes.agent.ModelChain.builder().buildDefault();
+                    com.nousresearch.hermes.agent.ModelChain.builder().buildDefault()
+                    .withContext(tenantId, agentId, agentId);
                 var tools = agent.getDelegate().buildToolDefinitions();
-                reply = chain.execute(tenant.getConfig(), globalConfig, message, tools);
+                var chainResult = chain.execute(tenant.getConfig(), globalConfig, message, tools);
+                reply = chainResult.output();
+
+                JSONObject result = new JSONObject();
+                result.put("agentId", agentId);
+                result.put("reply", reply);
+                result.put("durationMs", System.currentTimeMillis() - start);
+                result.put("workspaceId", workspaceId);
+                result.put("chainMode", true);
+                result.put("traceId", chainResult.traceId());
+                if (chainResult.plan() != null) {
+                    result.put("plan", com.alibaba.fastjson2.JSON.parseObject(
+                        com.alibaba.fastjson2.JSON.toJSONString(chainResult.toApi())));
+                }
+                tenant.updateActivity();
+                ctx.status(200).json(result);
+                return;
             } else {
                 reply = agent.processMessage(message);
             }

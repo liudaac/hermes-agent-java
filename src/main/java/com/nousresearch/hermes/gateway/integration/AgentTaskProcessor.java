@@ -66,9 +66,21 @@ public class AgentTaskProcessor implements AsyncTaskQueue.TaskProcessor {
             if (shouldUseChain(task, tenantConfig)) {
                 // Chain mode: planner -> executor -> reviewer
                 logger.info("Task {} using chain mode (planner->executor->reviewer)", task.taskId());
-                ModelChain chain = ModelChain.builder().buildDefault();
+                ModelChain chain = ModelChain.builder().buildDefault()
+                    .withContext(task.tenantId(), task.sessionId(), task.agentId());
                 var tools = agent.getDelegate().buildToolDefinitions();
-                reply = chain.execute(tenantConfig, globalConfig, task.input(), tools);
+                ModelChain.ChainResult chainResult = chain.execute(tenantConfig, globalConfig, task.input(), tools);
+                reply = chainResult.output();
+
+                // Dispatch chain-specific webhook with plan + traceId
+                if (webhookDispatcher != null && chainResult.plan() != null) {
+                    try {
+                        webhookDispatcher.dispatch(task.tenantId(), "chain.plan",
+                            com.alibaba.fastjson2.JSON.toJSONString(chainResult.toApi()));
+                    } catch (Exception e) {
+                        logger.debug("Chain plan webhook failed: {}", e.getMessage());
+                    }
+                }
             } else {
                 // Direct mode: single model call
                 reply = agent.processMessage(task.input());
