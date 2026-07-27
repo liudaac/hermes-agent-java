@@ -88,9 +88,9 @@ public class HermesConfig {
             logger.debug("Loading config from: {}", configPath);
             cfg.config = yamlMapper.readValue(configPath.toFile(), Map.class);
         } else {
-            logger.info("Config file not found, using defaults");
-            cfg.config = createDefaultConfig();
-            cfg.save();
+            // Load from classpath resources (bundled in jar)
+            logger.info("Config file not found at {}, loading from classpath resources", configPath);
+            cfg.config = loadFromClasspath();
         }
         
         // Apply environment variable overrides
@@ -100,15 +100,43 @@ public class HermesConfig {
     }
 
     /**
+     * Load default-config.yaml from classpath (bundled in jar resources).
+     * Falls back to createDefaultConfig() if resource not found.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> loadFromClasspath() {
+        try (var is = HermesConfig.class.getClassLoader()
+                .getResourceAsStream("default-config.yaml")) {
+            if (is != null) {
+                var yaml = new org.yaml.snakeyaml.Yaml();
+                Map<String, Object> loaded = yaml.load(is);
+                if (loaded != null) {
+                    logger.info("Loaded default-config.yaml from classpath resources");
+                    return loaded;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load default-config.yaml from classpath: {}", e.getMessage());
+        }
+        // Ultimate fallback
+        logger.info("Using hardcoded default config");
+        return createDefaultConfig();
+    }
+
+    /**
      * Create default configuration.
      */
     private static Map<String, Object> createDefaultConfig() {
         Map<String, Object> cfg = new HashMap<>();
         
-        // Model configuration
+        // Model configuration (VolcEngine cloud default)
         Map<String, Object> model = new HashMap<>();
-        model.put("provider", "openrouter");
-        model.put("model", "anthropic/claude-3.5-sonnet");
+        model.put("provider", "volcengine");
+        model.put("model", "deepseek-v3-250324");
+        model.put("base_url", "https://ark.cn-beijing.volces.com/api/v3");
+        model.put("temperature", 0.7);
+        model.put("max_tokens", 4096);
+        model.put("key_source", "hybrid");
         cfg.put("model", model);
         
         // Agent configuration
