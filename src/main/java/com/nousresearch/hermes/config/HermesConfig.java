@@ -80,18 +80,10 @@ public class HermesConfig {
      * Load configuration from default location.
      */
     public static HermesConfig load() throws IOException {
-        Path configPath = getConfigPath();
+        HermesConfig cfg = new HermesConfig(getConfigPath());
         
-        HermesConfig cfg = new HermesConfig(configPath);
-        
-        if (Files.exists(configPath)) {
-            logger.debug("Loading config from: {}", configPath);
-            cfg.config = yamlMapper.readValue(configPath.toFile(), Map.class);
-        } else {
-            // Load from classpath resources (bundled in jar)
-            logger.info("Config file not found at {}, loading from classpath resources", configPath);
-            cfg.config = loadFromClasspath();
-        }
+        // Always load from classpath resources (bundled in jar)
+        cfg.config = loadFromClasspath();
         
         // Apply environment variable overrides
         cfg.applyEnvOverrides();
@@ -101,7 +93,6 @@ public class HermesConfig {
 
     /**
      * Load default-config.yaml from classpath (bundled in jar resources).
-     * Falls back to createDefaultConfig() if resource not found.
      */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> loadFromClasspath() {
@@ -118,7 +109,6 @@ public class HermesConfig {
         } catch (Exception e) {
             logger.warn("Failed to load default-config.yaml from classpath: {}", e.getMessage());
         }
-        // Ultimate fallback
         logger.info("Using hardcoded default config");
         return createDefaultConfig();
     }
