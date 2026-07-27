@@ -42,6 +42,7 @@ public class IntegrationGatewayHandler {
     private final TenantManager tenantManager;
     private final AsyncTaskQueue taskQueue;
     private final WebhookDispatcher webhookDispatcher;
+    private com.nousresearch.hermes.config.HermesConfig globalConfig;
 
     public IntegrationGatewayHandler(TenantManager tenantManager,
                                      AsyncTaskQueue taskQueue,
@@ -49,6 +50,10 @@ public class IntegrationGatewayHandler {
         this.tenantManager = tenantManager;
         this.taskQueue = taskQueue;
         this.webhookDispatcher = webhookDispatcher;
+    }
+
+    public void setGlobalConfig(com.nousresearch.hermes.config.HermesConfig config) {
+        this.globalConfig = config;
     }
 
     // ============ Messages ============
@@ -79,7 +84,21 @@ public class IntegrationGatewayHandler {
             var agent = tenant.getOrCreateAgent(agentId, null);
 
             long start = System.currentTimeMillis();
-            String reply = agent.processMessage(message);
+
+            // Chain mode: [chain] prefix or tenant config chain_mode
+            String reply;
+            boolean useChain = shouldUseChain(message, tenant.getConfig());
+
+            if (useChain) {
+                logger.info("Sync message using chain mode for agent={}", agentId);
+                com.nousresearch.hermes.agent.ModelChain chain =
+                    com.nousresearch.hermes.agent.ModelChain.builder().buildDefault();
+                var tools = agent.getDelegate().buildToolDefinitions();
+                reply = chain.execute(tenant.getConfig(), globalConfig, message, tools);
+            } else {
+                reply = agent.processMessage(message);
+            }
+
             long duration = System.currentTimeMillis() - start;
             tenant.updateActivity();
 
@@ -88,6 +107,7 @@ public class IntegrationGatewayHandler {
             result.put("reply", reply);
             result.put("durationMs", duration);
             result.put("workspaceId", workspaceId);
+            result.put("chainMode", useChain);
             ctx.status(200).json(result);
 
             // D4: dispatch event
@@ -98,6 +118,23 @@ public class IntegrationGatewayHandler {
             logger.error("SendMessage failed: {}", e.getMessage(), e);
             ctx.status(500).json(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Determine whether to use ModelChain for this message.
+     * Same logic as AgentTaskProcessor.shouldUseChain().
+     */
+    private boolean shouldUseChain(String message, com.nousresearch.hermes.tenant.core.TenantConfig config) {
+        if (message != null && message.strip().startsWith("[chain]")) {
+            return true;
+        }
+        if (config != null) {
+            Object chainMode = config.get("chain_mode");
+            if (Boolean.TRUE.equals(chainMode) || "true".equals(String.valueOf(chainMode))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ============ Agents ============
