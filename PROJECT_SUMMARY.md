@@ -82,7 +82,7 @@ hermes-agent-java/
 │   │   │               ├── TerminalTool.java  # 终端执行
 │   │   │               └── FileTool.java      # 文件操作
 │   │   └── resources/
-│   │       ├── default-config.yaml  # 默认配置
+│   │       ├── config.yaml  # 默认配置
 │   │       └── logback.xml          # 日志配置
 │   └── test/
 │       └── java/com/nousresearch/hermes/
@@ -272,7 +272,7 @@ src/main/java/com/nousresearch/hermes/
         └── FileTool.java
 
 src/main/resources/
-├── default-config.yaml
+├── config.yaml
 └── logback.xml
 
 src/test/java/com/nousresearch/hermes/

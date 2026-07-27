@@ -92,22 +92,22 @@ public class HermesConfig {
     }
 
     /**
-     * Load default-config.yaml from classpath (bundled in jar resources).
+     * Load config.yaml from classpath (bundled in jar resources).
      */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> loadFromClasspath() {
         try (var is = HermesConfig.class.getClassLoader()
-                .getResourceAsStream("default-config.yaml")) {
+                .getResourceAsStream("config.yaml")) {
             if (is != null) {
                 var yaml = new org.yaml.snakeyaml.Yaml();
                 Map<String, Object> loaded = yaml.load(is);
                 if (loaded != null) {
-                    logger.info("Loaded default-config.yaml from classpath resources");
+                    logger.info("Loaded config.yaml from classpath");
                     return loaded;
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to load default-config.yaml from classpath: {}", e.getMessage());
+            logger.warn("Failed to load config.yaml from classpath: {}", e.getMessage());
         }
         logger.info("Using hardcoded default config");
         return createDefaultConfig();
