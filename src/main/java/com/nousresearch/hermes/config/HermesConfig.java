@@ -121,7 +121,7 @@ public class HermesConfig {
         
         // Model configuration (VolcEngine cloud default)
         Map<String, Object> model = new HashMap<>();
-        model.put("provider", "volcengine");
+        model.put("provider", "doubao");
         model.put("model", "deepseek-v3-250324");
         model.put("base_url", "https://ark.cn-beijing.volces.com/api/v3");
         model.put("temperature", 0.7);
@@ -681,7 +681,7 @@ public class HermesConfig {
         return switch (provider.toLowerCase()) {
             case "openai" -> "https://api.openai.com/v1";
             case "anthropic" -> "https://api.anthropic.com/v1";
-            case "volcengine" -> "https://ark.cn-beijing.volces.com/api/v3";
+            case "doubao" -> "https://ark.cn-beijing.volces.com/api/v3";
             case "deepseek" -> "https://api.deepseek.com/v1";
             case "openrouter" -> "https://openrouter.ai/api/v1";
             default -> "https://ark.cn-beijing.volces.com/api/v3";

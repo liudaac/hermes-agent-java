@@ -18,6 +18,7 @@ public final class Constants {
     // API Endpoints
     public static final String OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
     public static final String OPENROUTER_MODELS_URL = OPENROUTER_BASE_URL + "/models";
+    public static final String ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3";
     public static final String AI_GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
     public static final String NOUS_API_BASE_URL = "https://inference-api.nousresearch.com/v1";
 

@@ -91,55 +91,102 @@ public class TenantConfig {
         tenantConfig.loadFromDisk();
         return tenantConfig;
     }
+
+    /**
+     * Create a TenantConfig from a ConfigRepository (DB-backed).
+     * Does not touch local filesystem.
+     *
+     * @param tenantId   tenant ID
+     * @param repo       config repository (Local or Mysql)
+     * @param globalConfig  global HermesConfig for platform defaults
+     */
+    public static TenantConfig fromRepository(String tenantId,
+                                              com.nousresearch.hermes.config.repository.ConfigRepository repo,
+                                              com.nousresearch.hermes.config.HermesConfig globalConfig) {
+        TenantConfig tc = new TenantConfig(null, null, false);
+
+        // Load model config from repo
+        Map<String, Object> modelConfig = repo.loadModelConfig(tenantId);
+        if (modelConfig != null) {
+            for (var entry : modelConfig.entrySet()) {
+                if (entry.getValue() != null) {
+                    tc.set("model." + entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        // Load model routes from repo
+        var routes = repo.loadModelRoutes(tenantId);
+        if (routes != null && !routes.isEmpty()) {
+            tc.set("model_routes", routes.stream()
+                .map(r -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("alias", r.getAlias());
+                    m.put("model", r.getModel());
+                    m.put("provider", r.getProvider());
+                    if (r.getBaseUrl() != null) m.put("base-url", r.getBaseUrl());
+                    return m;
+                })
+                .toList());
+        }
+
+        // Load API keys from repo
+        Map<String, String> apiKeys = repo.loadApiKeys(tenantId);
+        if (apiKeys != null) {
+            for (var entry : apiKeys.entrySet()) {
+                tc.set("secrets." + entry.getKey().toUpperCase() + "_API_KEY", entry.getValue());
+            }
+        }
+
+        // Load quota from repo
+        var quota = repo.loadQuota(tenantId);
+        if (quota != null) {
+            tc.set("quota.max_requests_per_day", quota.getMaxDailyRequests());
+            tc.set("quota.max_tokens_per_day", quota.getMaxDailyTokens());
+        }
+
+        // Load platform defaults if global config available
+        if (globalConfig != null) {
+            var platformRoutes = globalConfig.getModelRoutes();
+            if (platformRoutes != null && !platformRoutes.isEmpty() && tc.get("model_routes") == null) {
+                tc.set("model_routes", platformRoutes.stream()
+                    .map(r -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("alias", r.getAlias());
+                        m.put("model", r.getModel());
+                        m.put("provider", r.getProvider());
+                        if (r.getBaseUrl() != null) m.put("base-url", r.getBaseUrl());
+                        return m;
+                    })
+                    .toList());
+            }
+        }
+
+        return tc;
+    }
     
     // ============ 默认配置 ============
     
     private void loadDefaults() {
-        // 模型配置
-        set("model.provider", "openrouter");
-        set("model.model", "anthropic/claude-3.5-sonnet");
-        set("model.base_url", "");
-        set("model.api_key", "");
+        // Load defaults from classpath config.yaml (same file as HermesConfig)
+        try (var is = getClass().getClassLoader().getResourceAsStream("config.yaml")) {
+            if (is != null) {
+                var yaml = new org.yaml.snakeyaml.Yaml();
+                Map<String, Object> loaded = yaml.load(is);
+                if (loaded != null) {
+                    deepMerge(config, loaded);
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load config.yaml from classpath for tenant defaults: {}", e.getMessage());
+        }
+        // Fallback: minimal hardcoded defaults
+        set("model.provider", "volcengine");
+        set("model.model", "deepseek-v3-250324");
+        set("model.base_url", "https://ark.cn-beijing.volces.com/api/v3");
         set("model.temperature", 0.7);
         set("model.max_tokens", 4096);
-        
-        // Agent 配置
-        set("agent.max_turns", 90);
-        set("agent.gateway_timeout", 300);
-        set("agent.gateway_timeout_warning", 900);
-        set("agent.restart_drain_timeout", 60);
-        set("agent.tool_use_enforcement", "auto");
-        
-        // 终端配置
-        set("terminal.backend", "local");
-        set("terminal.timeout", 300);
-        set("terminal.docker_image", "hermes-sandbox:latest");
-        set("terminal.persistent_shell", true);
-        
-        // 工具配置
-        set("tools.enabled", List.of("web_search", "terminal", "file_operations", "browser"));
-        
-        // 浏览器配置
-        set("browser.inactivity_timeout", 120);
-        set("browser.record_sessions", false);
-        
-        // 显示配置
-        set("display.compact", false);
-        set("display.show_thinking", false);
-        set("display.streaming", true);
-        
-        // 压缩配置
-        set("compression.enabled", true);
-        set("compression.threshold", 0.5);
-        
-        // 记忆配置
-        set("memory.memory_enabled", false);
-        set("memory.user_profile_enabled", false);
-        set("memory.nudge_interval", 10);
-        
-        // Skills 配置
-        set("skills.creation_nudge_interval", 10);
-        set("skills.auto_load", List.of());
     }
     
     // ============ 配置存取 ============

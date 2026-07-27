@@ -28,7 +28,7 @@ public class ConfigManagerTest {
         config.load(configPath);
 
         assertTrue(Files.exists(configPath));
-        assertEquals("openrouter", config.getModelProvider());
+        assertEquals("doubao", config.getModelProvider());
         assertEquals(Constants.DEFAULT_MAX_ITERATIONS, config.getMaxTurns());
     }
     

@@ -227,6 +227,78 @@ public class TenantContext {
         }
     }
 
+    /**
+     * Create tenant with DB-backed config repository (CLUSTER mode).
+     * Config is loaded from DB, not local files.
+     */
+    public static TenantContext create(String tenantId, TenantProvisioningRequest request,
+                                       com.nousresearch.hermes.config.repository.ConfigRepository repo,
+                                       com.nousresearch.hermes.config.HermesConfig globalConfig) {
+        logger.info("Creating tenant context (DB-backed): {}", tenantId);
+        String safeTenantId = sanitizeTenantId(tenantId);
+        Path tenantDir = Constants.getHermesHome().resolve("tenants").resolve(safeTenantId);
+
+        try {
+            createDirectoryStructure(tenantDir);
+            TenantContext context = new TenantContext(safeTenantId, tenantDir);
+            context.auditLogger = new TenantAuditLogger(tenantDir.resolve("logs"));
+            context.quotaManager = new TenantQuotaManager(tenantDir, request.getQuota());
+            context.securityPolicy = request.getSecurityPolicy();
+
+            // Load config from repository instead of local files
+            context.config = com.nousresearch.hermes.tenant.core.TenantConfig.fromRepository(
+                safeTenantId, repo, globalConfig);
+
+            context.memoryManager = new TenantMemoryManager(safeTenantId, tenantDir.resolve("memories"));
+            context.skillManager = new TenantSkillManager(safeTenantId, tenantDir.resolve("skills"), context);
+            context.sessionManager = new TenantSessionManager(tenantDir.resolve("sessions"), context);
+            context.loadAgentRoles();
+            context.toolRegistry = new TenantToolRegistry(context);
+            context.resourceMonitor = new TenantResourceMonitor(context);
+
+            context.state.set(State.ACTIVE);
+            context.auditLogger.log(AuditEvent.TENANT_CREATED, java.util.Map.of(
+                "tenantId", safeTenantId,
+                "mode", "DB-backed",
+                "createdBy", request.getCreatedBy()
+            ));
+            logger.info("Tenant context created (DB-backed): {}", safeTenantId);
+            return context;
+        } catch (Exception e) {
+            logger.error("Failed to create DB-backed tenant: {}", tenantId, e);
+            throw new TenantCreationException("Failed to create tenant: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Load tenant with DB-backed config repository (CLUSTER mode).
+     */
+    public static TenantContext load(String tenantId,
+                                     com.nousresearch.hermes.config.repository.ConfigRepository repo,
+                                     com.nousresearch.hermes.config.HermesConfig globalConfig) {
+        String safeTenantId = sanitizeTenantId(tenantId);
+        Path tenantDir = Constants.getHermesHome().resolve("tenants").resolve(safeTenantId);
+
+        TenantContext context = new TenantContext(safeTenantId, tenantDir);
+        try {
+            context.config = TenantConfig.fromRepository(safeTenantId, repo, globalConfig);
+            context.auditLogger = new TenantAuditLogger(tenantDir.resolve("logs"));
+            context.quotaManager = new TenantQuotaManager(tenantDir, null);
+            context.memoryManager = new TenantMemoryManager(safeTenantId, tenantDir.resolve("memories"));
+            context.skillManager = new TenantSkillManager(safeTenantId, tenantDir.resolve("skills"), context);
+            context.sessionManager = new TenantSessionManager(tenantDir.resolve("sessions"), context);
+            context.loadAgentRoles();
+            context.toolRegistry = new TenantToolRegistry(context);
+            context.resourceMonitor = new TenantResourceMonitor(context);
+            context.state.set(State.ACTIVE);
+            logger.info("Tenant context loaded (DB-backed): {}", safeTenantId);
+            return context;
+        } catch (Exception e) {
+            logger.error("Failed to load DB-backed tenant: {}", tenantId, e);
+            return null;
+        }
+    }
+
     // ============ 初始化方法 ============
 
     private void initializeComponents(TenantProvisioningRequest request) {

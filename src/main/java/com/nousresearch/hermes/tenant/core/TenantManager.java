@@ -35,6 +35,8 @@ public class TenantManager {
     
     // 全局配置
     private final TenantManagerConfig config;
+    private com.nousresearch.hermes.config.repository.ConfigRepository configRepository;
+    private com.nousresearch.hermes.config.HermesConfig globalConfig;
     
     public TenantManager() {
         this(Constants.getHermesHome().resolve("tenants"), new TenantManagerConfig());
@@ -107,11 +109,32 @@ public class TenantManager {
     }
     
     /**
+     * Wire a ConfigRepository for DB-backed config (CLUSTER mode).
+     * When set, tenant configs are loaded from DB instead of local files.
+     */
+    public void setConfigRepository(com.nousresearch.hermes.config.repository.ConfigRepository repo) {
+        this.configRepository = repo;
+    }
+
+    /**
+     * Wire global HermesConfig for platform-level defaults.
+     */
+    public void setGlobalConfig(com.nousresearch.hermes.config.HermesConfig cfg) {
+        this.globalConfig = cfg;
+    }
+
+    /**
      * 获取或创建租户
      */
     public TenantContext getOrCreateTenant(String tenantId, TenantProvisioningRequest request) {
         return tenants.computeIfAbsent(tenantId, id -> {
-            // 尝试从磁盘加载
+            // DB-backed mode: load from ConfigRepository
+            if (configRepository != null) {
+                logger.info("Loading tenant from config repository: {}", tenantId);
+                return TenantContext.create(tenantId, request, configRepository, globalConfig);
+            }
+
+            // File mode: try loading from disk
             Path tenantDir = tenantsDir.resolve(sanitizeTenantId(tenantId));
             if (Files.exists(tenantDir)) {
                 logger.info("Loading existing tenant: {}", tenantId);
@@ -140,7 +163,18 @@ public class TenantManager {
             return context;
         }
         
-        // 尝试从磁盘加载
+        // DB-backed mode
+        if (configRepository != null) {
+            logger.info("Loading tenant from config repository: {}", tenantId);
+            context = TenantContext.load(tenantId, configRepository, globalConfig);
+            if (context != null) {
+                tenants.put(tenantId, context);
+                return context;
+            }
+            return null;
+        }
+
+        // File mode
         registryLock.readLock().lock();
         try {
             if (registry.isRegistered(tenantId)) {

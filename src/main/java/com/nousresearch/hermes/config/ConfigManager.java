@@ -80,7 +80,7 @@ public class ConfigManager {
         
         // Model configuration
         ObjectNode model = cfg.putObject("model");
-        model.put("provider", "openrouter");
+        model.put("provider", "doubao");
         model.put("model", "anthropic/claude-3.5-sonnet");
         model.put("base_url", "");
         model.put("api_key", "");
@@ -124,7 +124,7 @@ public class ConfigManager {
         // Compression configuration
         ObjectNode compression = cfg.putObject("compression");
         compression.put("enabled", true);
-        compression.put("provider", "openrouter");
+        compression.put("provider", "doubao");
         compression.put("model", "google/gemini-flash-1.5");
         
         // Auxiliary tasks configuration
@@ -380,7 +380,7 @@ public class ConfigManager {
     // ==================== Convenience Methods ====================
     
     public String getModelProvider() {
-        return getString("model.provider", "openrouter");
+        return getString("model.provider", "doubao");
     }
     
     public String getModelName() {
@@ -405,9 +405,9 @@ public class ConfigManager {
         return switch (provider) {
             case "openai" -> "https://api.openai.com/v1";
             case "anthropic" -> "https://api.anthropic.com/v1";
-            case "openrouter" -> Constants.OPENROUTER_BASE_URL;
+            case "doubao" -> Constants.ARK_BASE_URL;
             case "nous" -> Constants.NOUS_API_BASE_URL;
-            default -> Constants.OPENROUTER_BASE_URL;
+            default -> Constants.ARK_BASE_URL;
         };
     }
     

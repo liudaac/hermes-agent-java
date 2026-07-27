@@ -36,10 +36,10 @@ class TenantConfigModelConfigTest {
     void buildModelConfig_defaults() {
         HermesConfig.ModelConfig mc = config.buildModelConfig();
         assertNotNull(mc);
-        assertEquals("openrouter", mc.getProvider());
-        assertEquals("anthropic/claude-3.5-sonnet", mc.getName());
+        assertEquals("doubao", mc.getProvider());
+        assertEquals("deepseek-v3-250324", mc.getName());
         // default base_url for openrouter
-        assertEquals("https://openrouter.ai/api/v1", mc.getBaseUrl());
+        assertEquals("https://ark.cn-beijing.volces.com/api/v3", mc.getBaseUrl());
     }
 
     @Test
@@ -119,6 +119,7 @@ class TenantConfigModelConfigTest {
     @Order(8)
     @DisplayName("resolveBaseUrl falls back to provider default")
     void resolveBaseUrl_providerDefault() {
+        config.set("model.base_url", ""); // clear classpath default
         config.set("model.provider", "deepseek");
 
         String url = config.resolveBaseUrl("deepseek");
@@ -144,11 +145,13 @@ class TenantConfigModelConfigTest {
         global.set("model.model", "claude-3-opus");
         global.set("model.api_key", "sk-global-xxx");
 
-        // Tenant has no model config -> falls back to global
+        // Tenant has api_key from config.yaml (${VOLC_API_KEY}) -> clear it to test fallback
+        config.set("model.api_key", "");
+
+        // Tenant has no effective api key -> falls back to global api key
         HermesConfig.ModelConfig mc = config.buildModelConfig(global);
-        assertEquals("openrouter", mc.getProvider()); // tenant default
-        assertEquals("anthropic/claude-3.5-sonnet", mc.getName()); // tenant default
-        // No tenant API key for openrouter -> falls back to global api key
+        assertEquals("doubao", mc.getProvider()); // tenant default
+        assertEquals("deepseek-v3-250324", mc.getName()); // tenant default
         assertEquals("sk-global-xxx", mc.getApiKey());
     }
 
@@ -178,7 +181,7 @@ class TenantConfigModelConfigTest {
     void resolveBaseUrl_allProviders() {
         assertNotNull(config.resolveBaseUrl("openai"));
         assertNotNull(config.resolveBaseUrl("anthropic"));
-        assertNotNull(config.resolveBaseUrl("openrouter"));
+        assertNotNull(config.resolveBaseUrl("doubao"));
         assertNotNull(config.resolveBaseUrl("deepseek"));
         assertNotNull(config.resolveBaseUrl("doubao"));
         assertNotNull(config.resolveBaseUrl("moonshot"));
@@ -192,9 +195,11 @@ class TenantConfigModelConfigTest {
 
     @Test
     @Order(13)
-    @DisplayName("getModelRoutes returns empty list when not configured")
+    @DisplayName("getModelRoutes returns routes from config.yaml defaults")
     void getModelRoutes_empty() {
-        assertTrue(config.getModelRoutes().isEmpty());
+        // config.yaml from classpath has 3 default routes (smart/fast/cheap)
+        assertFalse(config.getModelRoutes().isEmpty());
+        assertEquals(3, config.getModelRoutes().size());
     }
 
     @Test
@@ -246,6 +251,8 @@ class TenantConfigModelConfigTest {
     @Order(17)
     @DisplayName("resolveModelRoute falls back to platform routes")
     void resolveModelRoute_platformFallback() {
+        // Clear tenant routes (classpath config.yaml has 3 default routes)
+        config.set("model_routes", List.of());
         List<ModelRoute> platformRoutes = List.of(
             new ModelRoute("fast", "gpt-4o-mini", "openai", null),
             new ModelRoute("smart", "claude-3.5-sonnet", "anthropic", null)
@@ -293,6 +300,7 @@ class TenantConfigModelConfigTest {
     @Order(20)
     @DisplayName("resolveModelConfig by alias builds full ModelConfig with API key")
     void resolveModelConfig_byAlias() {
+        config.set("model.base_url", ""); // clear classpath default
         config.set("model_routes", List.of(
             Map.of("alias", "smart", "model", "claude-3.5-sonnet", "provider", "anthropic")
         ));
@@ -309,6 +317,8 @@ class TenantConfigModelConfigTest {
     @Order(21)
     @DisplayName("resolveModelConfig falls back to platform routes then tenant default")
     void resolveModelConfig_fallbackChain() {
+        config.set("model.base_url", ""); // clear classpath default
+        config.set("model_routes", List.of()); // clear classpath routes
         List<ModelRoute> platformRoutes = List.of(
             new ModelRoute("cheap", "deepseek-chat", "deepseek", null)
         );
@@ -319,10 +329,10 @@ class TenantConfigModelConfigTest {
         assertEquals("deepseek-chat", mc.getName());
         assertEquals("https://api.deepseek.com/v1", mc.getBaseUrl());
 
-        // Unknown alias -> falls back to tenant default (openrouter)
+        // Unknown alias -> falls back to tenant default (doubao)
         mc = config.resolveModelConfig("unknown", platformRoutes);
-        assertEquals("openrouter", mc.getProvider());
-        assertEquals("anthropic/claude-3.5-sonnet", mc.getName());
+        assertEquals("doubao", mc.getProvider());
+        assertEquals("deepseek-v3-250324", mc.getName());
     }
 
     @Test
@@ -330,8 +340,8 @@ class TenantConfigModelConfigTest {
     @DisplayName("resolveModelConfig with null alias returns tenant default")
     void resolveModelConfig_nullAlias() {
         HermesConfig.ModelConfig mc = config.resolveModelConfig(null);
-        assertEquals("openrouter", mc.getProvider());
-        assertEquals("anthropic/claude-3.5-sonnet", mc.getName());
+        assertEquals("doubao", mc.getProvider());
+        assertEquals("deepseek-v3-250324", mc.getName());
     }
 
     @Test
@@ -376,7 +386,7 @@ class TenantConfigModelConfigTest {
     @Order(25)
     @DisplayName("isProviderValid returns true for default provider")
     void isProviderValid_default() {
-        // default provider is "openrouter" which is in the catalog
+        // default provider is "doubao" which is in the catalog
         assertTrue(config.isProviderValid());
     }
 
@@ -393,7 +403,7 @@ class TenantConfigModelConfigTest {
     @DisplayName("isProviderValid returns true for all catalog providers")
     void isProviderValid_allCatalogProviders() {
         for (String provider : List.of(
-                "openai", "anthropic", "openrouter", "deepseek",
+                "openai", "anthropic", "doubao", "deepseek",
                 "doubao", "moonshot", "minimax", "ollama")) {
             config.set("model.provider", provider);
             assertTrue(config.isProviderValid(),
@@ -405,6 +415,7 @@ class TenantConfigModelConfigTest {
     @Order(28)
     @DisplayName("resolveBaseUrl uses catalog default")
     void resolveBaseUrl_usesCatalog() {
+        config.set("model.base_url", ""); // clear classpath default
         config.set("model.provider", "deepseek");
         assertEquals("https://api.deepseek.com/v1", config.resolveBaseUrl("deepseek"));
     }
@@ -423,6 +434,7 @@ class TenantConfigModelConfigTest {
             TenantConfig.setSharedCatalog(custom);
 
             config.set("model.provider", "my-provider");
+            config.set("model.base_url", ""); // clear classpath default
             assertTrue(config.isProviderValid());
             assertEquals("https://my.api.com/v1", config.resolveBaseUrl("my-provider"));
 

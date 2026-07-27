@@ -39,8 +39,8 @@ class ConfigRepositoryTest {
     @DisplayName("loadModelConfig returns defaults for new tenant")
     void loadModelConfig_defaults() {
         Map<String, Object> config = repo.loadModelConfig("new-tenant");
-        assertEquals("openrouter", config.get("provider"));
-        assertEquals("anthropic/claude-3.5-sonnet", config.get("model"));
+        assertEquals("doubao", config.get("provider"));
+        assertEquals("deepseek-v3-250324", config.get("model"));
         assertEquals("hybrid", config.get("key_source"));
     }
 
@@ -95,7 +95,8 @@ class ConfigRepositoryTest {
         repo.saveModelRoute("t1", new ModelRoute("smart", "claude-3.5-sonnet", "anthropic", null));
 
         List<ModelRoute> routes = repo.loadModelRoutes("t1");
-        assertEquals(2, routes.size());
+        // 2 saved (upsert over classpath "fast"/"smart") + 1 "cheap" from classpath = 3
+        assertEquals(3, routes.size());
     }
 
     @Test
@@ -106,8 +107,10 @@ class ConfigRepositoryTest {
         repo.saveModelRoute("t1", new ModelRoute("fast", "gpt-4.1-mini", "openai", null));
 
         List<ModelRoute> routes = repo.loadModelRoutes("t1");
-        assertEquals(1, routes.size());
-        assertEquals("gpt-4.1-mini", routes.get(0).getModel());
+        assertEquals(3, routes.size());
+        var fast = routes.stream().filter(r -> "fast".equals(r.getAlias())).findFirst().orElse(null);
+        assertNotNull(fast);
+        assertEquals("gpt-4.1-mini", fast.getModel());
     }
 
     @Test
@@ -119,8 +122,10 @@ class ConfigRepositoryTest {
         repo.removeModelRoute("t1", "fast");
 
         List<ModelRoute> routes = repo.loadModelRoutes("t1");
-        assertEquals(1, routes.size());
-        assertEquals("smart", routes.get(0).getAlias());
+        // 3 classpath defaults - 1 removed = 2
+        assertEquals(2, routes.size());
+        var fast = routes.stream().filter(r -> "fast".equals(r.getAlias())).findFirst().orElse(null);
+        assertNull(fast);
     }
 
     @Test

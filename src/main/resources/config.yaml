@@ -12,7 +12,7 @@
 # ---- Model (platform default) ----
 # Each tenant can override via tenant config.yaml or Admin API
 model:
-  provider: volcengine                     # volcengine | openrouter | openai | anthropic | deepseek | azure | bedrock | ollama
+  provider: doubao                     # volcengine | openrouter | openai | anthropic | deepseek | azure | bedrock | ollama
   model: deepseek-v3-250324                # default model (火山引擎模型 ID)
   api_key: ${VOLC_API_KEY}                 # set via env var VOLC_API_KEY
   base_url: https://ark.cn-beijing.volces.com/api/v3
@@ -26,15 +26,15 @@ model:
 model_routes:
   - alias: smart
     model: deepseek-v3-250324
-    provider: volcengine
+    provider: doubao
     base_url: https://ark.cn-beijing.volces.com/api/v3
   - alias: fast
     model: deepseek-v3-250324
-    provider: volcengine
+    provider: doubao
     base_url: https://ark.cn-beijing.volces.com/api/v3
   - alias: cheap
     model: deepseek-v3-250324
-    provider: volcengine
+    provider: doubao
     base_url: https://ark.cn-beijing.volces.com/api/v3
 
 # ---- Platform Provider Catalog ----

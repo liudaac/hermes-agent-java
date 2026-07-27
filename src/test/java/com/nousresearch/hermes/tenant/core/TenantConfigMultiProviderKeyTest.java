@@ -273,6 +273,7 @@ class TenantConfigMultiProviderKeyTest {
     @DisplayName("validateModelConfig: missing API key flagged")
     void validateModelConfig_missingKey() {
         config.set("model.provider", "openai");
+        config.set("model.api_key", ""); // clear classpath default
         // No API key set
 
         TenantConfig.ValidationResult result = config.validateModelConfig();

@@ -56,8 +56,8 @@ public class MysqlConfigRepository implements ConfigRepository {
         }
         // Return defaults
         Map<String, Object> defaults = new LinkedHashMap<>();
-        defaults.put("provider", "openrouter");
-        defaults.put("model", "anthropic/claude-3.5-sonnet");
+        defaults.put("provider", "doubao");
+        defaults.put("model", "deepseek-v3-250324");
         defaults.put("base_url", "");
         defaults.put("api_key", "");
         defaults.put("temperature", 0.7);
@@ -83,8 +83,8 @@ public class MysqlConfigRepository implements ConfigRepository {
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, tenantId);
-            ps.setString(2, (String) config.getOrDefault("provider", "openrouter"));
-            ps.setString(3, (String) config.getOrDefault("model", "anthropic/claude-3.5-sonnet"));
+            ps.setString(2, (String) config.getOrDefault("provider", "doubao"));
+            ps.setString(3, (String) config.getOrDefault("model", "deepseek-v3-250324"));
             ps.setString(4, (String) config.getOrDefault("base_url", ""));
             ps.setString(5, (String) config.getOrDefault("api_key", ""));
             ps.setDouble(6, ((Number) config.getOrDefault("temperature", 0.7)).doubleValue());
