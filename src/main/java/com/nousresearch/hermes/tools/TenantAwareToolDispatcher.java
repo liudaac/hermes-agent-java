@@ -464,6 +464,26 @@ public class TenantAwareToolDispatcher {
             return ToolRegistry.toolError("Command is required");
         }
 
+        boolean approved = Boolean.TRUE.equals(args.get("approved"));
+
+        // Risk check: DANGER always blocked, RISKY needs approval
+        String danger = checkDanger(command);
+        if (danger != null) {
+            return ToolRegistry.toolError("BLOCKED (dangerous): " + danger);
+        }
+
+        String risky = checkRisky(command);
+        if (risky != null && !approved) {
+            // Don't execute - throw exception so ChatService can show approval card
+            throw new com.nousresearch.hermes.agent.TenantAwareAIAgent.ToolApprovalRequiredException(
+                toolName,
+                "{\"command\":\"" + command.replace("\"", "\\\"") + "\",\"approved\":false}",
+                tenantContext != null ? tenantContext.getTenantId() : "unknown",
+                "risky_pattern:" + risky,
+                "命令包含风险操作: " + risky + "，需要用户确认"
+            );
+        }
+
         String cwd = (String) args.get("cwd");
         int timeout = ((Number) args.getOrDefault("timeout", 300)).intValue();
         var validation = validateTenantPath(cwd == null || cwd.isBlank() ? "." : cwd,
@@ -474,6 +494,36 @@ public class TenantAwareToolDispatcher {
 
         return executeInTenantSandbox(List.of("/bin/bash", "-c", command), timeout, 512,
             validation.path());
+    }
+
+    private static final java.util.List<String> DANGER_PATTERNS = java.util.List.of(
+        "rm -rf /", "rm -rf /*", "rm -rf ~", "> /dev/sda", "dd if=/dev/zero",
+        "mkfs.", "format", ":(){ :|:& };:"
+    );
+
+    private static final java.util.List<String> RISKY_PATTERNS = java.util.List.of(
+        "rm -rf", "rm -r", "rmdir", "mv /", "cp /", "chmod 777",
+        "chown", "kill -9", "pkill", "shutdown", "reboot",
+        "git push --force", "git push -f", "git reset --hard",
+        "DROP TABLE", "DROP DATABASE", "DELETE FROM",
+        "truncate", "shred", "curl | bash", "curl | sh"
+    );
+
+    private static String checkDanger(String command) {
+        String lower = command.toLowerCase();
+        for (String p : DANGER_PATTERNS) {
+            if (lower.contains(p.toLowerCase())) return p;
+        }
+        return null;
+    }
+
+    private static String checkRisky(String command) {
+        String lower = command.toLowerCase();
+        for (String p : RISKY_PATTERNS) {
+            if (lower.contains(p.toLowerCase())) return p;
+        }
+        if (lower.trim().startsWith("sudo")) return "sudo";
+        return null;
     }
     
     private String dispatchMemoryTool(String toolName, Map<String, Object> args) {

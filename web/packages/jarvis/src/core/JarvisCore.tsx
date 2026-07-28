@@ -122,10 +122,21 @@ export function JarvisCore({
   });
   const rejectHandler = onReject ?? (async (approvalId: string) => {
     try {
-      const result = await jarvisApi.resolveApproval(approvalId, "reject");
-      if (result && result.reply) {
+      if (approvalId.startsWith("cmd_")) {
+        // Command-level rejection: just clear the pending approval
         const { pushMessage } = await import("../hooks/useJarvisStore");
-        pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result.reply, timestamp: Date.now() });
+        pushMessage({
+          id: crypto.randomUUID(),
+          role: "jarvis",
+          text: "已取消执行。",
+          timestamp: Date.now(),
+        });
+      } else {
+        const result = await jarvisApi.resolveApproval(approvalId, "reject");
+        if (result && result.reply) {
+          const { pushMessage } = await import("../hooks/useJarvisStore");
+          pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result.reply, timestamp: Date.now() });
+        }
       }
     } catch (e) { console.error("Jarvis reject failed", e); }
   });

@@ -17,12 +17,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * ChatService — answer a user message by delegating to a real
+ * ChatService - answer a user message by delegating to a real
  * {@link TenantAwareAIAgent} (not a bare LLM call).
  *
  * <p>Why this matters: the previous implementation called
  * {@code ModelClient.chatCompletion()} directly, which bypassed the entire
- * agent runtime — no tools, no SubAgent, no team, no reflection, no traces,
+ * agent runtime - no tools, no SubAgent, no team, no reflection, no traces,
  * no tenant sandbox / quota / audit / metrics. By going through
  * {@code processMessage()} we get all of that for free, and dangerous
  * tool calls are routed through the real approval pipeline (see
@@ -69,7 +69,7 @@ public class ChatService {
 - 必要时给出明确、可点击的跳转建议
 - 简洁回答（中文优先），不要重复用户的问题
 - 你拥有真实的工具调用能力。如果用户的请求需要执行动作（查询数据、
-  调度工作流、修改配置等），请直接调用相应工具——危险操作会在执行前
+  调度工作流、修改配置等），请直接调用相应工具--危险操作会在执行前
   弹出审批请求。
 - 如果你的工具调用被批准/驳回，继续完成任务并向用户汇报结果。
 - 如果没有合适的工具，回答「这件事需要 XX 工具，我目前没有」。
@@ -149,40 +149,28 @@ public class ChatService {
                     replyText = "（agent 未返回内容）";
                 }
 
-                // Check for NEEDS APPROVAL
-                PendingApproval pending = extractPendingApproval(replyText);
-                if (pending != null) {
-                    pendingApprovals.put(pending.approvalId, pending);
-                    ChatReply.Approval approval = new ChatReply.Approval(
-                        pending.approvalId,
-                        "确认执行: " + pending.command,
-                        pending.risk
-                    );
-                    String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + pending.risk;
-                    streaming.complete(new ChatReply(note, spaceName(req), 0.9, List.of(), approval));
-                    return;
-                }
-
                 List<CrossSpaceLink> links = detectCrossSpaceLinks(replyText,
                     req.context != null ? req.context.space : null);
                 streaming.complete(new ChatReply(replyText, spaceName(req), 0.8, links, null));
 
             } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
-                String approvalId;
-                try {
-                    approvalId = toolApprovalCoordinator.requestToolApproval(
-                        workspaceId, null,
-                        agent.getAgentId() != null ? agent.getAgentId() : "jarvis",
-                        ex.getToolName(), ex.getToolArguments(), ex.getMatchedRule(),
-                        ex.getReason(), ex.getToolName(), agent);
-                } catch (Exception createEx) {
-                    streaming.error("无法创建审批：" + createEx.getMessage());
-                    return;
-                }
+                // Extract command from tool arguments
+                String command = extractCommandFromArgs(ex.getToolArguments());
+                String risk = inferRisk(ex.getToolName());
+                if (command != null && command.toLowerCase().contains("rm -rf")) risk = "high";
+
+                // Store pending approval for inline button approval
+                String approvalId = "cmd_" + System.currentTimeMillis();
+                PendingApproval pending = new PendingApproval(approvalId, command != null ? command : ex.getReason(), risk);
+                pendingApprovals.put(approvalId, pending);
+
                 ChatReply.Approval approval = new ChatReply.Approval(
-                    approvalId, "工具调用审批: " + ex.getToolName(), inferRisk(ex.getToolName()));
-                String note = "我准备执行工具 `" + ex.getToolName() + "`（" + ex.getReason() + "），请确认。";
-                streaming.complete(new ChatReply(note, spaceName(req), 0.7, List.of(), approval));
+                    approvalId,
+                    "确认执行: " + (command != null ? command : ex.getToolName()),
+                    risk
+                );
+                String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + risk;
+                streaming.complete(new ChatReply(note, spaceName(req), 0.9, List.of(), approval));
             } catch (Exception e) {
                 log.warn("Jarvis stream failed: {}", e.getMessage(), e);
                 streaming.error("agent 执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage()));
@@ -264,21 +252,6 @@ public class ChatService {
             capture.exception = null; // completed without approval gate
             String replyText = result == null ? "（agent 未返回内容）" : result.trim();
 
-            // Detect NEEDS APPROVAL pattern from tool results in the agent reply
-            PendingApproval pending = extractPendingApproval(replyText);
-            if (pending != null) {
-                // Store for later execution when user approves
-                pendingApprovals.put(pending.approvalId, pending);
-
-                ChatReply.Approval approval = new ChatReply.Approval(
-                    pending.approvalId,
-                    "确认执行: " + pending.command,
-                    pending.risk
-                );
-                String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + pending.risk;
-                return new ChatReply(note, spaceName(req), 0.9, List.of(), approval);
-            }
-
             // Detect cross-space navigation hints
             List<CrossSpaceLink> links = detectCrossSpaceLinks(replyText, req.context != null ? req.context.space : null);
             return new ChatReply(
@@ -289,38 +262,22 @@ public class ChatService {
                 null
             );
         } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
-            // Create a real BusinessApprovalRecord via the coordinator. The
-            // coordinator stores the agent reference in its pendingApprovals
-            // map so resumeToolApproval can find it again later.
-            String approvalId;
-            try {
-                approvalId = toolApprovalCoordinator.requestToolApproval(
-                    workspaceId,
-                    null, // teamId — Jarvis is cross-team
-                    agent.getAgentId() != null ? agent.getAgentId() : "jarvis",
-                    ex.getToolName(),
-                    ex.getToolArguments(),
-                    ex.getMatchedRule(),
-                    ex.getReason(),
-                    ex.getToolName(), // toolCallId — coordinator will use the tool name as the call id placeholder
-                    agent
-                );
-            } catch (Exception createEx) {
-                log.error("Failed to create tool approval for Jarvis: {}", createEx.getMessage(), createEx);
-                return new ChatReply(
-                    "（无法创建审批：" + createEx.getMessage() + "）",
-                    spaceName(req), 0.0, List.of(), null
-                );
-            }
+            // Extract command from tool arguments
+            String command = extractCommandFromArgs(ex.getToolArguments());
+            String risk = inferRisk(ex.getToolName());
+            if (command != null && command.toLowerCase().contains("rm -rf")) risk = "high";
+
+            String approvalId = "cmd_" + System.currentTimeMillis();
+            PendingApproval pending = new PendingApproval(approvalId, command != null ? command : ex.getReason(), risk);
+            pendingApprovals.put(approvalId, pending);
 
             ChatReply.Approval approval = new ChatReply.Approval(
                 approvalId,
-                "工具调用审批: " + ex.getToolName(),
-                inferRisk(ex.getToolName())
+                "确认执行: " + (command != null ? command : ex.getToolName()),
+                risk
             );
-            String note = "我准备执行工具 `" + ex.getToolName() + "`（" + ex.getReason()
-                + "），请在浮窗内确认。";
-            return new ChatReply(note, spaceName(req), 0.7, List.of(), approval);
+            String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + risk;
+            return new ChatReply(note, spaceName(req), 0.9, List.of(), approval);
         } catch (Exception e) {
             log.warn("Jarvis chat agent call failed: {}", e.getMessage(), e);
             return new ChatReply(
@@ -463,45 +420,6 @@ public class ChatService {
     }
 
     /**
-     * Extract a pending approval from agent reply text containing
-     * "NEEDS APPROVAL" pattern from TerminalTool.
-     *
-     * Returns null if no approval needed.
-     */
-    private static PendingApproval extractPendingApproval(String replyText) {
-        if (replyText == null) return null;
-        // Pattern: NEEDS APPROVAL: ... command ...
-        int idx = replyText.indexOf("NEEDS APPROVAL");
-        if (idx < 0) return null;
-
-        // Try to extract the command from surrounding context
-        // The LLM usually includes the command in its response
-        // Look for code blocks first
-        String command = null;
-        int codeStart = replyText.indexOf("```", idx);
-        if (codeStart >= 0) {
-            int codeEnd = replyText.indexOf("```", codeStart + 3);
-            if (codeEnd > codeStart) {
-                String block = replyText.substring(codeStart + 3, codeEnd).trim();
-                // Remove language hint if present
-                if (block.startsWith("bash") || block.startsWith("sh")) {
-                    block = block.substring(block.indexOf('\n') + 1).trim();
-                }
-                command = block;
-            }
-        }
-        if (command == null || command.isBlank()) {
-            // Fallback: look for "command" field pattern
-            // The tool error includes command in the result
-            return null;
-        }
-
-        String approvalId = "cmd_" + System.currentTimeMillis();
-        String risk = command.toLowerCase().contains("rm -rf") ? "high" : "medium";
-        return new PendingApproval(approvalId, command, risk);
-    }
-
-    /**
      * Handle an approved command: execute it directly with approved=true.
      */
     private ChatReply handleApprovedCommand(String message, String workspaceId, ChatRequest req) {
@@ -540,6 +458,19 @@ public class ChatService {
             this.approvalId = approvalId;
             this.command = command;
             this.risk = risk;
+        }
+    }
+
+    /**
+     * Extract command string from tool arguments JSON.
+     */
+    private static String extractCommandFromArgs(String toolArguments) {
+        if (toolArguments == null || toolArguments.isBlank()) return null;
+        try {
+            JSONObject obj = JSON.parseObject(toolArguments);
+            return obj.getString("command");
+        } catch (Exception e) {
+            return null;
         }
     }
 
