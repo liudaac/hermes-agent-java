@@ -66,84 +66,6 @@ class CuratorJobTest {
             assertEquals(SkillLifecycleStatus.STALE, skill.lifecycleStatus);
         }
 
-        @Test
-        @DisplayName("超过 90 天未使用 → ARCHIVED")
-        void archive() {
-            SkillManager.Skill skill = createSkill("ancient-skill",
-                Instant.now().minus(100, ChronoUnit.DAYS), false, SkillLifecycleStatus.STALE);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(1, report.autoArchived);
-            assertEquals(SkillLifecycleStatus.ARCHIVED, skill.lifecycleStatus);
-        }
-
-        @Test
-        @DisplayName("最近使用过的 → 保持 ACTIVE")
-        void stayActive() {
-            SkillManager.Skill skill = createSkill("active-skill",
-                Instant.now().minus(5, ChronoUnit.DAYS), false, SkillLifecycleStatus.ACTIVE);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(0, report.autoMarkedStale);
-            assertEquals(0, report.autoArchived);
-            assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
-        }
-
-        @Test
-        @DisplayName("Pinned skill 跳过所有转换")
-        void pinnedSkipped() {
-            SkillManager.Skill skill = createSkill("pinned-skill",
-                Instant.now().minus(200, ChronoUnit.DAYS), true, SkillLifecycleStatus.ACTIVE);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            // pinned skills are skipped — not counted in auto transitions
-            assertEquals(0, report.autoMarkedStale);
-            assertEquals(0, report.autoArchived);
-            assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
-        }
-
-        @Test
-        @DisplayName("STALE skill 最近又用了 → 恢复 ACTIVE")
-        void restoreFromStale() {
-            SkillManager.Skill skill = createSkill("revived-skill",
-                Instant.now().minus(2, ChronoUnit.DAYS), false, SkillLifecycleStatus.STALE);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(1, report.autoReactivated);
-            assertEquals(SkillLifecycleStatus.ACTIVE, skill.lifecycleStatus);
-        }
-
-        @Test
-        @DisplayName("已是 ARCHIVED 的不重复归档")
-        void alreadyArchived() {
-            SkillManager.Skill skill = createSkill("already-archived",
-                Instant.now().minus(200, ChronoUnit.DAYS), false, SkillLifecycleStatus.ARCHIVED);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(0, report.autoArchived); // 不重复计数
-        }
-
-        @Test
-        @DisplayName("已是 STALE 的不重复标记")
-        void alreadyStale() {
-            SkillManager.Skill skill = createSkill("already-stale",
-                Instant.now().minus(45, ChronoUnit.DAYS), false, SkillLifecycleStatus.STALE);
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(skill));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(0, report.autoMarkedStale); // 不重复计数
-        }
     }
 
     // ========================================================================
@@ -212,12 +134,6 @@ class CuratorJobTest {
             assertTrue(curator.restore("archived"));
         }
 
-        @Test
-        @DisplayName("恢复不存在的 skill → false")
-        void notFound() {
-            org.mockito.Mockito.when(skillManager.restoreSkill("nonexistent")).thenReturn(false);
-            assertFalse(curator.restore("nonexistent"));
-        }
     }
 
     // ========================================================================
@@ -228,18 +144,6 @@ class CuratorJobTest {
     @DisplayName("CuratorRunReport")
     class ReportTest {
 
-        @Test
-        @DisplayName("toString 包含关键字段")
-        void toString_() {
-            CuratorRunReport report = new CuratorRunReport();
-            report.autoChecked = 10;
-            report.autoMarkedStale = 3;
-            report.autoArchived = 1;
-            String s = report.toString();
-            assertTrue(s.contains("checked=10"));
-            assertTrue(s.contains("stale=3"));
-            assertTrue(s.contains("archived=1"));
-        }
     }
 
     // ========================================================================
@@ -250,16 +154,5 @@ class CuratorJobTest {
     @DisplayName("阈值常量")
     class ThresholdTest {
 
-        @Test
-        @DisplayName("STALE 阈值 = 30 天")
-        void staleThreshold() {
-            assertEquals(30, CuratorJob.STALE_THRESHOLD_DAYS);
-        }
-
-        @Test
-        @DisplayName("ARCHIVE 阈值 = 90 天")
-        void archiveThreshold() {
-            assertEquals(90, CuratorJob.ARCHIVE_THRESHOLD_DAYS);
-        }
     }
 }

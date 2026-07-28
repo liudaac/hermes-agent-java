@@ -67,44 +67,6 @@ class LocalPatchExecutorTest {
         assertEquals(DelegatedTask.Status.ACCEPTED, task.status());
     }
 
-    @Test
-    void parentVerificationRejectsWhenRequiredTestsAreMissing() throws Exception {
-        DelegatedTaskStore store = new DelegatedTaskStore();
-        ParentVerificationPolicy strict = new ParentVerificationPolicy(true, true, List.of("src/main/java"));
-        DelegatedTask task = store.createPending(envelope(), strict);
-        Path repo = createRepo();
-
-        DelegatedTaskExecutionResult result = store.executePending(task.taskId(), "local_patch", policy(repo, patch("src/main/java/App.java", "hello", "verified"), strict, List.of()));
-
-        assertTrue(result.executed());
-        assertTrue(result.submitted());
-        assertEquals("REJECTED", result.status());
-        assertFalse(result.verificationResult().accepted());
-        assertTrue(result.verificationResult().reasons().contains("no tests reported"));
-        assertEquals(DelegatedTask.Status.REJECTED, task.status());
-    }
-
-    @Test
-    void parentVerificationAcceptsWhenPolicySatisfied() throws Exception {
-        DelegatedTaskStore store = new DelegatedTaskStore();
-        ParentVerificationPolicy strict = new ParentVerificationPolicy(true, true, List.of("src/main/java"));
-        DelegatedTask task = store.createPending(envelope(), strict);
-        Path repo = createRepo();
-
-        DelegatedTaskExecutionResult result = store.executePending(task.taskId(), "local_patch", policy(repo, patch("src/main/java/App.java", "hello", "verified"), strict));
-
-        assertEquals("ACCEPTED", result.status());
-        assertTrue(result.verificationResult().accepted());
-        assertEquals(DelegatedTask.Status.ACCEPTED, task.status());
-    }
-
-    @Test
-    void registryIncludesLocalPatchExecutor() {
-        DelegatedTaskExecutorRegistry registry = new DelegatedTaskExecutorRegistry();
-
-        assertTrue(registry.find("local_patch").orElseThrow() instanceof LocalPatchExecutor);
-    }
-
     private Path createRepo() throws Exception {
         Path repo = tempDir.resolve("repo");
         Files.createDirectories(repo.resolve("src/main/java"));

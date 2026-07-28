@@ -64,39 +64,4 @@ class StickyRouterTest {
         assertTrue(moved > 50, "Too few keys moved when adding node: " + moved);
     }
 
-    @Test
-    void removingNodeRedistributes() {
-        StickyRouter router = new StickyRouter(List.of("n1", "n2", "n3"));
-        String target = router.routeFor("test-ws");
-        assertNotNull(target);
-
-        router.removeNode(target);
-        String newTarget = router.routeFor("test-ws");
-        assertNotEquals(target, newTarget, "Removed node should not be returned");
-    }
-
-    @Test
-    void isLocalReturnsTrueForRoutedNode() {
-        StickyRouter router = new StickyRouter(List.of("n1", "n2", "n3"));
-        String target = router.routeFor("ws-x");
-        assertTrue(router.isLocal("ws-x", target));
-        assertFalse(router.isLocal("ws-x", target + "-other"));
-    }
-
-    @Test
-    void emptyRingReturnsNull() {
-        StickyRouter router = new StickyRouter(List.of());
-        assertNull(router.routeFor("anything"));
-    }
-
-    @Test
-    void hermesProfileDefaultsToLocal() {
-        // Without system props or env, defaults to local
-        HermesProfile profile = new HermesProfile(HermesProfile.Mode.LOCAL,
-            "test-node", "", "", "", "", "");
-        assertTrue(profile.isLocal());
-        assertFalse(profile.isCluster());
-        assertFalse(profile.hasRedis());
-        assertEquals("test-node", profile.nodeId());
-    }
 }

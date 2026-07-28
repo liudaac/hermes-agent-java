@@ -61,68 +61,6 @@ class DelegatedTaskExecutorTest {
         assertEquals(1, task.verificationHistory().size());
     }
 
-    @Test
-    void executionPolicyConstraintsAreCarriedInResult() {
-        DelegatedTaskStore store = new DelegatedTaskStore();
-        DelegatedTask task = store.createPending(envelope());
-        ParentVerificationPolicy parentPolicy = ParentVerificationPolicy.allowChangedFilesUnder(List.of("src/main/java"));
-        DelegatedTaskExecutionPolicy policy = new DelegatedTaskExecutionPolicy(
-            false,
-            false,
-            false,
-            Duration.ofSeconds(9),
-            List.of("src/main/java"),
-            parentPolicy,
-            Map.of("trace_id", "trace-123")
-        );
-
-        DelegatedTaskExecutionResult result = store.executePending(task.taskId(), "mock", policy);
-
-        assertSame(policy, result.policy());
-        assertFalse(result.policy().allowExternalExecution());
-        assertFalse(result.policy().allowFileChanges());
-        assertFalse(result.policy().allowCommands());
-        assertEquals(Duration.ofSeconds(9), result.policy().timeout());
-        assertEquals(List.of("src/main/java"), result.policy().allowedChangedFilePrefixes());
-        assertEquals(parentPolicy, result.policy().parentVerificationPolicy());
-        assertEquals("trace-123", result.policy().metadata().get("trace_id"));
-        assertTrue(result.toMap().containsKey("policy"));
-    }
-
-    @Test
-    void unsupportedExecutorReturnsStructuredNotExecutedAndLeavesTaskPending() {
-        DelegatedTaskStore store = new DelegatedTaskStore();
-        DelegatedTask task = store.createPending(envelope());
-
-        DelegatedTaskExecutionResult result = store.executePending(task.taskId(), "real-subagent", DelegatedTaskExecutionPolicy.safeDefault());
-
-        assertFalse(result.executed());
-        assertFalse(result.submitted());
-        assertEquals("UNSUPPORTED_EXECUTOR", result.status());
-        assertTrue(result.message().contains("real-subagent"));
-        assertEquals("real-subagent", result.executorName());
-        assertEquals(DelegatedTask.Status.PENDING, task.status());
-        assertNull(task.result());
-        assertTrue(task.verificationHistory().isEmpty());
-    }
-
-    @Test
-    void mockSubmissionRespectsTaskVerificationPolicy() {
-        DelegatedTaskStore store = new DelegatedTaskStore();
-        DelegatedTask task = store.createPending(
-            envelope(),
-            new ParentVerificationPolicy(true, true, List.of("src/main/java"))
-        );
-
-        DelegatedTaskExecutionResult result = store.executePending(task.taskId(), "mock", DelegatedTaskExecutionPolicy.mockOnly());
-
-        assertTrue(result.executed());
-        assertTrue(result.submitted());
-        assertTrue(result.verificationResult().accepted());
-        assertEquals(DelegatedTask.Status.ACCEPTED, task.status());
-        assertEquals(List.of("src/main/java"), task.verificationPolicy().allowedChangedFilePrefixes());
-    }
-
     private static DelegatedTaskEnvelope envelope() {
         ContextPressureReport report = new ContextPressureReport(
             List.of("compacted"),

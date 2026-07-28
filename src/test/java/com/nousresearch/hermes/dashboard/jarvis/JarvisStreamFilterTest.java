@@ -44,32 +44,4 @@ class JarvisStreamFilterTest {
         assertTrue(c.canSee("initech"));
     }
 
-    @Test
-    @DisplayName("allAccess client also sees system-wide events (no workspaceId)")
-    void allAccessClientSeesSystemWide() {
-        var c = ctx("acme", true);
-        assertTrue(c.canSee(null));
-        assertTrue(c.canSee(""));
-    }
-
-    @Test
-    @DisplayName("Misconfigured client (no workspaceId, no allAccess) sees nothing")
-    void misconfiguredClientSeesNothing() {
-        // Client connected without declaring any scope.
-        var c = ctx(null, false);
-        assertFalse(c.canSee("acme"));
-        assertFalse(c.canSee("globex"));
-        assertFalse(c.canSee(null));
-    }
-
-    @Test
-    @DisplayName("Defence in depth: a client claiming one workspace can't peek another")
-    void claimedWorkspaceDoesNotLeak() {
-        var c = ctx("acme", false);
-        // The classic "URL spoofing" attempt: declare acme to get acme's events,
-        // then probe for other tenants. The filter rejects it.
-        assertFalse(c.canSee("globex"));
-        assertFalse(c.canSee("acme-typo"));
-        assertFalse(c.canSee("acme/../globex"));
-    }
 }

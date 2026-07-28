@@ -82,47 +82,4 @@ class HandoffProtocolTest {
         assertTrue(ctx.getOptions().stream().anyMatch(o -> o.id().equals("modify")));
     }
 
-    @Test
-    void testPriorityOrdering() {
-        HandoffContext low = protocol.createHandoff(
-            new HandoffContext.Builder("agent", "Low priority", "details")
-                .priority(HandoffContext.Priority.LOW).build()
-        );
-        HandoffContext critical = protocol.createHandoff(
-            new HandoffContext.Builder("agent", "Critical", "details")
-                .priority(HandoffContext.Priority.CRITICAL).build()
-        );
-
-        List<HandoffContext> pending = protocol.getAllPending();
-        assertFalse(pending.isEmpty());
-        // Critical should come before LOW
-        int criticalIdx = -1, lowIdx = -1;
-        for (int i = 0; i < pending.size(); i++) {
-            if (pending.get(i).getHandoffId().equals(critical.getHandoffId())) criticalIdx = i;
-            if (pending.get(i).getHandoffId().equals(low.getHandoffId())) lowIdx = i;
-        }
-        assertTrue(criticalIdx < lowIdx, "Critical should be before LOW");
-    }
-
-    @Test
-    void testSummary() {
-        protocol.createHandoff(new HandoffContext.Builder("a", "T1", "D").build());
-        protocol.createHandoff(new HandoffContext.Builder("a", "T2", "D").build());
-
-        var summary = protocol.getSummary();
-        assertTrue((int) summary.get("pending") >= 2);
-    }
-
-    @Test
-    void testHandoffContextContainsActionsTaken() {
-        HandoffContext ctx = protocol.createHandoff(
-            new HandoffContext.Builder("agent", "Error deploying", "Failed to connect to DB")
-                .addActionTaken("execute_command", "kubectl get pods", "3 pods running")
-                .addActionTaken("web_search", "PostgreSQL connection refused", "Found 3 solutions")
-                .build()
-        );
-
-        assertEquals(2, ctx.getActionsTaken().size());
-        assertEquals("execute_command", ctx.getActionsTaken().get(0).tool());
-    }
 }

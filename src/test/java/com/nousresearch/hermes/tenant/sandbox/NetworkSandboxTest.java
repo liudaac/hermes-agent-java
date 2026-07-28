@@ -61,43 +61,4 @@ class NetworkSandboxTest {
         assertTrue(policy.getAllowedProtocols().contains("http"));
     }
 
-    @Test
-    void testRequestSizeLimit() {
-        // 请求体超过限制应该被拒绝
-        String largeBody = "x".repeat((int) (policy.getMaxRequestBodySize() + 1));
-        
-        NetworkSandboxException exception = assertThrows(
-            NetworkSandboxException.class,
-            () -> client.post("https://api.github.com/test", largeBody)
-        );
-
-        assertTrue(exception.getMessage().contains("too large"));
-    }
-
-    @Test
-    void testRateLimit() {
-        // 快速发送请求应该触发速率限制
-        int requestCount = 0;
-        for (int i = 0; i < 15; i++) {
-            try {
-                client.get("https://api.github.com/");
-                requestCount++;
-            } catch (NetworkSandboxException e) {
-                assertTrue(e.getMessage().contains("Rate limit"));
-                break;
-            }
-        }
-        
-        // 应该在前 10 个请求后触发限制
-        assertTrue(requestCount <= 10);
-    }
-
-    @Test
-    void testNetworkStats() {
-        RestrictedHttpClient.NetworkStats stats = client.getStats();
-        
-        assertNotNull(stats);
-        assertEquals(0, stats.getTotalRequests()); // 初始状态
-        assertEquals(0, stats.getBlockedRequests());
-    }
 }

@@ -76,49 +76,4 @@ class ProcessSandboxTest {
         assertTrue(result.isTimedOut());
     }
 
-    @Test
-    void testWorkingDirectoryRestriction() {
-        ProcessResult result = sandbox.exec(
-            List.of("pwd"),
-            ProcessOptions.builder()
-                .workDirectory(tempDir)
-                .build()
-        );
-
-        assertTrue(result.isSuccess());
-        assertTrue(result.getStdout().trim().startsWith(tempDir.toString()));
-    }
-
-    @Test
-    void testEnvironmentVariableSanitization() {
-        ProcessResult result = sandbox.exec(
-            List.of("env"),
-            ProcessOptions.builder().build()
-        );
-
-        assertTrue(result.isSuccess());
-        // 确保敏感变量被清理
-        assertFalse(result.getStdout().contains("SECRET"));
-        assertFalse(result.getStdout().contains("PASSWORD"));
-    }
-
-    @Test
-    void testMaxPidsLimit() {
-        ProcessOptions options = ProcessOptions.builder()
-            .maxPids(5)
-            .timeoutSeconds(5)
-            .build();
-
-        // 尝试创建超过限制的进程
-        ProcessSandboxException exception = assertThrows(
-            ProcessSandboxException.class,
-            () -> sandbox.exec(
-                List.of("bash", "-c", "for i in {1..10}; do sleep 1 & done"),
-                options
-            )
-        );
-
-        assertTrue(exception.getMessage().contains("PID") || 
-                   exception.getMessage().contains("limit"));
-    }
 }

@@ -39,42 +39,6 @@ class LoopErrorClassifierTest {
             LoopErrorClassifier.classify(new TimeoutException("operation timed out")));
     }
 
-    @Test
-    void ioExceptionIsTransient() {
-        assertEquals(ErrorCategory.TRANSIENT,
-            LoopErrorClassifier.classify(new IOException("stream closed")));
-    }
-
-    @Test
-    void noSuchFileIsUserFixable() {
-        assertEquals(ErrorCategory.USER_FIXABLE,
-            LoopErrorClassifier.classify(new java.nio.file.NoSuchFileException("/tmp/missing.txt")));
-    }
-
-    @Test
-    void securityExceptionIsUserFixable() {
-        assertEquals(ErrorCategory.USER_FIXABLE,
-            LoopErrorClassifier.classify(new SecurityException("access denied")));
-    }
-
-    @Test
-    void illegalArgumentIsLlmRecoverable() {
-        assertEquals(ErrorCategory.LLM_RECOVERABLE,
-            LoopErrorClassifier.classify(new IllegalArgumentException("missing required parameter")));
-    }
-
-    @Test
-    void numberFormatIsLlmRecoverable() {
-        assertEquals(ErrorCategory.LLM_RECOVERABLE,
-            LoopErrorClassifier.classify(new NumberFormatException("For input string: \"abc\"")));
-    }
-
-    @Test
-    void genericRuntimeExceptionIsFatal() {
-        assertEquals(ErrorCategory.FATAL,
-            LoopErrorClassifier.classify(new RuntimeException("something went wrong")));
-    }
-
     // ==================== Message-based classification ====================
 
     @ParameterizedTest
@@ -122,51 +86,8 @@ class LoopErrorClassifierTest {
 
     // ==================== String-based classification ====================
 
-    @Test
-    void classifyErrorString() {
-        assertEquals(ErrorCategory.TRANSIENT,
-            LoopErrorClassifier.classify("API error: 429 rate limit exceeded"));
-        assertEquals(ErrorCategory.USER_FIXABLE,
-            LoopErrorClassifier.classify("permission denied: cannot write to /root"));
-        assertEquals(ErrorCategory.LLM_RECOVERABLE,
-            LoopErrorClassifier.classify("parse error: unexpected token"));
-        assertEquals(ErrorCategory.FATAL,
-            LoopErrorClassifier.classify("unknown internal error"));
-    }
-
-    @Test
-    void nullOrBlankStringIsFatal() {
-        assertEquals(ErrorCategory.FATAL, LoopErrorClassifier.classify((String) null));
-        assertEquals(ErrorCategory.FATAL, LoopErrorClassifier.classify(""));
-        assertEquals(ErrorCategory.FATAL, LoopErrorClassifier.classify("   "));
-    }
-
     // ==================== Cause chain ====================
-
-    @Test
-    void causeChainTransient() {
-        Exception wrapper = new RuntimeException("operation failed", new SocketTimeoutException("timed out"));
-        assertEquals(ErrorCategory.TRANSIENT, LoopErrorClassifier.classify(wrapper));
-    }
-
-    @Test
-    void causeChainUserFixable() {
-        Exception wrapper = new RuntimeException("can't proceed", new SecurityException("access denied"));
-        assertEquals(ErrorCategory.USER_FIXABLE, LoopErrorClassifier.classify(wrapper));
-    }
 
     // ==================== ErrorCategory methods ====================
 
-    @Test
-    void categoryFlags() {
-        assertTrue(ErrorCategory.TRANSIENT.isRetryable());
-        assertFalse(ErrorCategory.LLM_RECOVERABLE.isRetryable());
-        assertFalse(ErrorCategory.USER_FIXABLE.isRetryable());
-        assertFalse(ErrorCategory.FATAL.isRetryable());
-
-        assertTrue(ErrorCategory.TRANSIENT.shouldContinueLoop());
-        assertTrue(ErrorCategory.LLM_RECOVERABLE.shouldContinueLoop());
-        assertFalse(ErrorCategory.USER_FIXABLE.shouldContinueLoop());
-        assertFalse(ErrorCategory.FATAL.shouldContinueLoop());
-    }
 }

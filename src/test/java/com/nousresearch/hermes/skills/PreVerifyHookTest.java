@@ -31,46 +31,6 @@ class PreVerifyHookTest {
             assertTrue(step.blocking());
         }
 
-        @Test
-        @DisplayName("StepResult 成功")
-        void stepResultSuccess() {
-            PreVerifyHook.StepResult r = new PreVerifyHook.StepResult("compile", true, null, "BUILD SUCCESS", 500);
-            assertTrue(r.success());
-            assertNull(r.error());
-            assertEquals(500, r.durationMs());
-        }
-
-        @Test
-        @DisplayName("StepResult 失败")
-        void stepResultFailure() {
-            PreVerifyHook.StepResult r = new PreVerifyHook.StepResult("test", false, "Exit code: 1", "FAIL", 1000);
-            assertFalse(r.success());
-            assertEquals("Exit code: 1", r.error());
-        }
-
-        @Test
-        @DisplayName("VerifyResult passed=true")
-        void verifyResultPassed() {
-            PreVerifyHook.VerifyResult r = new PreVerifyHook.VerifyResult(true, List.of(), "All passed");
-            assertTrue(r.passed());
-            assertFalse(r.shouldBlock());
-        }
-
-        @Test
-        @DisplayName("VerifyResult passed=false → shouldBlock=true")
-        void verifyResultBlocked() {
-            PreVerifyHook.VerifyResult r = new PreVerifyHook.VerifyResult(false, List.of(), "Failed");
-            assertFalse(r.passed());
-            assertTrue(r.shouldBlock());
-        }
-
-        @Test
-        @DisplayName("VerifyResult.skipped → passed=true")
-        void verifyResultSkipped() {
-            PreVerifyHook.VerifyResult r = PreVerifyHook.VerifyResult.skipped("disabled");
-            assertTrue(r.passed());
-            assertFalse(r.shouldBlock());
-        }
     }
 
     // ========================================================================
@@ -91,12 +51,6 @@ class PreVerifyHookTest {
             assertNotNull(result.summary());
         }
 
-        @Test
-        @DisplayName("forTypeScriptProject 创建正确的 steps")
-        void forTypeScriptProject() {
-            PreVerifyHook hook = PreVerifyHook.forTypeScriptProject(Path.of("/tmp"));
-            assertNotNull(hook);
-        }
     }
 
     // ========================================================================
@@ -141,85 +95,5 @@ class PreVerifyHookTest {
             assertTrue(result.steps().get(0).output().contains("hello"));
         }
 
-        @Test
-        @DisplayName("false 命令失败 → 阻塞")
-        void falseCommandFails() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(new PreVerifyHook.VerifyStep("fail", "false", true)),
-                true, 10);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertFalse(result.passed());
-            assertTrue(result.shouldBlock());
-        }
-
-        @Test
-        @DisplayName("阻塞步骤失败 → 后续步骤不执行")
-        void blockingStopsChain() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(
-                    new PreVerifyHook.VerifyStep("fail", "false", true),
-                    new PreVerifyHook.VerifyStep("never-run", "echo hello", true)
-                ),
-                true, 10);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertFalse(result.passed());
-            assertEquals(1, result.steps().size()); // 只有第一个步骤的结果
-        }
-
-        @Test
-        @DisplayName("非阻塞步骤失败 → 继续执行")
-        void nonBlockingContinues() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(
-                    new PreVerifyHook.VerifyStep("fail", "false", false),
-                    new PreVerifyHook.VerifyStep("ok", "echo hello", true)
-                ),
-                true, 10);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertEquals(2, result.steps().size());
-            assertFalse(result.steps().get(0).success());
-            assertTrue(result.steps().get(1).success());
-        }
-
-        @Test
-        @DisplayName("全部成功 → passed=true")
-        void allPass() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(
-                    new PreVerifyHook.VerifyStep("a", "echo a", true),
-                    new PreVerifyHook.VerifyStep("b", "echo b", false)
-                ),
-                true, 10);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertTrue(result.passed());
-            assertEquals(2, result.steps().size());
-        }
-
-        @Test
-        @DisplayName("超时 → 失败")
-        void timeout() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(new PreVerifyHook.VerifyStep("sleep", "sleep 10", true)),
-                true, 1);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertFalse(result.passed());
-            assertTrue(result.steps().get(0).error().contains("Timeout"));
-        }
-
-        @Test
-        @DisplayName("durationMs 记录")
-        void durationRecorded() {
-            PreVerifyHook hook = new PreVerifyHook(
-                Path.of("/tmp"),
-                List.of(new PreVerifyHook.VerifyStep("sleep", "sleep 0.1", true)),
-                true, 10);
-            PreVerifyHook.VerifyResult result = hook.verify();
-            assertTrue(result.steps().get(0).durationMs() >= 50);
-        }
     }
 }

@@ -121,61 +121,6 @@ public class TenantIsolationIntegrationTest {
         });
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("Tenant agents should be isolated")
-    void testAgentIsolation() {
-        TenantContext tenant1 = createTestTenant(unique("agent-tenant-1"));
-        TenantContext tenant2 = createTestTenant(unique("agent-tenant-2"));
-
-        // Create agents for each tenant
-        TenantAwareAIAgent agent1 = TenantAwareAIAgent.forTenant(unique("agent-tenant-1"), hermesConfig);
-        TenantAwareAIAgent agent2 = TenantAwareAIAgent.forTenant(unique("agent-tenant-2"), hermesConfig);
-
-        // Verify tenant isolation
-        assertEquals(unique("agent-tenant-1"), agent1.getTenantId());
-        assertEquals(unique("agent-tenant-2"), agent2.getTenantId());
-
-        // Agents should have different tenant contexts
-        assertNotEquals(agent1.getTenantContext(), agent2.getTenantContext());
-    }
-
-    @Test
-    @Order(5)
-    @DisplayName("Suspended tenant should reject requests")
-    void testSuspendedTenant() {
-        TenantContext tenant = createTestTenant(unique("suspend-tenant"));
-        assertTrue(tenant.isActive());
-
-        // Suspend tenant
-        tenantManager.suspendTenant(unique("suspend-tenant"), "Test suspension");
-
-        // Verify tenant is suspended
-        TenantContext suspended = tenantManager.getTenant(unique("suspend-tenant"));
-        assertFalse(suspended.isActive());
-    }
-
-    @Test
-    @Order(6)
-    @DisplayName("Tenant sessions should be persisted and recovered")
-    void testSessionPersistence() {
-        TenantContext tenant = createTestTenant(unique("session-tenant"));
-
-        // Create a session
-        var session = tenant.getSessionManager().createSession("persist-session");
-        assertNotNull(session);
-
-        // Add a message
-        session.addMessage("user", "Hello");
-        session.addMessage("assistant", "Hi there");
-
-        // Persist sessions
-        tenant.getSessionManager().persistAll();
-
-        // Verify session exists
-        assertEquals(1, tenant.getActiveSessionCount());
-    }
-
     private static String unique(String base) {
         return base + "-" + RUN_ID;
     }

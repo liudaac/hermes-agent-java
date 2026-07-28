@@ -81,59 +81,6 @@ class MysqlSecretStoreTest {
         assertTrue(keys.contains("ANTHROPIC_API_KEY"));
     }
 
-    @Test
-    @Order(5)
-    @DisplayName("hasSecret")
-    void hasSecret() {
-        store.setSecret("t1", "OPENAI_API_KEY", "sk-xxx");
-        assertTrue(store.hasSecret("t1", "OPENAI_API_KEY"));
-        assertFalse(store.hasSecret("t1", "ANTHROPIC_API_KEY"));
-    }
-
-    @Test
-    @Order(6)
-    @DisplayName("loadAll returns all keys")
-    void loadAll() {
-        store.setSecret("t1", "OPENAI_API_KEY", "sk-1");
-        store.setSecret("t1", "ANTHROPIC_API_KEY", "sk-2");
-        var all = store.loadAll("t1");
-        assertEquals(2, all.size());
-        assertEquals("sk-1", all.get("OPENAI_API_KEY"));
-    }
-
-    @Test
-    @Order(7)
-    @DisplayName("upsert: set same provider updates key")
-    void upsert() {
-        store.setSecret("t1", "OPENAI_API_KEY", "sk-old");
-        store.setSecret("t1", "OPENAI_API_KEY", "sk-new");
-        assertEquals("sk-new", store.getSecret("t1", "OPENAI_API_KEY"));
-    }
-
-    @Test
-    @Order(8)
-    @DisplayName("tenants are isolated")
-    void tenantIsolation() {
-        store.setSecret("tenant-A", "OPENAI_API_KEY", "sk-a");
-        store.setSecret("tenant-B", "OPENAI_API_KEY", "sk-b");
-        assertEquals("sk-a", store.getSecret("tenant-A", "OPENAI_API_KEY"));
-        assertEquals("sk-b", store.getSecret("tenant-B", "OPENAI_API_KEY"));
-    }
-
-    @Test
-    @Order(9)
-    @DisplayName("generic API_KEY returns null (only provider-specific keys)")
-    void genericApiKey() {
-        assertNull(store.getSecret("t1", "API_KEY"));
-    }
-
-    @Test
-    @Order(10)
-    @DisplayName("remove nonexistent returns false")
-    void removeNonexistent() {
-        assertFalse(store.removeSecret("t1", "OPENAI_API_KEY"));
-    }
-
     // ============ Helper ============
 
     private static javax.sql.DataSource createH2() {

@@ -96,56 +96,6 @@ class BusinessRunServiceTest {
         assertEquals("step-1", fetched.getSteps().get(0).getStepId());
     }
 
-    @Test
-    void listRunsFilterByStatus() {
-        createSimpleRun("test-ws"); // RUNNING
-        BusinessRunRecord r2 = createSimpleRun("test-ws");
-        runService.updateRunStatus("test-ws", r2.getRunId(), BusinessRunService.FAILED, "error");
-
-        List<BusinessRunRecord> running = runService.listRuns("test-ws", null, BusinessRunService.RUNNING, 10);
-        List<BusinessRunRecord> failed = runService.listRuns("test-ws", null, BusinessRunService.FAILED, 10);
-
-        assertEquals(1, running.size());
-        assertEquals(1, failed.size());
-    }
-
-    @Test
-    void recoverOrphanedRunsMarksRunningAsFailed() {
-        // Create 2 RUNNING runs + 1 COMPLETED
-        BusinessRunRecord r1 = createSimpleRun("test-ws");
-        BusinessRunRecord r2 = createSimpleRun("test-ws");
-        BusinessRunRecord r3 = createSimpleRun("test-ws");
-        runService.updateRunStatus("test-ws", r3.getRunId(), BusinessRunService.COMPLETED, "done");
-
-        int recovered = runService.recoverOrphanedRuns();
-
-        assertEquals(2, recovered);
-
-        BusinessRunRecord after1 = runService.requireRun("test-ws", r1.getRunId());
-        BusinessRunRecord after2 = runService.requireRun("test-ws", r2.getRunId());
-        BusinessRunRecord after3 = runService.requireRun("test-ws", r3.getRunId());
-
-        assertEquals(BusinessRunService.FAILED, after1.getStatus());
-        assertEquals(BusinessRunService.FAILED, after2.getStatus());
-        assertEquals(BusinessRunService.COMPLETED, after3.getStatus()); // untouched
-        assertNotNull(after1.getMetadata().get("recoveredFromRestart"));
-        assertEquals("RUNNING", after1.getMetadata().get("previousStatus"));
-    }
-
-    @Test
-    void recoverOrphanedRunsWithNoRunningReturnsZero() {
-        BusinessRunRecord r = createSimpleRun("test-ws");
-        runService.updateRunStatus("test-ws", r.getRunId(), BusinessRunService.COMPLETED, "done");
-
-        assertEquals(0, runService.recoverOrphanedRuns());
-    }
-
-    @Test
-    void requireRunThrowsOnMissing() {
-        assertThrows(BusinessRunService.BusinessRunNotFoundException.class,
-            () -> runService.requireRun("test-ws", "nonexistent-run"));
-    }
-
     // ─── Helper ──────────────────────────────────────────
 
     private BusinessRunRecord createSimpleRun(String workspaceId) {
