@@ -1,5 +1,8 @@
 package com.nousresearch.hermes.tenant.sandbox;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -65,6 +68,11 @@ public class NetworkPolicy {
     private final long maxRequestBodySize;
     private final long maxResponseBodySize;
     private final boolean followRedirects;
+
+    /** No-arg constructor for Jackson deserialization. Uses defaults. */
+    public NetworkPolicy() {
+        this(builder());
+    }
 
     private NetworkPolicy(Builder builder) {
         this.allowedProtocols = Set.copyOf(builder.allowedProtocols);
