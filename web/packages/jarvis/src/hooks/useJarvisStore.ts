@@ -105,8 +105,6 @@ function persist(state: JarvisState): void {
 
 export const useJarvisStore = create<JarvisState>(() => ({
   ...loadPersisted(),
-  messages: [],
-  suggestions: [],
 }));
 
 // Standalone setters (zustand 3.x doesn't compose setters into the
