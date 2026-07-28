@@ -56,7 +56,7 @@ public class ConfigHandler {
         Map<String, Object> defaults = new LinkedHashMap<>();
 
         // General
-        defaults.put("model", "anthropic/claude-sonnet-4");
+        defaults.put("model", "deepseek-v3-250324");
         defaults.put("model_context_length", 0);
         defaults.put("toolsets", List.of("default"));
         defaults.put("timezone", "UTC");
@@ -132,7 +132,7 @@ public class ConfigHandler {
 
         overrides.put("model", Map.of(
             "type", "string",
-            "description", "Default model (e.g. anthropic/claude-sonnet-4)",
+            "description", "Default model (e.g. deepseek-v3-250324)",
             "category", "general"
         ));
 
@@ -358,7 +358,7 @@ public class ConfigHandler {
      */
     public void getModelInfo(Context ctx) {
         Map<String, Object> modelInfo = new HashMap<>();
-        modelInfo.put("model", "anthropic/claude-sonnet-4");
+        modelInfo.put("model", "deepseek-v3-250324");
         modelInfo.put("provider", "anthropic");
         modelInfo.put("auto_context_length", 200000);
         modelInfo.put("config_context_length", 0);

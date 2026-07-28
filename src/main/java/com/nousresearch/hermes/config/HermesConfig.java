@@ -188,11 +188,11 @@ public class HermesConfig {
     // Getters
     public String getCurrentModel() {
         if (modelOverride != null) return modelOverride;
-        return getNested("model.model", "anthropic/claude-3.5-sonnet");
+        return getNested("model.model", "deepseek-v3-250324");
     }
 
     public String getProvider() {
-        return getNested("model.provider", "openrouter");
+        return getNested("model.provider", "volcengine");
     }
 
     public String getBaseUrl() {
@@ -670,8 +670,8 @@ public class HermesConfig {
      */
     public ModelConfig getModelConfig() {
         Map<String, Object> model = getNested("model", new HashMap<>());
-        String provider = (String) model.getOrDefault("provider", "openrouter");
-        String modelName = (String) model.getOrDefault("model", "anthropic/claude-3.5-sonnet");
+        String provider = (String) model.getOrDefault("provider", "volcengine");
+        String modelName = (String) model.getOrDefault("model", "deepseek-v3-250324");
         String apiKey = getApiKey();
         String baseUrl = (String) model.getOrDefault("base_url", getDefaultBaseUrl(provider));
         return new ModelConfig(provider, modelName, apiKey, baseUrl);

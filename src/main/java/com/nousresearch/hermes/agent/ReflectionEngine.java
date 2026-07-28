@@ -44,7 +44,7 @@ public class ReflectionEngine {
         this.config = ConfigManager.getInstance();
         this.enabled = config.getBoolean("reflection.enabled", true);
         this.reflectionModel = config.getString("reflection.model",
-            config.getString("model.model", "anthropic/claude-3.5-sonnet"));
+            config.getString("model.model", "deepseek-v3-250324"));
         this.minMessagesForReflection = config.getInt("reflection.min_messages", 3);
     }
 

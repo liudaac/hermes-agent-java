@@ -246,8 +246,8 @@ public class GatewayServer {
     private void handleGetConfig(Context ctx) {
         Map<String, Object> config = new HashMap<>();
         config.put("model", Map.of(
-            "provider", "openrouter",
-            "model", "anthropic/claude-3.5-sonnet"
+            "provider", "volcengine",
+            "model", "deepseek-v3-250324"
         ));
         config.put("display", Map.of(
             "personality", "kawaii"
@@ -406,11 +406,11 @@ public class GatewayServer {
         modelSection.put("name", "model");
         modelSection.put("title", "模型设置");
         List<Map<String, Object>> modelFields = new ArrayList<>();
-        modelFields.add(createField("provider", "string", "提供商", "AI模型提供商", "openrouter", false, 
+        modelFields.add(createField("provider", "string", "提供商", "AI模型提供商", "volcengine", false, 
             List.of(Map.of("label", "OpenRouter", "value", "openrouter"),
                     Map.of("label", "OpenAI", "value", "openai"),
                     Map.of("label", "Anthropic", "value", "anthropic"))));
-        modelFields.add(createField("model", "string", "模型", "使用的AI模型", "anthropic/claude-3.5-sonnet", false, null));
+        modelFields.add(createField("model", "string", "模型", "使用的AI模型", "deepseek-v3-250324", false, null));
         modelFields.add(createField("api_key", "password", "API密钥", "提供商的API密钥", "", true, null));
         modelSection.put("fields", modelFields);
         sections.add(modelSection);

@@ -81,7 +81,7 @@ public class ConfigManager {
         // Model configuration
         ObjectNode model = cfg.putObject("model");
         model.put("provider", "doubao");
-        model.put("model", "anthropic/claude-3.5-sonnet");
+        model.put("model", "deepseek-v3-250324");
         model.put("base_url", "");
         model.put("api_key", "");
         
@@ -384,7 +384,7 @@ public class ConfigManager {
     }
     
     public String getModelName() {
-        return getString("model.model", "anthropic/claude-3.5-sonnet");
+        return getString("model.model", "deepseek-v3-250324");
     }
     
     public String getApiKey() {

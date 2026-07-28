@@ -570,11 +570,11 @@ public class TenantConfig {
     // ============ 便捷方法 ============
     
     public String getModelProvider() {
-        return getString("model.provider", "openrouter");
+        return getString("model.provider", "volcengine");
     }
     
     public String getModelName() {
-        return getString("model.model", "anthropic/claude-3.5-sonnet");
+        return getString("model.model", "deepseek-v3-250324");
     }
     
     public String getApiKey() {
