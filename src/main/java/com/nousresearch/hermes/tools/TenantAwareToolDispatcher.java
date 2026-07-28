@@ -247,6 +247,25 @@ public class TenantAwareToolDispatcher {
         }
 
         tenantContext.getToolRegistry().recordToolCall(toolName, safeArgs, result);
+
+        // Check for ask_user interaction request
+        if (result != null && result.contains("__ASK_USER__:")) {
+            int idx = result.indexOf("__ASK_USER__:");
+            String jsonSpec = result.substring(idx + "__ASK_USER__:".length());
+            // Trim trailing wrapper (tool error format adds extra text)
+            int specEnd = jsonSpec.indexOf("\"}");
+            if (specEnd > 0) specEnd += 2;
+            else specEnd = jsonSpec.length();
+            String cleanSpec = jsonSpec.substring(0, specEnd);
+            throw new com.nousresearch.hermes.agent.TenantAwareAIAgent.ToolApprovalRequiredException(
+                toolName,
+                cleanSpec,
+                tenantContext != null ? tenantContext.getTenantId() : "unknown",
+                "ask_user",
+                "Agent is requesting user interaction"
+            );
+        }
+
         return result;
     }
     

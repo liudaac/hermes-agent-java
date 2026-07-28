@@ -36,7 +36,7 @@ import { JarvisFullscreen } from "../overlay/JarvisFullscreen";
 
 export interface JarvisCoreProps {
   onSubmit?: (text: string) => void | Promise<void>;
-  onApprove?: (approvalId: string) => void | Promise<void>;
+  onApprove?: (approvalId: string, response?: string) => void | Promise<void>;
   onReject?: (approvalId: string) => void | Promise<void>;
   primarySlot?: React.ReactNode;
   hideOrb?: boolean;
@@ -100,13 +100,19 @@ export function JarvisCore({
   const chatHook = useJarvisChat();
   const { welcome: voiceWelcome, speak: voiceSpeak, cancel: voiceCancel, muted, toggleMute } = useJarvisVoice();
   const submitHandler = onSubmit ?? chatHook.onSubmit;
-  const approveHandler = onApprove ?? (async (approvalId: string) => {
+  const approveHandler = onApprove ?? (async (approvalId: string, response?: string) => {
     try {
-      // Command-level approvals (cmd_*) go through the chat endpoint
-      // with a special prefix so ChatService executes the approved command.
       if (approvalId.startsWith("cmd_")) {
         const { sendRaw } = await import("../hooks/useJarvisChat");
         const result = await sendRaw("__approve_command__:" + approvalId);
+        if (result) {
+          const { pushMessage } = await import("../hooks/useJarvisStore");
+          pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result, timestamp: Date.now() });
+        }
+      } else if (approvalId.startsWith("itx_")) {
+        // ask_user interaction response
+        const { sendRaw } = await import("../hooks/useJarvisChat");
+        const result = await sendRaw("__interact__:" + approvalId + ":" + (response ?? ""));
         if (result) {
           const { pushMessage } = await import("../hooks/useJarvisStore");
           pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result, timestamp: Date.now() });
@@ -122,13 +128,12 @@ export function JarvisCore({
   });
   const rejectHandler = onReject ?? (async (approvalId: string) => {
     try {
-      if (approvalId.startsWith("cmd_")) {
-        // Command-level rejection: just clear the pending approval
+      if (approvalId.startsWith("cmd_") || approvalId.startsWith("itx_")) {
         const { pushMessage } = await import("../hooks/useJarvisStore");
         pushMessage({
           id: crypto.randomUUID(),
           role: "jarvis",
-          text: "已取消执行。",
+          text: "已取消。",
           timestamp: Date.now(),
         });
       } else {

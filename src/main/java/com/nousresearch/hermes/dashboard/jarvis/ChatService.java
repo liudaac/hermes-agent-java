@@ -113,10 +113,15 @@ public class ChatService {
             return streaming;
         }
 
-        // Handle approved command execution
-        if (userMessage.startsWith("__approve_command__:")) {
+        // Handle approved command execution or interaction response
+        if (userMessage.startsWith("__approve_command__:") || userMessage.startsWith("__interact__:")) {
             new Thread(() -> {
-                ChatReply reply = handleApprovedCommand(userMessage, workspaceId, req);
+                ChatReply reply;
+                if (userMessage.startsWith("__approve_command__:")) {
+                    reply = handleApprovedCommand(userMessage, workspaceId, req);
+                } else {
+                    reply = handleInteractResponse(userMessage, workspaceId, req);
+                }
                 streaming.complete(reply);
             }, "jarvis-stream").start();
             return streaming;
@@ -154,23 +159,8 @@ public class ChatService {
                 streaming.complete(new ChatReply(replyText, spaceName(req), 0.8, links, null));
 
             } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
-                // Extract command from tool arguments
-                String command = extractCommandFromArgs(ex.getToolArguments());
-                String risk = inferRisk(ex.getToolName());
-                if (command != null && command.toLowerCase().contains("rm -rf")) risk = "high";
-
-                // Store pending approval for inline button approval
-                String approvalId = "cmd_" + System.currentTimeMillis();
-                PendingApproval pending = new PendingApproval(approvalId, command != null ? command : ex.getReason(), risk);
-                pendingApprovals.put(approvalId, pending);
-
-                ChatReply.Approval approval = new ChatReply.Approval(
-                    approvalId,
-                    "确认执行: " + (command != null ? command : ex.getToolName()),
-                    risk
-                );
-                String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + risk;
-                streaming.complete(new ChatReply(note, spaceName(req), 0.9, List.of(), approval));
+                ChatReply reply = handleInteractionRequest(ex, req);
+                streaming.complete(reply);
             } catch (Exception e) {
                 log.warn("Jarvis stream failed: {}", e.getMessage(), e);
                 streaming.error("agent 执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage()));
@@ -229,6 +219,11 @@ public class ChatService {
             return handleApprovedCommand(userMessage, workspaceId, req);
         }
 
+        // Handle ask_user interaction response
+        if (userMessage.startsWith("__interact__:")) {
+            return handleInteractResponse(userMessage, workspaceId, req);
+        }
+
         TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
         if (agent == null) {
             return new ChatReply(
@@ -262,22 +257,7 @@ public class ChatService {
                 null
             );
         } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
-            // Extract command from tool arguments
-            String command = extractCommandFromArgs(ex.getToolArguments());
-            String risk = inferRisk(ex.getToolName());
-            if (command != null && command.toLowerCase().contains("rm -rf")) risk = "high";
-
-            String approvalId = "cmd_" + System.currentTimeMillis();
-            PendingApproval pending = new PendingApproval(approvalId, command != null ? command : ex.getReason(), risk);
-            pendingApprovals.put(approvalId, pending);
-
-            ChatReply.Approval approval = new ChatReply.Approval(
-                approvalId,
-                "确认执行: " + (command != null ? command : ex.getToolName()),
-                risk
-            );
-            String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + risk;
-            return new ChatReply(note, spaceName(req), 0.9, List.of(), approval);
+            return handleInteractionRequest(ex, req);
         } catch (Exception e) {
             log.warn("Jarvis chat agent call failed: {}", e.getMessage(), e);
             return new ChatReply(
@@ -448,6 +428,38 @@ public class ChatService {
         }
     }
 
+    /**
+     * Handle an ask_user interaction response: feed the user's choice back to the agent.
+     */
+    private ChatReply handleInteractResponse(String message, String workspaceId, ChatRequest req) {
+        // Format: __interact__:<interactionId>:<response>
+        String payload = message.substring("__interact__:".length());
+        int colonIdx = payload.indexOf(':');
+        if (colonIdx < 0) {
+            return new ChatReply("（交互格式错误）", spaceName(req), 0.0, List.of(), null);
+        }
+        String interactionId = payload.substring(0, colonIdx);
+        String response = payload.substring(colonIdx + 1);
+
+        // Clear the pending interaction
+        pendingInteractions.remove(interactionId);
+
+        TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
+        if (agent == null) {
+            return new ChatReply("（无法找到 agent）", spaceName(req), 0.0, List.of(), null);
+        }
+
+        // Feed the response back to the agent
+        String agentMessage = "用户选择：" + response;
+        try {
+            String result = agent.processMessage(agentMessage);
+            String replyText = result == null ? "（执行完成）" : result.trim();
+            return new ChatReply(replyText, spaceName(req), 0.9, List.of(), null);
+        } catch (Exception e) {
+            return new ChatReply("（执行失败：" + e.getMessage() + "）", spaceName(req), 0.0, List.of(), null);
+        }
+    }
+
     /** Pending command approval stored for inline button approval. */
     private static final class PendingApproval {
         final String approvalId;
@@ -460,6 +472,57 @@ public class ChatService {
             this.risk = risk;
         }
     }
+
+    /**
+     * Handle a ToolApprovalRequiredException: could be a command approval
+     * or an ask_user interaction request.
+     */
+    private ChatReply handleInteractionRequest(
+            TenantAwareAIAgent.ToolApprovalRequiredException ex, ChatRequest req) {
+
+        String matchedRule = ex.getMatchedRule();
+
+        // --- ask_user interaction ---
+        if ("ask_user".equals(matchedRule)) {
+            try {
+                JSONObject spec = JSON.parseObject(ex.getToolArguments());
+                String type = spec.getString("interaction_type");
+                String prompt = spec.getString("prompt");
+                String interactionId = "itx_" + System.currentTimeMillis();
+
+                // Store for later resolution
+                pendingInteractions.put(interactionId, spec.toJSONString());
+
+                ChatReply.Approval approval = new ChatReply.Approval(
+                    interactionId, prompt, "low");
+                return new ChatReply(prompt, spaceName(req), 0.9, List.of(), approval);
+            } catch (Exception e) {
+                return new ChatReply("（交互请求解析失败）", spaceName(req), 0.0, List.of(), null);
+            }
+        }
+
+        // --- command approval ---
+        String command = extractCommandFromArgs(ex.getToolArguments());
+        String risk = inferRisk(ex.getToolName());
+        if (command != null && command.toLowerCase().contains("rm -rf")) risk = "high";
+
+        String approvalId = "cmd_" + System.currentTimeMillis();
+        PendingApproval pending = new PendingApproval(approvalId,
+            command != null ? command : ex.getReason(), risk);
+        pendingApprovals.put(approvalId, pending);
+
+        ChatReply.Approval approval = new ChatReply.Approval(
+            approvalId,
+            "确认执行: " + (command != null ? command : ex.getToolName()),
+            risk
+        );
+        String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command
+            + "\n```\n\n**风险等级**: " + risk;
+        return new ChatReply(note, spaceName(req), 0.9, List.of(), approval);
+    }
+
+    /** Pending ask_user interactions. */
+    private final Map<String, String> pendingInteractions = new ConcurrentHashMap<>();
 
     /**
      * Extract command string from tool arguments JSON.

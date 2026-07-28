@@ -55,6 +55,7 @@ public class ToolInitializerV2 {
         
         // Org-native: 让 Agent 感知组织（找队友、委派、查知识库、升级）
         OrgNativeTools.register(registry);
+        AskUserTool.register(registry);
         
         logger.info("All tools initialized");
     }
