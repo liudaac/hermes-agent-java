@@ -1333,7 +1333,7 @@ public class DashboardServer {
 
         // Plugins API
         app.get("/api/dashboard/plugins", ctx -> ctx.json(new java.util.ArrayList<>()));
-        app.sse("/api/jarvis/chat", jarvisHandler::chat);
+        app.post("/api/jarvis/chat", jarvisHandler::chat);
         app.post("/api/jarvis/intent", jarvisHandler::classifyIntent);
         // Short-lived SSE token endpoint — Bearer-auth'd clients call this to refresh
         // the ?token= used for EventSource connections. The token injected into

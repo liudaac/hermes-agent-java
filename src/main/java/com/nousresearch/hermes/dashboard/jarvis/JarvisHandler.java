@@ -126,16 +126,29 @@ public class JarvisHandler {
 
     // ── POST /api/jarvis/chat (SSE streaming) ────────────────────
 
-    public void chat(SseClient sseClient) {
-        // Javalin SSE doesn't give easy access to the request body via SseClient,
-        // so we read it from the underlying request
-        String body = sseClient.ctx().body();
-        ChatRequest req = parseChatRequest(body);
+    public void chat(Context ctx) {
+        ChatRequest req = parseChatRequest(ctx.body());
+
+        // Set up streaming response (chunked transfer encoding, not SSE)
+        ctx.contentType("text/plain; charset=utf-8");
+        ctx.header("Transfer-Encoding", "chunked");
+        ctx.header("Cache-Control", "no-cache");
+        ctx.header("X-Accel-Buffering", "no");
 
         ChatService.StreamingReply streaming = chatService.replyStream(req);
 
+        java.io.PrintWriter writer;
+        try {
+            writer = ctx.res().getWriter();
+        } catch (java.io.IOException e) {
+            log.error("Failed to get response writer", e);
+            ctx.status(500);
+            return;
+        }
+
         streaming.onChunk = chunk -> {
-            sseClient.sendEvent("delta", chunk);
+            writer.print("event: delta\ndata: " + chunk + "\n\n");
+            writer.flush();
         };
 
         streaming.onComplete = reply -> {
@@ -162,15 +175,19 @@ public class JarvisHandler {
                 }
                 resp.put("approval", ap);
             }
-            sseClient.sendEvent("done", resp.toJSONString());
-            sseClient.close();
+            writer.print("event: done\ndata: " + resp.toJSONString() + "\n\n");
+            writer.flush();
+            writer.close();
         };
 
         streaming.onError = error -> {
             JSONObject err = new JSONObject();
             err.put("error", error);
-            sseClient.sendEvent("error", err.toJSONString());
-            sseClient.close();
+            try {
+                writer.print("event: error\ndata: " + err.toJSONString() + "\n\n");
+                writer.flush();
+                writer.close();
+            } catch (Exception ignored) {}
         };
 
         streaming.start();
