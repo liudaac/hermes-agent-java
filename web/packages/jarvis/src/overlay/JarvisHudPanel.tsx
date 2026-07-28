@@ -26,7 +26,7 @@ import { SuggestionTicker } from "./SuggestionTicker";
 
 interface JarvisHudPanelProps {
   onSubmit: (text: string) => void | Promise<void>;
-  onApprove: (approvalId: string) => void | Promise<void>;
+  onApprove: (approvalId: string, response?: string) => void | Promise<void>;
   onReject: (approvalId: string) => void | Promise<void>;
   onMicClick?: () => void;
   onSettingsClick?: () => void;
@@ -223,34 +223,144 @@ export function JarvisHudPanel({
           </div>
         </header>
 
-        {/* ── Pending approval banner ───────────────────────────── */}
-        {pendingApproval && (
-          <div className="flex items-start gap-3 border-b border-[oklch(0.65_0.16_80/_0.3)] bg-[oklch(0.65_0.16_80/_0.08)] px-4 py-2.5">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[oklch(0.78_0.16_85)]" />
-            <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
-              <div className="tracking-[0.2em] uppercase text-[oklch(0.78_0.16_85)]">
-                APPROVAL REQUIRED · {pendingApproval.risk.toUpperCase()}
+        {/* ── Interaction / approval card ──────────────────────── */}
+        {pendingApproval && (() => {
+          const itx = pendingApproval;
+          const type = itx.interactionType ?? "approval";
+
+          // Choice: render option buttons
+          if (type === "choice" && itx.options && itx.options.length > 0) {
+            return (
+              <div className="flex items-start gap-3 border-b border-[oklch(0.62_0.15_250/_0.3)] bg-[oklch(0.62_0.15_250/_0.08)] px-4 py-2.5">
+                <div className="mt-0.5 text-base">❓</div>
+                <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
+                  <div className="tracking-[0.2em] uppercase text-[oklch(0.78_0.12_250)]">
+                    选择
+                  </div>
+                  <div className="mt-0.5 text-[oklch(0.92_0.05_80)]">{itx.title}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {itx.options.map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => { onApprove(itx.approvalId, opt); }}
+                        className="rounded border border-[oklch(0.72_0.14_145/_0.5)] bg-[oklch(0.72_0.14_145/_0.12)] px-3 py-1.5 text-[11px] text-[oklch(0.88_0.08_145)] transition-colors hover:bg-[oklch(0.72_0.14_145/_0.25)]"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => { onReject(itx.approvalId); }}
+                      className="rounded border border-[oklch(0.65_0.22_30/_0.5)] bg-[oklch(0.65_0.22_30/_0.12)] px-2.5 py-1.5 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.85_0.18_30)] transition-colors hover:bg-[oklch(0.65_0.22_30/_0.25)]"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="mt-0.5 text-[oklch(0.92_0.05_80)]">{pendingApproval.title}</div>
-              <div className="mt-1.5 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => { onApprove(pendingApproval.approvalId); }}
-                  className="rounded border border-[oklch(0.72_0.14_145/_0.5)] bg-[oklch(0.72_0.14_145/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.82_0.12_145)] transition-colors hover:bg-[oklch(0.72_0.14_145/_0.25)]"
-                >
-                  APPROVE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { onReject(pendingApproval.approvalId); }}
-                  className="rounded border border-[oklch(0.65_0.22_30/_0.5)] bg-[oklch(0.65_0.22_30/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.85_0.18_30)] transition-colors hover:bg-[oklch(0.65_0.22_30/_0.25)]"
-                >
-                  REJECT
-                </button>
+            );
+          }
+
+          // Input: render text input
+          if (type === "input") {
+            return (
+              <div className="flex items-start gap-3 border-b border-[oklch(0.62_0.15_250/_0.3)] bg-[oklch(0.62_0.15_250/_0.08)] px-4 py-2.5">
+                <div className="mt-0.5 text-base">📝</div>
+                <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
+                  <div className="tracking-[0.2em] uppercase text-[oklch(0.78_0.12_250)]">
+                    输入
+                  </div>
+                  <div className="mt-0.5 text-[oklch(0.92_0.05_80)]">{itx.title}</div>
+                  <form
+                    className="mt-2 flex gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const input = (e.currentTarget.elements.namedItem("itx-input") as HTMLInputElement);
+                      if (input.value.trim()) {
+                        onApprove(itx.approvalId, input.value.trim());
+                        input.value = "";
+                      }
+                    }}
+                  >
+                    <input
+                      name="itx-input"
+                      type="text"
+                      placeholder={itx.placeholder ?? "输入..."}
+                      className="flex-1 rounded border border-[oklch(0.65_0.10_80/_0.4)] bg-[oklch(0.2_0.02_80/_0.6)] px-2 py-1 text-[11px] text-[oklch(0.92_0.05_80)] placeholder:text-[oklch(0.55_0.03_80)] focus:border-[oklch(0.72_0.14_145/_0.6)] focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded border border-[oklch(0.72_0.14_145/_0.5)] bg-[oklch(0.72_0.14_145/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.82_0.12_145)] transition-colors hover:bg-[oklch(0.72_0.14_145/_0.25)]"
+                    >
+                      提交
+                    </button>
+                  </form>
+                </div>
+              </div>
+            );
+          }
+
+          // Confirm: single OK button
+          if (type === "confirm") {
+            return (
+              <div className="flex items-start gap-3 border-b border-[oklch(0.65_0.16_80/_0.3)] bg-[oklch(0.65_0.16_80/_0.08)] px-4 py-2.5">
+                <div className="mt-0.5 text-base">✅</div>
+                <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
+                  <div className="tracking-[0.2em] uppercase text-[oklch(0.82_0.10_145)]">
+                    确认
+                  </div>
+                  <div className="mt-0.5 text-[oklch(0.92_0.05_80)]">{itx.title}</div>
+                  <div className="mt-1.5 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { onApprove(itx.approvalId, "yes"); }}
+                      className="rounded border border-[oklch(0.72_0.14_145/_0.5)] bg-[oklch(0.72_0.14_145/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.82_0.12_145)] transition-colors hover:bg-[oklch(0.72_0.14_145/_0.25)]"
+                    >
+                      OK
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { onReject(itx.approvalId); }}
+                      className="rounded border border-[oklch(0.65_0.22_30/_0.5)] bg-[oklch(0.65_0.22_30/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.85_0.18_30)] transition-colors hover:bg-[oklch(0.65_0.22_30/_0.25)]"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Default: approval (APPROVE / REJECT)
+          return (
+            <div className="flex items-start gap-3 border-b border-[oklch(0.65_0.16_80/_0.3)] bg-[oklch(0.65_0.16_80/_0.08)] px-4 py-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[oklch(0.78_0.16_85)]" />
+              <div className="min-w-0 flex-1 text-[11px] leading-relaxed">
+                <div className="tracking-[0.2em] uppercase text-[oklch(0.78_0.16_85)]">
+                  APPROVAL REQUIRED · {itx.risk.toUpperCase()}
+                </div>
+                <div className="mt-0.5 text-[oklch(0.92_0.05_80)]">{itx.title}</div>
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { onApprove(itx.approvalId); }}
+                    className="rounded border border-[oklch(0.72_0.14_145/_0.5)] bg-[oklch(0.72_0.14_145/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.82_0.12_145)] transition-colors hover:bg-[oklch(0.72_0.14_145/_0.25)]"
+                  >
+                    APPROVE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { onReject(itx.approvalId); }}
+                    className="rounded border border-[oklch(0.65_0.22_30/_0.5)] bg-[oklch(0.65_0.22_30/_0.12)] px-2.5 py-1 text-[10px] tracking-[0.2em] uppercase text-[oklch(0.85_0.18_30)] transition-colors hover:bg-[oklch(0.65_0.22_30/_0.25)]"
+                  >
+                    REJECT
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Conversation ─────────────────────────────────────── */}
         <div

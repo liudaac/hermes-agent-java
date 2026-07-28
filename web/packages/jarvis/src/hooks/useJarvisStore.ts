@@ -54,6 +54,9 @@ export interface JarvisState {
     approvalId: string;
     title: string;
     risk: "low" | "medium" | "high";
+    interactionType?: "approval" | "choice" | "input" | "confirm";
+    options?: string[];
+    placeholder?: string;
   };
   /** Ring buffer of recent proactive suggestions from the SSE stream. */
   suggestions: JarvisSuggestion[];

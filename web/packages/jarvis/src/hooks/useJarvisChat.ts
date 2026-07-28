@@ -120,7 +120,14 @@ export function useJarvisChat() {
             replaceMessages(next);
 
             if (resp.approval) {
-              setPendingApproval(resp.approval);
+              setPendingApproval({
+                approvalId: resp.approval.approvalId,
+                title: resp.approval.title,
+                risk: resp.approval.risk,
+                interactionType: resp.approval.interactionType ?? "approval",
+                options: resp.approval.options,
+                placeholder: resp.approval.placeholder,
+              });
             }
 
             if (resp.crossSpaceLink && resp.crossSpaceLink.to) {

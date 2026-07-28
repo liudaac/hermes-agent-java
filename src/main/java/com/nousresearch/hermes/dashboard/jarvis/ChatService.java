@@ -490,11 +490,23 @@ public class ChatService {
                 String prompt = spec.getString("prompt");
                 String interactionId = "itx_" + System.currentTimeMillis();
 
-                // Store for later resolution
                 pendingInteractions.put(interactionId, spec.toJSONString());
 
+                List<String> options = null;
+                String placeholder = spec.getString("placeholder");
+                if ("choice".equals(type)) {
+                    options = spec.getJSONArray("options").toJavaList(String.class);
+                }
+
+                String interactionType = switch (type != null ? type : "input") {
+                    case "choice" -> "choice";
+                    case "confirm" -> "confirm";
+                    default -> "input";
+                };
+
                 ChatReply.Approval approval = new ChatReply.Approval(
-                    interactionId, prompt, "low");
+                    interactionId, prompt, "low",
+                    interactionType, options, placeholder);
                 return new ChatReply(prompt, spaceName(req), 0.9, List.of(), approval);
             } catch (Exception e) {
                 return new ChatReply("（交互请求解析失败）", spaceName(req), 0.0, List.of(), null);
@@ -602,11 +614,22 @@ public class ChatService {
             public final String approvalId;
             public final String title;
             public final String risk; // "low" | "medium" | "high"
+            public final String interactionType; // "approval" | "choice" | "input" | "confirm"
+            public final List<String> options; // for choice type
+            public final String placeholder; // for input type
 
             public Approval(String approvalId, String title, String risk) {
+                this(approvalId, title, risk, "approval", null, null);
+            }
+
+            public Approval(String approvalId, String title, String risk,
+                           String interactionType, List<String> options, String placeholder) {
                 this.approvalId = approvalId;
                 this.title = title;
                 this.risk = risk;
+                this.interactionType = interactionType;
+                this.options = options;
+                this.placeholder = placeholder;
             }
         }
     }

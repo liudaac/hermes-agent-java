@@ -36,11 +36,14 @@ export interface ChatResponse {
   }>;
   /** Optional cross-space link suggestion. */
   crossSpaceLink?: { to: string; label: string };
-  /** If the reply requires user approval, the gate info. */
+  /** If the reply requires user approval or interaction, the gate info. */
   approval?: {
     approvalId: string;
     title: string;
     risk: "low" | "medium" | "high";
+    interactionType?: "approval" | "choice" | "input" | "confirm";
+    options?: string[];
+    placeholder?: string;
   };
 }
 

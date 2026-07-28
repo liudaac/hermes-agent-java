@@ -151,6 +151,15 @@ public class JarvisHandler {
                 ap.put("approvalId", reply.approval.approvalId);
                 ap.put("title", reply.approval.title);
                 ap.put("risk", reply.approval.risk);
+                if (reply.approval.interactionType != null) {
+                    ap.put("interactionType", reply.approval.interactionType);
+                }
+                if (reply.approval.options != null) {
+                    ap.put("options", reply.approval.options);
+                }
+                if (reply.approval.placeholder != null) {
+                    ap.put("placeholder", reply.approval.placeholder);
+                }
                 resp.put("approval", ap);
             }
             sseClient.sendEvent("done", resp.toJSONString());
