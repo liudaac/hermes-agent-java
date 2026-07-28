@@ -1639,8 +1639,22 @@ public class TenantAwareAIAgent {
         String roleName = "General Assistant";
         String roleDesc = "Default general-purpose agent";
         AgentRuntimeProfile role = new AgentRuntimeProfile(roleName, roleDesc, AgentRuntimeProfile.Level.MID);
-        role.allowedTools("read", "write", "exec", "web_search", "web_fetch",
-            "memory", "skills", "session");
+        role.allowedTools("read_file", "write_file", "search_files", "grep_files",
+            "execute_command", "execute_python", "execute_bash", "execute_javascript",
+            "web_search", "web_extract",
+            "memory_save", "memory_get", "memory_search", "memory_delete", "memory_replace",
+            "skill_list", "skill_get", "skill_search", "skill_invoke",
+            "subagent_spawn", "delegate_task", "escalate_to_human",
+            "find_teammate", "query_org_knowledge",
+            "browser_open", "browser_navigate", "browser_screenshot", "browser_snapshot",
+            "browser_click", "browser_type", "browser_get_content",
+            "git_status", "git_log", "git_branch",
+            "cronjob_list", "cronjob_add", "cronjob_remove",
+            "vision_analyze", "tts_speak",
+            "mcp_list_servers", "mcp_list_tools", "mcp_call",
+            "blackboard_read", "blackboard_write", "blackboard_list",
+            "team_read", "team_post", "team_status",
+            "org_traces", "org_anomalies", "intent_status", "orchestrate_intent");
         role.reportsTo("human_operator");
         role.minTaskScore(0.4);
         role.maxConsecutiveFailures(3);
