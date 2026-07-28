@@ -144,3 +144,16 @@ export function useJarvisChat() {
 
   return { onSubmit };
 }
+
+/**
+ * Send a raw message to Jarvis API without adding to UI (used for
+ * internal commands like __approve_command__).
+ */
+export async function sendRaw(message: string): Promise<string | null> {
+  try {
+    const resp = await jarvisApi.chat({ message, context: undefined });
+    return resp?.reply ?? null;
+  } catch {
+    return null;
+  }
+}

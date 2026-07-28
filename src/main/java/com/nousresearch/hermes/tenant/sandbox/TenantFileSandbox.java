@@ -122,8 +122,9 @@ public class TenantFileSandbox {
                 }
             }
             
-            // 6. 硬链接检查
-            if (!config.isAllowHardlinks()) {
+            // 6. 硬链接检查 (only for paths inside sandbox, not whitelisted paths)
+            boolean withinSandbox = realPath.startsWith(sandboxRoot);
+            if (!config.isAllowHardlinks() && withinSandbox) {
                 if (isHardLink(realPath)) {
                     return PathValidationResult.rejected("Hard links not allowed", path);
                 }
@@ -136,7 +137,6 @@ public class TenantFileSandbox {
             }
             
             // 8. 沙箱边界检查
-            boolean withinSandbox = realPath.startsWith(sandboxRoot);
             boolean inWhitelist = config.getAllowedPaths().stream().anyMatch(realPath::startsWith);
             
             if (!withinSandbox && !inWhitelist) {

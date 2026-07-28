@@ -419,7 +419,45 @@ public class TenantContext {
         } else if (processSandbox != null) {
             return processSandbox.exec(command, options);
         } else {
-            throw new IllegalStateException("Process sandbox not initialized");
+            // Fallback: direct execution without resource limits.
+            // This happens when the tenant was restored from cache
+            // without re-initializing sandboxes (e.g. after restart).
+            logger.warn("Process sandbox not initialized for tenant {}, using direct execution", tenantId);
+            return execDirect(command, options);
+        }
+    }
+
+    /**
+     * Direct process execution without cgroup/resource limits.
+     * Used as fallback when sandbox is not initialized.
+     */
+    private ProcessResult execDirect(List<String> command, ProcessOptions options) throws ProcessSandboxException {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            if (options != null && options.getWorkDirectory() != null) {
+                pb.directory(options.getWorkDirectory().toFile());
+            }
+            pb.redirectErrorStream(false);
+
+            Process process = pb.start();
+            boolean completed = process.waitFor(
+                options != null ? options.getTimeoutSeconds() : 60,
+                java.util.concurrent.TimeUnit.SECONDS
+            );
+
+            String stdout = new String(process.getInputStream().readAllBytes());
+            String stderr = new String(process.getErrorStream().readAllBytes());
+            int exitCode = completed ? process.exitValue() : -1;
+
+            if (!completed) {
+                process.destroyForcibly();
+            }
+
+            ProcessResult result = new ProcessResult(exitCode, stdout, stderr);
+            result.setTimedOut(!completed);
+            return result;
+        } catch (Exception e) {
+            throw new ProcessSandboxException("Direct execution failed: " + e.getMessage(), e);
         }
     }
 

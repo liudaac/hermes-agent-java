@@ -102,10 +102,21 @@ export function JarvisCore({
   const submitHandler = onSubmit ?? chatHook.onSubmit;
   const approveHandler = onApprove ?? (async (approvalId: string) => {
     try {
-      const result = await jarvisApi.resolveApproval(approvalId, "approve");
-      if (result && result.reply) {
-        const { pushMessage } = await import("../hooks/useJarvisStore");
-        pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result.reply, timestamp: Date.now() });
+      // Command-level approvals (cmd_*) go through the chat endpoint
+      // with a special prefix so ChatService executes the approved command.
+      if (approvalId.startsWith("cmd_")) {
+        const { sendRaw } = await import("../hooks/useJarvisChat");
+        const result = await sendRaw("__approve_command__:" + approvalId);
+        if (result) {
+          const { pushMessage } = await import("../hooks/useJarvisStore");
+          pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result, timestamp: Date.now() });
+        }
+      } else {
+        const result = await jarvisApi.resolveApproval(approvalId, "approve");
+        if (result && result.reply) {
+          const { pushMessage } = await import("../hooks/useJarvisStore");
+          pushMessage({ id: crypto.randomUUID(), role: "jarvis", text: result.reply, timestamp: Date.now() });
+        }
       }
     } catch (e) { console.error("Jarvis approve failed", e); }
   });

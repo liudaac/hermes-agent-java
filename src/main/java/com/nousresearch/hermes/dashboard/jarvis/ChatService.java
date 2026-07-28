@@ -83,6 +83,9 @@ public class ChatService {
     private final BusinessApprovalService businessApprovalService;
     private final Map<String, TenantAwareAIAgent> agentPool = new ConcurrentHashMap<>();
 
+    /** Pending command approvals from NEEDS APPROVAL tool results. */
+    private final Map<String, PendingApproval> pendingApprovals = new ConcurrentHashMap<>();
+
     public ChatService(HermesConfig config,
                        TenantManager tenantManager,
                        ToolApprovalCoordinator toolApprovalCoordinator,
@@ -101,6 +104,11 @@ public class ChatService {
 
         if (userMessage.isEmpty()) {
             return new ChatReply("（消息为空）", spaceName(req), 0.0, List.of(), null);
+        }
+
+        // Handle approved command execution (from inline approval button)
+        if (userMessage.startsWith("__approve_command__:")) {
+            return handleApprovedCommand(userMessage, workspaceId, req);
         }
 
         TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
@@ -125,8 +133,23 @@ public class ChatService {
             String result = agent.processMessage(userMessage);
             capture.exception = null; // completed without approval gate
             String replyText = result == null ? "（agent 未返回内容）" : result.trim();
-            // Detect cross-space navigation hints in the reply so the
-            // front-end can auto-navigate (F10 Jarvis auto cross-page nav).
+
+            // Detect NEEDS APPROVAL pattern from tool results in the agent reply
+            PendingApproval pending = extractPendingApproval(replyText);
+            if (pending != null) {
+                // Store for later execution when user approves
+                pendingApprovals.put(pending.approvalId, pending);
+
+                ChatReply.Approval approval = new ChatReply.Approval(
+                    pending.approvalId,
+                    "确认执行: " + pending.command,
+                    pending.risk
+                );
+                String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + pending.risk;
+                return new ChatReply(note, spaceName(req), 0.9, List.of(), approval);
+            }
+
+            // Detect cross-space navigation hints
             List<CrossSpaceLink> links = detectCrossSpaceLinks(replyText, req.context != null ? req.context.space : null);
             return new ChatReply(
                 replyText,
@@ -307,6 +330,87 @@ public class ChatService {
         }
         sb.append("- 来源: 跨空间对话壳 (Jarvis)\n");
         return sb.toString();
+    }
+
+    /**
+     * Extract a pending approval from agent reply text containing
+     * "NEEDS APPROVAL" pattern from TerminalTool.
+     *
+     * Returns null if no approval needed.
+     */
+    private static PendingApproval extractPendingApproval(String replyText) {
+        if (replyText == null) return null;
+        // Pattern: NEEDS APPROVAL: ... command ...
+        int idx = replyText.indexOf("NEEDS APPROVAL");
+        if (idx < 0) return null;
+
+        // Try to extract the command from surrounding context
+        // The LLM usually includes the command in its response
+        // Look for code blocks first
+        String command = null;
+        int codeStart = replyText.indexOf("```", idx);
+        if (codeStart >= 0) {
+            int codeEnd = replyText.indexOf("```", codeStart + 3);
+            if (codeEnd > codeStart) {
+                String block = replyText.substring(codeStart + 3, codeEnd).trim();
+                // Remove language hint if present
+                if (block.startsWith("bash") || block.startsWith("sh")) {
+                    block = block.substring(block.indexOf('\n') + 1).trim();
+                }
+                command = block;
+            }
+        }
+        if (command == null || command.isBlank()) {
+            // Fallback: look for "command" field pattern
+            // The tool error includes command in the result
+            return null;
+        }
+
+        String approvalId = "cmd_" + System.currentTimeMillis();
+        String risk = command.toLowerCase().contains("rm -rf") ? "high" : "medium";
+        return new PendingApproval(approvalId, command, risk);
+    }
+
+    /**
+     * Handle an approved command: execute it directly with approved=true.
+     */
+    private ChatReply handleApprovedCommand(String message, String workspaceId, ChatRequest req) {
+        // Format: __approve_command__:<approvalId>
+        String approvalId = message.substring("__approve_command__:".length()).trim();
+        PendingApproval pending = pendingApprovals.remove(approvalId);
+        if (pending == null) {
+            return new ChatReply("（审批已过期或不存在）", spaceName(req), 0.0, List.of(), null);
+        }
+
+        // Execute the command directly through the agent with a special message
+        TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
+        if (agent == null) {
+            return new ChatReply("（无法找到 agent）", spaceName(req), 0.0, List.of(), null);
+        }
+
+        // Send a message to the agent telling it to re-execute with approval
+        String retryMessage = "用户已确认，请重新执行以下命令（使用 approved=true）：" + pending.command;
+        try {
+            String result = agent.processMessage(retryMessage);
+            String replyText = result == null ? "（执行完成，无输出）" : result.trim();
+            return new ChatReply(replyText, spaceName(req), 0.9, List.of(), null);
+        } catch (Exception e) {
+            log.error("Approved command execution failed: {}", e.getMessage(), e);
+            return new ChatReply("（执行失败：" + e.getMessage() + "）", spaceName(req), 0.0, List.of(), null);
+        }
+    }
+
+    /** Pending command approval stored for inline button approval. */
+    private static final class PendingApproval {
+        final String approvalId;
+        final String command;
+        final String risk;
+
+        PendingApproval(String approvalId, String command, String risk) {
+            this.approvalId = approvalId;
+            this.command = command;
+            this.risk = risk;
+        }
     }
 
     private static String inferRisk(String toolName) {
