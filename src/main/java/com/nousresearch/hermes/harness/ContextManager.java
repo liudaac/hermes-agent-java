@@ -188,10 +188,19 @@ public class ContextManager {
         if (cutoff <= 2) return 0;  // nothing to compress
 
         // Collect messages to compress (index 1 to cutoff-1)
+        // But skip any existing compression summaries to avoid recursive nesting
         List<ModelMessage> toCompress = new ArrayList<>();
         for (int i = 1; i < cutoff; i++) {
-            toCompress.add(history.get(i));
+            ModelMessage msg = history.get(i);
+            // Skip existing compression summaries to prevent recursive nesting
+            if ("system".equals(msg.getRole()) && msg.getContent() != null
+                    && msg.getContent().startsWith(COMPRESSION_MARKER)) {
+                continue;
+            }
+            toCompress.add(msg);
         }
+
+        if (toCompress.isEmpty()) return 0;
 
         // Build extractive summary
         StringBuilder summary = new StringBuilder();
@@ -212,11 +221,13 @@ public class ContextManager {
             // Skip very short assistant messages (likely tool call wrappers)
             if ("assistant".equals(role) && content.length() < 50) continue;
 
-            // Skip very long tool results (even unshielded ones)
-            if ("tool".equals(role) && content.length() > 500) {
-                summary.append("- [tool result truncated: ")
-                    .append(content, 0, Math.min(80, content.length()))
-                    .append("...]\n");
+            // For tool results, extract just the key info, don't include raw JSON
+            if ("tool".equals(role)) {
+                // Try to extract stdout/error from tool result, skip raw JSON
+                String extracted = extractToolSummary(content);
+                if (extracted != null) {
+                    summary.append("- Tool result: ").append(extracted).append("\n");
+                }
                 continue;
             }
 
@@ -231,13 +242,55 @@ public class ContextManager {
 
         if (kept == 0) return 0;
 
-        // Remove the old messages and insert summary
+        // Remove ALL messages from index 1 to cutoff-1 (including old compression summaries)
         for (int i = cutoff - 1; i >= 1; i--) {
             history.remove(i);
         }
-        history.add(1, ModelMessage.system(summary.toString()));
+        // Insert fresh summary as a user message (not system - multiple system
+        // messages confuse some models like glm)
+        history.add(1, ModelMessage.user(summary.toString()));
 
         return toCompress.size();
+    }
+
+    /**
+     * Extract a short human-readable summary from a tool result.
+     * Avoids including raw JSON that could be truncated into invalid content.
+     */
+    private String extractToolSummary(String content) {
+        if (content == null || content.isBlank()) return null;
+        // Try to find stdout or error field
+        int stdoutIdx = content.indexOf("\"stdout\"");
+        if (stdoutIdx >= 0) {
+            int colonIdx = content.indexOf(':', stdoutIdx);
+            if (colonIdx >= 0) {
+                int start = colonIdx + 2;
+                while (start < content.length() && content.charAt(start) == ' ') start++;
+                if (start < content.length() && content.charAt(start) == '"') {
+                    int end = content.indexOf('"', start + 1);
+                    if (end > start) {
+                        String stdout = content.substring(start + 1, end);
+                        return stdout.length() > 100 ? stdout.substring(0, 100) + "..." : stdout;
+                    }
+                }
+            }
+        }
+        int errorIdx = content.indexOf("\"error\"");
+        if (errorIdx >= 0) {
+            int colonIdx = content.indexOf(':', errorIdx);
+            if (colonIdx >= 0) {
+                int start = colonIdx + 2;
+                while (start < content.length() && content.charAt(start) == ' ') start++;
+                if (start < content.length() && content.charAt(start) == '"') {
+                    int end = content.indexOf('"', start + 1);
+                    if (end > start) {
+                        return "error: " + content.substring(start + 1, end);
+                    }
+                }
+            }
+        }
+        // Fallback: first 80 chars, no JSON
+        return content.length() > 80 ? content.substring(0, 80) + "..." : content;
     }
 
     // ==================== Phase 3: Hard Truncation ====================
