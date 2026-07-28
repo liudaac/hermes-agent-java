@@ -253,3 +253,17 @@ CREATE TABLE IF NOT EXISTS config_version (
     UNIQUE KEY uk_version_id (version_id),
     INDEX idx_tenant_version (tenant_id, version_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Cluster node discovery (MySQL heartbeat table)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS cluster_node (
+    node_id         VARCHAR(64)  NOT NULL,
+    base_url        VARCHAR(256) NOT NULL,
+    last_heartbeat  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status          VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    started_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (node_id),
+    INDEX idx_status_heartbeat (status, last_heartbeat)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
