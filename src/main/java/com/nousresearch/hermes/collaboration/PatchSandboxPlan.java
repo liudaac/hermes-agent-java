@@ -73,7 +73,7 @@ public record PatchSandboxPlan(
 
     private static String defaultSandboxRoot(String repositoryRoot, String sandboxId) {
         String root = repositoryRoot == null || repositoryRoot.isBlank() ? "." : repositoryRoot;
-        return normalize(root + "/.hermes/patch-sandboxes/" + (sandboxId == null || sandboxId.isBlank() ? "patch-sandbox" : sandboxId));
+        return normalize(root + "/.harness/patch-sandboxes/" + (sandboxId == null || sandboxId.isBlank() ? "patch-sandbox" : sandboxId));
     }
 
     private static String normalize(String value) {

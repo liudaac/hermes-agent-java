@@ -180,7 +180,7 @@ final class BusinessServices {
         b.deadLetterQueue = new DeadLetterQueue();
         b.approvalAnalytics = new ApprovalAnalytics(b.businessApprovalService);
         b.humanOverrideService = new HumanOverrideService(b.workspaceService, b.businessRunService);
-        Path workflowsDir = Paths.get(System.getProperty("user.home"), ".hermes", "workflows");
+        Path workflowsDir = Paths.get(System.getProperty("user.home"), ".harness", "workflows");
         b.workflowService = new BusinessWorkflowService(
             new WorkflowEngine(workflowsDir), b.scenarioService, b.workspaceService,
             b.businessRunService, b.slaManager);

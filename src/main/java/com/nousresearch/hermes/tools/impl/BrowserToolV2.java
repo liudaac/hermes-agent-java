@@ -32,7 +32,7 @@ public class BrowserToolV2 {
         .build();
     
     // Screenshot storage directory
-    private static final Path SCREENSHOTS_DIR = Paths.get(System.getProperty("user.home"), ".hermes", "cache", "screenshots");
+    private static final Path SCREENSHOTS_DIR = Paths.get(System.getProperty("user.home"), ".harness", "cache", "screenshots");
     
     // Default CDP endpoint
     private static final String DEFAULT_CDP_URL = "http://localhost:9222";

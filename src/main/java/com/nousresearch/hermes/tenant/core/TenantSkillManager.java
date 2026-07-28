@@ -27,7 +27,7 @@ import java.util.stream.Stream;
  * - 缓存优化：内存缓存 + 文件监听
  *
  * 存储结构：
- * ~/.hermes/tenants/{tenantId}/skills/
+ * ~/.harness/tenants/{tenantId}/skills/
  * ├── private/          # 租户私有 Skills
  * ├── installed/        # 从 Registry 安装的 Skills
  * └── index.json        # 本地索引

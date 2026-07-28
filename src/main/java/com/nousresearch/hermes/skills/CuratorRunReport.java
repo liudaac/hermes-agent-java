@@ -120,7 +120,7 @@ public class CuratorRunReport {
 
         sb.append("## Recovery\n");
         sb.append("- Restore: `hermes curator restore <name>`\n");
-        sb.append("- Archives live under `~/.hermes/skills/.archive/`\n");
+        sb.append("- Archives live under `~/.harness/skills/.archive/`\n");
 
         return sb.toString();
     }

@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * - USER.md: 用户画像（用户偏好、习惯等）
  * - 向量存储: 用于语义搜索
  * 
- * 存储路径: ~/.hermes/tenants/{tenantId}/memories/
+ * 存储路径: ~/.harness/tenants/{tenantId}/memories/
  * 
  * 特性：
  * - 租户间完全隔离

@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
  *   <li>SLA 违约且补偿失败</li>
  *   <li>无可用的补偿器（Compensator）</li>
  * </ul>
- * <p>持久化到 <code>~/.hermes/business/dead-letter-queue</code>，以 JSON 文件形式存储。</p>
+ * <p>持久化到 <code>~/.harness/business/dead-letter-queue</code>，以 JSON 文件形式存储。</p>
  */
 public class DeadLetterQueue {
     private static final Logger logger = LoggerFactory.getLogger(DeadLetterQueue.class);

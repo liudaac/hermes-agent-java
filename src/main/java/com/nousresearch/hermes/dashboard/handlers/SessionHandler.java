@@ -376,8 +376,8 @@ public class SessionHandler {
     /**
      * Import persisted tenant JSON sessions into the dashboard SQLite DB.
      *
-     * TenantSessionManager persists conversations under ~/.hermes/tenants/{tenantId}/sessions/*.json
-     * Dashboard pages read ~/.hermes/sessions.db. This lightweight sync keeps the dashboard
+     * TenantSessionManager persists conversations under ~/.harness/tenants/{tenantId}/sessions/*.json
+     * Dashboard pages read ~/.harness/sessions.db. This lightweight sync keeps the dashboard
      * backed by real agent sessions without forcing a larger SessionManager rewrite.
      */
     void syncGatewaySessions() {

@@ -13,7 +13,7 @@ import java.util.Optional;
  * to the Business Portal. Eagerly loads on construction and supports
  * {@link #reload()} for hot updates.
  *
- * <p>By default also scans {@code ~/.hermes/business-templates/} for
+ * <p>By default also scans {@code ~/.harness/business-templates/} for
  * user-uploaded templates (M4 external ecosystem), with classpath shipped
  * templates taking precedence and user templates layered on top.
  */
@@ -21,7 +21,7 @@ public class BusinessTemplateService {
     private static final Logger logger = LoggerFactory.getLogger(BusinessTemplateService.class);
 
     public static Path defaultUserRoot() {
-        return Paths.get(System.getProperty("user.home"), ".hermes", "business-templates");
+        return Paths.get(System.getProperty("user.home"), ".harness", "business-templates");
     }
 
     private final AgentTemplateLoader loader;

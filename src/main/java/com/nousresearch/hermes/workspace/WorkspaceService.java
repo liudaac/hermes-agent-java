@@ -21,7 +21,7 @@ import java.util.Optional;
  *   <li>解析工作空间对应的 TenantContext（供 Agent Runtime、工具沙箱使用）</li>
  * </ul>
  * <p>工作空间是业务层 facade，一个 workspace 对应一个 tenant，存储在
- * <code>~/.hermes/business/workspaces/{workspaceId}/workspace.json</code>。</p>
+ * <code>~/.harness/business/workspaces/{workspaceId}/workspace.json</code>。</p>
  */
 public class WorkspaceService {
     /** 工作空间持久化仓库 */
@@ -30,7 +30,7 @@ public class WorkspaceService {
     private final TenantManager tenantManager;
 
     /**
-     * 默认构造函数 — 使用 ~/.hermes/business/workspaces 作为持久化根目录。
+     * 默认构造函数 — 使用 ~/.harness/business/workspaces 作为持久化根目录。
      *
      * @param tenantManager 租户管理器
      */

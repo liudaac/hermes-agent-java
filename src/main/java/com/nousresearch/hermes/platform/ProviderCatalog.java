@@ -10,7 +10,7 @@ import java.util.*;
  * This prevents tenants from configuring arbitrary base_url endpoints
  * (security + compliance).</p>
  *
- * <p>Configuration is loaded from {@code ~/.hermes/platform-providers.yaml}:</p>
+ * <p>Configuration is loaded from {@code ~/.harness/platform-providers.yaml}:</p>
  * <pre>{@code
  * providers:
  *   - id: openai

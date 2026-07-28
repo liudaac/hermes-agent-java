@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  *   <li>持久化到文件系统（JSON 格式）</li>
  *   <li>发布状态变更事件（供 SSE 实时推送）</li>
  * </ul>
- * <p>所有运行记录按 workspace 隔离，存储在 <code>~/.hermes/business/workspaces/{workspaceId}/runs/</code>。</p>
+ * <p>所有运行记录按 workspace 隔离，存储在 <code>~/.harness/business/workspaces/{workspaceId}/runs/</code>。</p>
  */
 public class BusinessRunService {
     // ---- 运行状态常量 ----
@@ -56,7 +56,7 @@ public class BusinessRunService {
     private final RunEventBus eventBus = new RunEventBus();
 
     /**
-     * 默认构造函数 — 使用 ~/.hermes/business/workspaces 作为持久化根目录。
+     * 默认构造函数 — 使用 ~/.harness/business/workspaces 作为持久化根目录。
      *
      * @param workspaceService     工作空间服务，用于校验 workspace 存在性
      * @param teamBlueprintService 团队蓝图服务，用于解析团队版本

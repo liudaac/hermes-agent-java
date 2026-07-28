@@ -286,7 +286,7 @@ public class KimiOfficialWebBridgeAdapter implements BrowserBridge {
         addSkillPathCandidates(candidates, System.getenv("HERMES_EXTRA_SKILLS_DIRS"));
         candidates.add(Paths.get(home, ".openclaw", "skills", "kimi-webbridge"));
         candidates.add(Paths.get(home, ".openclaw", "workspace", "skills", "kimi-webbridge"));
-        candidates.add(Paths.get(home, ".hermes", "skills", "kimi-webbridge"));
+        candidates.add(Paths.get(home, ".harness", "skills", "kimi-webbridge"));
         for (Path dir : candidates) {
             Path skill = dir.resolve("SKILL.md");
             if (Files.exists(skill)) return dir.toAbsolutePath().normalize();

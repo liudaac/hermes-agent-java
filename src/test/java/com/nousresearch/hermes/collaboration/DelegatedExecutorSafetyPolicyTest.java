@@ -84,7 +84,7 @@ class DelegatedExecutorSafetyPolicyTest {
 
         assertEquals("task-123", map.get("sandbox_id"));
         assertEquals("/repo/hermes-agent-java", map.get("repository_root"));
-        assertEquals("/repo/hermes-agent-java/.hermes/patch-sandboxes/task-123", map.get("sandbox_root"));
+        assertEquals("/repo/hermes-agent-java/.harness/patch-sandboxes/task-123", map.get("sandbox_root"));
         assertEquals(List.of("src/main/java", "src/test/java", "docs"), map.get("allowed_changed_path_prefixes"));
         assertEquals(List.of(".git", ".github", "target", "build", "out", "pom.xml", "gradle.properties", "settings.gradle"), map.get("denied_changed_path_prefixes"));
         assertTrue((Boolean) map.get("collect_diff"));

@@ -13,7 +13,7 @@ public final class Constants {
     private Constants() {} // Prevent instantiation
 
     public static final String VERSION = "0.1.0";
-    public static final String DEFAULT_HERMES_HOME = ".hermes";
+    public static final String DEFAULT_HERMES_HOME = ".harness";
     
     // API Endpoints
     public static final String OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";

@@ -33,7 +33,7 @@ public class ConfigHandler {
 
     public ConfigHandler(HermesConfig config) {
         this.config = config;
-        this.configPath = Path.of(System.getProperty("user.home"), ".hermes", "config.yaml");
+        this.configPath = Path.of(System.getProperty("user.home"), ".harness", "config.yaml");
         this.yaml = new Yaml();
 
         // Initialize default configuration

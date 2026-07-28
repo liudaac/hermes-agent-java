@@ -37,7 +37,7 @@ public class LogsHandler {
     private final Set<TailSubscriber> subscribers = ConcurrentHashMap.newKeySet();
 
     public LogsHandler() {
-        this.logsDir = Path.of(System.getProperty("user.home"), ".hermes", "logs");
+        this.logsDir = Path.of(System.getProperty("user.home"), ".harness", "logs");
         tailExecutor.scheduleAtFixedRate(this::pollSubscribers, 500, 500, TimeUnit.MILLISECONDS);
     }
 
@@ -144,7 +144,7 @@ public class LogsHandler {
             }
 
             // Also check for agent.log in hermes home
-            Path agentLog = Path.of(System.getProperty("user.home"), ".hermes", "agent.log");
+            Path agentLog = Path.of(System.getProperty("user.home"), ".harness", "agent.log");
             if (Files.exists(agentLog)) {
                 java.util.Map<String, Object> info = new java.util.HashMap<>();
                 info.put("name", "agent.log");
@@ -183,7 +183,7 @@ public class LogsHandler {
 
             if (!Files.exists(logPath)) {
                 // Try hermes home
-                logPath = Path.of(System.getProperty("user.home"), ".hermes", file);
+                logPath = Path.of(System.getProperty("user.home"), ".harness", file);
                 logger.info("getLogContent: fallback to hermes home: {}, exists={}",
                     logPath, Files.exists(logPath));
             }
@@ -196,7 +196,7 @@ public class LogsHandler {
             // Security check: ensure file is within allowed directories
             Path normalized = logPath.toAbsolutePath().normalize();
             Path allowedDir1 = logsDir.toAbsolutePath().normalize();
-            Path allowedDir2 = Path.of(System.getProperty("user.home"), ".hermes").toAbsolutePath().normalize();
+            Path allowedDir2 = Path.of(System.getProperty("user.home"), ".harness").toAbsolutePath().normalize();
 
             if (!normalized.startsWith(allowedDir1) && !normalized.startsWith(allowedDir2)) {
                 return List.of("Access denied");
@@ -407,12 +407,12 @@ public class LogsHandler {
     private Path resolveSafe(String file) {
         Path logPath = logsDir.resolve(file);
         if (!Files.exists(logPath)) {
-            logPath = Path.of(System.getProperty("user.home"), ".hermes", file);
+            logPath = Path.of(System.getProperty("user.home"), ".harness", file);
         }
         if (!Files.exists(logPath)) return null;
         Path normalized = logPath.toAbsolutePath().normalize();
         Path allowed1 = logsDir.toAbsolutePath().normalize();
-        Path allowed2 = Path.of(System.getProperty("user.home"), ".hermes").toAbsolutePath().normalize();
+        Path allowed2 = Path.of(System.getProperty("user.home"), ".harness").toAbsolutePath().normalize();
         if (!normalized.startsWith(allowed1) && !normalized.startsWith(allowed2)) {
             return null;
         }

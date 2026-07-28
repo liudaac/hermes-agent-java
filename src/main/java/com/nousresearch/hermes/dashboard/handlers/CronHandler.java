@@ -45,7 +45,7 @@ public class CronHandler {
     private final ConcurrentHashMap<String, Set<SseClient>> runSubscribers = new ConcurrentHashMap<>();
 
     public CronHandler() {
-        this(Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"));
+        this(Path.of(System.getProperty("user.home"), ".harness", "dashboard-cron-jobs.json"));
     }
 
     public CronHandler(Path storePath) {

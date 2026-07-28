@@ -23,7 +23,7 @@ public class RLTrainingTool {
     private final ExecutorService executor;
     
     public RLTrainingTool() {
-        this.trainingDir = Paths.get(System.getProperty("user.home"), ".hermes", "rl_training");
+        this.trainingDir = Paths.get(System.getProperty("user.home"), ".harness", "rl_training");
         this.sessions = new ConcurrentHashMap<>();
         this.executor = Executors.newFixedThreadPool(2);
         

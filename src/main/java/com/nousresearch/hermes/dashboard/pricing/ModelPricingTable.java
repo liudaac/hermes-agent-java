@@ -16,7 +16,7 @@ import java.util.Map;
  *
  * Prices are in USD per 1 million tokens for prompt / completion respectively.
  * Defaults come from public list prices and are loaded once; users can override by
- * supplying a JSON file at {@code ~/.hermes/dashboard-model-pricing.json} with the
+ * supplying a JSON file at {@code ~/.harness/dashboard-model-pricing.json} with the
  * shape:
  *
  * <pre>{@code

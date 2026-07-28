@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * <p>Discovery sources (later override earlier on key collision):</p>
  * <ol>
  *   <li>Bundled plugins – {@code <hermes-home>/plugins/}</li>
- *   <li>User plugins – {@code ~/.hermes/plugins/}</li>
+ *   <li>User plugins – {@code ~/.harness/plugins/}</li>
  *   <li>Project plugins – {@code ./.hermes/plugins/} (opt-in)</li>
  * </ol>
  *
@@ -71,7 +71,7 @@ public class PluginManager implements PluginManagerBackend {
         this.bundledDir = resolveBundledPluginsDir();
         this.userDir = resolveUserPluginsDir();
         this.projectPluginsEnabled = isEnvEnabled("HERMES_ENABLE_PROJECT_PLUGINS");
-        this.projectDir = Paths.get(".").toAbsolutePath().normalize().resolve(".hermes").resolve("plugins");
+        this.projectDir = Paths.get(".").toAbsolutePath().normalize().resolve(".harness").resolve("plugins");
         INSTANCE = this;
     }
 
@@ -375,7 +375,7 @@ public class PluginManager implements PluginManagerBackend {
 
     private Path resolveUserPluginsDir() {
         String home = System.getProperty("user.home");
-        return Paths.get(home, ".hermes", "plugins");
+        return Paths.get(home, ".harness", "plugins");
     }
 
     private boolean isEnvEnabled(String name) {

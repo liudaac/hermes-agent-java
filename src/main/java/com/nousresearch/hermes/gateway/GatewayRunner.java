@@ -171,7 +171,7 @@ public class GatewayRunner {
     /**
      * Start gateway as service (background).
      */
-    private static final Path PID_FILE = Path.of(System.getProperty("user.home"), ".hermes", "gateway.pid");
+    private static final Path PID_FILE = Path.of(System.getProperty("user.home"), ".harness", "gateway.pid");
     
     public void startService() {
         try {

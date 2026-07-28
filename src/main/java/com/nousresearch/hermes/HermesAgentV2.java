@@ -63,7 +63,7 @@ public class HermesAgentV2 {
         ToolInitializerV2.initializeAll(toolRegistry, approvalSystem);
 
         // Initialize session manager
-        Path dataDir = Paths.get(System.getProperty("user.home"), ".hermes");
+        Path dataDir = Paths.get(System.getProperty("user.home"), ".harness");
         this.sessionManager = new SessionManager(dataDir);
 
         // Initialize tenant manager (always available, used in both modes)

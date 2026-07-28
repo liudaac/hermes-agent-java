@@ -138,7 +138,7 @@ public class DashboardServer {
             .with("handoff", new HandoffProtocol())
             .with("auth", new PermissionPolicy())
             .with("knowledge", new OrganizationalKnowledgeBase())
-            .with("workflow", new WorkflowEngine(java.nio.file.Paths.get(System.getProperty("user.home"), ".hermes", "workflows")))
+            .with("workflow", new WorkflowEngine(java.nio.file.Paths.get(System.getProperty("user.home"), ".harness", "workflows")))
             .with("market", new AgentMarketplace())
             .with("cost", new CostAttribution())
             .with("observe", new AgentObservability())
@@ -275,7 +275,7 @@ public class DashboardServer {
 
         // ── Cron runs against workspace agents ──────────────
         this.cronHandler = new CronHandler(
-            Path.of(System.getProperty("user.home"), ".hermes", "dashboard-cron-jobs.json"),
+            Path.of(System.getProperty("user.home"), ".harness", "dashboard-cron-jobs.json"),
             true,
             new com.nousresearch.hermes.dashboard.handlers.AgentCronRunner(config, tenantManager, workspaceService)
         );
@@ -1665,8 +1665,8 @@ public class DashboardServer {
         status.put("version", "0.1.0");
         status.put("release_date", "2026-04-23");
         status.put("hermes_home", System.getProperty("user.home") + "/.hermes");
-        status.put("config_path", System.getProperty("user.home") + "/.hermes/config.yaml");
-        status.put("env_path", System.getProperty("user.home") + "/.hermes/.env");
+        status.put("config_path", System.getProperty("user.home") + "/.harness/config.yaml");
+        status.put("env_path", System.getProperty("user.home") + "/.harness/.env");
         status.put("config_version", 1);
         status.put("latest_config_version", 1);
         status.put("active_sessions", sessionHandler.getActiveSessionCount());

@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 
 /**
  * Memory management for persistent cross-session memory.
- * Aligned with Python Hermes: stores MEMORY.md and USER.md in ~/.hermes/memories/
+ * Aligned with Python Hermes: stores MEMORY.md and USER.md in ~/.harness/memories/
  * 
  * Design:
  * - Two parallel states:

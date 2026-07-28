@@ -21,7 +21,7 @@ import java.util.stream.Stream;
  * Skill management system - aligned with Python Hermes.
  *
  * Directory Structure:
- * ~/.hermes/skills/
+ * ~/.harness/skills/
  * ├── my-skill/
  * │   ├── SKILL.md           # Main instructions (required)
  * │   ├── references/        # Supporting documentation
@@ -71,7 +71,7 @@ public class SkillManager {
 
     /**
      * Create a new skill from a successful workflow.
-     * Creates directory structure: ~/.hermes/skills/{name}/SKILL.md
+     * Creates directory structure: ~/.harness/skills/{name}/SKILL.md
      */
     public Skill createSkill(String name, String description, String content,
                             List<String> tags, Map<String, Object> metadata) {
@@ -114,7 +114,7 @@ public class SkillManager {
 
     /**
      * Load a skill by name.
-     * Searches ~/.hermes/skills/{name}/SKILL.md
+     * Searches ~/.harness/skills/{name}/SKILL.md
      */
     public Skill loadSkill(String name) {
         String safeName = name.toLowerCase().replaceAll("[^a-z0-9_-]", "_");

@@ -41,7 +41,7 @@ class LogsHandlerTest {
         tempHome = Files.createTempDirectory("hermes-logs-test");
         System.setProperty("user.home", tempHome.toString());
 
-        Path logsDir = tempHome.resolve(".hermes/logs");
+        Path logsDir = tempHome.resolve(".harness/logs");
         Files.createDirectories(logsDir);
 
         handler = new LogsHandler();
@@ -70,7 +70,7 @@ class LogsHandlerTest {
     @Test
     @DisplayName("aggregate merges lines across files sorted by timestamp prefix")
     void aggregateMergesAndSorts() throws Exception {
-        Path logs = tempHome.resolve(".hermes/logs");
+        Path logs = tempHome.resolve(".harness/logs");
         Files.writeString(logs.resolve("a.log"),
             "2026-01-01 00:00:01 INFO  msg-from-a-1\n" +
             "2026-01-01 00:00:03 INFO  msg-from-a-2\n");
@@ -99,7 +99,7 @@ class LogsHandlerTest {
     @Test
     @DisplayName("tail SSE emits new lines appended to the file")
     void tailEmitsAppendedLines() throws Exception {
-        Path logs = tempHome.resolve(".hermes/logs");
+        Path logs = tempHome.resolve(".harness/logs");
         Path file = logs.resolve("tail.log");
         Files.writeString(file, "2026-01-01 00:00:00 INFO seed\n");
 
@@ -142,7 +142,7 @@ class LogsHandlerTest {
     @Test
     @DisplayName("deleteLog removes a log file and returns ok")
     void deleteLogRemovesFile() throws Exception {
-        Path logs = tempHome.resolve(".hermes/logs");
+        Path logs = tempHome.resolve(".harness/logs");
         Path file = logs.resolve("deleteme.log");
         Files.writeString(file, "2026-01-01 00:00:00 INFO deleteme\n");
 

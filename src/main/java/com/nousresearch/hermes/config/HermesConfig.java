@@ -13,7 +13,7 @@ import java.util.List;
 
 /**
  * Configuration management for Hermes Agent.
- * Loads from ~/.hermes/config.yaml with environment variable overrides.
+ * Loads from ~/.harness/config.yaml with environment variable overrides.
  */
 public class HermesConfig {
     private static final Logger logger = LoggerFactory.getLogger(HermesConfig.class);

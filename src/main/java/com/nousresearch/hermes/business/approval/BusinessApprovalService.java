@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  *   <li>持久化审批记录和审批时间线</li>
  *   <li>发布审批事件（支持全局、workspace 维度、单条审批维度订阅）</li>
  * </ul>
- * <p>审批记录按 workspace 隔离，存储在 <code>~/.hermes/business/workspaces/{workspaceId}/approvals/</code>。</p>
+ * <p>审批记录按 workspace 隔离，存储在 <code>~/.harness/business/workspaces/{workspaceId}/approvals/</code>。</p>
  */
 public class BusinessApprovalService {
     // ---- 审批状态常量 ----
@@ -46,7 +46,7 @@ public class BusinessApprovalService {
     private final Map<String, List<Consumer<ApprovalEvent>>> approvalSubscribers = new ConcurrentHashMap<>();
 
     /**
-     * 默认构造函数 — 使用 ~/.hermes/business/workspaces 作为持久化根目录。
+     * 默认构造函数 — 使用 ~/.harness/business/workspaces 作为持久化根目录。
      *
      * @param workspaceService 工作空间服务
      */

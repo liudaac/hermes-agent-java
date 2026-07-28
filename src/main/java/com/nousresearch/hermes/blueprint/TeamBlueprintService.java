@@ -31,7 +31,7 @@ public class TeamBlueprintService {
     private final PromptAssetService promptAssetService;
 
     /**
-     * 默认构造函数 — 使用 ~/.hermes/business/workspaces 作为持久化根目录。
+     * 默认构造函数 — 使用 ~/.harness/business/workspaces 作为持久化根目录。
      *
      * @param workspaceService 工作空间服务
      */

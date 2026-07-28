@@ -11,7 +11,7 @@ public enum Source {
     BUNDLED("bundled"),
 
     /**
-     * Installed by user in ~/.hermes/plugins/.
+     * Installed by user in ~/.harness/plugins/.
      */
     USER("user"),
 

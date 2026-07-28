@@ -32,7 +32,7 @@ public class EnvHandler {
     private final Map<String, EnvVarMetadata> knownVars;
 
     public EnvHandler() {
-        this.envPath = Path.of(System.getProperty("user.home"), ".hermes", ".env");
+        this.envPath = Path.of(System.getProperty("user.home"), ".harness", ".env");
         this.knownVars = createKnownVars();
         loadEnvFile();
     }
