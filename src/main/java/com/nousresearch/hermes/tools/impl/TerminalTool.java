@@ -28,6 +28,15 @@ public class TerminalTool {
         "mkfs.", "format", ":(){ :|:& };:"
     );
     
+    /** Commands that require explicit user approval via chat. */
+    private static final List<String> RISKY_PATTERNS = List.of(
+        "rm -rf", "rm -r", "rmdir", "mv /", "cp /", "chmod 777",
+        "chown", "kill -9", "pkill", "shutdown", "reboot",
+        "git push --force", "git push -f", "git reset --hard",
+        "DROP TABLE", "DROP DATABASE", "DELETE FROM",
+        "truncate", "shred", "wget -O -", "curl | bash", "curl | sh"
+    );
+    
     /**
      * Register terminal tools.
      */
@@ -36,7 +45,7 @@ public class TerminalTool {
             .name("execute_command")
             .toolset("terminal")
             .schema(Map.of(
-                "description", "Execute a terminal command",
+                "description", "Execute a terminal command. Risky commands (rm -rf, git push --force, DROP TABLE, etc.) require approved=true. If you get a 'NEEDS APPROVAL' error, ask the user to confirm and retry with approved=true.",
                 "parameters", Map.of(
                     "type", "object",
                     "properties", Map.of(
@@ -51,6 +60,11 @@ public class TerminalTool {
                         "timeout", Map.of(
                             "type", "integer",
                             "description", "Timeout in seconds (default: 300)"
+                        ),
+                        "approved", Map.of(
+                            "type", "boolean",
+                            "description", "Set to true when the user has explicitly confirmed execution of a risky command. Default: false.",
+                            "default", false
                         )
                     ),
                     "required", List.of("command")
@@ -71,6 +85,7 @@ public class TerminalTool {
     private static String execute(Map<String, Object> args) {
         String command = (String) args.get("command");
         String cwd = (String) args.get("cwd");
+        boolean approved = Boolean.TRUE.equals(args.get("approved"));
         int timeout = args.containsKey("timeout") ? 
             ((Number) args.get("timeout")).intValue() : 300;
         
@@ -78,13 +93,28 @@ public class TerminalTool {
             return ToolRegistry.toolError("Command is required");
         }
         
-        // Safety check
-        String checkResult = checkSafety(command);
-        if (checkResult != null) {
-            return ToolRegistry.toolError(checkResult, Map.of(
-                "safety_check", "failed",
+        // Safety check: DANGER = always blocked, RISKY = needs approval
+        String danger = checkDanger(command);
+        if (danger != null) {
+            logger.warn("Blocked dangerous command: {}", command);
+            return ToolRegistry.toolError("BLOCKED (dangerous): " + danger, Map.of(
+                "safety_check", "danger",
                 "command", command
             ));
+        }
+        
+        String risky = checkRisky(command);
+        if (risky != null && !approved) {
+            logger.info("Risky command needs approval: {}", command);
+            return ToolRegistry.toolError(
+                "NEEDS APPROVAL: This command is flagged as risky (" + risky + "). " +
+                "Ask the user to confirm, then retry with approved=true.",
+                Map.of(
+                    "safety_check", "needs_approval",
+                    "risk_pattern", risky,
+                    "command", command
+                )
+            );
         }
         
         try {
@@ -162,23 +192,33 @@ public class TerminalTool {
     }
     
     /**
-     * Check command safety.
+     * Check if command is unconditionally dangerous (always blocked).
      */
-    private static String checkSafety(String command) {
+    private static String checkDanger(String command) {
         String lower = command.toLowerCase();
-        
         for (String pattern : DANGEROUS_PATTERNS) {
             if (lower.contains(pattern.toLowerCase())) {
-                return "Command contains dangerous pattern: " + pattern;
+                return pattern;
             }
         }
-        
-        // Check for sudo without restrictions
-        if (lower.trim().startsWith("sudo") && !lower.contains("-u ")) {
-            // Allow sudo but log warning
-            logger.warn("Command uses sudo: {}", command);
+        return null;
+    }
+    
+    /**
+     * Check if command is risky and requires user approval.
+     * Returns the matched risk pattern, or null if safe.
+     */
+    private static String checkRisky(String command) {
+        String lower = command.toLowerCase();
+        for (String pattern : RISKY_PATTERNS) {
+            if (lower.contains(pattern.toLowerCase())) {
+                return pattern;
+            }
         }
-        
+        // Check for sudo
+        if (lower.trim().startsWith("sudo")) {
+            return "sudo";
+        }
         return null;
     }
     
