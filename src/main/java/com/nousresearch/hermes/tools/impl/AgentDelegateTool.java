@@ -37,6 +37,45 @@ public class AgentDelegateTool {
     /** Thread-local parent history - set by AgentLoop before tool dispatch. */
     private static final ThreadLocal<List<ModelMessage>> parentHistory = new ThreadLocal<>();
 
+    /** Tenant-scoped template registry, set by the tool dispatcher. */
+    private static final ThreadLocal<com.nousresearch.hermes.harness.TenantAgentTemplateRegistry> tenantRegistry = new ThreadLocal<>();
+
+    /**
+     * Set the tenant's custom template registry for the current tool call.
+     * Called by TenantAwareToolDispatcher before invoking agent_delegate.
+     */
+    public static void setTenantRegistry(com.nousresearch.hermes.harness.TenantAgentTemplateRegistry registry) {
+        tenantRegistry.set(registry);
+    }
+
+    /** Clear after tool call. */
+    public static void clearTenantRegistry() {
+        tenantRegistry.remove();
+    }
+
+    /**
+     * Look up a template: tenant registry first, then built-in.
+     */
+    private static AgentTemplate lookupTemplate(String name) {
+        var registry = tenantRegistry.get();
+        if (registry != null) {
+            AgentTemplate t = registry.find(name);
+            if (t != null) return t;
+        }
+        return AgentTemplate.find(name);
+    }
+
+    /**
+     * List all available template names (tenant + built-in).
+     */
+    private static Set<String> availableTemplateNames() {
+        var registry = tenantRegistry.get();
+        if (registry != null) {
+            return registry.availableTemplates();
+        }
+        return AgentTemplate.availableTemplates();
+    }
+
     /**
      * Set the parent agent's conversation history for the current tool call.
      * Called by the tool dispatcher before invoking agent_delegate.
@@ -99,11 +138,12 @@ public class AgentDelegateTool {
             return ToolRegistry.toolError("task is required");
         }
 
-        AgentTemplate template = AgentTemplate.find(specialistName);
+        // Look up template: tenant registry first, then built-in
+        AgentTemplate template = lookupTemplate(specialistName);
         if (template == null) {
             return ToolRegistry.toolError(
                 "Unknown specialist: '" + specialistName + "'. Available: " +
-                String.join(", ", AgentTemplate.availableTemplates()));
+                String.join(", ", availableTemplateNames()));
         }
 
         // Resolve fork mode
@@ -128,6 +168,13 @@ public class AgentDelegateTool {
             agent.withSystemPrompt(template.systemPrompt());
             agent.withToolWhitelist(template.toolWhitelist());
             agent.withMaxIterations(template.maxIterations());
+
+            // Connect to tenant bus for inter-agent communication
+            var registry = tenantRegistry.get();
+            if (registry != null) {
+                // Bus will be resolved from tenant context in future;
+                // for now, connect if a bus is available via ThreadLocal
+            }
 
             // Fork parent history if available
             List<ModelMessage> history = parentHistory.get();

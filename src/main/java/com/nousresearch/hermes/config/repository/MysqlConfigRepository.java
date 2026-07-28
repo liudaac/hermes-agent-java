@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.config.repository;
 
 import com.nousresearch.hermes.config.ModelRoute;
+import com.nousresearch.hermes.harness.AgentTemplate;
+import com.nousresearch.hermes.harness.ForkMode;
 import com.nousresearch.hermes.platform.ProviderCatalog;
 import com.nousresearch.hermes.tenant.quota.TenantQuota;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -376,5 +378,73 @@ public class MysqlConfigRepository implements ConfigRepository {
             logger.error("Failed to load platform API key for {}: {}", provider, e.getMessage());
         }
         return null;
+    }
+
+    
+    // ============ Agent Templates ============
+
+    @Override
+    public Map<String, AgentTemplate> loadAgentTemplates(String tenantId) {
+        Map<String, AgentTemplate> result = new LinkedHashMap<>();
+        String sql = "SELECT template_name, description, system_prompt, tool_whitelist, max_iterations, fork_mode " +
+                     "FROM tenant_agent_template WHERE tenant_id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String name = rs.getString("template_name");
+                    String desc = rs.getString("description");
+                    String prompt = rs.getString("system_prompt");
+                    String toolsJson = rs.getString("tool_whitelist");
+                    Set<String> tools = new LinkedHashSet<>();
+                    if (toolsJson != null && !toolsJson.isBlank()) {
+                        tools = new ObjectMapper().readValue(toolsJson, 
+                            new com.fasterxml.jackson.core.type.TypeReference<Set<String>>() {});
+                    }
+                    int maxIter = rs.getInt("max_iterations");
+                    ForkMode fork = ForkMode.valueOf(rs.getString("fork_mode").toUpperCase());
+                    result.put(name.toLowerCase().trim(), 
+                        new AgentTemplate(name, desc != null ? desc : "", prompt, tools, maxIter, fork));
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to load agent templates for {}: {}", tenantId, e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public void saveAgentTemplate(String tenantId, String name, AgentTemplate template) {
+        String sql = "INSERT INTO tenant_agent_template (tenant_id, template_name, description, system_prompt, tool_whitelist, max_iterations, fork_mode) " +
+                     "VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                     "description=VALUES(description), system_prompt=VALUES(system_prompt), " +
+                     "tool_whitelist=VALUES(tool_whitelist), max_iterations=VALUES(max_iterations), fork_mode=VALUES(fork_mode)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            ps.setString(2, name);
+            ps.setString(3, template.description());
+            ps.setString(4, template.systemPrompt());
+            ps.setString(5, new ObjectMapper().writeValueAsString(template.toolWhitelist()));
+            ps.setInt(6, template.maxIterations());
+            ps.setString(7, template.defaultForkMode().name());
+            ps.executeUpdate();
+        } catch (Exception e) {
+            logger.error("Failed to save agent template: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public void deleteAgentTemplate(String tenantId, String name) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                 "DELETE FROM tenant_agent_template WHERE tenant_id = ? AND template_name = ?")) {
+            ps.setString(1, tenantId);
+            ps.setString(2, name);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.warn("Failed to delete agent template: {}", e.getMessage());
+        }
     }
 }

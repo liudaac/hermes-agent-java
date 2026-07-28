@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.config.repository;
 
 import com.nousresearch.hermes.config.ModelRoute;
+import com.nousresearch.hermes.harness.AgentTemplate;
 import com.nousresearch.hermes.platform.ProviderCatalog;
 import com.nousresearch.hermes.tenant.quota.TenantQuota;
 import org.slf4j.Logger;
@@ -211,5 +212,23 @@ public class ConfigCache implements ConfigRepository {
         T data = loader.load();
         providerCatalogCache = new CacheEntry(data, now, 0);
         return data;
+    }
+
+    
+    // ============ Agent Templates (delegate to underlying repo) ============
+
+    @Override
+    public Map<String, AgentTemplate> loadAgentTemplates(String tenantId) {
+        return delegate.loadAgentTemplates(tenantId);
+    }
+
+    @Override
+    public void saveAgentTemplate(String tenantId, String name, AgentTemplate template) {
+        delegate.saveAgentTemplate(tenantId, name, template);
+    }
+
+    @Override
+    public void deleteAgentTemplate(String tenantId, String name) {
+        delegate.deleteAgentTemplate(tenantId, name);
     }
 }

@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.agent;
 
+import com.nousresearch.hermes.collaboration.AgentMessage;
 import com.nousresearch.hermes.collaboration.TenantBus;
 import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.harness.ForkMode;
@@ -89,10 +90,118 @@ public class SubAgent implements Callable<SubAgentResult> {
         this.busAgentId = id;
         if (bus != null) {
             bus.register(busAgentId, msg -> {
-                logger.debug("[SubAgent {}] received message: {}", id, msg.getAction());
+                logger.debug("[SubAgent {}] received message: {} action={}", 
+                    id, msg.getType(), msg.getAction());
+                
+                // Handle REQUEST messages from other agents
+                if (msg.getType() == AgentMessage.Type.REQUEST) {
+                    handleBusRequest(msg);
+                } else if (msg.getType() == AgentMessage.Type.NOTIFY) {
+                    // Store notifications as context
+                    String notification = "[" + msg.getSenderId() + "]: " + 
+                        msg.getAction() + " " + msg.getPayload();
+                    synchronized (conversationHistory) {
+                        conversationHistory.add(ModelMessage.system(
+                            "Notification from peer: " + notification));
+                    }
+                }
             });
+            bus.start();
         }
         return this;
+    }
+
+    /**
+     * Handle a REQUEST message from another agent on the bus.
+     * Sends a reply with the best available information.
+     */
+    private void handleBusRequest(AgentMessage request) {
+        if (bus == null) return;
+        
+        String action = request.getAction();
+        Map<String, Object> payload = request.getPayload();
+        
+        String replyText;
+        if ("status".equals(action)) {
+            replyText = running ? "running (iteration " + budget.getUsed() + ")" : "idle";
+        } else if ("partial_result".equals(action)) {
+            // Return current output so far
+            StringBuilder sb = new StringBuilder();
+            for (ModelMessage m : conversationHistory) {
+                if ("assistant".equals(m.getRole()) && m.getContent() != null) {
+                    sb.append(m.getContent()).append("\n");
+                }
+            }
+            replyText = sb.length() > 0 ? sb.toString() : "No output yet";
+        } else if ("query".equals(action)) {
+            // Answer a question from another agent using conversation context
+            String question = payload != null ? String.valueOf(payload.get("question")) : "";
+            replyText = answerFromContext(question);
+        } else {
+            replyText = "Unknown action: " + action;
+        }
+        
+        AgentMessage reply = AgentMessage.builder(busAgentId, request.getSenderId(), 
+                AgentMessage.Type.RESPONSE)
+            .action(action)
+            .payload(Map.of("result", replyText))
+            .replyTo(request.getMessageId())
+            .build();
+        bus.reply(request, reply);
+    }
+
+    /**
+     * Best-effort answer to a peer query from conversation history.
+     */
+    private String answerFromContext(String question) {
+        // Simple: return last assistant message that mentions keywords from the question
+        String[] keywords = question.toLowerCase().split("\\s+");
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
+            ModelMessage m = conversationHistory.get(i);
+            if ("assistant".equals(m.getRole()) && m.getContent() != null) {
+                String content = m.getContent().toLowerCase();
+                for (String kw : keywords) {
+                    if (kw.length() > 3 && content.contains(kw)) {
+                        return m.getContent();
+                    }
+                }
+            }
+        }
+        return "No relevant information found in current context";
+    }
+
+    /**
+     * Send a message to another agent on the bus.
+     */
+    public AgentMessage askPeer(String peerId, String action, Map<String, Object> payload, 
+                                 long timeoutMs) {
+        if (bus == null) return null;
+        
+        AgentMessage msg = AgentMessage.builder(busAgentId, peerId, AgentMessage.Type.REQUEST)
+            .action(action)
+            .payload(payload != null ? payload : Map.of())
+            .timeoutMs(timeoutMs)
+            .build();
+        
+        try {
+            return bus.sendAndWait(msg, timeoutMs);
+        } catch (TenantBus.TimeoutException e) {
+            logger.warn("[SubAgent {}] Peer {} did not respond in {}ms", id, peerId, timeoutMs);
+            return null;
+        }
+    }
+
+    /**
+     * Notify all peers on the bus.
+     */
+    public void notifyPeers(String action, Map<String, Object> payload) {
+        if (bus == null) return;
+        
+        AgentMessage msg = AgentMessage.builder(busAgentId, "all", AgentMessage.Type.BROADCAST)
+            .action(action)
+            .payload(payload != null ? payload : Map.of())
+            .build();
+        bus.send(msg);
     }
 
     /**

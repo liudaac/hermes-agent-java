@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.config.repository;
 
 import com.nousresearch.hermes.config.ModelRoute;
+import com.nousresearch.hermes.harness.AgentTemplate;
 import com.nousresearch.hermes.platform.ProviderCatalog;
 import com.nousresearch.hermes.tenant.quota.TenantQuota;
 
@@ -103,4 +104,22 @@ public interface ConfigRepository {
      * Load platform-managed API key for a provider (代付 key).
      */
     String loadPlatformApiKey(String provider);
+
+    // ============ Agent Templates (P0: Dynamic Specialist Registry) ============
+
+    /**
+     * Load all custom agent templates for a tenant.
+     * @return map of templateName -> AgentTemplate
+     */
+    Map<String, AgentTemplate> loadAgentTemplates(String tenantId);
+
+    /**
+     * Save (upsert) a custom agent template for a tenant.
+     */
+    void saveAgentTemplate(String tenantId, String name, AgentTemplate template);
+
+    /**
+     * Delete a custom agent template.
+     */
+    void deleteAgentTemplate(String tenantId, String name);
 }

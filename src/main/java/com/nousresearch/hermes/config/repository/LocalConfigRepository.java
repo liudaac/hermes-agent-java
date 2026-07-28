@@ -1,6 +1,8 @@
 package com.nousresearch.hermes.config.repository;
 
 import com.nousresearch.hermes.config.ModelRoute;
+import com.nousresearch.hermes.harness.AgentTemplate;
+import com.nousresearch.hermes.harness.ForkMode;
 import com.nousresearch.hermes.platform.ProviderCatalog;
 import com.nousresearch.hermes.tenant.core.TenantConfig;
 import com.nousresearch.hermes.tenant.quota.TenantQuota;
@@ -191,6 +193,83 @@ public class LocalConfigRepository implements ConfigRepository {
         String key = System.getProperty("platform." + envKey);
         if (key != null && !key.isBlank()) return key;
         return System.getenv("PLATFORM_" + envKey);
+    }
+
+    // ============ Agent Templates ============
+
+    @Override
+    public Map<String, AgentTemplate> loadAgentTemplates(String tenantId) {
+        Path templateDir = hermesHome.resolve("tenants").resolve(tenantId).resolve("agent-templates");
+        Map<String, AgentTemplate> result = new LinkedHashMap<>();
+        if (!Files.isDirectory(templateDir)) return result;
+
+        try (var paths = Files.list(templateDir)) {
+            paths.filter(p -> p.toString().endsWith(".yaml") || p.toString().endsWith(".yml"))
+                .forEach(p -> {
+                    try {
+                        var yaml = new org.yaml.snakeyaml.Yaml();
+                        Map<String, Object> data = yaml.load(Files.readString(p));
+                        if (data != null) {
+                            String name = (String) data.get("name");
+                            if (name != null) {
+                                result.put(name.toLowerCase().trim(), toTemplate(data));
+                            }
+                        }
+                    } catch (Exception e) {
+                        logger.warn("Failed to load template from {}: {}", p, e.getMessage());
+                    }
+                });
+        } catch (Exception e) {
+            logger.warn("Failed to list agent templates: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public void saveAgentTemplate(String tenantId, String name, AgentTemplate template) {
+        Path dir = hermesHome.resolve("tenants").resolve(tenantId).resolve("agent-templates");
+        try {
+            Files.createDirectories(dir);
+            Path file = dir.resolve(name + ".yaml");
+            var yaml = new org.yaml.snakeyaml.Yaml();
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("name", template.name());
+            data.put("description", template.description());
+            data.put("system_prompt", template.systemPrompt());
+            data.put("tool_whitelist", new java.util.ArrayList<>(template.toolWhitelist()));
+            data.put("max_iterations", template.maxIterations());
+            data.put("fork_mode", template.defaultForkMode().name());
+            Files.writeString(file, yaml.dump(data));
+            logger.info("Saved agent template '{}' for tenant {}", name, tenantId);
+        } catch (Exception e) {
+            logger.error("Failed to save agent template: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public void deleteAgentTemplate(String tenantId, String name) {
+        Path file = hermesHome.resolve("tenants").resolve(tenantId).resolve("agent-templates").resolve(name + ".yaml");
+        try {
+            Files.deleteIfExists(file);
+        } catch (Exception e) {
+            logger.warn("Failed to delete agent template: {}", e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private AgentTemplate toTemplate(Map<String, Object> data) {
+        String name = (String) data.get("name");
+        String desc = (String) data.getOrDefault("description", "");
+        String prompt = (String) data.getOrDefault("system_prompt", "");
+        Set<String> tools = new LinkedHashSet<>();
+        Object tl = data.get("tool_whitelist");
+        if (tl instanceof List<?> list) {
+            for (Object t : list) tools.add(String.valueOf(t));
+        }
+        int maxIter = data.get("max_iterations") instanceof Number n ? n.intValue() : 10;
+        String forkStr = (String) data.getOrDefault("fork_mode", "FULL");
+        ForkMode forkMode = ForkMode.valueOf(forkStr.toUpperCase());
+        return new AgentTemplate(name, desc, prompt, tools, maxIter, forkMode);
     }
 
     // ============ Helper ============

@@ -267,3 +267,22 @@ CREATE TABLE IF NOT EXISTS cluster_node (
     PRIMARY KEY (node_id),
     INDEX idx_status_heartbeat (status, last_heartbeat)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Tenant agent templates (custom specialist definitions)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS tenant_agent_template (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    tenant_id       VARCHAR(64)  NOT NULL,
+    template_name   VARCHAR(128) NOT NULL,
+    description     TEXT,
+    system_prompt   TEXT         NOT NULL,
+    tool_whitelist  JSON,
+    max_iterations  INT          NOT NULL DEFAULT 10,
+    fork_mode       VARCHAR(16)  NOT NULL DEFAULT 'FULL',
+    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_tenant_template (tenant_id, template_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
