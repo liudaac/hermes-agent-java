@@ -132,6 +132,63 @@ export const jarvisApi = {
       body: JSON.stringify(req),
     }),
 
+  /**
+   * SSE streaming chat. Returns an object with onDelta/onDone/onError callbacks.
+   * Uses fetch + ReadableStream to consume SSE from a POST endpoint.
+   */
+  chatStream: (req: ChatRequest, handlers: {
+    onDelta: (text: string) => void;
+    onDone: (resp: ChatResponse) => void;
+    onError: (msg: string) => void;
+  }) => {
+    const controller = new AbortController();
+    fetch("/api/jarvis/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(req),
+      signal: controller.signal,
+    }).then(async (res) => {
+      if (!res.ok || !res.body) {
+        handlers.onError(`HTTP ${res.status}`);
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("event: delta")) continue;
+          if (line.startsWith("event: done")) continue;
+          if (line.startsWith("event: error")) continue;
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            // Try to determine event type from preceding line
+            const prevIdx = lines.indexOf(line) - 1;
+            const prevLine = prevIdx >= 0 ? lines[prevIdx] : "";
+            if (prevLine.startsWith("event: delta")) {
+              handlers.onDelta(data);
+            } else if (prevLine.startsWith("event: done")) {
+              try { handlers.onDone(JSON.parse(data)); } catch { handlers.onDone({ reply: data } as ChatResponse); }
+            } else if (prevLine.startsWith("event: error")) {
+              handlers.onError(data);
+            } else {
+              // No event prefix, treat as delta
+              handlers.onDelta(data);
+            }
+          }
+        }
+      }
+    }).catch((e) => {
+      if (e.name !== "AbortError") handlers.onError(String(e));
+    });
+    return { abort: () => controller.abort() };
+  },
+
   classifyIntent: (input: string) =>
     jsonFetch<IntentResult>("/api/jarvis/intent", {
       method: "POST",

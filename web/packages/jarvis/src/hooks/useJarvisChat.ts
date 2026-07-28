@@ -91,42 +91,59 @@ export function useJarvisChat() {
             }
           : undefined,
       };
-      const resp = await jarvisApi.chat({ message: text.trim(), context });
 
-      // Replace the placeholder with the real reply.
-      const jarvisMsg: JarvisMessage = {
-        id: crypto.randomUUID(),
-        role: "jarvis",
-        text: resp.reply ?? "(空回复)",
-        timestamp: Date.now(),
-      };
-      // Remove placeholder, add real.
-      const s = useJarvisStore.getState();
-      const next = s.messages.filter((m) => m.id !== placeholderId);
-      next.push(jarvisMsg);
-      replaceMessages(next);
+      // Use SSE streaming: update placeholder incrementally as chunks arrive
+      jarvisApi.chatStream(
+        { message: text.trim(), context },
+        {
+          onDelta: (chunk) => {
+            // Append chunk to the placeholder message
+            const s = useJarvisStore.getState();
+            replaceMessages(
+              s.messages.map((m) =>
+                m.id === placeholderId
+                  ? { ...m, text: (m.text === "…" ? "" : m.text) + chunk, pending: true }
+                  : m,
+              ),
+            );
+          },
+          onDone: (resp) => {
+            const s = useJarvisStore.getState();
+            // Replace placeholder with final reply
+            const next = s.messages.filter((m) => m.id !== placeholderId);
+            next.push({
+              id: crypto.randomUUID(),
+              role: "jarvis",
+              text: resp.reply ?? "(空回复)",
+              timestamp: Date.now(),
+            });
+            replaceMessages(next);
 
-      // If there's a pending approval, surface it via the store.
-      if (resp.approval) {
-        setPendingApproval(resp.approval);
-      }
+            if (resp.approval) {
+              setPendingApproval(resp.approval);
+            }
 
-      // If the reply includes a cross-space link, auto-navigate
-      // after a short delay so the user can read the reply first.
-      if (resp.crossSpaceLink && resp.crossSpaceLink.to) {
-        const target = resp.crossSpaceLink.to;
-        const label = resp.crossSpaceLink.label ?? "";
-        // Append a subtle "navigating..." hint to the reply.
-        replaceMessages(
-          useJarvisStore.getState().messages.map((m) =>
-            m.id === jarvisMsg.id
-              ? { ...m, text: m.text + `\n\n→ 正在跳转：${label || target}` }
-              : m,
-          ),
-        );
-        // Navigate after 1.5s so the user sees the reply + hint.
-        setTimeout(() => navigateToSpace(target), 1500);
-      }
+            if (resp.crossSpaceLink && resp.crossSpaceLink.to) {
+              const target = resp.crossSpaceLink.to;
+              const _label = resp.crossSpaceLink.label ?? "";
+              void _label;
+              setTimeout(() => navigateToSpace(target), 1500);
+            }
+          },
+          onError: (err) => {
+            const s = useJarvisStore.getState();
+            const next = s.messages.filter((m) => m.id !== placeholderId);
+            next.push({
+              id: crypto.randomUUID(),
+              role: "jarvis",
+              text: "（连接失败：" + err + "）",
+              timestamp: Date.now(),
+              error: true,
+            });
+            replaceMessages(next);
+          },
+        },
+      );
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       const s = useJarvisStore.getState();
@@ -150,10 +167,14 @@ export function useJarvisChat() {
  * internal commands like __approve_command__).
  */
 export async function sendRaw(message: string): Promise<string | null> {
-  try {
-    const resp = await jarvisApi.chat({ message, context: undefined });
-    return resp?.reply ?? null;
-  } catch {
-    return null;
-  }
+  return new Promise((resolve) => {
+    jarvisApi.chatStream(
+      { message, context: undefined },
+      {
+        onDelta: () => {}, // ignore deltas for raw calls
+        onDone: (resp) => resolve(resp.reply ?? null),
+        onError: () => resolve(null),
+      },
+    );
+  });
 }

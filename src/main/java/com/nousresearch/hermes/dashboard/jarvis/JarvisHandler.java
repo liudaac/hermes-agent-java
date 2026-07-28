@@ -124,27 +124,47 @@ public class JarvisHandler {
         }
     }
 
-    // ── POST /api/jarvis/chat ──────────────────────────────────────
+    // ── POST /api/jarvis/chat (SSE streaming) ────────────────────
 
-    public void chat(Context ctx) {
-        ChatRequest req = parseChatRequest(ctx.body());
-        ChatReply reply = chatService.reply(req);
+    public void chat(SseClient sseClient) {
+        // Javalin SSE doesn't give easy access to the request body via SseClient,
+        // so we read it from the underlying request
+        String body = sseClient.ctx().body();
+        ChatRequest req = parseChatRequest(body);
 
-        JSONObject body = new JSONObject();
-        body.put("reply", reply.text);
-        body.put("intent", reply.intent);
-        body.put("confidence", reply.confidence);
-        if (!reply.crossSpaceLinks.isEmpty()) {
-            body.put("crossSpaceLink", reply.crossSpaceLinks.get(0));
-        }
-        if (reply.approval != null) {
-            JSONObject ap = new JSONObject();
-            ap.put("approvalId", reply.approval.approvalId);
-            ap.put("title", reply.approval.title);
-            ap.put("risk", reply.approval.risk);
-            body.put("approval", ap);
-        }
-        ctx.json(body);
+        ChatService.StreamingReply streaming = chatService.replyStream(req);
+
+        streaming.onChunk = chunk -> {
+            sseClient.sendEvent("delta", chunk);
+        };
+
+        streaming.onComplete = reply -> {
+            JSONObject resp = new JSONObject();
+            resp.put("reply", reply.text);
+            resp.put("intent", reply.intent);
+            resp.put("confidence", reply.confidence);
+            if (!reply.crossSpaceLinks.isEmpty()) {
+                resp.put("crossSpaceLink", reply.crossSpaceLinks.get(0));
+            }
+            if (reply.approval != null) {
+                JSONObject ap = new JSONObject();
+                ap.put("approvalId", reply.approval.approvalId);
+                ap.put("title", reply.approval.title);
+                ap.put("risk", reply.approval.risk);
+                resp.put("approval", ap);
+            }
+            sseClient.sendEvent("done", resp.toJSONString());
+            sseClient.close();
+        };
+
+        streaming.onError = error -> {
+            JSONObject err = new JSONObject();
+            err.put("error", error);
+            sseClient.sendEvent("error", err.toJSONString());
+            sseClient.close();
+        };
+
+        streaming.start();
     }
 
     // ── POST /api/jarvis/intent ────────────────────────────────────

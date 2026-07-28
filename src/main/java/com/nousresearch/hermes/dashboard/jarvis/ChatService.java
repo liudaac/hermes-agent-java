@@ -96,6 +96,136 @@ public class ChatService {
         this.businessApprovalService = businessApprovalService;
     }
 
+    /**
+     * Streaming reply: returns a StreamingReply that fires onChunk for each
+     * LLM delta, then onComplete with the final ChatReply.
+     */
+    public StreamingReply replyStream(ChatRequest req) {
+        String userMessage = req.message == null ? "" : req.message.trim();
+        String workspaceId = (req.context != null && req.context.workspaceId != null
+            && !req.context.workspaceId.isBlank())
+                ? req.context.workspaceId : "default";
+
+        StreamingReply streaming = new StreamingReply();
+
+        if (userMessage.isEmpty()) {
+            streaming.complete(new ChatReply("（消息为空）", spaceName(req), 0.0, List.of(), null));
+            return streaming;
+        }
+
+        // Handle approved command execution
+        if (userMessage.startsWith("__approve_command__:")) {
+            new Thread(() -> {
+                ChatReply reply = handleApprovedCommand(userMessage, workspaceId, req);
+                streaming.complete(reply);
+            }, "jarvis-stream").start();
+            return streaming;
+        }
+
+        TenantAwareAIAgent agent = getOrCreateAgent(workspaceId);
+        if (agent == null) {
+            streaming.complete(new ChatReply(
+                "（未找到 workspace=" + workspaceId + " 的租户上下文）",
+                spaceName(req), 0.0, List.of(), null));
+            return streaming;
+        }
+
+        applySystemPrompt(agent, req);
+        ToolApprovalCapture capture = new ToolApprovalCapture();
+        agent.setToolApprovalCallback(ex -> capture.exception = ex);
+
+        new Thread(() -> {
+            try {
+                // Use streaming processMessage
+                StringBuilder resultBuilder = new StringBuilder();
+                agent.processMessageStream(userMessage, chunk -> {
+                    resultBuilder.append(chunk);
+                    streaming.fireChunk(chunk);
+                });
+
+                capture.exception = null;
+                String replyText = resultBuilder.toString().trim();
+                if (replyText.isEmpty()) {
+                    replyText = "（agent 未返回内容）";
+                }
+
+                // Check for NEEDS APPROVAL
+                PendingApproval pending = extractPendingApproval(replyText);
+                if (pending != null) {
+                    pendingApprovals.put(pending.approvalId, pending);
+                    ChatReply.Approval approval = new ChatReply.Approval(
+                        pending.approvalId,
+                        "确认执行: " + pending.command,
+                        pending.risk
+                    );
+                    String note = "⚠️ 即将执行以下命令，请确认：\n\n```\n" + pending.command + "\n```\n\n**风险等级**: " + pending.risk;
+                    streaming.complete(new ChatReply(note, spaceName(req), 0.9, List.of(), approval));
+                    return;
+                }
+
+                List<CrossSpaceLink> links = detectCrossSpaceLinks(replyText,
+                    req.context != null ? req.context.space : null);
+                streaming.complete(new ChatReply(replyText, spaceName(req), 0.8, links, null));
+
+            } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
+                String approvalId;
+                try {
+                    approvalId = toolApprovalCoordinator.requestToolApproval(
+                        workspaceId, null,
+                        agent.getAgentId() != null ? agent.getAgentId() : "jarvis",
+                        ex.getToolName(), ex.getToolArguments(), ex.getMatchedRule(),
+                        ex.getReason(), ex.getToolName(), agent);
+                } catch (Exception createEx) {
+                    streaming.error("无法创建审批：" + createEx.getMessage());
+                    return;
+                }
+                ChatReply.Approval approval = new ChatReply.Approval(
+                    approvalId, "工具调用审批: " + ex.getToolName(), inferRisk(ex.getToolName()));
+                String note = "我准备执行工具 `" + ex.getToolName() + "`（" + ex.getReason() + "），请确认。";
+                streaming.complete(new ChatReply(note, spaceName(req), 0.7, List.of(), approval));
+            } catch (Exception e) {
+                log.warn("Jarvis stream failed: {}", e.getMessage(), e);
+                streaming.error("agent 执行失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage()));
+            }
+        }, "jarvis-stream").start();
+
+        return streaming;
+    }
+
+    /**
+     * Streaming reply container. The caller sets callbacks and calls start().
+     */
+    public static class StreamingReply {
+        public volatile java.util.function.Consumer<String> onChunk;
+        public volatile java.util.function.Consumer<ChatReply> onComplete;
+        public volatile java.util.function.Consumer<String> onError;
+
+        private final java.util.concurrent.atomic.AtomicBoolean started = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        void fireChunk(String chunk) {
+            if (onChunk != null) {
+                try { onChunk.accept(chunk); } catch (Exception ignored) {}
+            }
+        }
+
+        void complete(ChatReply reply) {
+            if (onComplete != null) {
+                try { onComplete.accept(reply); } catch (Exception ignored) {}
+            }
+        }
+
+        void error(String msg) {
+            if (onError != null) {
+                try { onError.accept(msg); } catch (Exception ignored) {}
+            }
+        }
+
+        public void start() {
+            // Already started via constructor - this is a no-op for API compatibility
+            started.set(true);
+        }
+    }
+
     public ChatReply reply(ChatRequest req) {
         String userMessage = req.message == null ? "" : req.message.trim();
         String workspaceId = (req.context != null && req.context.workspaceId != null
