@@ -19,7 +19,7 @@ public class HermesConfig {
     private String version = "1.0.0";
 
     @JsonProperty("default_model")
-    private String defaultModel = "claude-3-5-sonnet";
+    private String defaultModel = "deepseek-v3-250324";
 
     @JsonProperty("models")
     private List<ModelConfig> models = new ArrayList<>();
@@ -176,11 +176,11 @@ public class HermesConfig {
         @JsonProperty("name")
         private String name = "";
         @JsonProperty("provider")
-        private String provider = "openrouter";
+        private String provider = "volcengine";
         @JsonProperty("api_key")
         private String apiKey = "";
         @JsonProperty("base_url")
-        private String baseUrl = "";
+        private String baseUrl = "https://ark.cn-beijing.volces.com/api/v3";
 
         public String getName() { return name; }
         public String getProvider() { return provider; }

@@ -207,7 +207,7 @@ public class HermesConfig {
             case "anthropic" -> "https://api.anthropic.com/v1";
             case "openrouter" -> Constants.OPENROUTER_BASE_URL;
             case "nous" -> Constants.NOUS_API_BASE_URL;
-            default -> Constants.OPENROUTER_BASE_URL;
+            default -> "https://ark.cn-beijing.volces.com/api/v3";
         };
     }
 
