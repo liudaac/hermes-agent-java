@@ -76,8 +76,8 @@ function loadPersisted(): JarvisState {
       sub: parsed.sub,
       overlay: parsed.overlay ?? "hidden",
       enabled: parsed.enabled ?? true,
-      messages: [],
-      suggestions: [],
+      messages: parsed.messages ?? [],
+      suggestions: parsed.suggestions ?? [],
     };
   } catch {
     return { form: "core", overlay: "hidden", enabled: true, messages: [], suggestions: [] };
@@ -94,6 +94,8 @@ function persist(state: JarvisState): void {
         sub: state.sub,
         overlay: state.overlay,
         enabled: state.enabled,
+        messages: state.messages.slice(-50),
+        suggestions: state.suggestions,
       }),
     );
   } catch {
@@ -132,11 +134,26 @@ export const setEnabled = (enabled: boolean) => {
 };
 export const pushMessage = (msg: JarvisMessage) => {
   const s = useJarvisStore.getState();
-  useJarvisStore.setState({ messages: [...s.messages.slice(-49), msg] });
+  const next = [...s.messages.slice(-49), msg];
+  const newState = { messages: next };
+  persist({ ...s, ...newState });
+  useJarvisStore.setState(newState);
 };
-export const clearMessages = () => useJarvisStore.setState({ messages: [] });
+export const clearMessages = () => {
+  const s = useJarvisStore.getState();
+  persist({ ...s, messages: [] });
+  useJarvisStore.setState({ messages: [] });
+};
 export const setPendingApproval = (a: JarvisState["pendingApproval"]) => {
   useJarvisStore.setState({ pendingApproval: a });
+};
+
+/** Replace the entire message list and persist. */
+export const replaceMessages = (messages: JarvisMessage[]) => {
+  const s = useJarvisStore.getState();
+  const next = messages.slice(-50);
+  persist({ ...s, messages: next });
+  useJarvisStore.setState({ messages: next });
 };
 
 /**

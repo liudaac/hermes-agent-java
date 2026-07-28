@@ -12,6 +12,7 @@ import {
   useJarvisStore,
   pushMessage,
   setPendingApproval,
+  replaceMessages,
   type JarvisMessage,
 } from "./useJarvisStore";
 import { useContextAwareness } from "./useContextAwareness";
@@ -103,7 +104,7 @@ export function useJarvisChat() {
       const s = useJarvisStore.getState();
       const next = s.messages.filter((m) => m.id !== placeholderId);
       next.push(jarvisMsg);
-      useJarvisStore.setState({ messages: next.slice(-50) });
+      replaceMessages(next);
 
       // If there's a pending approval, surface it via the store.
       if (resp.approval) {
@@ -116,13 +117,13 @@ export function useJarvisChat() {
         const target = resp.crossSpaceLink.to;
         const label = resp.crossSpaceLink.label ?? "";
         // Append a subtle "navigating..." hint to the reply.
-        useJarvisStore.setState({
-          messages: useJarvisStore.getState().messages.map((m) =>
+        replaceMessages(
+          useJarvisStore.getState().messages.map((m) =>
             m.id === jarvisMsg.id
               ? { ...m, text: m.text + `\n\n→ 正在跳转：${label || target}` }
               : m,
           ),
-        });
+        );
         // Navigate after 1.5s so the user sees the reply + hint.
         setTimeout(() => navigateToSpace(target), 1500);
       }
@@ -137,7 +138,7 @@ export function useJarvisChat() {
         timestamp: Date.now(),
         error: true,
       });
-      useJarvisStore.setState({ messages: next });
+      replaceMessages(next);
     }
   }, [awareness.space, awareness.workspaceId, awareness.activeResource]);
 
