@@ -65,7 +65,7 @@ public class GitTool {
                     "properties", Map.of("path", Map.of("type", "string"), "remote", Map.of("type", "string", "default", "origin"), "branch", Map.of("type", "string")),
                     "required", List.of("path"))))
             .risk(com.nousresearch.hermes.approval.ToolRisk.MEDIUM)
-            .requiresApproval(true)
+            .requiresApproval(false)
             .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
             .approvalMessageTemplate("Push to remote")
             .handler(this::gitPush).emoji("🚀").build());

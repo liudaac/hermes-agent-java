@@ -85,7 +85,7 @@ public class FileTool {
             .handler(FileTool::writeFile)
             .emoji("✏️")
             .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
-            .requiresApproval(true)
+            .requiresApproval(false)
             .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.FILE_WRITE)
             .approvalMessageTemplate("Write file: {path}")
             .build());

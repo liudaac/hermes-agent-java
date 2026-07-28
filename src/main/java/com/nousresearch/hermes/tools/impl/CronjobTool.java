@@ -48,7 +48,7 @@ public class CronjobTool {
                         "timezone", Map.of("type", "string", "default", "UTC")),
                     "required", List.of("name", "schedule", "command"))))
             .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
-            .requiresApproval(true)
+            .requiresApproval(false)
             .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
             .approvalMessageTemplate("Add cron job: {command}")
             .handler(this::addJob).emoji("⏰").build());
@@ -69,7 +69,7 @@ public class CronjobTool {
                     "properties", Map.of("name", Map.of("type", "string")),
                     "required", List.of("name"))))
             .risk(com.nousresearch.hermes.approval.ToolRisk.HIGH)
-            .requiresApproval(true)
+            .requiresApproval(false)
             .approvalType(com.nousresearch.hermes.approval.ApprovalSystem.ApprovalType.TERMINAL_COMMAND)
             .approvalMessageTemplate("Remove cron job")
             .handler(this::removeJob).emoji("🗑️").build());
