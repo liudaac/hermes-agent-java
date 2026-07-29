@@ -59,11 +59,25 @@ public class MemoryStoreFactory {
         HermesProfile profile = HermesProfile.current();
 
         if (profile != null && profile.hasRedis()) {
+            if (profile.hasPostgres()) {
+                // Sprint C: Hybrid (Redis short-term + Postgres long-term)
+                logger.info("CLUSTER mode: using PostgresMemoryStore (long-term persistence)");
+                return new PostgresMemoryStore(getDataSource());
+            }
             logger.info("CLUSTER mode: using RedisMemoryStore");
             return new RedisMemoryStore(profile.redisOps());
         }
 
+        if (profile != null && profile.hasPostgres()) {
+            logger.info("Postgres-only mode: using PostgresMemoryStore");
+            return new PostgresMemoryStore(getDataSource());
+        }
+
         logger.info("Using LocalMemoryStore");
         return new LocalMemoryStore();
+    }
+
+    private static javax.sql.DataSource getDataSource() {
+        return com.nousresearch.hermes.config.repository.DataSourceFactory.create();
     }
 }

@@ -51,6 +51,11 @@ public class SkillStoreFactory {
     private static SkillStore create() {
         HermesProfile profile = HermesProfile.current();
 
+        if (profile != null && profile.hasPostgres()) {
+            logger.info("CLUSTER mode: using PostgresSkillStore");
+            return new PostgresSkillStore(getDataSource());
+        }
+
         if (profile != null && profile.hasRedis()) {
             logger.info("CLUSTER mode: using RedisSkillStore");
             RedisSkillStore store = new RedisSkillStore(profile.redisOps());
@@ -60,5 +65,9 @@ public class SkillStoreFactory {
 
         logger.info("Using LocalSkillStore");
         return new LocalSkillStore();
+    }
+
+    private static javax.sql.DataSource getDataSource() {
+        return com.nousresearch.hermes.config.repository.DataSourceFactory.create();
     }
 }
