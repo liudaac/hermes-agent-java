@@ -53,6 +53,35 @@ public interface RedisOps {
     long incr(String key);
     long decr(String key);
 
+    // ── Sorted Set operations ───────────────────────────────
+    /**
+     * Add a member to a sorted set with the given score.
+     */
+    void zadd(String key, double score, String member);
+
+    /**
+     * Remove and return members from a sorted set with scores in [min, max].
+     *
+     * @return list of removed members (empty if none)
+     */
+    java.util.List<String> zpoprangebyscore(String key, double min, double max);
+
+    /**
+     * Return members from a sorted set with scores in [min, max].
+     * Non-removing (read-only).
+     */
+    java.util.List<String> zrangebyscore(String key, double min, double max);
+
+    /**
+     * Count members in a sorted set.
+     */
+    long zcard(String key);
+
+    /**
+     * Remove a member from a sorted set.
+     */
+    void zrem(String key, String member);
+
     // ── Lua script ──────────────────────────────────────────
     /**
      * Execute a Lua script.

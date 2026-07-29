@@ -52,9 +52,10 @@ public class SkillStoreFactory {
         HermesProfile profile = HermesProfile.current();
 
         if (profile != null && profile.hasRedis()) {
-            // Sprint B: RedisSkillStore with pub/sub
-            logger.info("CLUSTER mode detected, but Redis implementation not yet available. " +
-                        "Falling back to LocalSkillStore.");
+            logger.info("CLUSTER mode: using RedisSkillStore");
+            RedisSkillStore store = new RedisSkillStore(profile.redisOps());
+            store.startSubscribing();
+            return store;
         }
 
         logger.info("Using LocalSkillStore");

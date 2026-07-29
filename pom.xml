@@ -233,6 +233,12 @@
             <version>${h2.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Redis client (Lettuce) -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>6.5.3.RELEASE</version>
+        </dependency>
     </dependencies>
 
     <build>

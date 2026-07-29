@@ -59,10 +59,8 @@ public class MemoryStoreFactory {
         HermesProfile profile = HermesProfile.current();
 
         if (profile != null && profile.hasRedis()) {
-            // Sprint B: RedisMemoryStore
-            // Sprint C: HybridMemoryStore (Redis short-term + Postgres long-term)
-            logger.info("CLUSTER mode detected, but Redis implementation not yet available. " +
-                        "Falling back to LocalMemoryStore.");
+            logger.info("CLUSTER mode: using RedisMemoryStore");
+            return new RedisMemoryStore(profile.redisOps());
         }
 
         logger.info("Using LocalMemoryStore");
