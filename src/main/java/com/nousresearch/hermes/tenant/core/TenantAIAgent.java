@@ -57,7 +57,7 @@ public class TenantAIAgent {
     }
 
     /**
-     * 处理消息 - 委托给 TenantAwareAIAgent
+     * 处理消息 - 委托给 TenantAwareAIAgent，同时接入中心化 MemoryStore
      */
     public String processMessage(String message) {
         if (interrupted) {
@@ -65,8 +65,36 @@ public class TenantAIAgent {
         }
 
         try {
+            // ── MemoryStore: 写入用户消息到短期记忆 ──
+            var memoryStore = context.getCentralMemoryStore();
+            if (memoryStore != null) {
+                memoryStore.appendSessionMessage(
+                    context.getTenantId(), sessionId, "user", message);
+            }
+
+            // ── MemoryStore: 检索长期记忆，注入上下文 ──
+            if (memoryStore != null) {
+                var longTermResults = memoryStore.searchMemories(
+                    context.getTenantId(), null, message, 5);
+                if (!longTermResults.isEmpty()) {
+                    StringBuilder ctx = new StringBuilder();
+                    ctx.append("\n\n[Relevant long-term memory]\n");
+                    for (var entry : longTermResults) {
+                        ctx.append("- ").append(entry.getContent()).append("\n");
+                    }
+                    message = message + ctx.toString();
+                }
+            }
+
             // 委托给 TenantAwareAIAgent 处理
             String response = delegate.processMessage(message);
+
+            // ── MemoryStore: 写入 assistant 回复到短期记忆 ──
+            if (memoryStore != null && response != null && !response.isBlank()) {
+                memoryStore.appendSessionMessage(
+                    context.getTenantId(), sessionId, "assistant", response);
+            }
+
             return response;
         } catch (Exception e) {
             logger.error("Error processing message in TenantAIAgent: {}", e.getMessage(), e);
@@ -75,7 +103,7 @@ public class TenantAIAgent {
     }
 
     /**
-     * 流式处理消息 - 委托给 TenantAwareAIAgent
+     * 流式处理消息 - 委托给 TenantAwareAIAgent，同时接入中心化 MemoryStore
      */
     public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
         if (interrupted) {
@@ -84,7 +112,41 @@ public class TenantAIAgent {
         }
 
         try {
-            delegate.processMessageStream(message, chunkConsumer);
+            // ── MemoryStore: 写入用户消息到短期记忆 ──
+            var memoryStore = context.getCentralMemoryStore();
+            if (memoryStore != null) {
+                memoryStore.appendSessionMessage(
+                    context.getTenantId(), sessionId, "user", message);
+            }
+
+            // ── MemoryStore: 检索长期记忆 ──
+            if (memoryStore != null) {
+                var longTermResults = memoryStore.searchMemories(
+                    context.getTenantId(), null, message, 5);
+                if (!longTermResults.isEmpty()) {
+                    StringBuilder ctx = new StringBuilder();
+                    ctx.append("\n\n[Relevant long-term memory]\n");
+                    for (var entry : longTermResults) {
+                        ctx.append("- ").append(entry.getContent()).append("\n");
+                    }
+                    message = message + ctx.toString();
+                }
+            }
+
+            // 包装 chunkConsumer 以捕获完整响应
+            StringBuilder responseBuilder = new StringBuilder();
+            java.util.function.Consumer<String> wrappingConsumer = chunk -> {
+                responseBuilder.append(chunk);
+                chunkConsumer.accept(chunk);
+            };
+
+            delegate.processMessageStream(message, wrappingConsumer);
+
+            // ── MemoryStore: 写入 assistant 回复 ──
+            if (memoryStore != null && responseBuilder.length() > 0) {
+                memoryStore.appendSessionMessage(
+                    context.getTenantId(), sessionId, "assistant", responseBuilder.toString());
+            }
         } catch (Exception e) {
             logger.error("Error in stream processing in TenantAIAgent: {}", e.getMessage(), e);
             chunkConsumer.accept("Error: " + e.getMessage());
