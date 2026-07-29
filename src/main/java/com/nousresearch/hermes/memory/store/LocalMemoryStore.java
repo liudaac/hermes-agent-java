@@ -96,6 +96,7 @@ public class LocalMemoryStore implements MemoryStore {
         SessionBucket bucket = sessions.computeIfAbsent(
             sessionKey(tenantId, sessionId), k -> new SessionBucket());
         bucket.fullMessages.addLast(new TimestampedMessage(role, content, Instant.now()));
+        MemorySkillMetrics.getInstance().recordSessionWrite(tenantId);
     }
 
     @Override
@@ -143,7 +144,9 @@ public class LocalMemoryStore implements MemoryStore {
         }
 
         results.sort((a, b) -> Double.compare(b.score(), a.score()));
-        return results.subList(0, Math.min(limit, results.size()));
+        List<MemoryRecall> result = results.subList(0, Math.min(limit, results.size()));
+        MemorySkillMetrics.getInstance().recordSessionRead(tenantId);
+        return result;
     }
 
     @Override
@@ -226,9 +229,11 @@ public class LocalMemoryStore implements MemoryStore {
         }
 
         bucket.lastDecayRun = Instant.now();
+        Duration duration = Duration.between(startTime, Instant.now());
+        MemorySkillMetrics.getInstance().recordDecay(
+            tenantId, compressed, evicted, facts.size(), duration.toMillis());
         return new DecayResult(
-            compressed, evicted, facts.size(), facts,
-            Duration.between(startTime, Instant.now())
+            compressed, evicted, facts.size(), facts, duration
         );
     }
 
@@ -274,6 +279,7 @@ public class LocalMemoryStore implements MemoryStore {
             entry.setId(id);
         }
         longTermMemories.put(id, entry);
+        MemorySkillMetrics.getInstance().recordLongTermWrite(entry.getTenantId());
         return id;
     }
 
@@ -380,6 +386,17 @@ public class LocalMemoryStore implements MemoryStore {
             .limit(limit)
             .map(Map.Entry::getKey)
             .collect(Collectors.toList());
+    }
+
+    @SuppressWarnings("unused")
+    private List<MemoryEntry> searchMemoriesWithMetrics(String tenantId, String userId,
+                                            String query, int limit,
+                                            RetrievalConfig config) {
+        long start = System.currentTimeMillis();
+        List<MemoryEntry> results = searchMemories(tenantId, userId, query, limit, config);
+        MemorySkillMetrics.getInstance().recordSearch(
+            tenantId, System.currentTimeMillis() - start, results.size());
+        return results;
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.nousresearch.hermes.skills.store;
 
+import com.nousresearch.hermes.memory.store.MemorySkillMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,6 +82,7 @@ public class LocalSkillStore implements SkillStore {
         versionHistory.put(skillId, versions);
 
         notifyChange(tenantId, skillId, reg.name(), ChangeAction.REGISTERED);
+        MemorySkillMetrics.getInstance().recordSkillRegistered(tenantId, reg.scope().name());
 
         logger.info("Registered skill: {} ({}) for tenant: {}", reg.name(), skillId, tenantId);
         return skillId;
@@ -101,6 +103,7 @@ public class LocalSkillStore implements SkillStore {
         versionHistory.remove(skillId);
 
         notifyChange(tenantId, skillId, record.name(), ChangeAction.UNREGISTERED);
+        MemorySkillMetrics.getInstance().recordSkillUnregistered(tenantId);
         logger.info("Unregistered skill: {} ({})", record.name(), skillId);
     }
 
@@ -118,6 +121,7 @@ public class LocalSkillStore implements SkillStore {
         skills.put(skillId, record);
 
         notifyChange(tenantId, skillId, record.name(), ChangeAction.ENABLED);
+        MemorySkillMetrics.getInstance().recordSkillEnabled(tenantId);
     }
 
     @Override
@@ -134,6 +138,7 @@ public class LocalSkillStore implements SkillStore {
         skills.put(skillId, record);
 
         notifyChange(tenantId, skillId, record.name(), ChangeAction.DISABLED);
+        MemorySkillMetrics.getInstance().recordSkillDisabled(tenantId);
     }
 
     // ══════════════════════════════════════════════════════════════════
@@ -228,6 +233,7 @@ public class LocalSkillStore implements SkillStore {
         skills.put(skillId, r);
 
         notifyChange(tenantId, skillId, r.name(), ChangeAction.VERSION_PUBLISHED);
+        MemorySkillMetrics.getInstance().recordVersionPublished(tenantId);
         logger.info("Published version {} for skill: {} ({})", version, r.name(), skillId);
     }
 
@@ -258,6 +264,7 @@ public class LocalSkillStore implements SkillStore {
         skills.put(skillId, r);
 
         notifyChange(tenantId, skillId, r.name(), ChangeAction.ROLLED_BACK);
+        MemorySkillMetrics.getInstance().recordVersionRollback(tenantId);
         logger.info("Rolled back skill {} to version {}", skillId, version);
     }
 
@@ -285,6 +292,7 @@ public class LocalSkillStore implements SkillStore {
         for (SkillChangeListener listener : listeners) {
             try {
                 listener.onSkillChange(event);
+                MemorySkillMetrics.getInstance().recordSkillChangeNotification();
             } catch (Exception e) {
                 logger.warn("Skill change listener error: {}", e.getMessage());
             }

@@ -732,6 +732,54 @@ public class DashboardServer {
             app.get("/api/v1/webhooks", integrationHandler::listWebhooks);
             // Health
             app.get("/api/v1/health", integrationHandler::healthCheck);
+
+            // Memory & Skill metrics for Portal observability
+            app.get("/api/memory/{tenantId}/stats", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                var memMetrics = com.nousresearch.hermes.memory.store.MemorySkillMetrics.getInstance();
+                var stats = new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("memory", memMetrics.getMemorySummary(tenantId))
+                    .fluentPut("skill", memMetrics.getSkillSummary(tenantId));
+                ctx.json(stats);
+            });
+
+            // Memory store session stats
+            app.get("/api/memory/{tenantId}/sessions/{sessionId}/stats", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String sessionId = ctx.pathParam("sessionId");
+                var store = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+                var stats = store.getSessionStats(tenantId, sessionId);
+                var json = new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("full", stats.fullCount())
+                    .fluentPut("warm", stats.warmCount())
+                    .fluentPut("cool", stats.coolCount())
+                    .fluentPut("evicted", stats.evictedCount())
+                    .fluentPut("lastDecayRun", stats.lastDecayRun() != null ? stats.lastDecayRun().toString() : null)
+                    .fluentPut("earliestMessage", stats.earliestMessage() != null ? stats.earliestMessage().toString() : null)
+                    .fluentPut("latestMessage", stats.latestMessage() != null ? stats.latestMessage().toString() : null);
+                ctx.json(json);
+            });
+
+            // Skill store listing for Portal
+            app.get("/api/skills/{tenantId}", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                var store = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+                var skills = store.list(tenantId, null);
+                var arr = new com.alibaba.fastjson2.JSONArray();
+                for (var skill : skills) {
+                    arr.add(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("id", skill.id())
+                        .fluentPut("name", skill.name())
+                        .fluentPut("description", skill.description())
+                        .fluentPut("scope", skill.scope().name())
+                        .fluentPut("type", skill.type().name())
+                        .fluentPut("enabled", skill.enabled())
+                        .fluentPut("currentVersion", skill.currentVersion())
+                        .fluentPut("versions", skill.versions())
+                        .fluentPut("updatedAt", skill.updatedAt() != null ? skill.updatedAt().toString() : null));
+                }
+                ctx.json(arr);
+            });
             // Admin: register business system
             app.post("/api/v1/systems", ctx -> {
                 var reg = com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getRegistry();
@@ -1402,6 +1450,8 @@ public class DashboardServer {
             ctx.contentType("text/plain; version=0.0.4; charset=utf-8");
             try {
                 String out = metricsCollector.exportPrometheusMetrics();
+                // Append memory & skill metrics
+                out += "\n" + com.nousresearch.hermes.memory.store.MemorySkillMetrics.getInstance().exportPrometheus();
                 ctx.result(out);
             } catch (Exception e) {
                 logger.warn("Failed to export metrics: {}", e.getMessage());
