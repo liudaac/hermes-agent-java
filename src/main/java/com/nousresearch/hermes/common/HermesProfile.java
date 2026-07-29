@@ -119,6 +119,36 @@ public final class HermesProfile {
         return mode == Mode.CLUSTER && redisOps != null;
     }
 
+    /** Check if Postgres is available (cluster mode + postgresUrl configured). */
+    public boolean hasPostgres() {
+        return mode == Mode.CLUSTER && postgresUrl != null && !postgresUrl.isBlank();
+    }
+
+    // ── Singleton ────────────────────────────────────────────
+
+    private static volatile HermesProfile current;
+
+    /**
+     * Get the global HermesProfile instance. Created lazily on first access.
+     */
+    public static HermesProfile current() {
+        if (current == null) {
+            synchronized (HermesProfile.class) {
+                if (current == null) {
+                    current = new HermesProfile();
+                }
+            }
+        }
+        return current;
+    }
+
+    /**
+     * Set the global profile (for testing / DI).
+     */
+    public static void setCurrent(HermesProfile profile) {
+        current = profile;
+    }
+
     // ── Config resolvers ────────────────────────────────────
 
     private static Mode resolveMode() {
