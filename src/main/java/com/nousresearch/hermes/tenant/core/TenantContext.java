@@ -73,6 +73,10 @@ public class TenantContext {
     private volatile TenantSecurityPolicy securityPolicy;
     private volatile TenantResourceMonitor resourceMonitor;
 
+    // Centralised stores (Memory & Skill centralisation)
+    private volatile com.nousresearch.hermes.memory.store.MemoryStore centralMemoryStore;
+    private volatile com.nousresearch.hermes.skills.store.SkillStore centralSkillStore;
+
     // Phase 2: 资源隔离沙箱
     private volatile ProcessSandbox processSandbox;
     private volatile CgroupProcessSandbox cgroupSandbox;
@@ -316,6 +320,10 @@ public class TenantContext {
 
             // Skill 管理
             this.skillManager = new TenantSkillManager(this.tenantId, tenantDir.resolve("skills"), this);
+
+            // Centralised stores (Memory & Skill centralisation)
+            this.centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+            this.centralSkillStore = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
 
             // 会话管理
             this.sessionManager = new TenantSessionManager(tenantDir.resolve("sessions"), this);
@@ -970,6 +978,12 @@ public class TenantContext {
     public TenantFileSandbox getFileSandbox() { return fileSandbox; }
     public TenantMemoryManager getMemoryManager() { return memoryManager; }
     public TenantSkillManager getSkillManager() { return skillManager; }
+
+    /** Centralised memory store (short-term decay + long-term RRF retrieval). */
+    public com.nousresearch.hermes.memory.store.MemoryStore getCentralMemoryStore() { return centralMemoryStore; }
+
+    /** Centralised skill store (registration + versioning + pub/sub sync). */
+    public com.nousresearch.hermes.skills.store.SkillStore getCentralSkillStore() { return centralSkillStore; }
     public TenantSessionManager getSessionManager() { return sessionManager; }
     public TenantToolRegistry getToolRegistry() { return toolRegistry; }
     public TenantQuotaManager getQuotaManager() { return quotaManager; }
