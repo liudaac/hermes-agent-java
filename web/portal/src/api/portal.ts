@@ -438,4 +438,47 @@ export const portalApi = {
       `/api/harness/active${qs}`,
     );
   },
+
+  // ── Memory & Skill observability ──
+  getMemoryStats: (tenantId: string) =>
+    fetchJSON<{
+      memory: {
+        totalMemories: number;
+        sessionCount: number;
+        longTermMemories: number;
+        agentExperiences: number;
+        decayRuns: number;
+        lastDecayRun: string | null;
+      };
+      skill: {
+        totalSkills: number;
+        enabledSkills: number;
+        byScope: Record<string, number>;
+        byType: Record<string, number>;
+      };
+    }>(`/api/memory/${encodeURIComponent(tenantId)}/stats`),
+
+  getSessionMemoryStats: (tenantId: string, sessionId: string) =>
+    fetchJSON<{
+      full: number;
+      warm: number;
+      cool: number;
+      evicted: number;
+      lastDecayRun: string | null;
+      earliestMessage: string | null;
+      latestMessage: string | null;
+    }>(`/api/memory/${encodeURIComponent(tenantId)}/sessions/${encodeURIComponent(sessionId)}/stats`),
+
+  getSkills: (tenantId: string) =>
+    fetchJSON<Array<{
+      id: string;
+      name: string;
+      description: string;
+      scope: string;
+      type: string;
+      enabled: boolean;
+      currentVersion: number;
+      versions: number;
+      updatedAt: string | null;
+    }>>(`/api/skills/${encodeURIComponent(tenantId)}`),
 };

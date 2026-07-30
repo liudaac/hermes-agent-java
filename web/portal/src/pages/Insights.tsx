@@ -4,7 +4,8 @@ import type { BusinessInsightsResponse, BusinessInsightRecord } from "@/api/type
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorCard } from "@/components/ErrorCard";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Brain } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
 
@@ -29,13 +30,22 @@ export default function Insights() {
   return (
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
-        <header className="mb-5">
-          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
-            {t("insights.title")}
-          </h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
-            {t("insights.subtitle")}
-          </p>
+        <header className="mb-5 flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+              {t("insights.title")}
+            </h1>
+            <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+              {t("insights.subtitle")}
+            </p>
+          </div>
+          <Link
+            to="/memory"
+            className="glass flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+          >
+            <Brain className="h-4 w-4" />
+            {t("memory.title")}
+          </Link>
         </header>
 
         {error && <ErrorCard message={error} onRetry={loadData} />}

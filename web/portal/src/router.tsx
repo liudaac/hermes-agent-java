@@ -14,6 +14,7 @@ const Approvals = lazy(() => import("@/pages/Approvals"));
 const Runs = lazy(() => import("@/pages/Runs"));
 const RunDetail = lazy(() => import("@/pages/RunDetail"));
 const Insights = lazy(() => import("@/pages/Insights"));
+const Memory = lazy(() => import("@/pages/Memory"));
 
 function PageFallback() {
   const location = useLocation();
@@ -48,6 +49,7 @@ export function PortalRouter() {
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetail />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/memory" element={<Memory />} />
           {/* Unknown paths inside the portal render Home instead of
               navigating away. This matters because the portal's entry
               URL is /portal/index.html — when the user opens that
@@ -72,5 +74,6 @@ function titleFor(pathname: string, t: (k: string) => string): string {
   if (pathname.startsWith("/approvals")) return t("nav.approvals");
   if (pathname.startsWith("/runs")) return t("nav.runs");
   if (pathname.startsWith("/insights")) return t("nav.insights");
+  if (pathname.startsWith("/memory")) return t("memory.title");
   return t("app.name");
 }
