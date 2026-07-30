@@ -122,4 +122,35 @@ public interface ConfigRepository {
      * Delete a custom agent template.
      */
     void deleteAgentTemplate(String tenantId, String name);
+
+    // ============ Tenant Settings (KV) ============
+
+    /**
+     * Load a tenant-level setting value by key.
+     *
+     * <p>Used for settings that don't fit the structured tables:
+     * memory.decay_policy, memory.summary_batch_size, etc.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param key      setting key (e.g. "memory.decay_policy")
+     * @return setting value, or null if not set
+     */
+    String loadTenantSetting(String tenantId, String key);
+
+    /**
+     * Save (upsert) a tenant-level setting.
+     *
+     * @param tenantId tenant identifier
+     * @param key      setting key
+     * @param value    setting value
+     */
+    void saveTenantSetting(String tenantId, String key, String value);
+
+    /**
+     * Load all tenant settings as a key-value map.
+     *
+     * @param tenantId tenant identifier
+     * @return map of all settings (never null, may be empty)
+     */
+    Map<String, String> loadAllTenantSettings(String tenantId);
 }

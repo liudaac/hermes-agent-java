@@ -272,6 +272,33 @@ public class LocalConfigRepository implements ConfigRepository {
         return new AgentTemplate(name, desc, prompt, tools, maxIter, forkMode);
     }
 
+    // ============ Tenant Settings (KV) ============
+
+    @Override
+    public String loadTenantSetting(String tenantId, String key) {
+        TenantConfig tc = loadTenantConfig(tenantId);
+        return tc.getString(key);
+    }
+
+    @Override
+    public void saveTenantSetting(String tenantId, String key, String value) {
+        TenantConfig tc = loadTenantConfig(tenantId);
+        tc.set(key, value);
+        tc.save();
+    }
+
+    @Override
+    public Map<String, String> loadAllTenantSettings(String tenantId) {
+        TenantConfig tc = loadTenantConfig(tenantId);
+        Map<String, String> result = new LinkedHashMap<>();
+        // Read memory.* settings if present
+        String decayPolicy = tc.getString("memory.decay_policy");
+        if (decayPolicy != null) result.put("memory.decay_policy", decayPolicy);
+        String summaryBatch = tc.getString("memory.summary_batch_size");
+        if (summaryBatch != null) result.put("memory.summary_batch_size", summaryBatch);
+        return result;
+    }
+
     // ============ Helper ============
 
     private Map<String, Object> routeToMap(ModelRoute route) {

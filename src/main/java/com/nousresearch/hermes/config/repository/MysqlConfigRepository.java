@@ -447,4 +447,60 @@ public class MysqlConfigRepository implements ConfigRepository {
             logger.warn("Failed to delete agent template: {}", e.getMessage());
         }
     }
+
+    // ============ Tenant Settings (KV) ============
+
+    @Override
+    public String loadTenantSetting(String tenantId, String key) {
+        String sql = "SELECT setting_value FROM tenant_setting WHERE tenant_id = ? AND setting_key = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            ps.setString(2, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString("setting_value");
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to load setting {}/{}: {}", tenantId, key, e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public void saveTenantSetting(String tenantId, String key, String value) {
+        String sql = """
+            INSERT INTO tenant_setting (tenant_id, setting_key, setting_value)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+            """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            ps.setString(2, key);
+            ps.setString(3, value);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to save setting {}/{}: {}", tenantId, key, e.getMessage());
+        }
+    }
+
+    @Override
+    public Map<String, String> loadAllTenantSettings(String tenantId) {
+        String sql = "SELECT setting_key, setting_value FROM tenant_setting WHERE tenant_id = ?";
+        Map<String, String> result = new LinkedHashMap<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, tenantId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.put(rs.getString("setting_key"), rs.getString("setting_value"));
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to load all settings for tenant {}: {}", tenantId, e.getMessage());
+        }
+        return result;
+    }
 }

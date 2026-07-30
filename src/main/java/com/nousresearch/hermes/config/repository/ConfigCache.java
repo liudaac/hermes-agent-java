@@ -231,4 +231,21 @@ public class ConfigCache implements ConfigRepository {
     public void deleteAgentTemplate(String tenantId, String name) {
         delegate.deleteAgentTemplate(tenantId, name);
     }
+
+    // ============ Tenant Settings (KV) - delegate without caching ============
+
+    @Override
+    public String loadTenantSetting(String tenantId, String key) {
+        return delegate.loadTenantSetting(tenantId, key);
+    }
+
+    @Override
+    public void saveTenantSetting(String tenantId, String key, String value) {
+        delegate.saveTenantSetting(tenantId, key, value);
+    }
+
+    @Override
+    public Map<String, String> loadAllTenantSettings(String tenantId) {
+        return delegate.loadAllTenantSettings(tenantId);
+    }
 }

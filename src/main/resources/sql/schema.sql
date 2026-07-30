@@ -286,3 +286,16 @@ CREATE TABLE IF NOT EXISTS tenant_agent_template (
     PRIMARY KEY (id),
     UNIQUE KEY uk_tenant_template (tenant_id, template_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- Tenant settings (generic KV for configs not in structured tables)
+-- e.g. memory.decay_policy, memory.summary_batch_size
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS tenant_setting (
+    tenant_id       VARCHAR(64)  NOT NULL,
+    setting_key     VARCHAR(128) NOT NULL,
+    setting_value   TEXT,
+    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_id, setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

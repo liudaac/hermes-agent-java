@@ -79,6 +79,8 @@ public class TenantContext {
     private volatile com.nousresearch.hermes.skills.store.SkillStore centralSkillStore;
     // DecayScheduler lifecycle: started on tenant create, stopped on destroy
     private volatile com.nousresearch.hermes.memory.store.DecayScheduler decayScheduler;
+    // ConfigRepository reference (for DB-backed settings like decay_policy)
+    private volatile com.nousresearch.hermes.config.repository.ConfigRepository configRepository;
 
     // Phase 2: 资源隔离沙箱
     private volatile ProcessSandbox processSandbox;
@@ -248,6 +250,7 @@ public class TenantContext {
         try {
             createDirectoryStructure(tenantDir);
             TenantContext context = new TenantContext(safeTenantId, tenantDir);
+            context.configRepository = repo;
             context.auditLogger = new TenantAuditLogger(tenantDir.resolve("logs"));
             context.quotaManager = new TenantQuotaManager(tenantDir, request.getQuota());
             context.securityPolicy = request.getSecurityPolicy();
@@ -294,6 +297,7 @@ public class TenantContext {
 
         TenantContext context = new TenantContext(safeTenantId, tenantDir);
         try {
+            context.configRepository = repo;
             context.config = TenantConfig.fromRepository(safeTenantId, repo, globalConfig);
             context.auditLogger = new TenantAuditLogger(tenantDir.resolve("logs"));
             context.quotaManager = new TenantQuotaManager(tenantDir, null);
@@ -1020,6 +1024,9 @@ public class TenantContext {
     /** DecayScheduler for this tenant (started on init, stopped on destroy). */
     public com.nousresearch.hermes.memory.store.DecayScheduler getDecayScheduler() { return decayScheduler; }
 
+    /** ConfigRepository (DB-backed in CLUSTER mode, null in LOCAL mode). */
+    public com.nousresearch.hermes.config.repository.ConfigRepository getConfigRepository() { return configRepository; }
+
     /**
      * Register a session for decay tracking. Called when a new Agent session starts.
      * Uses the tenant's configured DecayPolicy (or standard() as default).
@@ -1037,15 +1044,39 @@ public class TenantContext {
     }
 
     /**
-     * Resolve the DecayPolicy for this tenant from config.
-     * Reads {@code memory.decay_policy} from TenantConfig.
-     * Supported values: aggressive, standard, longRunning, archival.
-     * Defaults to {@link DecayPolicy#standard()}.
+     * Resolve the DecayPolicy for this tenant from the config source.
+     *
+     * <p>Resolution order:</p>
+     * <ol>
+     *   <li>If a DB-backed {@link com.nousresearch.hermes.config.repository.ConfigRepository}
+     *       is attached, reads {@code memory.decay_policy} from the
+     *       {@code tenant_setting} table.</li>
+     *   <li>Otherwise, reads from the file-based {@link TenantConfig}.</li>
+     *   <li>Defaults to {@link DecayPolicy#standard()} if not configured.</li>
+     * </ol>
+     *
+     * <p>Supported values: aggressive, standard, longRunning, archival.</p>
      */
     public com.nousresearch.hermes.memory.store.DecayPolicy resolveDecayPolicy() {
-        if (config == null) return com.nousresearch.hermes.memory.store.DecayPolicy.standard();
-        String preset = config.getString("memory.decay_policy");
-        if (preset == null || preset.isBlank()) return com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+        String preset = null;
+
+        // 1. DB-backed repository (CLUSTER mode)
+        if (configRepository != null) {
+            try {
+                preset = configRepository.loadTenantSetting(tenantId, "memory.decay_policy");
+            } catch (Exception e) {
+                logger.debug("Failed to load decay_policy from repository for tenant {}: {}", tenantId, e.getMessage());
+            }
+        }
+
+        // 2. File-based config (LOCAL mode or fallback)
+        if (preset == null && config != null) {
+            preset = config.getString("memory.decay_policy");
+        }
+
+        if (preset == null || preset.isBlank()) {
+            return com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+        }
         return switch (preset.toLowerCase()) {
             case "aggressive" -> com.nousresearch.hermes.memory.store.DecayPolicy.aggressive();
             case "standard" -> com.nousresearch.hermes.memory.store.DecayPolicy.standard();
