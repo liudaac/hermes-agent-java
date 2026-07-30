@@ -6,6 +6,7 @@ import com.nousresearch.hermes.org.handoff.HandoffProtocol;
 import com.nousresearch.hermes.org.knowledge.OrganizationalKnowledgeBase;
 import com.nousresearch.hermes.tenant.core.TenantConfig;
 import com.nousresearch.hermes.tenant.core.TenantProvisioningRequest;
+import com.nousresearch.hermes.memory.store.DecayPolicy;
 import com.nousresearch.hermes.tenant.audit.AuditEvent;
 import com.nousresearch.hermes.tenant.audit.TenantAuditLogger;
 import com.nousresearch.hermes.tenant.quota.TenantQuotaManager;
@@ -76,6 +77,8 @@ public class TenantContext {
     // Centralised stores (Memory & Skill centralisation)
     private volatile com.nousresearch.hermes.memory.store.MemoryStore centralMemoryStore;
     private volatile com.nousresearch.hermes.skills.store.SkillStore centralSkillStore;
+    // DecayScheduler lifecycle: started on tenant create, stopped on destroy
+    private volatile com.nousresearch.hermes.memory.store.DecayScheduler decayScheduler;
 
     // Phase 2: 资源隔离沙箱
     private volatile ProcessSandbox processSandbox;
@@ -129,7 +132,7 @@ public class TenantContext {
     private volatile java.util.Map<String, Object> browserProbeReport = java.util.Map.of();
     private volatile com.nousresearch.hermes.browser.BrowserBridgeConfig browserBridgeConfig;
     private final AtomicBoolean collaborationInitialized = new AtomicBoolean(false);
-    
+
     // 自动保存调度器
     private volatile ScheduledExecutorService autoSaveScheduler;
     private static final long AUTO_SAVE_INTERVAL_SECONDS = 300; // 5分钟
@@ -260,6 +263,12 @@ public class TenantContext {
             context.toolRegistry = new TenantToolRegistry(context);
             context.resourceMonitor = new TenantResourceMonitor(context);
 
+            // Start DecayScheduler for DB-backed tenant
+            context.centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+            context.centralSkillStore = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+            context.decayScheduler = new com.nousresearch.hermes.memory.store.DecayScheduler(context.centralMemoryStore);
+            context.decayScheduler.start();
+
             context.state.set(State.ACTIVE);
             context.auditLogger.log(AuditEvent.TENANT_CREATED, java.util.Map.of(
                 "tenantId", safeTenantId,
@@ -294,6 +303,13 @@ public class TenantContext {
             context.loadAgentRoles();
             context.toolRegistry = new TenantToolRegistry(context);
             context.resourceMonitor = new TenantResourceMonitor(context);
+
+            // Start DecayScheduler for DB-backed loaded tenant
+            context.centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+            context.centralSkillStore = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+            context.decayScheduler = new com.nousresearch.hermes.memory.store.DecayScheduler(context.centralMemoryStore);
+            context.decayScheduler.start();
+
             context.state.set(State.ACTIVE);
             logger.info("Tenant context loaded (DB-backed): {}", safeTenantId);
             return context;
@@ -324,6 +340,10 @@ public class TenantContext {
             // Centralised stores (Memory & Skill centralisation)
             this.centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
             this.centralSkillStore = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+
+            // Start DecayScheduler for this tenant
+            this.decayScheduler = new com.nousresearch.hermes.memory.store.DecayScheduler(centralMemoryStore);
+            this.decayScheduler.start();
 
             // 会话管理
             this.sessionManager = new TenantSessionManager(tenantDir.resolve("sessions"), this);
@@ -570,7 +590,7 @@ public class TenantContext {
         return createAgent(sessionId, hermesConfig);
     }
 
-    /** 从磁盘加载所有已持久化的组件 — 用于 TenantContext.load()。 */
+    /** 从磁盘加载所有已持久化的组件 - 用于 TenantContext.load()。 */
     private void loadExistingComponents() {
         lifecycleLock.writeLock().lock();
         try {
@@ -585,6 +605,12 @@ public class TenantContext {
             loadAgentRoles();
             this.toolRegistry = new TenantToolRegistry(this);
             this.resourceMonitor = new TenantResourceMonitor(this);
+
+            // Restore centralised stores and start DecayScheduler
+            this.centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+            this.centralSkillStore = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+            this.decayScheduler = new com.nousresearch.hermes.memory.store.DecayScheduler(centralMemoryStore);
+            this.decayScheduler.start();
 
         } finally {
             lifecycleLock.writeLock().unlock();
@@ -675,24 +701,24 @@ public class TenantContext {
         lifecycleLock.readLock().lock();
         try {
             logger.debug("Saving tenant context: {}", tenantId);
-            
+
             // 保存会话
             if (sessionManager != null) {
                 sessionManager.persistAll();
             }
-            
+
             // 保存配额使用量
             if (quotaManager != null) {
                 quotaManager.saveUsage();
             }
-            
+
             // 保存配置
             if (config != null) {
                 config.save();
             }
 
             saveAgentRoles();
-            
+
             // 保存安全策略
             if (securityPolicy != null) {
                 try {
@@ -701,12 +727,12 @@ public class TenantContext {
                     logger.error("Failed to save security policy", e);
                 }
             }
-            
+
             // 更新最后活动时间
             lastActivity = Instant.now();
-            
+
             logger.debug("Tenant context saved: {}", tenantId);
-            
+
         } finally {
             lifecycleLock.readLock().unlock();
         }
@@ -738,7 +764,7 @@ public class TenantContext {
         );
         logger.info("Auto-save enabled for tenant: {}", tenantId);
     }
-    
+
     /**
      * 禁用自动保存
      */
@@ -769,9 +795,15 @@ public class TenantContext {
 
             state.set(State.CLEANING_UP);
             logger.info("Destroying tenant context: {}", tenantId);
-            
+
             // 停止自动保存
             disableAutoSave();
+
+            // Stop DecayScheduler for this tenant
+            if (decayScheduler != null) {
+                decayScheduler.stop();
+                decayScheduler = null;
+            }
 
             // 1. 停止所有 Agent
             logger.debug("Stopping {} active agents", activeAgents.size());
@@ -961,7 +993,7 @@ public class TenantContext {
         return lastActivity.plus(duration, unit.toChronoUnit()).isBefore(Instant.now());
     }
 
-    /** 更新最后活动时间戳 — 通常在接收到新请求时调用。 */
+    /** 更新最后活动时间戳 - 通常在接收到新请求时调用。 */
     public void updateActivity() {
         this.lastActivity = Instant.now();
     }
@@ -984,6 +1016,45 @@ public class TenantContext {
 
     /** Centralised skill store (registration + versioning + pub/sub sync). */
     public com.nousresearch.hermes.skills.store.SkillStore getCentralSkillStore() { return centralSkillStore; }
+
+    /** DecayScheduler for this tenant (started on init, stopped on destroy). */
+    public com.nousresearch.hermes.memory.store.DecayScheduler getDecayScheduler() { return decayScheduler; }
+
+    /**
+     * Register a session for decay tracking. Called when a new Agent session starts.
+     * Uses the tenant's configured DecayPolicy (or standard() as default).
+     */
+    public void registerSessionForDecay(String sessionId) {
+        if (decayScheduler == null || centralMemoryStore == null) return;
+        DecayPolicy policy = resolveDecayPolicy();
+        decayScheduler.registerSession(tenantId, sessionId, policy);
+    }
+
+    /** Unregister a session from decay tracking (e.g. when session ends). */
+    public void unregisterSessionForDecay(String sessionId) {
+        if (decayScheduler == null) return;
+        decayScheduler.unregisterSession(tenantId, sessionId);
+    }
+
+    /**
+     * Resolve the DecayPolicy for this tenant from config.
+     * Reads {@code memory.decay_policy} from TenantConfig.
+     * Supported values: aggressive, standard, longRunning, archival.
+     * Defaults to {@link DecayPolicy#standard()}.
+     */
+    public com.nousresearch.hermes.memory.store.DecayPolicy resolveDecayPolicy() {
+        if (config == null) return com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+        String preset = config.getString("memory.decay_policy");
+        if (preset == null || preset.isBlank()) return com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+        return switch (preset.toLowerCase()) {
+            case "aggressive" -> com.nousresearch.hermes.memory.store.DecayPolicy.aggressive();
+            case "standard" -> com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+            case "longrunning", "long-running", "long_running" ->
+                com.nousresearch.hermes.memory.store.DecayPolicy.longRunning();
+            case "archival" -> com.nousresearch.hermes.memory.store.DecayPolicy.archival();
+            default -> com.nousresearch.hermes.memory.store.DecayPolicy.standard();
+        };
+    }
     public TenantSessionManager getSessionManager() { return sessionManager; }
     public TenantToolRegistry getToolRegistry() { return toolRegistry; }
     public TenantQuotaManager getQuotaManager() { return quotaManager; }
@@ -1346,7 +1417,7 @@ public class TenantContext {
 
     // ============ 工具方法 ============
 
-    /** 清理租户 ID — 仅保留 Unicode 字母、数字、下划线和连字符，超长截断。 */
+    /** 清理租户 ID - 仅保留 Unicode 字母、数字、下划线和连字符，超长截断。 */
     private static String sanitizeTenantId(String tenantId) {
         // 允许 Unicode 字母、数字、中文、下划线和连字符
         String sanitized = tenantId.replaceAll("[^\\p{L}\\p{N}_-]", "_");
@@ -1377,7 +1448,7 @@ public class TenantContext {
         logger.debug("Created tenant directory structure: {}", tenantDir);
     }
 
-    /** 递归删除目录 — 用于销毁租户时清理数据。 */
+    /** 递归删除目录 - 用于销毁租户时清理数据。 */
     private static void cleanupDirectory(Path dir) {
         try {
             if (Files.exists(dir)) {
@@ -1406,21 +1477,21 @@ public class TenantContext {
 
     // ============ 异常类 ============
 
-    /** 租户创建异常 — 目录创建或组件初始化失败时抛出。 */
+    /** 租户创建异常 - 目录创建或组件初始化失败时抛出。 */
     public static class TenantCreationException extends RuntimeException {
         public TenantCreationException(String message, Throwable cause) {
             super(message, cause);
         }
     }
 
-    /** 租户加载异常 — 从磁盘恢复租户失败时抛出。 */
+    /** 租户加载异常 - 从磁盘恢复租户失败时抛出。 */
     public static class TenantLoadException extends RuntimeException {
         public TenantLoadException(String message, Throwable cause) {
             super(message, cause);
         }
     }
 
-    /** 租户不存在异常 — 加载时目录缺失抛出。 */
+    /** 租户不存在异常 - 加载时目录缺失抛出。 */
     public static class TenantNotFoundException extends RuntimeException {
         public TenantNotFoundException(String message) {
             super(message);
@@ -1430,7 +1501,7 @@ public class TenantContext {
 
 
     /**
-     * 兼容性别名 — 供调用方/测试获取当前租户 ID。
+     * 兼容性别名 - 供调用方/测试获取当前租户 ID。
      * <p>通过反射尝试 getTenantId()、tenantId() 方法或直接字段访问。</p>
      */
     public String getCurrentTenantId() {

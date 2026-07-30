@@ -24,6 +24,8 @@ public class TenantAIAgent {
         // Bind the delegate to the already-resolved tenant context and session.
         // Do not call forTenant(...), which would create/load a separate TenantManager/TenantContext graph.
         this.delegate = TenantAwareAIAgent.forContext(context, sessionId, config);
+        // Register this session for decay tracking
+        context.registerSessionForDecay(sessionId);
         logger.debug("Created TenantAIAgent for tenant: {}, session: {}", context.getTenantId(), sessionId);
     }
     
@@ -187,7 +189,68 @@ public class TenantAIAgent {
      */
     public void endSession(boolean completed) {
         delegate.endSession(completed);
+
+        // AgentExperience: auto-learn from this session
+        if (completed) {
+            autoLearnExperience();
+        }
+
+        // Unregister from decay scheduler
+        context.unregisterSessionForDecay(sessionId);
+
         logger.debug("Ended session: {} (completed: {})", sessionId, completed);
+    }
+
+    /**
+     * Auto-learn experience from this session's conversation.
+     *
+     * <p>Extracts a brief experience note from the session's messages and
+     * records it to the MemoryStore's agent experience log. This enables
+     * the agent to accumulate learned patterns across sessions.</p>
+     */
+    private void autoLearnExperience() {
+        var memoryStore = context.getCentralMemoryStore();
+        if (memoryStore == null) return;
+
+        try {
+            // Get session stats to check if there's anything to learn
+            var stats = memoryStore.getSessionStats(context.getTenantId(), sessionId);
+            if (stats.fullCount() + stats.warmCount() + stats.coolCount() == 0) return;
+
+            // Recall recent messages to build an experience summary
+            var recalls = memoryStore.recallSession(
+                context.getTenantId(), sessionId, "", 5,
+                com.nousresearch.hermes.memory.store.DecayPolicy.standard());
+
+            if (recalls.isEmpty()) return;
+
+            // Build a concise experience note from the conversation
+            StringBuilder exp = new StringBuilder();
+            for (var r : recalls) {
+                String content = r.content();
+                // Truncate each message to keep the experience concise
+                int maxLen = Math.min(content.length(), 150);
+                exp.append("[").append(r.role()).append("] ")
+                   .append(content, 0, maxLen)
+                   .append(content.length() > 150 ? "..." : "")
+                   .append(" ");
+            }
+
+            String experience = exp.toString().trim();
+            if (!experience.isEmpty()) {
+                memoryStore.addAgentExperience(
+                    context.getTenantId(),
+                    sessionId,  // use sessionId as agentId proxy
+                    "session_summary",
+                    experience
+                );
+                logger.debug("Auto-learned experience for tenant={}/session={}",
+                    context.getTenantId(), sessionId);
+            }
+        } catch (Exception e) {
+            logger.warn("Auto-learn experience failed for {}/{}: {}",
+                context.getTenantId(), sessionId, e.getMessage());
+        }
     }
 
     /**
