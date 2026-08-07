@@ -65,11 +65,35 @@ public class TenantAIAgent {
      * @param userId  用户标识（用于用户维度记忆隔离），null 则不按用户隔离
      */
     public String processMessage(String message, String userId) {
+        return processMessage(message, userId, null);
+    }
+
+    /**
+     * 处理消息（带参考会话）
+     *
+     * @param message             用户消息
+     * @param userId              用户标识
+     * @param referenceSessionId  参考会话 ID（将注入历史流程），null 则不注入
+     */
+    public String processMessage(String message, String userId, String referenceSessionId) {
         if (interrupted) {
             return "Agent has been interrupted";
         }
 
         try {
+            // ── SessionRef: 注入参考流程 ──
+            if (referenceSessionId != null && !referenceSessionId.isBlank()) {
+                var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                String augmented = sessionRef.injectReferenceFromSession(
+                    context.getTenantId(), referenceSessionId, message);
+                if (!augmented.equals(message)) {
+                    logger.info("Injected reference flow from session {} into new message", referenceSessionId);
+                    message = augmented;
+                }
+            }
+
             // ── MemoryStore: 写入用户消息到短期记忆 ──
             var memoryStore = context.getCentralMemoryStore();
             if (memoryStore != null) {
@@ -123,12 +147,38 @@ public class TenantAIAgent {
      * @param chunkConsumer 流式回调
      */
     public void processMessageStream(String message, String userId, java.util.function.Consumer<String> chunkConsumer) {
+        processMessageStream(message, userId, null, chunkConsumer);
+    }
+
+    /**
+     * 流式处理消息（带参考会话）
+     *
+     * @param message             用户消息
+     * @param userId              用户标识
+     * @param referenceSessionId  参考会话 ID，null 则不注入
+     * @param chunkConsumer       流式回调
+     */
+    public void processMessageStream(String message, String userId, String referenceSessionId,
+                                      java.util.function.Consumer<String> chunkConsumer) {
         if (interrupted) {
             chunkConsumer.accept("Agent has been interrupted");
             return;
         }
 
         try {
+            // ── SessionRef: 注入参考流程 ──
+            if (referenceSessionId != null && !referenceSessionId.isBlank()) {
+                var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                String augmented = sessionRef.injectReferenceFromSession(
+                    context.getTenantId(), referenceSessionId, message);
+                if (!augmented.equals(message)) {
+                    logger.info("Injected reference flow from session {} into stream message", referenceSessionId);
+                    message = augmented;
+                }
+            }
+
             // ── MemoryStore: 写入用户消息到短期记忆 ──
             var memoryStore = context.getCentralMemoryStore();
             if (memoryStore != null) {

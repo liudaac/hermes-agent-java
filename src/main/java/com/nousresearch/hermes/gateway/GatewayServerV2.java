@@ -589,6 +589,7 @@ public class GatewayServerV2 {
             String sessionId = body.getString("session_id");
             String tenantId = body.getString("tenant_id");
             String userId = body.getString("user_id");
+            String referenceSessionId = body.getString("reference_session_id");
 
             if (message == null || message.trim().isEmpty()) {
                 ctx.status(400).json(Map.of("error", "Message is required"));
@@ -650,7 +651,7 @@ public class GatewayServerV2 {
 
             // 处理消息 (through harness, which emits structured events)
             long startTime = System.currentTimeMillis();
-            String response = harness.processMessage(message, userId);
+            String response = harness.processMessage(message, userId, referenceSessionId);
             long duration = System.currentTimeMillis() - startTime;
 
             // 更新租户活动状态

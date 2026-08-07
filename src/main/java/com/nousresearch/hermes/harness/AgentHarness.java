@@ -74,8 +74,25 @@ public class AgentHarness {
 
     /** Process a user message with userId for user-dimension memory isolation. */
     public String processMessage(String message, String userId) {
+        return processMessage(message, userId, null);
+    }
+
+    /** Process a user message with userId and optional reference session. */
+    public String processMessage(String message, String userId, String referenceSessionId) {
         currentPhase = "thinking";
         try {
+            // ── SessionRef: inject reference flow ──
+            if (referenceSessionId != null && !referenceSessionId.isBlank()) {
+                var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                String augmented = sessionRef.injectReferenceFromSession(
+                    tenantCtx.getTenantId(), referenceSessionId, message);
+                if (!augmented.equals(message)) {
+                    message = augmented;
+                }
+            }
+
             // Write to MemoryStore before processing (user message)
             var memoryStore = tenantCtx.getCentralMemoryStore();
             if (memoryStore != null) {
