@@ -850,6 +850,141 @@ public class DashboardServer {
         app.get("/api/sessions/{id}/messages", sessionHandler::getSessionMessages);
         app.delete("/api/sessions/{id}", sessionHandler::deleteSession);
 
+        // Session Assets API (user-dimension session library)
+        var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+        var sessionLibrary = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+        var stepExtractor = new com.nousresearch.hermes.session.SessionStepExtractor();
+
+        app.get("/api/session-assets/{tenantId}", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String userId = ctx.queryParam("user_id");
+            String status = ctx.queryParam("status");
+            Boolean bookmarked = ctx.queryParam("bookmarked") != null
+                    ? Boolean.parseBoolean(ctx.queryParam("bookmarked")) : null;
+            Integer minRating = ctx.queryParam("min_rating") != null
+                    ? Integer.parseInt(ctx.queryParam("min_rating")) : null;
+            String tag = ctx.queryParam("tag");
+            int page = ctx.queryParam("page") != null ? Integer.parseInt(ctx.queryParam("page")) : 0;
+            int size = ctx.queryParam("size") != null ? Integer.parseInt(ctx.queryParam("size")) : 20;
+
+            var query = new com.nousresearch.hermes.session.SessionLibrary.SessionQuery(
+                    status, bookmarked, minRating, tag, null, null, "updated");
+            var result = sessionLibrary.querySessions(tenantId, userId, query, page, size);
+
+            var arr = new com.alibaba.fastjson2.JSONArray();
+            for (var asset : result.items()) {
+                arr.add(assetToJson(asset));
+            }
+            ctx.json(new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("items", arr)
+                    .fluentPut("page", result.page())
+                    .fluentPut("size", result.size())
+                    .fluentPut("total", result.total())
+                    .fluentPut("hasNext", result.hasNext()));
+        });
+
+        app.get("/api/session-assets/{tenantId}/{sessionId}", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            var asset = sessionLibrary.getAsset(tenantId, sessionId);
+            if (asset == null) {
+                ctx.status(404).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Session asset not found"));
+            } else {
+                ctx.json(assetToJson(asset));
+            }
+        });
+
+        app.get("/api/session-assets/{tenantId}/search", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String userId = ctx.queryParam("user_id");
+            String keyword = ctx.queryParam("q");
+            if (keyword == null || keyword.isBlank()) {
+                ctx.status(400).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Query parameter 'q' is required"));
+                return;
+            }
+            var results = sessionLibrary.searchSessions(tenantId, userId, keyword);
+            var arr = new com.alibaba.fastjson2.JSONArray();
+            for (var asset : results) {
+                arr.add(assetToJson(asset));
+            }
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("results", arr).fluentPut("total", results.size()));
+        });
+
+        app.post("/api/session-assets/{tenantId}/{sessionId}/bookmark", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            String userId = ctx.queryParam("user_id");
+            var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
+            String note = body != null ? body.getString("note") : null;
+            sessionLibrary.bookmark(tenantId, userId, sessionId, note);
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("bookmarked", true));
+        });
+
+        app.delete("/api/session-assets/{tenantId}/{sessionId}/bookmark", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            String userId = ctx.queryParam("user_id");
+            sessionLibrary.unbookmark(tenantId, userId, sessionId);
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("bookmarked", false));
+        });
+
+        app.post("/api/session-assets/{tenantId}/{sessionId}/rate", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            String userId = ctx.queryParam("user_id");
+            var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
+            int rating = body.getIntValue("rating");
+            String comment = body.getString("comment");
+            sessionLibrary.rate(tenantId, userId, sessionId, rating, comment);
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("rating", rating));
+        });
+
+        app.put("/api/session-assets/{tenantId}/{sessionId}", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
+            var update = new com.nousresearch.hermes.session.SessionLibrary.SessionAssetUpdate(
+                    body.getString("title"),
+                    body.getList("tags", String.class),
+                    body.getString("comment"),
+                    body.getString("status") != null
+                            ? com.nousresearch.hermes.session.SessionAsset.SessionStatus.valueOf(body.getString("status"))
+                            : null
+            );
+            sessionLibrary.updateAsset(tenantId, sessionId, update);
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("updated", true));
+        });
+
+        app.get("/api/session-assets/{tenantId}/{sessionId}/steps", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            var steps = sessionLibrary.getSteps(tenantId, sessionId);
+            var arr = new com.alibaba.fastjson2.JSONArray();
+            for (var step : steps) {
+                arr.add(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("index", step.index())
+                        .fluentPut("action", step.action())
+                        .fluentPut("toolUsed", step.toolUsed())
+                        .fluentPut("result", step.result())
+                        .fluentPut("keyStep", step.keyStep())
+                        .fluentPut("timestamp", step.timestamp()));
+            }
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("steps", arr));
+        });
+
+        app.get("/api/session-assets/{tenantId}/{sessionId}/reference", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String sessionId = ctx.pathParam("sessionId");
+            var asset = sessionLibrary.getAsset(tenantId, sessionId);
+            if (asset == null) {
+                ctx.status(404).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Session asset not found"));
+                return;
+            }
+            var steps = sessionLibrary.getSteps(tenantId, sessionId);
+            String reference = stepExtractor.buildReferenceContext(asset.title(), steps);
+            ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("reference", reference));
+        });
+
         // Logs API
         app.get("/api/logs", logsHandler::getLogs);
         app.get("/api/logs/files", logsHandler::getLogFiles);
@@ -1700,6 +1835,39 @@ public class DashboardServer {
         if (filename.endsWith(".woff")) return "font/woff";
         if (filename.endsWith(".ttf")) return "font/ttf";
         return "application/octet-stream";
+    }
+
+    /** Convert SessionAsset to JSON for API responses. */
+    private static com.alibaba.fastjson2.JSONObject assetToJson(com.nousresearch.hermes.session.SessionAsset asset) {
+        var json = new com.alibaba.fastjson2.JSONObject()
+                .fluentPut("id", asset.id())
+                .fluentPut("tenantId", asset.tenantId())
+                .fluentPut("userId", asset.userId())
+                .fluentPut("sessionId", asset.sessionId())
+                .fluentPut("title", asset.title())
+                .fluentPut("summary", asset.summary())
+                .fluentPut("status", asset.status().name())
+                .fluentPut("bookmarked", asset.bookmarked())
+                .fluentPut("rating", asset.rating())
+                .fluentPut("userComment", asset.userComment())
+                .fluentPut("tags", asset.tags())
+                .fluentPut("createdAt", asset.createdAt())
+                .fluentPut("updatedAt", asset.updatedAt())
+                .fluentPut("completedAt", asset.completedAt());
+        if (asset.steps() != null) {
+            var stepsArr = new com.alibaba.fastjson2.JSONArray();
+            for (var step : asset.steps()) {
+                stepsArr.add(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("index", step.index())
+                        .fluentPut("action", step.action())
+                        .fluentPut("toolUsed", step.toolUsed())
+                        .fluentPut("result", step.result())
+                        .fluentPut("keyStep", step.keyStep())
+                        .fluentPut("timestamp", step.timestamp()));
+            }
+            json.put("steps", stepsArr);
+        }
+        return json;
     }
 
     /**

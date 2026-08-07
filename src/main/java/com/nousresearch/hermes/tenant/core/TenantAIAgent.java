@@ -216,12 +216,56 @@ public class TenantAIAgent {
         // AgentExperience: auto-learn from this session
         if (completed) {
             autoLearnExperience();
+            // SessionAsset: archive the session for user-dimension query/bookmark
+            archiveSessionAsset(completed);
         }
 
         // Unregister from decay scheduler
         context.unregisterSessionForDecay(sessionId);
 
         logger.debug("Ended session: {} (completed: {})", sessionId, completed);
+    }
+
+    /**
+     * Archive the current session as a SessionAsset.
+     * Extracts steps, generates title/summary, and saves to SessionLibrary.
+     */
+    private void archiveSessionAsset(boolean completed) {
+        try {
+            var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
+            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(hermesHome);
+            var session = sessionMgr.getSession(sessionId);
+
+            var extractor = new com.nousresearch.hermes.session.SessionStepExtractor();
+            var steps = extractor.extract(session);
+            var title = extractor.generateTitle(session);
+            var summary = extractor.generateSummary(session);
+
+            var asset = new com.nousresearch.hermes.session.SessionAsset(
+                    null,  // id will be generated
+                    context.getTenantId(),
+                    delegate.getCurrentUserId(),
+                    sessionId,
+                    title,
+                    summary,
+                    completed ? com.nousresearch.hermes.session.SessionAsset.SessionStatus.COMPLETED
+                              : com.nousresearch.hermes.session.SessionAsset.SessionStatus.ACTIVE,
+                    false,  // bookmarked
+                    0,      // rating
+                    null,   // userComment
+                    java.util.List.of(),
+                    steps,
+                    System.currentTimeMillis(),
+                    System.currentTimeMillis(),
+                    completed ? System.currentTimeMillis() : null
+            );
+
+            var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+            String assetId = library.saveAsset(asset);
+            logger.info("Archived session asset: {} for session: {}", assetId, sessionId);
+        } catch (Exception e) {
+            logger.warn("Failed to archive session asset for {}: {}", sessionId, e.getMessage());
+        }
     }
 
     /**
