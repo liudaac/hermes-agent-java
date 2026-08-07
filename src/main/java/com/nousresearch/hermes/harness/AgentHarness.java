@@ -69,8 +69,34 @@ public class AgentHarness {
 
     /** Process a user message through the harness (AgentLoop + structured events). */
     public String processMessage(String message) {
+        return processMessage(message, null);
+    }
+
+    /** Process a user message with userId for user-dimension memory isolation. */
+    public String processMessage(String message, String userId) {
         currentPhase = "thinking";
         try {
+            // Write to MemoryStore before processing (user message)
+            var memoryStore = tenantCtx.getCentralMemoryStore();
+            if (memoryStore != null) {
+                memoryStore.appendSessionMessage(
+                    tenantCtx.getTenantId(), sessionId, "user", message);
+            }
+
+            // Retrieve user-scoped long-term memories
+            if (memoryStore != null) {
+                var longTermResults = memoryStore.searchMemories(
+                    tenantCtx.getTenantId(), userId, message, 5);
+                if (!longTermResults.isEmpty()) {
+                    StringBuilder ctx = new StringBuilder();
+                    ctx.append("\n\n[Relevant long-term memory]\n");
+                    for (var entry : longTermResults) {
+                        ctx.append("- ").append(entry.getContent()).append("\n");
+                    }
+                    message = message + ctx.toString();
+                }
+            }
+
             // Build AgentContext (single interface between agent and loop)
             var ctx = new AgentContext(delegate.getDelegate(), config);
 
@@ -78,6 +104,12 @@ public class AgentHarness {
             boolean shouldReviewMemory = AgentLoop.preLoop(ctx, message);
             String loopResponse = AgentLoop.run(ctx, emitter);
             String finalResponse = AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
+
+            // Write assistant response to MemoryStore
+            if (memoryStore != null && finalResponse != null && !finalResponse.isBlank()) {
+                memoryStore.appendSessionMessage(
+                    tenantCtx.getTenantId(), sessionId, "assistant", finalResponse);
+            }
 
             currentPhase = "idle";
             // Clear checkpoint on successful completion
@@ -97,6 +129,11 @@ public class AgentHarness {
 
     /** Stream a user message (delegates to TenantAIAgent for streaming). */
     public void processMessageStream(String message, Consumer<String> onChunk) {
+        processMessageStream(message, null, onChunk);
+    }
+
+    /** Stream a user message with userId for user-dimension memory isolation. */
+    public void processMessageStream(String message, String userId, Consumer<String> onChunk) {
         currentPhase = "thinking";
         emitter.subscribe(e -> {
             if (e.type().equals(AgentEvent.LLM_DELTA)) {
@@ -104,7 +141,7 @@ public class AgentHarness {
             }
         });
         try {
-            delegate.processMessageStream(message, onChunk);
+            delegate.processMessageStream(message, userId, onChunk);
             currentPhase = "idle";
         } catch (Exception e) {
             emitter.emit(AgentEvent.ERROR, Map.of("message", e.getMessage()));

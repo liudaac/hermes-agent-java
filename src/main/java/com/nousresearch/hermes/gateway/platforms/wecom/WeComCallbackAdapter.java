@@ -233,6 +233,7 @@ public class WeComCallbackAdapter implements PlatformAdapter {
             try {
                 // Build message with sender context
                 String fullMessage = "[From: " + fromUser + "]\n" + content;
+                agent.setUserId(fromUser);
                 agent.processMessage(fullMessage);
             } catch (Exception e) {
                 logger.error("Error processing WeCom message", e);

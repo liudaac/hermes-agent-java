@@ -593,16 +593,19 @@ public class QQBotAdapter implements PlatformAdapter {
                 ? data.getJSONObject("group_openid") 
                 : data;
             String groupOpenid = data.getString("group_openid");
+            String msgUserId = null;
             
             if (groupOpenid != null) {
                 chatId = "GROUP_" + groupOpenid;
             } else {
-                String userId = author != null ? author.getString("id") : data.getString("author_id");
-                chatId = "C2C_" + userId;
+                msgUserId = author != null ? author.getString("id") : data.getString("author_id");
+                chatId = "C2C_" + msgUserId;
             }
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
+                    // Set userId on agent for user-dimension memory isolation
+                    agent.setUserId(msgUserId);
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         replyToMessage(chatId, messageId, response);
@@ -627,6 +630,7 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
+                    agent.setUserId(userId);
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         replyToMessage(chatId, messageId, response);
@@ -646,9 +650,12 @@ public class QQBotAdapter implements PlatformAdapter {
             String content = data.getString("content");
             String channelId = data.getString("channel_id");
             String messageId = data.getString("id");
+            JSONObject author = data.getJSONObject("author");
+            String userId = author != null ? author.getString("id") : data.getString("author_id");
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
+                    agent.setUserId(userId);
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         sendChannelMessage(channelId, response);

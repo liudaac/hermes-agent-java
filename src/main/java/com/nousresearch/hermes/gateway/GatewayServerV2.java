@@ -650,7 +650,7 @@ public class GatewayServerV2 {
 
             // 处理消息 (through harness, which emits structured events)
             long startTime = System.currentTimeMillis();
-            String response = harness.processMessage(message);
+            String response = harness.processMessage(message, userId);
             long duration = System.currentTimeMillis() - startTime;
 
             // 更新租户活动状态
@@ -682,6 +682,7 @@ public class GatewayServerV2 {
         String message = body.getString("message");
         String sessionId = body.getString("session_id");
         String tenantId = body.getString("tenant_id");
+        String streamUserId = body.getString("user_id");
 
         if (message == null || message.trim().isEmpty()) {
             sendSseEvent(ctx, "error", Map.of("error", "Message is required"));
@@ -752,7 +753,7 @@ public class GatewayServerV2 {
 
         try {
             // Stream through harness (emits structured events + text deltas)
-            harness.processMessageStream(message, chunk -> {
+            harness.processMessageStream(message, streamUserId, chunk -> {
                 sendSseEvent(ctx, "delta", Map.of("content", chunk));
             });
 
@@ -1503,8 +1504,8 @@ public class GatewayServerV2 {
             // 获取或创建 Agent（租户隔离）
             TenantAIAgent agent = tenant.getOrCreateAgent(sessionId, config);
 
-            // 处理消息
-            String response = agent.processMessage(message.content());
+            // 处理消息（传入 userId 实现用户维度记忆隔离）
+            String response = agent.processMessage(message.content(), message.userId());
 
             // 发送响应
             if (response != null && !response.isEmpty()) {

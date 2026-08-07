@@ -303,6 +303,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
             try {
                 String context = String.format("Document: %s (%s)\nComment by: %s\n\n%s", 
                     docToken, docType, creator, content);
+                agent.setUserId(creator);
                 String response = agent.processMessage(context);
                 if (response != null && !response.isEmpty()) {
                     sendMessage(chatId, response);

@@ -60,8 +60,11 @@ public class TenantAIAgent {
 
     /**
      * 处理消息 - 委托给 TenantAwareAIAgent，同时接入中心化 MemoryStore
+     *
+     * @param message 用户消息
+     * @param userId  用户标识（用于用户维度记忆隔离），null 则不按用户隔离
      */
-    public String processMessage(String message) {
+    public String processMessage(String message, String userId) {
         if (interrupted) {
             return "Agent has been interrupted";
         }
@@ -74,10 +77,10 @@ public class TenantAIAgent {
                     context.getTenantId(), sessionId, "user", message);
             }
 
-            // ── MemoryStore: 检索长期记忆，注入上下文 ──
+            // ── MemoryStore: 检索长期记忆，注入上下文（按用户隔离） ──
             if (memoryStore != null) {
                 var longTermResults = memoryStore.searchMemories(
-                    context.getTenantId(), null, message, 5);
+                    context.getTenantId(), userId, message, 5);
                 if (!longTermResults.isEmpty()) {
                     StringBuilder ctx = new StringBuilder();
                     ctx.append("\n\n[Relevant long-term memory]\n");
@@ -105,9 +108,21 @@ public class TenantAIAgent {
     }
 
     /**
-     * 流式处理消息 - 委托给 TenantAwareAIAgent，同时接入中心化 MemoryStore
+     * 处理消息（向后兼容，不传 userId）
+     * 如果底层 delegate 已通过 setUserId() 设置了用户 ID，则使用它。
      */
-    public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
+    public String processMessage(String message) {
+        return processMessage(message, delegate.getCurrentUserId());
+    }
+
+    /**
+     * 流式处理消息 - 委托给 TenantAwareAIAgent，同时接入中心化 MemoryStore
+     *
+     * @param message  用户消息
+     * @param userId   用户标识（用于用户维度记忆隔离）
+     * @param chunkConsumer 流式回调
+     */
+    public void processMessageStream(String message, String userId, java.util.function.Consumer<String> chunkConsumer) {
         if (interrupted) {
             chunkConsumer.accept("Agent has been interrupted");
             return;
@@ -121,10 +136,10 @@ public class TenantAIAgent {
                     context.getTenantId(), sessionId, "user", message);
             }
 
-            // ── MemoryStore: 检索长期记忆 ──
+            // ── MemoryStore: 检索长期记忆（按用户隔离） ──
             if (memoryStore != null) {
                 var longTermResults = memoryStore.searchMemories(
-                    context.getTenantId(), null, message, 5);
+                    context.getTenantId(), userId, message, 5);
                 if (!longTermResults.isEmpty()) {
                     StringBuilder ctx = new StringBuilder();
                     ctx.append("\n\n[Relevant long-term memory]\n");
@@ -153,6 +168,14 @@ public class TenantAIAgent {
             logger.error("Error in stream processing in TenantAIAgent: {}", e.getMessage(), e);
             chunkConsumer.accept("Error: " + e.getMessage());
         }
+    }
+
+    /**
+     * 流式处理消息（向后兼容，不传 userId）
+     * 如果底层 delegate 已通过 setUserId() 设置了用户 ID，则使用它。
+     */
+    public void processMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
+        processMessageStream(message, delegate.getCurrentUserId(), chunkConsumer);
     }
 
     /**

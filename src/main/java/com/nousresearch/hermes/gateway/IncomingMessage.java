@@ -13,4 +13,15 @@ public record IncomingMessage(
     String content,
     long timestamp,
     boolean isGroup
-) {}
+) {
+    /**
+     * Derive the user identifier for user-dimension isolation.
+     * The sender field is populated by each platform adapter with the
+     * platform-native user identifier (e.g. QQ user_openid, Feishu open_id).
+     *
+     * @return the sender, or null if unknown
+     */
+    public String userId() {
+        return sender;
+    }
+}

@@ -418,6 +418,26 @@ public class TenantAwareAIAgent {
         }
     }
 
+    /** Current user ID for user-dimension memory isolation (set by adapters). */
+    private volatile String currentUserId;
+
+    /**
+     * Set the current user ID for user-dimension memory isolation.
+     * This is read by the TenantAIAgent wrapper to scope MemoryStore calls.
+     * @param userId user identifier, or null to clear
+     */
+    public void setUserId(String userId) {
+        this.currentUserId = userId;
+    }
+
+    /**
+     * Get the current user ID (for TenantAIAgent wrapper to read).
+     * @return current user ID, or null if not set
+     */
+    public String getCurrentUserId() {
+        return currentUserId;
+    }
+
     // ==================== Public API ====================
 
     /**
