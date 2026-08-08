@@ -3,7 +3,7 @@ import { portalApi } from "@/api/portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorCard } from "@/components/ErrorCard";
-import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle, Sparkles, Search } from "lucide-react";
+import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle, Sparkles, Search, Clock3 } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
 
@@ -266,6 +266,10 @@ export default function Memory() {
                 搜索
               </button>
             </div>
+            <a href="/portal/index.html#/sessions" className="mt-2 flex items-center gap-1 text-[11px] text-[var(--color-text-muted)] hover:text-[oklch(0.78_0.16_70)]">
+              <Clock3 className="h-3 w-3" />
+              查看会话历史 →
+            </a>
           </GlassCard>
 
           {/* Memory list */}
