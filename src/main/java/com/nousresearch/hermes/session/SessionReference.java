@@ -2,6 +2,7 @@ package com.nousresearch.hermes.session;
 
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.gateway.SessionManager;
+import com.nousresearch.hermes.improvement.SignalCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,10 +22,19 @@ public class SessionReference {
 
     private final SessionLibrary library;
     private final SessionStepExtractor extractor;
+    private SignalCollector signalCollector;
 
     public SessionReference(SessionLibrary library) {
         this.library = library;
         this.extractor = new SessionStepExtractor();
+    }
+
+    /**
+     * Set the signal collector for emitting SESSION_REFERENCE signals.
+     * Optional: if not set, no signals are emitted.
+     */
+    public void setSignalCollector(SignalCollector collector) {
+        this.signalCollector = collector;
     }
 
     /**
@@ -86,6 +96,10 @@ public class SessionReference {
     public String injectReferenceFromSession(String tenantId, String referenceSessionId,
                                               String userMessage) {
         String referenceContext = buildReference(tenantId, referenceSessionId);
-        return injectReference(userMessage, referenceContext);
+        String result = injectReference(userMessage, referenceContext);
+        if (signalCollector != null && referenceContext != null && !referenceContext.isBlank()) {
+            signalCollector.onSessionReference(tenantId, null, referenceSessionId);
+        }
+        return result;
     }
 }

@@ -3,6 +3,7 @@ package com.nousresearch.hermes.session;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nousresearch.hermes.improvement.SignalCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +26,7 @@ public class LocalSessionLibrary implements SessionLibrary {
 
     private final Path sessionsRoot;
     private final Map<String, SessionAsset> cache = new ConcurrentHashMap<>();
+    private SignalCollector signalCollector;
 
     public LocalSessionLibrary(Path hermesHome) {
         this.sessionsRoot = hermesHome.resolve("session-assets");
@@ -33,6 +35,14 @@ public class LocalSessionLibrary implements SessionLibrary {
         } catch (IOException e) {
             logger.error("Failed to create session assets directory: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Set the signal collector for emitting improvement signals on bookmark/rate.
+     * Optional: if not set, no signals are emitted (backward compatible).
+     */
+    public void setSignalCollector(SignalCollector collector) {
+        this.signalCollector = collector;
     }
 
     @Override
@@ -135,6 +145,9 @@ public class LocalSessionLibrary implements SessionLibrary {
                 existing.createdAt(), System.currentTimeMillis(), existing.completedAt()
         );
         saveAsset(updated);
+        if (signalCollector != null) {
+            signalCollector.onBookmark(tenantId, userId, sessionId, note);
+        }
     }
 
     @Override
@@ -164,6 +177,13 @@ public class LocalSessionLibrary implements SessionLibrary {
                 existing.createdAt(), System.currentTimeMillis(), existing.completedAt()
         );
         saveAsset(updated);
+        if (signalCollector != null) {
+            if (rating >= 4) {
+                signalCollector.onRatingHigh(tenantId, userId, sessionId, rating);
+            } else if (rating <= 2 && rating > 0) {
+                signalCollector.onRatingLow(tenantId, userId, sessionId, rating);
+            }
+        }
     }
 
     @Override
