@@ -481,4 +481,147 @@ export const portalApi = {
       versions: number;
       updatedAt: string | null;
     }>>(`/api/skills/${encodeURIComponent(tenantId)}`),
+
+  // ── User-dimension Memory Visibility (Sprint 5) ──
+  getMemoryOverview: (tenantId: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{
+      totalMemories: number;
+      preferences: number;
+      facts: number;
+      decisions: number;
+      feedbacks: number;
+      experiences: number;
+      byType: Record<string, number>;
+      recentMemories: Array<{
+        id: string;
+        type: string;
+        content: string;
+        category: string;
+        userId: string;
+        source: string;
+        createdAt: number;
+      }>;
+    }>(`/api/memory/${encodeURIComponent(tenantId)}/overview${qs.toString() ? "?" + qs : ""}`);
+  },
+
+  searchMemories: (tenantId: string, query: string, userId?: string) => {
+    const qs = new URLSearchParams({ q: query });
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{
+      results: Array<{
+        id: string;
+        type: string;
+        content: string;
+        category: string;
+        userId: string;
+        source: string;
+        createdAt: number;
+      }>;
+      total: number;
+    }>(`/api/memory/${encodeURIComponent(tenantId)}/search?${qs}`);
+  },
+
+  getUserPreferences: (tenantId: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{
+      preferences: Array<{
+        id: string;
+        type: string;
+        content: string;
+        category: string;
+        userId: string;
+        source: string;
+        createdAt: number;
+      }>;
+    }>(`/api/memory/${encodeURIComponent(tenantId)}/preferences${qs.toString() ? "?" + qs : ""}`);
+  },
+
+  // ── Improvement signals & proposals (Sprint 5) ──
+  getImprovementSignals: (tenantId: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{
+      signals: Array<{
+        id: string;
+        type: string;
+        content: string;
+        weight: number;
+        timestamp: number;
+        processed: boolean;
+      }>;
+      total: number;
+    }>(`/api/improvement/${encodeURIComponent(tenantId)}/signals${qs.toString() ? "?" + qs : ""}`);
+  },
+
+  getImprovementProposals: (tenantId: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{
+      proposals: Array<{
+        id: string;
+        title: string;
+        finding: string;
+        proposedChange: string;
+        expectedBenefit: string;
+        status: string;
+        confidence: number;
+        evidence: string;
+        createdAt: number;
+      }>;
+      total: number;
+    }>(`/api/improvement/${encodeURIComponent(tenantId)}/proposals${qs.toString() ? "?" + qs : ""}`);
+  },
+
+  acceptProposal: (tenantId: string, proposalId: string) =>
+    fetchJSON<{ status: string; title: string }>(
+      `/api/improvement/${encodeURIComponent(tenantId)}/proposals/${encodeURIComponent(proposalId)}/accept`,
+      { method: "POST" }
+    ),
+
+  rejectProposal: (tenantId: string, proposalId: string) =>
+    fetchJSON<{ status: string; title: string }>(
+      `/api/improvement/${encodeURIComponent(tenantId)}/proposals/${encodeURIComponent(proposalId)}/reject`,
+      { method: "POST" }
+    ),
+
+  // ── Session assets (Sprint 2) ──
+  getSessionAssets: (tenantId: string, opts?: {
+    userId?: string;
+    status?: string;
+    bookmarked?: boolean;
+    page?: number;
+    size?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (opts?.userId) qs.set("user_id", opts.userId);
+    if (opts?.status) qs.set("status", opts.status);
+    if (opts?.bookmarked !== undefined) qs.set("bookmarked", String(opts.bookmarked));
+    if (opts?.page !== undefined) qs.set("page", String(opts.page));
+    if (opts?.size !== undefined) qs.set("size", String(opts.size));
+    return fetchJSON<{
+      items: Array<{
+        id: string;
+        tenantId: string;
+        userId: string;
+        sessionId: string;
+        title: string;
+        summary: string;
+        status: string;
+        bookmarked: boolean;
+        rating: number;
+        userComment: string;
+        tags: string[];
+        createdAt: number;
+        updatedAt: number;
+        completedAt: number | null;
+      }>;
+      page: number;
+      size: number;
+      total: number;
+      hasNext: boolean;
+    }>(`/api/session-assets/${encodeURIComponent(tenantId)}${qs.toString() ? "?" + qs : ""}`);
+  },
 };

@@ -3,7 +3,7 @@ import { portalApi } from "@/api/portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorCard } from "@/components/ErrorCard";
-import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle, Sparkles, Search } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
 
@@ -45,21 +45,45 @@ export default function Memory() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // User-dimension memory + improvement state (Sprint 5)
+  const [userMemories, setUserMemories] = useState<Array<{ id: string; type: string; content: string; category: string; source: string; createdAt: number }>>([]);
+  const [proposals, setProposals] = useState<Array<{ id: string; title: string; finding: string; proposedChange: string; status: string; confidence: number; evidence: string; createdAt: number }>>([]);
+  const [memorySearch, setMemorySearch] = useState("");
+  const [searchResults, setSearchResults] = useState<typeof userMemories | null>(null);
+  const [activeTab, setActiveTab] = useState<"decay" | "memory" | "improvement">("decay");
+
   const loadData = useCallback(() => {
     setLoading(true);
     setError(null);
     Promise.all([
       portalApi.getMemoryStats(DEFAULT_TENANT).catch(() => null),
       portalApi.getSkills(DEFAULT_TENANT).catch(() => [] as SkillItem[]),
-    ]).then(([memStats, skillList]) => {
+      portalApi.getMemoryOverview(DEFAULT_TENANT).catch(() => null),
+      portalApi.getImprovementProposals(DEFAULT_TENANT).catch(() => null),
+    ]).then(([memStats, skillList, overview, propResult]) => {
       if (memStats) setStats(memStats);
       setSkills(skillList);
+      if (overview) setUserMemories(overview.recentMemories || []);
+      if (propResult) setProposals(propResult.proposals || []);
       setLoading(false);
     }).catch((e) => {
       setError(String(e?.message ?? e));
       setLoading(false);
     });
   }, []);
+
+  const handleSearch = useCallback(() => {
+    if (!memorySearch.trim()) { setSearchResults(null); return; }
+    portalApi.searchMemories(DEFAULT_TENANT, memorySearch).then(r => setSearchResults(r.results)).catch(() => setSearchResults([]));
+  }, [memorySearch]);
+
+  const handleAcceptProposal = useCallback((proposalId: string) => {
+    portalApi.acceptProposal(DEFAULT_TENANT, proposalId).then(() => loadData());
+  }, [loadData]);
+
+  const handleRejectProposal = useCallback((proposalId: string) => {
+    portalApi.rejectProposal(DEFAULT_TENANT, proposalId).then(() => loadData());
+  }, [loadData]);
 
   useEffect(() => {
     loadData();
@@ -90,7 +114,30 @@ export default function Memory() {
 
         {error && <ErrorCard message={error} onRetry={loadData} />}
 
-        {/* Decay Status Section */}
+        {/* Tab Switcher */}
+        <div className="mb-5 flex gap-2">
+          {(["decay", "memory", "improvement"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-[12px] font-medium transition-all",
+                activeTab === tab
+                  ? "bg-[oklch(0.78_0.16_70)] text-[oklch(0.15_0.02_70)]"
+                  : "glass text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              )}
+            >
+              {tab === "decay" && "衰减流水线"}
+              {tab === "memory" && "我的记忆"}
+              {tab === "improvement" && "自我改进"}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Decay Pipeline Tab (existing) ── */}
+        {activeTab === "decay" && (
+        <div>
+          {/* Decay Status Section */}
         <section className="mb-6">
           <h2 className="mb-3 flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text-primary)]">
             <Brain className="h-4 w-4 text-[oklch(0.78_0.16_70)]" />
@@ -190,6 +237,129 @@ export default function Memory() {
             </div>
           )}
         </section>
+        </div>
+        )}
+
+        {/* ── User Memory Tab (Sprint 5) ── */}
+        {activeTab === "memory" && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text-primary)]">
+            <Brain className="h-4 w-4 text-[oklch(0.78_0.16_70)]" />
+            我的记忆
+          </h2>
+
+          {/* Search bar */}
+          <GlassCard className="mb-3" padding="sm">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <input
+                  type="text"
+                  value={memorySearch}
+                  onChange={e => setMemorySearch(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleSearch()}
+                  placeholder="搜索记忆..."
+                  className="w-full rounded-xl bg-[oklch(0.2_0.02_70_/_0.5)] py-2 pl-10 pr-3 text-[13px] text-[var(--color-text-primary)] outline-none ring-1 ring-[oklch(0.3_0.02_70_/_0.5)] focus:ring-[oklch(0.78_0.16_70_/_0.5)]"
+                />
+              </div>
+              <button onClick={handleSearch} className="glass rounded-xl px-4 text-[13px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]">
+                搜索
+              </button>
+            </div>
+          </GlassCard>
+
+          {/* Memory list */}
+          <div className="space-y-2">
+            {(searchResults ?? userMemories).length === 0 ? (
+              <GlassCard className="py-8 text-center text-[13px] text-[var(--color-text-muted)]">
+                暂无记忆记录
+              </GlassCard>
+            ) : (
+              (searchResults ?? userMemories).map(mem => (
+                <GlassCard key={mem.id} padding="sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[oklch(0.78_0.16_70_/_0.12)]">
+                      <span className="text-[10px] font-bold text-[oklch(0.88_0.12_70)]">
+                        {mem.type.slice(0, 2)}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] text-[var(--color-text-primary)]">{mem.content}</p>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--color-text-muted)]">
+                        <span className="rounded-full bg-[oklch(0.3_0.02_70_/_0.4)] px-2 py-0.5">{mem.type}</span>
+                        {mem.category && <span>{mem.category}</span>}
+                        <span>{formatTime(new Date(mem.createdAt).toISOString())}</span>
+                      </div>
+                    </div>
+                  </div>
+                </GlassCard>
+              ))
+            )}
+          </div>
+        </section>
+        )}
+
+        {/* ── Improvement Tab (Sprint 5) ── */}
+        {activeTab === "improvement" && (
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 text-[16px] font-semibold text-[var(--color-text-primary)]">
+            <Sparkles className="h-4 w-4 text-[oklch(0.78_0.16_70)]" />
+            自我改进
+          </h2>
+
+          {/* Proposals */}
+          <div className="space-y-2">
+            {proposals.length === 0 ? (
+              <GlassCard className="py-8 text-center text-[13px] text-[var(--color-text-muted)]">
+                <Sparkles className="mx-auto mb-2 h-5 w-5 opacity-40" />
+                暂无改进提议
+              </GlassCard>
+            ) : (
+              proposals.map(prop => (
+                <GlassCard key={prop.id} padding="md">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[14px] font-semibold text-[var(--color-text-primary)]">{prop.title}</h3>
+                        <span className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          prop.status === "PENDING" && "bg-[oklch(0.72_0.12_160_/_0.18)] text-[oklch(0.82_0.12_160)]",
+                          prop.status === "REQUIRE_CONFIRM" && "bg-[oklch(0.68_0.20_25_/_0.18)] text-[oklch(0.78_0.16_25)]",
+                          prop.status === "AUTO_APPLIED" && "bg-[oklch(0.72_0.12_160_/_0.18)] text-[oklch(0.82_0.12_160)]",
+                        )}>
+                          {prop.status === "PENDING" ? "待确认" : prop.status === "REQUIRE_CONFIRM" ? "需确认" : prop.status === "AUTO_APPLIED" ? "已应用" : prop.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[12px] text-[var(--color-text-secondary)]">{prop.finding}</p>
+                      <p className="mt-1 text-[12px] text-[var(--color-text-primary)]">建议: {prop.proposedChange}</p>
+                      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-[var(--color-text-muted)]">
+                        <span>置信度 {(prop.confidence * 100).toFixed(0)}%</span>
+                        <span>{prop.evidence}</span>
+                      </div>
+                    </div>
+                    {(prop.status === "PENDING" || prop.status === "REQUIRE_CONFIRM") && (
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          onClick={() => handleAcceptProposal(prop.id)}
+                          className="rounded-lg bg-[oklch(0.78_0.16_70)] px-3 py-1 text-[11px] font-medium text-[oklch(0.15_0.02_70)] transition-opacity hover:opacity-90"
+                        >
+                          采纳
+                        </button>
+                        <button
+                          onClick={() => handleRejectProposal(prop.id)}
+                          className="glass rounded-lg px-3 py-1 text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                        >
+                          拒绝
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </GlassCard>
+              ))
+            )}
+          </div>
+        </section>
+        )}
       </div>
     </AuroraBackground>
   );
