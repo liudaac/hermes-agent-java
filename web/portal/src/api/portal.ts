@@ -539,6 +539,24 @@ export const portalApi = {
     }>(`/api/memory/${encodeURIComponent(tenantId)}/preferences${qs.toString() ? "?" + qs : ""}`);
   },
 
+  editMemory: (tenantId: string, memoryId: string, content: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{ edited: boolean }>(
+      `/api/memory/${encodeURIComponent(tenantId)}/${encodeURIComponent(memoryId)}${qs.toString() ? "?" + qs : ""}`,
+      { method: "PUT", body: JSON.stringify({ content }) }
+    );
+  },
+
+  deleteMemory: (tenantId: string, memoryId: string, userId?: string) => {
+    const qs = new URLSearchParams();
+    if (userId) qs.set("user_id", userId);
+    return fetchJSON<{ deleted: boolean }>(
+      `/api/memory/${encodeURIComponent(tenantId)}/${encodeURIComponent(memoryId)}${qs.toString() ? "?" + qs : ""}`,
+      { method: "DELETE" }
+    );
+  },
+
   // ── Improvement signals & proposals (Sprint 5) ──
   getImprovementSignals: (tenantId: string, userId?: string) => {
     const qs = new URLSearchParams();

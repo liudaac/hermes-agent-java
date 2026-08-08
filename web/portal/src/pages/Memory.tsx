@@ -3,7 +3,7 @@ import { portalApi } from "@/api/portal";
 import { GlassCard } from "@/components/GlassCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorCard } from "@/components/ErrorCard";
-import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle, Sparkles, Search, Clock3 } from "lucide-react";
+import { RefreshCw, Brain, Layers, Clock, CheckCircle2, XCircle, Sparkles, Search, Clock3, Pencil, Trash2 } from "lucide-react";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
 
@@ -83,6 +83,19 @@ export default function Memory() {
 
   const handleRejectProposal = useCallback((proposalId: string) => {
     portalApi.rejectProposal(DEFAULT_TENANT, proposalId).then(() => loadData());
+  }, [loadData]);
+
+  const handleEditMemory = useCallback((memoryId: string, oldContent: string) => {
+    const newContent = prompt("编辑记忆:", oldContent);
+    if (newContent !== null && newContent.trim() && newContent !== oldContent) {
+      portalApi.editMemory(DEFAULT_TENANT, memoryId, newContent).then(() => loadData());
+    }
+  }, [loadData]);
+
+  const handleDeleteMemory = useCallback((memoryId: string) => {
+    if (confirm("确定删除这条记忆？")) {
+      portalApi.deleteMemory(DEFAULT_TENANT, memoryId).then(() => loadData());
+    }
   }, [loadData]);
 
   useEffect(() => {
@@ -294,6 +307,22 @@ export default function Memory() {
                         {mem.category && <span>{mem.category}</span>}
                         <span>{formatTime(new Date(mem.createdAt).toISOString())}</span>
                       </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        onClick={() => handleEditMemory(mem.id, mem.content)}
+                        className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[oklch(0.3_0.02_70_/_0.3)] hover:text-[oklch(0.78_0.16_70)]"
+                        title="编辑"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMemory(mem.id)}
+                        className="rounded-lg p-1.5 text-[var(--color-text-muted)] transition-colors hover:bg-[oklch(0.68_0.20_25_/_0.15)] hover:text-[oklch(0.68_0.20_25)]"
+                        title="删除"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 </GlassCard>
