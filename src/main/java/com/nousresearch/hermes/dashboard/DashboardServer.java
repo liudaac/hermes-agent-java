@@ -985,6 +985,151 @@ public class DashboardServer {
             ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("reference", reference));
         });
 
+        // ── Memory Visibility API (Sprint 5) ──────────────────
+        var memoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+        var visibilityService = memoryStore != null
+                ? new com.nousresearch.hermes.improvement.MemoryVisibilityService(memoryStore)
+                : null;
+
+        if (visibilityService != null) {
+            app.get("/api/memory/{tenantId}/overview", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                var overview = visibilityService.getOverview(tenantId, userId);
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("totalMemories", overview.totalMemories())
+                        .fluentPut("preferences", overview.preferences())
+                        .fluentPut("facts", overview.facts())
+                        .fluentPut("decisions", overview.decisions())
+                        .fluentPut("feedbacks", overview.feedbacks())
+                        .fluentPut("experiences", overview.experiences())
+                        .fluentPut("byType", overview.byType())
+                        .fluentPut("recentMemories", memoryEntriesToJson(overview.recentMemories())));
+            });
+
+            app.get("/api/memory/{tenantId}/list", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                String typeStr = ctx.queryParam("type");
+                int page = ctx.queryParam("page") != null ? Integer.parseInt(ctx.queryParam("page")) : 0;
+                int size = ctx.queryParam("size") != null ? Integer.parseInt(ctx.queryParam("size")) : 20;
+                var type = typeStr != null ? com.nousresearch.hermes.memory.store.MemoryEntry.MemoryType.valueOf(typeStr) : null;
+                var entries = visibilityService.listByType(tenantId, userId, type, page, size);
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("items", memoryEntriesToJson(entries))
+                        .fluentPut("page", page)
+                        .fluentPut("size", size));
+            });
+
+            app.get("/api/memory/{tenantId}/search", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                String query = ctx.queryParam("q");
+                if (query == null || query.isBlank()) {
+                    ctx.status(400).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Query 'q' required"));
+                    return;
+                }
+                var results = visibilityService.search(tenantId, userId, query);
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("results", memoryEntriesToJson(results))
+                        .fluentPut("total", results.size()));
+            });
+
+            app.put("/api/memory/{tenantId}/{memoryId}", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                String memoryId = ctx.pathParam("memoryId");
+                var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
+                String newContent = body.getString("content");
+                visibilityService.edit(tenantId, userId, memoryId, newContent);
+                ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("edited", true));
+            });
+
+            app.delete("/api/memory/{tenantId}/{memoryId}", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                String memoryId = ctx.pathParam("memoryId");
+                visibilityService.delete(tenantId, userId, memoryId);
+                ctx.json(new com.alibaba.fastjson2.JSONObject().fluentPut("deleted", true));
+            });
+
+            app.get("/api/memory/{tenantId}/preferences", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                String userId = ctx.queryParam("user_id");
+                var prefs = visibilityService.getPreferences(tenantId, userId);
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("preferences", memoryEntriesToJson(prefs)));
+            });
+        }
+
+        // ── Improvement API (Sprint 5) ────────────────────────
+        var signalStore = new com.nousresearch.hermes.improvement.LocalSignalStore();
+        var proposalStore = new com.nousresearch.hermes.improvement.LocalProposalStore();
+        var confirmationFlow = new com.nousresearch.hermes.improvement.ImprovementConfirmationFlow(proposalStore);
+
+        app.get("/api/improvement/{tenantId}/signals", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String userId = ctx.queryParam("user_id");
+            var signals = signalStore.queryByUser(tenantId, userId);
+            ctx.json(new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("signals", signals.stream().map(s ->
+                            new com.alibaba.fastjson2.JSONObject()
+                                    .fluentPut("id", s.id())
+                                    .fluentPut("type", s.type().name())
+                                    .fluentPut("content", s.content())
+                                    .fluentPut("weight", s.weight())
+                                    .fluentPut("timestamp", s.timestamp())
+                                    .fluentPut("processed", s.processed())).collect(com.alibaba.fastjson2.JSONArray::new,
+                                    JSONArray::add, JSONArray::addAll))
+                    .fluentPut("total", signals.size()));
+        });
+
+        app.get("/api/improvement/{tenantId}/proposals", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String userId = ctx.queryParam("user_id");
+            var proposals = proposalStore.queryPending(tenantId, userId);
+            ctx.json(new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("proposals", proposals.stream().map(p ->
+                            new com.alibaba.fastjson2.JSONObject()
+                                    .fluentPut("id", p.id())
+                                    .fluentPut("title", p.title())
+                                    .fluentPut("finding", p.finding())
+                                    .fluentPut("proposedChange", p.proposedChange())
+                                    .fluentPut("expectedBenefit", p.expectedBenefit())
+                                    .fluentPut("status", p.status().name())
+                                    .fluentPut("confidence", p.confidence())
+                                    .fluentPut("evidence", p.evidence())
+                                    .fluentPut("createdAt", p.createdAt())).collect(com.alibaba.fastjson2.JSONArray::new,
+                                    JSONArray::add, JSONArray::addAll))
+                    .fluentPut("total", proposals.size()));
+        });
+
+        app.post("/api/improvement/{tenantId}/proposals/{proposalId}/accept", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String proposalId = ctx.pathParam("proposalId");
+            var result = confirmationFlow.accept(tenantId, proposalId);
+            if (result == null) {
+                ctx.status(404).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Proposal not found or not confirmable"));
+            } else {
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("status", result.status().name())
+                        .fluentPut("title", result.title()));
+            }
+        });
+
+        app.post("/api/improvement/{tenantId}/proposals/{proposalId}/reject", ctx -> {
+            String tenantId = ctx.pathParam("tenantId");
+            String proposalId = ctx.pathParam("proposalId");
+            var result = confirmationFlow.reject(tenantId, proposalId);
+            if (result == null) {
+                ctx.status(404).json(new com.alibaba.fastjson2.JSONObject().fluentPut("error", "Proposal not found"));
+            } else {
+                ctx.json(new com.alibaba.fastjson2.JSONObject()
+                        .fluentPut("status", result.status().name())
+                        .fluentPut("title", result.title()));
+            }
+        });
+
         // Logs API
         app.get("/api/logs", logsHandler::getLogs);
         app.get("/api/logs/files", logsHandler::getLogFiles);
@@ -1908,5 +2053,21 @@ public class DashboardServer {
 
         return status;
     }
-    
+
+    private static com.alibaba.fastjson2.JSONArray memoryEntriesToJson(
+            java.util.List<com.nousresearch.hermes.memory.store.MemoryEntry> entries) {
+        var arr = new com.alibaba.fastjson2.JSONArray();
+        for (var entry : entries) {
+            arr.add(new com.alibaba.fastjson2.JSONObject()
+                    .fluentPut("id", entry.getId())
+                    .fluentPut("type", entry.getType() != null ? entry.getType().name() : null)
+                    .fluentPut("content", entry.getContent())
+                    .fluentPut("category", entry.getCategory())
+                    .fluentPut("userId", entry.getUserId())
+                    .fluentPut("source", entry.getSource())
+                    .fluentPut("createdAt", entry.getCreatedAt()));
+        }
+        return arr;
+    }
+
 }
