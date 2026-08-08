@@ -3,6 +3,7 @@ package com.nousresearch.hermes.gateway.platforms.feishu;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.auth.UserIdentityResolver;
 import com.nousresearch.hermes.gateway.IncomingMessage;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
@@ -29,6 +30,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     
     private final OkHttpClient httpClient;
     private TenantAwareAIAgent agent;
+    private UserIdentityResolver userIdentityResolver = UserIdentityResolver.passthrough();
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -86,6 +88,13 @@ public class FeishuCommentAdapter implements PlatformAdapter {
     @Override
     public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
+    }
+
+    /**
+     * Set the user identity resolver for multi-channel identity normalization.
+     */
+    public void setUserIdentityResolver(UserIdentityResolver resolver) {
+        this.userIdentityResolver = resolver != null ? resolver : UserIdentityResolver.passthrough();
     }
     
     @Override
@@ -303,7 +312,7 @@ public class FeishuCommentAdapter implements PlatformAdapter {
             try {
                 String context = String.format("Document: %s (%s)\nComment by: %s\n\n%s", 
                     docToken, docType, creator, content);
-                agent.setUserId(creator);
+                agent.setUserId(userIdentityResolver.resolveUserId("feishu", creator));
                 String response = agent.processMessage(context);
                 if (response != null && !response.isEmpty()) {
                     sendMessage(chatId, response);

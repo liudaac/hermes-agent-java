@@ -3,6 +3,7 @@ package com.nousresearch.hermes.gateway.platforms.wecom;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.auth.UserIdentityResolver;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -28,6 +29,7 @@ public class WeComCallbackAdapter implements PlatformAdapter {
     
     private final OkHttpClient httpClient;
     private TenantAwareAIAgent agent;
+    private UserIdentityResolver userIdentityResolver = UserIdentityResolver.passthrough();
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -91,6 +93,13 @@ public class WeComCallbackAdapter implements PlatformAdapter {
     @Override
     public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
+    }
+
+    /**
+     * Set the user identity resolver for multi-channel identity normalization.
+     */
+    public void setUserIdentityResolver(UserIdentityResolver resolver) {
+        this.userIdentityResolver = resolver != null ? resolver : UserIdentityResolver.passthrough();
     }
     
     @Override
@@ -233,7 +242,7 @@ public class WeComCallbackAdapter implements PlatformAdapter {
             try {
                 // Build message with sender context
                 String fullMessage = "[From: " + fromUser + "]\n" + content;
-                agent.setUserId(fromUser);
+                agent.setUserId(userIdentityResolver.resolveUserId("wecom", fromUser));
                 agent.processMessage(fullMessage);
             } catch (Exception e) {
                 logger.error("Error processing WeCom message", e);

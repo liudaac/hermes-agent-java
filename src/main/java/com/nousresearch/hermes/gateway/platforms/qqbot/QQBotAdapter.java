@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.auth.UserIdentityResolver;
 import com.nousresearch.hermes.gateway.platforms.PlatformAdapter;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -36,6 +37,7 @@ public class QQBotAdapter implements PlatformAdapter {
     
     private final OkHttpClient httpClient;
     private TenantAwareAIAgent agent;
+    private UserIdentityResolver userIdentityResolver = UserIdentityResolver.passthrough();
     private volatile boolean connected;
     private volatile boolean running;
     
@@ -121,6 +123,14 @@ public class QQBotAdapter implements PlatformAdapter {
     @Override
     public void setAgent(TenantAwareAIAgent agent) {
         this.agent = agent;
+    }
+
+    /**
+     * Set the user identity resolver for normalizing channel user IDs
+     * to unified internal user IDs (multi-channel identity mapping).
+     */
+    public void setUserIdentityResolver(UserIdentityResolver resolver) {
+        this.userIdentityResolver = resolver != null ? resolver : UserIdentityResolver.passthrough();
     }
     
     @Override
@@ -605,7 +615,7 @@ public class QQBotAdapter implements PlatformAdapter {
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
                     // Set userId on agent for user-dimension memory isolation
-                    agent.setUserId(msgUserId);
+                    agent.setUserId(userIdentityResolver.resolveUserId("qq", msgUserId));
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         replyToMessage(chatId, messageId, response);
@@ -630,7 +640,7 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
-                    agent.setUserId(userId);
+                    agent.setUserId(userIdentityResolver.resolveUserId("qq", userId));
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         replyToMessage(chatId, messageId, response);
@@ -655,7 +665,7 @@ public class QQBotAdapter implements PlatformAdapter {
             
             if (agent != null && content != null && !content.isEmpty()) {
                 try {
-                    agent.setUserId(userId);
+                    agent.setUserId(userIdentityResolver.resolveUserId("qq", userId));
                     String response = agent.processMessage(content);
                     if (response != null && !response.isEmpty()) {
                         sendChannelMessage(channelId, response);
