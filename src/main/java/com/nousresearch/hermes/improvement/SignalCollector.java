@@ -71,4 +71,12 @@ public class SignalCollector {
         signalStore.save(signal);
         logger.debug("Emitted signal: type={}, user={}, weight={}", type, userId, weight);
     }
+
+    /**
+     * Public emit for external detectors (LlmSignalDetector, etc).
+     */
+    public void emitSignal(String tenantId, String userId, SignalType type,
+                           String sessionId, String content, double weight) {
+        emit(tenantId, userId, type, sessionId, content, weight);
+    }
 }
