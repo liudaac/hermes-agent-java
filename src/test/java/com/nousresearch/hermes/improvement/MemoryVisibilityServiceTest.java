@@ -134,13 +134,41 @@ class MemoryVisibilityServiceTest {
     }
 
     @Test
-    void editReturnsTrue() {
-        assertTrue(service.edit(tenantId, userId, "mem_001", "new content"));
+    void editActuallyUpdatesMemory() {
+        memoryStore.addMemory(MemoryEntry.builder()
+                .tenantId(tenantId).userId(userId)
+                .type(MemoryEntry.MemoryType.PREFERENCE)
+                .content("old content").build());
+        var before = service.search(tenantId, userId, "old");
+        assertEquals(1, before.size());
+        String memId = before.get(0).getId();
+
+        assertTrue(service.edit(tenantId, userId, memId, "new content"));
+
+        var after = service.search(tenantId, userId, "new");
+        assertFalse(after.isEmpty());
+        assertEquals("new content", after.get(0).getContent());
     }
 
     @Test
-    void deleteReturnsTrue() {
-        assertTrue(service.delete(tenantId, userId, "mem_001"));
+    void editReturnsFalseForNonexistent() {
+        assertFalse(service.edit(tenantId, userId, "nonexistent_id", "content"));
+    }
+
+    @Test
+    void deleteActuallyRemovesMemory() {
+        memoryStore.addMemory(MemoryEntry.builder()
+                .tenantId(tenantId).userId(userId)
+                .type(MemoryEntry.MemoryType.FACT)
+                .content("fact to delete").build());
+        var before = service.search(tenantId, userId, "fact");
+        assertEquals(1, before.size());
+        String memId = before.get(0).getId();
+
+        assertTrue(service.delete(tenantId, userId, memId));
+
+        var after = service.search(tenantId, userId, "fact");
+        assertTrue(after.isEmpty());
     }
 
     @Test

@@ -83,23 +83,49 @@ public class MemoryVisibilityService {
      * Edit a memory (user correction). Only changes content, preserves the record.
      */
     public boolean edit(String tenantId, String userId, String memoryId, String newContent) {
-        // MemoryStore doesn't have a direct update-by-ID method in the interface
-        // For now, we delete + re-add with same metadata
-        // This preserves audit trail via the source field
-        logger.info("Memory edit requested: tenant={}, user={}, memoryId={}", tenantId, userId, memoryId);
-        // TODO: implement when MemoryStore adds updateMemory(id, content)
-        // For now, this is a no-op that logs the request
-        return true;
+        try {
+            // Find existing memory
+            List<MemoryEntry> all = memoryStore.searchMemories(tenantId, userId, "", 1000);
+            MemoryEntry existing = all.stream()
+                    .filter(e -> memoryId.equals(e.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (existing == null) {
+                logger.warn("Memory not found for edit: {}/{}", tenantId, memoryId);
+                return false;
+            }
+            // Update with new content, preserving all other fields
+            MemoryEntry updated = MemoryEntry.builder()
+                    .tenantId(existing.getTenantId())
+                    .userId(existing.getUserId())
+                    .type(existing.getType())
+                    .content(newContent)
+                    .category(existing.getCategory())
+                    .source(existing.getSource() != null ? existing.getSource() + " [edited]" : "user_edit")
+                    .build();
+            // Preserve original ID
+            updated.setId(existing.getId());
+            memoryStore.updateMemory(memoryId, updated);
+            logger.info("Memory edited: tenant={}, user={}, memoryId={}", tenantId, userId, memoryId);
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to edit memory: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
      * Delete a memory.
      */
     public boolean delete(String tenantId, String userId, String memoryId) {
-        logger.info("Memory deletion requested: tenant={}, user={}, memoryId={}", tenantId, userId, memoryId);
-        // TODO: implement when MemoryStore adds deleteMemory(id)
-        // For now, this is a no-op that logs the request
-        return true;
+        try {
+            memoryStore.deleteMemory(memoryId);
+            logger.info("Memory deleted: tenant={}, user={}, memoryId={}", tenantId, userId, memoryId);
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to delete memory: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**
