@@ -1018,6 +1018,28 @@ public class TenantContext {
     /** Centralised memory store (short-term decay + long-term RRF retrieval). */
     public com.nousresearch.hermes.memory.store.MemoryStore getCentralMemoryStore() { return centralMemoryStore; }
 
+    /**
+     * LLM-assisted signal detector for user corrections and explicit feedback.
+     * Lazily initialized; null if no SignalStore is configured.
+     */
+    private transient com.nousresearch.hermes.improvement.LlmSignalDetector llmSignalDetector;
+
+    public com.nousresearch.hermes.improvement.LlmSignalDetector getLlmSignalDetector() {
+        if (llmSignalDetector == null) {
+            try {
+                var signalStore = com.nousresearch.hermes.improvement.ImprovementStoreFactory.getSignalStore();
+                if (signalStore == null) {
+                    signalStore = new com.nousresearch.hermes.improvement.LocalSignalStore();
+                }
+                var collector = new com.nousresearch.hermes.improvement.SignalCollector(signalStore);
+                llmSignalDetector = new com.nousresearch.hermes.improvement.LlmSignalDetector(collector);
+            } catch (Exception e) {
+                // Non-critical: signal detection is best-effort
+            }
+        }
+        return llmSignalDetector;
+    }
+
     /** Centralised skill store (registration + versioning + pub/sub sync). */
     public com.nousresearch.hermes.skills.store.SkillStore getCentralSkillStore() { return centralSkillStore; }
 

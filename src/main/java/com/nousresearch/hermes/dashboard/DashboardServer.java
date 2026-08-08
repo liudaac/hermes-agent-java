@@ -1063,8 +1063,9 @@ public class DashboardServer {
         }
 
         // ── Improvement API (Sprint 5) ────────────────────────
-        var signalStore = new com.nousresearch.hermes.improvement.LocalSignalStore();
-        var proposalStore = new com.nousresearch.hermes.improvement.LocalProposalStore();
+        var signalStore = com.nousresearch.hermes.improvement.ImprovementStoreFactory.createSignalStore(
+                tenantManager != null ? null : null); // null DataSource -> Local mode
+        var proposalStore = com.nousresearch.hermes.improvement.ImprovementStoreFactory.createProposalStore(null);
         var confirmationFlow = new com.nousresearch.hermes.improvement.ImprovementConfirmationFlow(proposalStore);
 
         app.get("/api/improvement/{tenantId}/signals", ctx -> {

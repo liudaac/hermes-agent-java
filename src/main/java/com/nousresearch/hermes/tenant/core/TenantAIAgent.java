@@ -81,6 +81,21 @@ public class TenantAIAgent {
         }
 
         try {
+            // ── LlmSignalDetector: 检测用户纠正和显式反馈 ──
+            if (userId != null && message != null && !message.isBlank()) {
+                try {
+                    var signalDetector = context.getLlmSignalDetector();
+                    if (signalDetector != null) {
+                        signalDetector.detectCorrection(
+                            context.getTenantId(), userId, sessionId, message);
+                        signalDetector.detectExplicitFeedback(
+                            context.getTenantId(), userId, sessionId, message);
+                    }
+                } catch (Exception e) {
+                    logger.debug("Signal detection skipped: {}", e.getMessage());
+                }
+            }
+
             // ── SessionRef: 注入参考流程 ──
             if (referenceSessionId != null && !referenceSessionId.isBlank()) {
                 var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
