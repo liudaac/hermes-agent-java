@@ -95,7 +95,7 @@ export default function Sessions() {
         ) : (
           <div className="space-y-2">
             {sessions.map((session) => (
-              <SessionCard key={session.id} session={session} />
+              <SessionCard key={session.id} session={session} onChanged={loadData} />
             ))}
           </div>
         )}
@@ -104,13 +104,38 @@ export default function Sessions() {
   );
 }
 
-function SessionCard({ session }: { session: SessionAssetItem }) {
+function SessionCard({ session, onChanged }: { session: SessionAssetItem; onChanged: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [rating, setRating] = useState(session.rating);
 
   const statusColors: Record<string, string> = {
     ACTIVE: "oklch(0.72_0.12_160)",
     COMPLETED: "oklch(0.65_0.08_250)",
     ARCHIVED: "oklch(0.55_0.05_50)",
+  };
+
+  const handleRate = (newRating: number) => {
+    setRating(newRating);
+    
+    // Call rate API via fetch directly since portalApi doesn't have it
+    fetch(`/api/session-assets/${DEFAULT_TENANT}/${session.sessionId}/rate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating: newRating }),
+    }).catch(() => {});
+  };
+
+  const handleBookmark = () => {
+    if (session.bookmarked) {
+      fetch(`/api/session-assets/${DEFAULT_TENANT}/${session.sessionId}/bookmark`, { method: "DELETE" })
+        .then(() => onChanged());
+    } else {
+      fetch(`/api/session-assets/${DEFAULT_TENANT}/${session.sessionId}/bookmark`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }).then(() => onChanged());
+    }
   };
 
   return (
@@ -122,9 +147,17 @@ function SessionCard({ session }: { session: SessionAssetItem }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              {session.bookmarked && (
-                <Bookmark className="h-3.5 w-3.5 fill-[oklch(0.78_0.16_70)] text-[oklch(0.78_0.16_70)]" />
-              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleBookmark(); }}
+                className="transition-transform hover:scale-110"
+                title={session.bookmarked ? "取消收藏" : "收藏"}
+              >
+                {session.bookmarked ? (
+                  <Bookmark className="h-3.5 w-3.5 fill-[oklch(0.78_0.16_70)] text-[oklch(0.78_0.16_70)]" />
+                ) : (
+                  <Bookmark className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                )}
+              </button>
               <h3 className="truncate text-[14px] font-semibold text-[var(--color-text-primary)]">
                 {session.title || "未命名会话"}
               </h3>
@@ -175,6 +208,32 @@ function SessionCard({ session }: { session: SessionAssetItem }) {
 
       {expanded && (
         <div className="mt-3 border-t border-[oklch(0.3_0.02_70_/_0.3)] pt-3">
+          {/* Interactive rating */}
+          <div className="mb-2 flex items-center gap-1">
+            <span className="text-[11px] text-[var(--color-text-muted)] mr-1">评分:</span>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                onClick={(e) => { e.stopPropagation(); handleRate(star); }}
+                className="transition-transform hover:scale-110"
+              >
+                {star <= rating ? (
+                  <Star className="h-3.5 w-3.5 fill-[oklch(0.78_0.16_70)] text-[oklch(0.78_0.16_70)]" />
+                ) : (
+                  <Star className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                )}
+              </button>
+            ))}
+            {rating > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleRate(0); }}
+                className="ml-1 text-[10px] text-[var(--color-text-muted)] hover:text-[oklch(0.68_0.20_25)]"
+              >
+                清除
+              </button>
+            )}
+          </div>
+
           {session.userComment && (
             <p className="mb-2 text-[12px] text-[var(--color-text-secondary)] italic">
               "{session.userComment}"
