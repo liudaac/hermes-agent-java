@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Home, Users, Layers, ShieldCheck, Activity, MoreHorizontal } from "lucide-react";
+import { Home, Users, Activity, ShieldCheck, User } from "lucide-react";
 import { cn } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 import { portalApi } from "@/api/portal";
@@ -16,10 +16,9 @@ interface TabItem {
 const TABS: TabItem[] = [
   { to: "/", labelKey: "nav.home", icon: Home, exact: true },
   { to: "/teams", labelKey: "nav.teams", icon: Users },
-  { to: "/templates", labelKey: "nav.templates", icon: Layers },
-  { to: "/approvals", labelKey: "nav.approvals", icon: ShieldCheck, badgeKey: "approvals" },
   { to: "/runs", labelKey: "nav.runs", icon: Activity },
-  { to: "/user-admin", labelKey: "nav.profile", icon: MoreHorizontal },
+  { to: "/approvals", labelKey: "nav.approvals", icon: ShieldCheck, badgeKey: "approvals" },
+  { to: "/me", labelKey: "nav.profile", icon: User },
 ];
 
 /**
@@ -64,7 +63,7 @@ export function BottomTabBar() {
       )}
       aria-label="Primary"
     >
-      <ul className="mx-auto grid max-w-3xl grid-cols-6">
+      <ul className="mx-auto grid max-w-3xl grid-cols-5">
         {TABS.map(({ to, labelKey, icon: Icon, exact, badgeKey }) => {
           const path = location.pathname;
           const active = exact ? path === to : path === to || path.startsWith(to + "/");
