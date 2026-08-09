@@ -49,6 +49,9 @@ public class GatewayServerV2 {
     private volatile boolean running = false;
     private volatile String sessionToken;
 
+    // Three-layer main line
+    private com.nousresearch.hermes.organization.OrgManager orgManager;
+
     // 用户到租户的映射缓存
     private final ConcurrentHashMap<String, String> userTenantCache = new ConcurrentHashMap<>();
 
@@ -153,6 +156,14 @@ public class GatewayServerV2 {
     public void setSessionToken(String token) {
         this.sessionToken = token;
         logger.info("Gateway chat endpoints now protected with shared session token");
+    }
+
+    /**
+     * Inject the three-layer OrgManager. When set, every incoming message
+     * goes through the User -> Space -> Org assembly flow before processing.
+     */
+    public void setOrgManager(com.nousresearch.hermes.organization.OrgManager orgManager) {
+        this.orgManager = orgManager;
     }
 
     // ==================== Routes Setup ====================
@@ -1474,6 +1485,31 @@ public class GatewayServerV2 {
         try {
             logger.info("Processing message from {} on {} for tenant {}",
                 message.sender(), adapter.getPlatformName(), tenantId);
+
+            // ── Three-layer assembly: User -> Space -> Org ──
+            // When OrgManager is injected, walk the three-layer main line
+            // to resolve identity, load user profile, and enter the space.
+            String resolvedUserId = message.userId();
+            if (orgManager != null && resolvedUserId != null) {
+                try {
+                    var assembled = orgManager.assemble(
+                        adapter.getPlatformName(), resolvedUserId, tenantId);
+                    if (assembled != null) {
+                        // Log the three-layer context for observability
+                        logger.info("Three-layer assembled: user={} space={} skills={} tools={}",
+                            assembled.userId(),
+                            assembled.spaceContext().spaceId(),
+                            assembled.effectiveSkills().size(),
+                            assembled.mergedCapabilities().frequentTools().size());
+                        // The assembled context is available for the agent to use;
+                        // the tenantId from space resolution takes precedence
+                        tenantId = assembled.spaceContext().spaceId();
+                    }
+                } catch (Exception e) {
+                    logger.debug("Three-layer assembly failed (non-fatal, falling back): {}",
+                        e.getMessage());
+                }
+            }
 
             // 获取或创建租户
             TenantContext tenant = tenantManager.getOrCreateTenant(

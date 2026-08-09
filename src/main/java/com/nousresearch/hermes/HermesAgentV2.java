@@ -112,6 +112,13 @@ public class HermesAgentV2 {
         if (tenantMode) {
             this.gatewayServerV2 = new GatewayServerV2(gatewayPort, agentConfig);
             this.gatewayServer = null;
+            // Wire three-layer main line into the gateway
+            var spaceMgr = new com.nousresearch.hermes.space.SpaceManager(tenantManager);
+            var userMgr = new com.nousresearch.hermes.user.UserManager(
+                com.nousresearch.hermes.auth.UserIdentityResolver.passthrough()
+            );
+            var orgMgr = new com.nousresearch.hermes.organization.OrgManager(agentConfig, spaceMgr, userMgr);
+            this.gatewayServerV2.setOrgManager(orgMgr);
             registerAdaptersV2();
         } else {
             this.gatewayServer = new GatewayServer(gatewayPort, agentConfig, tenantManager);
