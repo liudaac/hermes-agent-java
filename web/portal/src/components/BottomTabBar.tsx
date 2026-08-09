@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Home, Users, Layers, ShieldCheck, Activity, Sparkles } from "lucide-react";
+import { Home, Users, Layers, ShieldCheck, Activity, MoreHorizontal } from "lucide-react";
 import { cn } from "@hermes/ui";
 import { useI18n } from "@/i18n";
 import { portalApi } from "@/api/portal";
@@ -19,7 +19,7 @@ const TABS: TabItem[] = [
   { to: "/templates", labelKey: "nav.templates", icon: Layers },
   { to: "/approvals", labelKey: "nav.approvals", icon: ShieldCheck, badgeKey: "approvals" },
   { to: "/runs", labelKey: "nav.runs", icon: Activity },
-  { to: "/insights", labelKey: "nav.insights", icon: Sparkles },
+  { to: "/user-admin", labelKey: "nav.profile", icon: MoreHorizontal },
 ];
 
 /**

@@ -39,13 +39,27 @@ export default function Insights() {
               {t("insights.subtitle")}
             </p>
           </div>
-          <Link
-            to="/memory"
-            className="glass flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-          >
-            <Brain className="h-4 w-4" />
-            {t("memory.title")}
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to="/space-admin"
+              className="glass flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              空间管理
+            </Link>
+            <Link
+              to="/org-admin"
+              className="glass flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              组织管理
+            </Link>
+            <Link
+              to="/memory"
+              className="glass flex h-9 items-center gap-1.5 rounded-xl px-3 text-[12px] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+            >
+              <Brain className="h-4 w-4" />
+              {t("memory.title")}
+            </Link>
+          </div>
         </header>
 
         {error && <ErrorCard message={error} onRetry={loadData} />}
