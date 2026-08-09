@@ -2,6 +2,13 @@ package com.nousresearch.hermes.dashboard.handlers;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.nousresearch.hermes.improvement.ImprovementProposal;
+import com.nousresearch.hermes.improvement.ImprovementSignal;
+import com.nousresearch.hermes.improvement.ProposalStore;
+import com.nousresearch.hermes.improvement.SignalStore;
+import com.nousresearch.hermes.improvement.SignalScope;
+import com.nousresearch.hermes.memory.store.MemoryEntry;
+import com.nousresearch.hermes.memory.store.MemoryStore;
 import com.nousresearch.hermes.organization.OrgManager;
 import com.nousresearch.hermes.space.SpaceContext;
 import com.nousresearch.hermes.space.SpaceMember;
@@ -29,10 +36,17 @@ public class ThreeLayerAdminHandler {
     private static final Logger logger = LoggerFactory.getLogger(ThreeLayerAdminHandler.class);
 
     private final OrgManager orgManager;
+    private SignalStore signalStore;
+    private ProposalStore proposalStore;
+    private MemoryStore memoryStore;
 
     public ThreeLayerAdminHandler(OrgManager orgManager) {
         this.orgManager = orgManager;
     }
+
+    public void setSignalStore(SignalStore store) { this.signalStore = store; }
+    public void setProposalStore(ProposalStore store) { this.proposalStore = store; }
+    public void setMemoryStore(MemoryStore store) { this.memoryStore = store; }
 
     // ═══════════════════════════════════════════════════════════════
     //  Organization Layer
@@ -320,37 +334,101 @@ public class ThreeLayerAdminHandler {
     // ═══════════════════════════════════════════════════════════════
 
     public void improvementSignals(Context ctx) {
-        String scope = ctx.queryParam("scope");   // user | space | org
+        String scope = ctx.queryParam("scope");
         String userId = ctx.queryParam("userId");
         String spaceId = ctx.queryParam("spaceId");
-        // Delegate to existing signal stores via orgManager
-        // For now, return a structured placeholder that the frontend can build on
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("ok", true);
-        result.put("scope", scope != null ? scope : "all");
-        result.put("userId", userId);
-        result.put("spaceId", spaceId);
-        result.put("signals", List.of());  // TODO: wire to SignalStore
-        ctx.json(result);
+        String tenantId = spaceId != null ? spaceId : "default";
+
+        if (signalStore == null) {
+            ctx.json(Map.of("ok", true, "signals", List.of(), "scope", scope != null ? scope : "all"));
+            return;
+        }
+
+        List<ImprovementSignal> signals;
+        if (userId != null && !userId.isBlank()) {
+            signals = signalStore.queryByUser(tenantId, userId);
+        } else {
+            signals = signalStore.queryByUser(tenantId, null);
+        }
+
+        // Filter by scope if specified
+        if (scope != null && !scope.isBlank() && !scope.equals("all")) {
+            SignalScope filterScope = SignalScope.valueOf(scope.toUpperCase());
+            signals = signals.stream()
+                .filter(s -> s.scope() == filterScope)
+                .toList();
+        }
+
+        List<Map<String, Object>> result = signals.stream()
+            .sorted(Comparator.comparingLong(ImprovementSignal::timestamp).reversed())
+            .limit(100)
+            .map(s -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", s.id());
+                m.put("type", s.type().name());
+                m.put("scope", s.scope() != null ? s.scope().name() : "USER");
+                m.put("userId", s.userId());
+                m.put("content", s.content());
+                m.put("weight", s.weight());
+                m.put("timestamp", s.timestamp());
+                m.put("processed", s.processed());
+                return m;
+            }).toList();
+
+        ctx.json(Map.of("ok", true, "signals", result, "total", result.size()));
     }
 
     public void improvementProposals(Context ctx) {
         String scope = ctx.queryParam("scope");
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("ok", true);
-        result.put("scope", scope != null ? scope : "all");
-        result.put("proposals", List.of());  // TODO: wire to ProposalStore
-        ctx.json(result);
+        String userId = ctx.queryParam("userId");
+        String spaceId = ctx.queryParam("spaceId");
+        String tenantId = spaceId != null ? spaceId : "default";
+
+        if (proposalStore == null) {
+            ctx.json(Map.of("ok", true, "proposals", List.of(), "scope", scope != null ? scope : "all"));
+            return;
+        }
+
+        List<ImprovementProposal> proposals;
+        if (userId != null && !userId.isBlank()) {
+            proposals = proposalStore.queryByUser(tenantId, userId);
+        } else {
+            proposals = proposalStore.queryAll(tenantId);
+        }
+
+        ctx.json(Map.of("ok", true, "proposals", proposals, "total", proposals.size()));
     }
 
     public void improvementAdaptations(Context ctx) {
         String userId = ctx.queryParam("userId");
         UserProfile profile = orgManager.users().load(userId);
+
+        // Also fetch user memories from MemoryStore if available
+        List<Map<String, Object>> memories = List.of();
+        if (memoryStore != null) {
+            try {
+                var entries = memoryStore.searchMemories("default", userId, "", 20);
+                memories = entries.stream()
+                    .map(e -> {
+                        Map<String, Object> m = new LinkedHashMap<>();
+                        m.put("id", e.getId());
+                        m.put("type", e.getType() != null ? e.getType().name() : "UNKNOWN");
+                        m.put("content", e.getContent());
+                        m.put("category", e.getCategory());
+                        m.put("createdAt", e.getCreatedAt());
+                        return m;
+                    }).toList();
+            } catch (Exception e) {
+                logger.debug("Failed to fetch memories for adaptations: {}", e.getMessage());
+            }
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("ok", true);
         result.put("userId", userId);
         result.put("preferences", profile.preferences().toMap());
         result.put("capabilities", profile.capabilities().toMap());
+        result.put("memories", memories);
         ctx.json(result);
     }
 }

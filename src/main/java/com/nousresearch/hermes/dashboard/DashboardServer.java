@@ -1082,6 +1082,14 @@ public class DashboardServer {
         var proposalStore = com.nousresearch.hermes.improvement.ImprovementStoreFactory.createProposalStore(null);
         var confirmationFlow = new com.nousresearch.hermes.improvement.ImprovementConfirmationFlow(proposalStore);
 
+        // Wire improvement stores into three-layer admin handler
+        threeLayerAdminHandler.setSignalStore(signalStore);
+        threeLayerAdminHandler.setProposalStore(proposalStore);
+        var centralMemoryStore = com.nousresearch.hermes.memory.store.MemoryStoreFactory.get();
+        if (centralMemoryStore != null) {
+            threeLayerAdminHandler.setMemoryStore(centralMemoryStore);
+        }
+
         app.get("/api/improvement/{tenantId}/signals", ctx -> {
             String tenantId = ctx.pathParam("tenantId");
             String userId = ctx.queryParam("user_id");
