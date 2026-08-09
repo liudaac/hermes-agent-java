@@ -10,12 +10,14 @@ const SessionsPage = lazy(() => import("@/pages/SessionsPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const LogsPage = lazy(() => import("@/pages/LogsPage"));
 const CronPage = lazy(() => import("@/pages/CronPage"));
-const SkillsPage = lazy(() => import("@/pages/SkillsPage"));
 const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
-const TenantsPage = lazy(() => import("@/pages/TenantsPage"));
 const ConfigPage = lazy(() => import("@/pages/ConfigPage"));
 const EnvPage = lazy(() => import("@/pages/EnvPage"));
-const OrgPage = lazy(() => import("@/pages/OrgPage"));
+const SpaceAdminPage = lazy(() => import("@/pages/SpaceAdminPage"));
+const OrgAdminPage = lazy(() => import("@/pages/OrgAdminPage"));
+const DLQPage = lazy(() => import("@/pages/DLQPage"));
+const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
+const HumanLoopPage = lazy(() => import("@/pages/HumanLoopPage"));
 
 function PageLoading() {
   return (
@@ -26,11 +28,8 @@ function PageLoading() {
 }
 
 /**
- * Ops router. Paths are root-relative inside the ops SPA.
- *
- * Note: the ops SPA is a fully independent entry — there are no longer
- * any cross-space /portal/* or /noc/* paths. Cross-product links are
- * full-page navigations via <a href> in the topbar.
+ * Ops router. Three-layer admin replaces Tenants/Skills/Org.
+ * NOC pages will be added in Step 3.
  */
 export function OpsRouter() {
   return (
@@ -40,28 +39,28 @@ export function OpsRouter() {
         <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<StatusPage />} />
+            <Route path="/spaces" element={<SpaceAdminPage />} />
+            <Route path="/org" element={<OrgAdminPage />} />
             <Route path="/playground" element={<PlaygroundPage />} />
             <Route path="/compare" element={<ComparePage />} />
             <Route path="/sessions" element={<SessionsPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/logs" element={<LogsPage />} />
             <Route path="/cron" element={<CronPage />} />
-            <Route path="/skills" element={<SkillsPage />} />
             <Route path="/tools" element={<ToolsPage />} />
-            <Route path="/tenants" element={<TenantsPage />} />
+            <Route path="/dlq" element={<DLQPage />} />
+            <Route path="/workflows" element={<WorkflowPage />} />
+            <Route path="/hitl" element={<HumanLoopPage />} />
             <Route path="/config" element={<ConfigPage />} />
             <Route path="/env" element={<EnvPage />} />
-            <Route path="/org" element={<OrgPage />} />
+            {/* Legacy redirects */}
+            <Route path="/tenants" element={<SpaceAdminPage />} />
+            <Route path="/skills" element={<SpaceAdminPage />} />
             <Route path="/sla" element={<AnalyticsPage />} />
-            {/* See portal/src/router.tsx for the rationale: render
-                StatusPage on unknown paths so /ops/index.html stays
-                in the ops console instead of bouncing to the hub. */}
             <Route path="*" element={<StatusPage />} />
           </Routes>
         </Suspense>
       </main>
-
-      {/* Cross-space dialogue shell — design.md §0 */}
       <JarvisCore />
     </div>
   );

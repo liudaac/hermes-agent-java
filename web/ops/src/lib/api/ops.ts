@@ -192,3 +192,40 @@ export interface ThemeSetResponse {
   ok: boolean;
   active: string;
 }
+
+// ── NOC business APIs (merged from NOC SPA) ──────────────
+
+export const opsNocApi = {
+  getDLQ: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<{ ok: boolean; items: unknown[] }>(`/api/v1/business/dlq${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  retryDLQItem: (itemId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/dlq/${encodeURIComponent(itemId)}/retry`, { method: "POST" }),
+  resolveDLQItem: (itemId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/dlq/${encodeURIComponent(itemId)}/resolve`, { method: "POST" }),
+
+  getTakeovers: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<{ ok: boolean; takeovers: unknown[] }>(`/api/v1/business/takeovers${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  confirmTakeover: (takeoverId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/takeovers/${encodeURIComponent(takeoverId)}/confirm`, { method: "POST" }),
+  releaseTakeover: (takeoverId: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/takeovers/${encodeURIComponent(takeoverId)}/release`, { method: "POST" }),
+
+  getWorkflows: (workspaceId?: string) => {
+    const qs = new URLSearchParams();
+    if (workspaceId) qs.set("workspaceId", workspaceId);
+    return fetchJSON<{ ok: boolean; workflows: unknown[] }>(`/api/v1/business/workflows${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  approveWorkflowCheckpoint: (workflowId: string, decision: string) =>
+    fetchJSON<{ ok: boolean }>(`/api/v1/business/workflows/${encodeURIComponent(workflowId)}/checkpoint`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision }),
+    }),
+
+  getSLATemplates: () =>
+    fetchJSON<{ ok: boolean; templates: unknown[] }>(`/api/v1/business/sla/templates`),
+};

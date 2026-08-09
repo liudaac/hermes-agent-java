@@ -88,12 +88,6 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/portal/, ""),
         ws: true,
       },
-      "/noc": {
-        target: "http://localhost:5177",
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/noc/, ""),
-        ws: true,
-      },
     },
   },
 });

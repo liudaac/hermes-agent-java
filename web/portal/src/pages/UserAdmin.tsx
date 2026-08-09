@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { GlassCard } from "@/components/GlassCard";
 import { StatusPill } from "@/components/StatusPill";
 import { threeLayerApi, type UserProfile, type UserPreferences, type UserCapability } from "@/api/three-layer";
 import { portalApi } from "@/api/portal";
-import { Home, Brain, Wrench, Settings, MessageSquare, Sparkles, Building2, Layers } from "lucide-react";
+import { Home, Brain, Wrench, Settings, MessageSquare, Sparkles, Building2, Layers, ExternalLink } from "lucide-react";
 
 const DEFAULT_USER = "default-user";
 
@@ -59,16 +58,18 @@ export default function UserAdmin() {
       {section === "sessions" && <SessionsSection />}
       {section === "improvement" && <ImprovementSection />}
 
-      {/* Admin links */}
+      {/* Admin links -> Ops */}
       <div className="flex gap-2 pt-2">
-        <Link to="/space-admin" className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 p-3 text-sm transition-colors hover:bg-white/10">
+        <a href="/ops/index.html/spaces" className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 p-3 text-sm transition-colors hover:bg-white/10">
           <Building2 className="h-4 w-4 text-[var(--color-accent)]" />
           空间管理
-        </Link>
-        <Link to="/org-admin" className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 p-3 text-sm transition-colors hover:bg-white/10">
+          <ExternalLink className="ml-auto h-3 w-3 opacity-50" />
+        </a>
+        <a href="/ops/index.html/org" className="flex flex-1 items-center gap-2 rounded-lg bg-white/5 p-3 text-sm transition-colors hover:bg-white/10">
           <Layers className="h-4 w-4 text-[var(--color-accent)]" />
           组织管理
-        </Link>
+          <ExternalLink className="ml-auto h-3 w-3 opacity-50" />
+        </a>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Activity, Wrench, type LucideIcon, ExternalLink, BriefcaseBusiness, ShieldCheck } from "lucide-react";
+import { Activity, Wrench, type LucideIcon, ExternalLink, BriefcaseBusiness } from "lucide-react";
 import { cn } from "@hermes/ui";
 import { OPS_NAV, CROSS_PRODUCT_LINKS, type OpsNavItem } from "@/lib/nav";
 
@@ -79,7 +79,6 @@ function CrossProductSwitcher() {
   return (
     <div className="flex shrink-0 items-center gap-1 rounded-full border border-current/20 bg-background-base/40 px-1 py-0.5">
       <CrossPill href={CROSS_PRODUCT_LINKS.portal} label="Portal" icon={BriefcaseBusiness} title="Open Portal (separate app)" />
-      <CrossPill href={CROSS_PRODUCT_LINKS.noc} label="NOC" icon={ShieldCheck} title="Open NOC (separate app)" />
     </div>
   );
 }

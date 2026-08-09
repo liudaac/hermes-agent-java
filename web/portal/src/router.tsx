@@ -13,8 +13,6 @@ const Approvals = lazy(() => import("@/pages/Approvals"));
 const Runs = lazy(() => import("@/pages/Runs"));
 const RunDetail = lazy(() => import("@/pages/RunDetail"));
 const UserAdmin = lazy(() => import("@/pages/UserAdmin"));
-const SpaceAdmin = lazy(() => import("@/pages/SpaceAdmin"));
-const OrgAdmin = lazy(() => import("@/pages/OrgAdmin"));
 
 function PageFallback() {
   const location = useLocation();
@@ -26,12 +24,9 @@ function PageFallback() {
 }
 
 /**
- * Portal router - 5 tab flat structure.
+ * Portal router - 5 tab, pure business. No admin pages.
  *
  * 首页 / 员工 / 运行 / 审批 / 我的
- *
- * 「我的」aggregates user-layer concerns (profile, memory, capabilities,
- * preferences, sessions, improvement) and links to SpaceAdmin / OrgAdmin.
  */
 export function PortalRouter() {
   const location = useLocation();
@@ -50,11 +45,7 @@ export function PortalRouter() {
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetail />} />
-          {/* 「我的」- user layer hub */}
           <Route path="/me" element={<UserAdmin />} />
-          {/* Three-layer admin sub-pages */}
-          <Route path="/space-admin" element={<SpaceAdmin />} />
-          <Route path="/org-admin" element={<OrgAdmin />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </Suspense>
@@ -71,7 +62,5 @@ function titleFor(pathname: string): string {
   if (pathname.startsWith("/approvals")) return "待审批";
   if (pathname.startsWith("/runs")) return "我的运行";
   if (pathname.startsWith("/me")) return "我的";
-  if (pathname.startsWith("/space-admin")) return "空间管理";
-  if (pathname.startsWith("/org-admin")) return "组织管理";
   return "Hermes";
 }
