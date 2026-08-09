@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
+import com.nousresearch.hermes.organization.OrgManager;
 import com.nousresearch.hermes.dashboard.jarvis.ApprovalBridge;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService;
 import com.nousresearch.hermes.dashboard.jarvis.IntentRouter;
@@ -148,6 +149,9 @@ public class DashboardServer {
 
     // ---- Business Portal 核心服务 ----
     private final TenantManager tenantManager;
+    // ---- Three-layer main line ----
+    private OrgManager orgManager;
+    private ThreeLayerAdminHandler threeLayerAdminHandler;
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService teamBlueprintService;
     private final BusinessApprovalService businessApprovalService;
@@ -228,6 +232,16 @@ public class DashboardServer {
             : GatewayRuntimeStatus::disconnected;
         this.sessionToken = loadOrCreateSessionToken();
         this.sseSigningKey = generateSigningKey();
+
+        // ── Three-layer main line: Org -> Space -> User ──
+        this.orgManager = new OrgManager(
+            config,
+            new com.nousresearch.hermes.space.SpaceManager(tenantManager),
+            new com.nousresearch.hermes.user.UserManager(
+                com.nousresearch.hermes.auth.UserIdentityResolver.passthrough()
+            )
+        );
+        this.threeLayerAdminHandler = new ThreeLayerAdminHandler(orgManager);
 
         // ── Plain HTTP handlers (no business deps) ──────────
         this.configHandler = new ConfigHandler(config);
@@ -1720,6 +1734,42 @@ public class DashboardServer {
         app.get("/api/dashboard/plugins/rescan", ctx -> ctx.json(new JSONObject()
             .fluentPut("ok", true)
             .fluentPut("count", 0)));
+
+        // ── Three-layer admin API: Org -> Space -> User ──────────────
+        // Organization layer
+        app.get("/api/org/overview", threeLayerAdminHandler::orgOverview);
+        app.get("/api/org/models", threeLayerAdminHandler::orgModels);
+        app.get("/api/org/users", threeLayerAdminHandler::orgUsers);
+        app.get("/api/org/spaces", threeLayerAdminHandler::orgSpaces);
+        app.get("/api/org/billing", threeLayerAdminHandler::orgBilling);
+        // Space layer
+        app.get("/api/spaces/{spaceId}/overview", threeLayerAdminHandler::spaceOverview);
+        app.get("/api/spaces/{spaceId}/capabilities", threeLayerAdminHandler::spaceCapabilities);
+        app.post("/api/spaces/{spaceId}/capabilities/skills", threeLayerAdminHandler::spaceInstallSkill);
+        app.delete("/api/spaces/{spaceId}/capabilities/skills/{skillId}", threeLayerAdminHandler::spaceUninstallSkill);
+        app.get("/api/spaces/{spaceId}/knowledge", threeLayerAdminHandler::spaceKnowledge);
+        app.post("/api/spaces/{spaceId}/knowledge", threeLayerAdminHandler::spaceAddKnowledge);
+        app.put("/api/spaces/{spaceId}/knowledge/{entryId}", threeLayerAdminHandler::spaceUpdateKnowledge);
+        app.delete("/api/spaces/{spaceId}/knowledge/{entryId}", threeLayerAdminHandler::spaceDeleteKnowledge);
+        app.get("/api/spaces/{spaceId}/knowledge/search", threeLayerAdminHandler::spaceSearchKnowledge);
+        app.get("/api/spaces/{spaceId}/policies", threeLayerAdminHandler::spacePolicy);
+        app.put("/api/spaces/{spaceId}/policies", threeLayerAdminHandler::spaceUpdatePolicy);
+        app.get("/api/spaces/{spaceId}/members", threeLayerAdminHandler::spaceMembers);
+        app.post("/api/spaces/{spaceId}/members", threeLayerAdminHandler::spaceAddMember);
+        app.delete("/api/spaces/{spaceId}/members/{userId}", threeLayerAdminHandler::spaceRemoveMember);
+        // User layer
+        app.get("/api/users/{userId}/profile", threeLayerAdminHandler::userProfile);
+        app.put("/api/users/{userId}/profile", threeLayerAdminHandler::userUpdateProfile);
+        app.get("/api/users/{userId}/capabilities", threeLayerAdminHandler::userCapabilities);
+        app.post("/api/users/{userId}/capabilities", threeLayerAdminHandler::userAddCapability);
+        app.delete("/api/users/{userId}/capabilities/{type}/{value}", threeLayerAdminHandler::userRemoveCapability);
+        app.get("/api/users/{userId}/preferences", threeLayerAdminHandler::userPreferences);
+        app.put("/api/users/{userId}/preferences", threeLayerAdminHandler::userUpdatePreferences);
+        app.get("/api/users/{userId}/spaces", threeLayerAdminHandler::userSpaces);
+        // Improvement (cross-layer)
+        app.get("/api/improvement/signals", threeLayerAdminHandler::improvementSignals);
+        app.get("/api/improvement/proposals", threeLayerAdminHandler::improvementProposals);
+        app.get("/api/improvement/adaptations", threeLayerAdminHandler::improvementAdaptations);
 
         // Prometheus-compatible metrics scrape endpoint.
         //
