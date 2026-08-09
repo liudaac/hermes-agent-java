@@ -112,7 +112,8 @@ public class SignalBroadcaster {
                 signal.content() != null ? signal.content().replace("|", "/") : "",
                 String.valueOf(signal.weight()),
                 String.valueOf(signal.timestamp()),
-                String.valueOf(signal.processed())
+                String.valueOf(signal.processed()),
+                signal.scope() != null ? signal.scope().name() : SignalScope.USER.name()
         );
     }
 
@@ -120,16 +121,20 @@ public class SignalBroadcaster {
         try {
             String[] parts = message.split("\\|", -1);
             if (parts.length < 9) return null;
+            SignalScope scope = parts.length > 9 && !parts[9].isEmpty()
+                ? SignalScope.valueOf(parts[9]) : SignalScope.USER;
             return new ImprovementSignal(
                     parts[0],                         // id
                     parts[1],                         // tenantId
                     parts[2].isEmpty() ? null : parts[2],  // userId
                     SignalType.valueOf(parts[3]),     // type
+                    scope,                            // scope
                     parts[4].isEmpty() ? null : parts[4],  // sessionId
                     parts[5],                         // content
                     Double.parseDouble(parts[6]),     // weight
                     Long.parseLong(parts[7]),         // timestamp
-                    Boolean.parseBoolean(parts[8])    // processed
+                    Boolean.parseBoolean(parts[8]),   // processed
+                    java.util.Map.of()                // metadata (not serialized in broadcast)
             );
         } catch (Exception e) {
             logger.warn("Failed to deserialize signal: {}", e.getMessage());

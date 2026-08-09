@@ -53,8 +53,8 @@ public class PostgresSignalStore implements SignalStore {
     @Override
     public void save(ImprovementSignal signal) {
         String sql = """
-            INSERT INTO improvement_signal (id, tenant_id, user_id, signal_type, session_id, content, weight, timestamp, processed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO improvement_signal (id, tenant_id, user_id, signal_type, session_id, content, weight, timestamp, processed, scope)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO NOTHING
             """;
         try (Connection conn = dataSource.getConnection();
@@ -68,6 +68,7 @@ public class PostgresSignalStore implements SignalStore {
             ps.setDouble(7, signal.weight());
             ps.setLong(8, signal.timestamp());
             ps.setBoolean(9, signal.processed());
+            ps.setString(10, signal.scope() != null ? signal.scope().name() : SignalScope.USER.name());
             ps.executeUpdate();
         } catch (SQLException e) {
             logger.error("Failed to save signal: {}", e.getMessage());
@@ -136,16 +137,21 @@ public class PostgresSignalStore implements SignalStore {
     }
 
     private ImprovementSignal mapRow(ResultSet rs) throws SQLException {
+        String scopeStr = rs.getString("scope");
+        SignalScope scope = scopeStr != null && !scopeStr.isEmpty()
+            ? SignalScope.valueOf(scopeStr) : SignalScope.USER;
         return new ImprovementSignal(
                 rs.getString("id"),
                 rs.getString("tenant_id"),
                 rs.getString("user_id"),
                 SignalType.valueOf(rs.getString("signal_type")),
+                scope,
                 rs.getString("session_id"),
                 rs.getString("content"),
                 rs.getDouble("weight"),
                 rs.getLong("timestamp"),
-                rs.getBoolean("processed")
+                rs.getBoolean("processed"),
+                java.util.Map.of()
         );
     }
 }
