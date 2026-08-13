@@ -90,6 +90,10 @@ public class TenantAwareAIAgent {
     private volatile String customSystemPrompt;
     private volatile Map<String, Object> modelParams;
 
+    // ===== Declarative System Prompt Assembly (P0-1) =====
+    private com.nousresearch.hermes.harness.prompt.SystemPromptAssembler promptAssembler;
+    private Runnable promptDisposer;
+
     private static final int AUTO_SAVE_INTERVAL = 5;
 
     // ===== 工具级审批挂起状态 =====
@@ -1269,43 +1273,71 @@ public class TenantAwareAIAgent {
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             return customSystemPrompt;
         }
-        StringBuilder prompt = new StringBuilder();
-        prompt.append(com.nousresearch.hermes.config.Constants.DEFAULT_AGENT_IDENTITY).append("\n\n");
-        prompt.append(com.nousresearch.hermes.config.Constants.MEMORY_GUIDANCE).append("\n\n");
-        prompt.append(com.nousresearch.hermes.config.Constants.TOOL_USE_ENFORCEMENT_GUIDANCE).append("\n\n");
-        prompt.append(com.nousresearch.hermes.config.Constants.EXECUTION_DISCIPLINE_GUIDANCE).append("\n\n");
-        prompt.append(com.nousresearch.hermes.config.Constants.SESSION_SEARCH_GUIDANCE).append("\n\n");
-        prompt.append(com.nousresearch.hermes.config.Constants.SKILLS_GUIDANCE).append("\n\n");
+
+        // Use declarative assembler (P0-1) - lazy init on first call
+        if (promptAssembler == null) {
+            initPromptAssembler();
+        }
+        var ctx = new com.nousresearch.hermes.harness.prompt.PromptAssembleContext(
+            tenantId, sessionId, agentId,
+            agentRole != null ? agentRole.getRoleName() : null);
+        var assembly = promptAssembler.assemble(ctx);
+        String prompt = assembly.renderSystemPrompt();
+
+        // Append dynamic contexts (memory snapshot, tool hints, evolution, team)
+        // These are registered as PromptContexts when available, but during
+        // migration we still append them here for backward compatibility.
+        String dynamicContext = buildDynamicPromptContext();
+        if (!dynamicContext.isEmpty()) {
+            prompt = prompt + "\n\n" + dynamicContext;
+        }
+
+        return prompt;
+    }
+
+    /**
+     * Initialize the declarative prompt assembler with default sections.
+     */
+    private void initPromptAssembler() {
+        promptAssembler = new com.nousresearch.hermes.harness.prompt.SystemPromptAssembler();
+        promptDisposer = com.nousresearch.hermes.harness.prompt.DefaultPromptSections.registerAll(promptAssembler);
+        logger.debug("Initialized SystemPromptAssembler for agent {}", agentId);
+    }
+
+    /**
+     * Build dynamic prompt context from memory, tool hints, evolution, and team.
+     * This will be migrated to PromptContext registrations in a follow-up step.
+     */
+    private String buildDynamicPromptContext() {
+        StringBuilder sb = new StringBuilder();
 
         String memoryContext = memoryManager.getSystemPromptSnapshot();
         if (!memoryContext.isEmpty()) {
-            prompt.append(memoryContext).append("\n\n");
+            sb.append(memoryContext).append("\n\n");
         }
 
-        // Tool performance hints (learned from past usage)
         if (toolPerformanceTracker != null) {
             String hints = toolPerformanceTracker.buildHintBlock();
             if (!hints.isEmpty()) {
-                prompt.append(hints).append("\n");
+                sb.append(hints).append("\n");
             }
         }
 
-        // ======== AI原生组织：自进化上下文 ========
-        // 注入从历史失败中学到的经验教训，让 Agent 持续进化
         if (evolutionEngine != null) {
             String evolutionCtx = evolutionEngine.buildEvolutionPrompt(agentId);
             if (!evolutionCtx.isBlank() && !evolutionCtx.trim().equals("# Self-Evolution Context")) {
-                prompt.append(evolutionCtx).append("\n");
+                sb.append(evolutionCtx).append("\n");
             }
         }
 
-        // ======== AI原生组织：第三刀--Team 上下文注入 ========
-        // 让 Agent 知道自己属于哪个团队、有哪些队友、最近发生了什么
         if (team != null) {
-            prompt.append(buildTeamAwarePrompt()).append("\n");
+            String teamCtx = buildTeamAwarePrompt();
+            if (!teamCtx.isEmpty()) {
+                sb.append(teamCtx).append("\n");
+            }
         }
 
-        return prompt.toString();
+        return sb.toString().trim();
     }
 
     public void autoSaveSession() {
