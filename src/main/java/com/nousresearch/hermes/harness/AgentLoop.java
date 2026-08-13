@@ -342,6 +342,29 @@ public class AgentLoop {
                 continue;
             }
 
+            // P0-3: Context overflow recovery - compact and retry once
+            String error = response.getError();
+            if (error != null && (error.toLowerCase().contains("context")
+                    || error.toLowerCase().contains("token")
+                    || error.toLowerCase().contains("too long")
+                    || error.contains("maximum"))) {
+                logger.warn("Context overflow detected, attempting compaction: {}", error);
+                var compactResult = compactionEngine.compactIfNeeded(
+                    history,
+                    com.nousresearch.hermes.harness.compaction.CompactionTrigger.CONTEXT_OVERFLOW,
+                    ctx.modelClient()
+                );
+                if (compactResult.success() && attempt < MAX_TRANSIENT_RETRIES) {
+                    if (emitter != null) {
+                        emitter.emit(AgentEvent.CONTEXT_COMPRESSED, Map.of(
+                            "strategy", "overflow-compaction",
+                            "messagesCompacted", compactResult.messagesCompacted()
+                        ));
+                    }
+                    continue; // retry with compacted history
+                }
+            }
+
             // USER_FIXABLE or FATAL (or TRANSIENT exhausted): return error response
             return response;
         }
@@ -465,12 +488,40 @@ public class AgentLoop {
 
     // ==================== Helpers ====================
 
+    /** Compaction engine for context window management (P0-3). */
+    private static final com.nousresearch.hermes.harness.compaction.CompactionEngine compactionEngine
+        = new com.nousresearch.hermes.harness.compaction.BasicCompactionEngine();
+
     private static void enforceContextBudget(AgentContext ctx, List<ModelMessage> history,
                                               EventEmitter emitter) {
+        // P0-3: Try compaction engine first (LLM-based summarization)
+        try {
+            var result = compactionEngine.compactIfNeeded(
+                history,
+                com.nousresearch.hermes.harness.compaction.CompactionTrigger.PRESSURE,
+                ctx.modelClient()
+            );
+            if (result.success()) {
+                logger.info("Compaction: {} messages compacted, ~{} tokens saved",
+                    result.messagesCompacted(), result.tokensSaved());
+                if (emitter != null) {
+                    emitter.emit(AgentEvent.CONTEXT_COMPRESSED, java.util.Map.of(
+                        "strategy", "compaction",
+                        "messagesCompacted", result.messagesCompacted(),
+                        "tokensSaved", result.tokensSaved()
+                    ));
+                }
+                return;
+            }
+        } catch (Exception e) {
+            logger.debug("Compaction engine failed, falling back to ContextManager: {}", e.getMessage());
+        }
+
+        // Fallback: legacy ContextManager (shielding -> summary -> truncate)
         var cm = new ContextManager();
         var stats = cm.enforce(history, emitter);
         if (stats.anythingDone()) {
-            logger.debug("Context managed: shielded={}, summarized={}, truncated={}, tokens~{}",
+            logger.debug("Context managed (fallback): shielded={}, summarized={}, truncated={}, tokens~{}",
                 stats.toolResultsShielded(), stats.messagesSummarized(),
                 stats.messagesTruncated(), stats.finalTokenEstimate());
         }
