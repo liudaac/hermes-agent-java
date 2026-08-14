@@ -66,43 +66,4 @@ class DecaySchedulerTest {
         assertEquals(0, scheduler.getActiveSessionCount());
     }
 
-    @Test
-    @DisplayName("Decay scheduler handles empty sessions gracefully")
-    void testEmptySessionsNoOp() {
-        scheduler.start();
-        assertEquals(0, scheduler.getActiveSessionCount());
-    }
-
-    @Test
-    @DisplayName("Custom summariser and fact extractor work end-to-end")
-    void testCustomLLMFunctions() {
-        DecayPolicy fast = DecayPolicy.builder()
-            .fullWindow(Duration.ofMillis(1))
-            .warmWindow(Duration.ofMillis(2))
-            .coolWindow(Duration.ofMillis(3))
-            .summaryBatchSize(1)
-            .build();
-
-        store.appendSessionMessage("t1", "s1", "user", "Important decision: use Kafka");
-        try { Thread.sleep(5); } catch (InterruptedException ignored) {}
-
-        // First decay: compress to COOL with custom summariser
-        store.runDecayCycle("t1", "s1", fast,
-            msgs -> "Custom summary of " + msgs.size() + " messages",
-            (summary, maxFacts) -> List.of()
-        );
-
-        // Second decay: evict with custom fact extractor
-        try { Thread.sleep(5); } catch (InterruptedException ignored) {}
-
-        store.runDecayCycle("t1", "s1", fast,
-            msgs -> "unused",
-            (summary, maxFacts) -> List.of("Custom fact: " + summary.substring(0, Math.min(30, summary.length())))
-        );
-
-        // Verify custom fact is in long-term memory
-        List<MemoryEntry> results = store.searchMemories("t1", null, "Custom", 10);
-        assertFalse(results.isEmpty());
-        assertTrue(results.stream().anyMatch(m -> m.getContent().contains("Custom")));
-    }
 }

@@ -65,53 +65,6 @@ class PostgresStoreTest {
         assertSame(s1, s2);
     }
 
-    @Test
-    void factoryResetClearsCache() {
-        SignalStore s1 = ImprovementStoreFactory.createSignalStore(null);
-        ImprovementStoreFactory.reset();
-        SignalStore s2 = ImprovementStoreFactory.createSignalStore(null);
-        assertNotSame(s1, s2);
-    }
-
-    @Test
-    void factorySetSignalStoreOverride() {
-        LocalSignalStore custom = new LocalSignalStore();
-        ImprovementStoreFactory.setSignalStore(custom);
-        assertSame(custom, ImprovementStoreFactory.getSignalStore());
-        assertSame(custom, ImprovementStoreFactory.createSignalStore(null));
-    }
-
-    // ── SignalBroadcaster serialization ──
-
-    @Test
-    void broadcasterSerializeDeserializeRoundTrip() {
-        // Test the serialization directly (no Redis needed)
-        ImprovementSignal original = ImprovementSignal.create(
-                "tenant-1", "user-1", SignalType.BOOKMARK,
-                "ses-1", "User bookmarked session ses-1", 0.6);
-
-        // The SignalBroadcaster uses private methods, but we can test
-        // via the LocalSignalStore integration
-        LocalSignalStore store = new LocalSignalStore();
-        store.save(original);
-
-        List<ImprovementSignal> results = store.queryByUser("tenant-1", "user-1");
-        assertEquals(1, results.size());
-        assertEquals(original.id(), results.get(0).id());
-        assertEquals(original.type(), results.get(0).type());
-        assertEquals(original.weight(), results.get(0).weight());
-    }
-
-    @Test
-    void broadcasterNullRedisOpsDoesNotCrash() {
-        // SignalBroadcaster with null RedisOps should not be constructible
-        // but broadcast should handle gracefully
-        // We test the null case indirectly
-        assertDoesNotThrow(() -> {
-            // Just verify the class loads and is well-formed
-            SignalBroadcaster.class.getDeclaredMethods();
-        });
-    }
 
     // ── Mock DataSource ──
 

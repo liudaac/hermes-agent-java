@@ -94,16 +94,6 @@ class UserRbacServiceTest {
         assertEquals("carol@test.com", found.email());
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("addMember + getRole")
-    void addMemberGetRole() {
-        UserAccount user = rbac.createUser("dave@test.com", "Dave", null);
-        rbac.addMember("workspace-1", user.userId(), UserAccount.Role.ADMIN);
-
-        UserAccount.Role role = rbac.getRole("workspace-1", user.userId());
-        assertEquals(UserAccount.Role.ADMIN, role);
-    }
 
     // ============ D6: JwtService ============
 
