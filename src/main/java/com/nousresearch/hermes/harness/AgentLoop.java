@@ -1,6 +1,7 @@
 package com.nousresearch.hermes.harness;
 
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
+import com.nousresearch.hermes.harness.loop.*;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
@@ -113,10 +114,44 @@ public class AgentLoop {
             emitter.emit(AgentEvent.LOOP_START, Map.of("budget", budget.getRemaining() + budget.getUsed()));
         }
 
+        // P1-2: Claim any pending next-turn messages
+        var turnEntries = ctx.inbox().claimNextTurn();
+        for (var entry : turnEntries) {
+            history.add(entry.message());
+        }
+
         while (budget.hasRemaining() && !ctx.isInterrupted()) {
             if (!budget.consume()) {
                 responseBuilder.append("\n[Reached maximum iterations]");
                 break;
+            }
+
+            // P1-1: Pre-step interceptor chain
+            PreStepContext preStepCtx = new PreStepContext(
+                ctx.getUserTurnCount(), budget.getUsed(),
+                new ArrayList<>(history), ctx.sessionId(), ctx.tenantId());
+            PreStepDecision preDecision = ctx.preStepChain().intercept(preStepCtx);
+            if (preDecision.kind() == PreStepDecision.Kind.REJECT) {
+                if (preDecision.reason() != null) {
+                    responseBuilder.append("\n⚠️ ").append(preDecision.reason());
+                }
+                break;
+            }
+            if (preDecision.kind() == PreStepDecision.Kind.REWRITE && preDecision.messages() != null) {
+                history.clear();
+                history.addAll(preDecision.messages());
+            }
+
+            // P1-2: Claim any pending next-step messages
+            var stepEntries = ctx.inbox().claimNextStep();
+            for (var entry : stepEntries) {
+                history.add(entry.message());
+            }
+
+            // P1-2: Claim any pending inject messages (silent, don't affect flow)
+            var injectEntries = ctx.inbox().claimInject();
+            for (var entry : injectEntries) {
+                history.add(entry.message());
             }
 
             if (ctx.governancePolicy() != null && ctx.governancePolicy().isPaused()) {
@@ -192,6 +227,7 @@ public class AgentLoop {
                         responseBuilder.append(assistantMessage.getContent());
                     }
 
+                    // Emit PRE_TOOL for all calls
                     for (ToolCall tc : assistantMessage.getToolCalls()) {
                         if (emitter != null) {
                             emitter.emit(AgentEvent.PRE_TOOL, Map.of(
@@ -199,31 +235,20 @@ public class AgentLoop {
                                 "tool", tc.getFunction().getName(),
                                 "args", tc.getFunction().getArguments()));
                         }
+                    }
 
-                        long toolStart = System.currentTimeMillis();
-                        String result;
-                        try {
-                            result = ctx.executeToolCall(tc);
-                        } catch (Exception toolEx) {
-                            result = handleToolException(tc, toolEx, history, emitter);
-                            if (result == null) {
-                                // USER_FIXABLE or FATAL: error already emitted, break
-                                responseBuilder.append("\n⚠️ Tool '")
-                                    .append(tc.getFunction().getName())
-                                    .append("' failed: ").append(toolEx.getMessage());
-                                throw toolEx; // re-throw to outer catch for break
-                            }
-                        }
-                        long duration = System.currentTimeMillis() - toolStart;
+                    // P1-3: Execute tools via scheduler (parallel where possible)
+                    List<ToolCall> toolCalls = assistantMessage.getToolCalls();
+                    List<ToolCallResult> toolResults = ctx.toolCallScheduler().execute(toolCalls, ctx);
 
+                    for (ToolCallResult tcr : toolResults) {
                         if (emitter != null) {
                             emitter.emit(AgentEvent.POST_TOOL, Map.of(
-                                "callId", tc.getId(),
-                                "ok", !result.contains("\"error\""),
-                                "durationMs", duration));
+                                "callId", tcr.callId(),
+                                "ok", tcr.success(),
+                                "durationMs", tcr.durationMs()));
                         }
-
-                        history.add(ModelMessage.tool(result, tc.getId()));
+                        history.add(ModelMessage.tool(tcr.content(), tcr.callId()));
                     }
                     ctx.incrementItersSinceSkill();
                 } else {
@@ -232,10 +257,20 @@ public class AgentLoop {
                         if (responseBuilder.length() > 0) responseBuilder.append("\n\n");
                         responseBuilder.append(content);
                     }
+                    // P1-2: Check for steer messages before breaking
+                    if (ctx.inbox().hasNextStep()) {
+                        continue;
+                    }
                     break;
                 }
 
-                if ("stop".equals(response.getFinishReason())) break;
+                if ("stop".equals(response.getFinishReason())) {
+                    // P1-2: If there are next-step messages (steer), continue processing
+                    if (ctx.inbox().hasNextStep()) {
+                        continue;
+                    }
+                    break;
+                }
 
             } catch (TenantAwareAIAgent.ToolApprovalRequiredException ex) {
                 throw ex;

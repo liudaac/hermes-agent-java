@@ -8,6 +8,9 @@ import com.nousresearch.hermes.collaboration.AgentRuntimeProfile;
 import com.nousresearch.hermes.collaboration.GovernancePolicy;
 import com.nousresearch.hermes.collaboration.TenantBus;
 import com.nousresearch.hermes.config.HermesConfig;
+import com.nousresearch.hermes.harness.loop.AgentInbox;
+import com.nousresearch.hermes.harness.loop.PreStepInterceptorChain;
+import com.nousresearch.hermes.harness.loop.ToolCallScheduler;
 import com.nousresearch.hermes.memory.MemoryManager;
 import com.nousresearch.hermes.memory.PromptContextBuilder;
 import com.nousresearch.hermes.model.ModelClient;
@@ -62,6 +65,12 @@ public class AgentContext {
     // ===== EventEmitter (injected by AgentHarness) =====
 
     private volatile EventEmitter eventEmitter;
+
+    // ===== P1: Loop enhancement =====
+
+    private final PreStepInterceptorChain preStepChain = new PreStepInterceptorChain();
+    private final AgentInbox inbox = new AgentInbox();
+    private final ToolCallScheduler toolCallScheduler = new ToolCallScheduler();
 
     // ===== Constructor =====
 
@@ -147,6 +156,12 @@ public class AgentContext {
         this.eventEmitter = emitter;
         agent.setEventEmitter(emitter);
     }
+
+    // ===== P1: Loop enhancement accessors =====
+
+    public PreStepInterceptorChain preStepChain() { return preStepChain; }
+    public AgentInbox inbox() { return inbox; }
+    public ToolCallScheduler toolCallScheduler() { return toolCallScheduler; }
 
     // ===== Wrapped agent (for direct access when needed) =====
 
