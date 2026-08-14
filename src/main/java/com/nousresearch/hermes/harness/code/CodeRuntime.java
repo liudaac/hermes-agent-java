@@ -33,6 +33,25 @@ public class CodeRuntime {
     private static final String BRIDGE_PREAMBLE = """
 import json, sys, io
 
+# ===== Hermes Sandbox: restrict dangerous operations =====
+_blocked_modules = {'os', 'subprocess', 'shutil', 'ctypes', 'socket', 'http',
+                     'urllib', 'pathlib', 'signal', 'multiprocessing', 'asyncio'}
+
+_original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+def _safe_import(name, *args, **kwargs):
+    if name.split('.')[0] in _blocked_modules:
+        raise ImportError(f"Module '{name}' is blocked in Hermes code sandbox. Use tools.* to access files and network.")
+    return _original_import(name, *args, **kwargs)
+import builtins
+builtins.__import__ = _safe_import
+
+# Restrict open() - force code to use tools.read_file / tools.write_file
+_orig_open = open
+def _restricted_open(file, mode='r', *args, **kwargs):
+    raise PermissionError("open() is blocked in Hermes code sandbox. Use tools.read_file or tools.write_file.")
+builtins.open = _restricted_open
+
+# ===== Hermes Bridge: tool access =====
 class _HermesBridge:
     def __init__(self):
         self._results = {}
@@ -83,6 +102,14 @@ def _hermes_output(value):
 
             ProcessBuilder pb = new ProcessBuilder(PYTHON_BIN, "-u", scriptFile.toString());
             pb.redirectErrorStream(false);
+
+            // P3-1 fix: Sandbox - restrict environment
+            var env = pb.environment();
+            env.clear();
+            env.put("PATH", "/usr/local/bin:/usr/bin:/bin");
+            env.put("HOME", "/tmp");
+            env.put("LANG", "en_US.UTF-8");
+            env.put("PYTHONPATH", "");
 
             Process process = pb.start();
 

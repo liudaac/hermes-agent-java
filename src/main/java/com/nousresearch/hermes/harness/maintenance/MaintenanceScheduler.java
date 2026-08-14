@@ -19,6 +19,7 @@ public class MaintenanceScheduler {
     private final List<MaintenanceJob> jobs = new ArrayList<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile boolean interrupted = false;
+    private volatile Thread runningThread = null;
 
     public void register(MaintenanceJob job) {
         jobs.add(job);
@@ -45,6 +46,7 @@ public class MaintenanceScheduler {
         }
 
         interrupted = false;
+        runningThread = Thread.currentThread();
         boolean allCompleted = true;
 
         try {
@@ -66,6 +68,7 @@ public class MaintenanceScheduler {
                 }
             }
         } finally {
+            runningThread = null;
             running.set(false);
         }
 
@@ -74,10 +77,14 @@ public class MaintenanceScheduler {
 
     /**
      * Signal that a new message has arrived and maintenance should stop.
-     * The current job will finish, but no new jobs will start.
+     * The current job will finish (or be interrupted if blocking on I/O),
+     * but no new jobs will start.
      */
     public void interrupt() {
         interrupted = true;
+        if (runningThread != null) {
+            runningThread.interrupt();
+        }
     }
 
     public boolean isRunning() {

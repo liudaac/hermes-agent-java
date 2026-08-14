@@ -222,47 +222,4 @@ public class AgentContext {
                 "Tool execution failed: " + e.getMessage());
         }
     }
-
-    // ===== P3: Maintenance =====
-
-    private final com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler =
-        new com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler();
-
-    public com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler() {
-        return maintenanceScheduler;
-    }
-
-    /**
-     * Register default maintenance jobs.
-     */
-    public void registerDefaultMaintenanceJobs() {
-        maintenanceScheduler.register(
-            new com.nousresearch.hermes.harness.maintenance.CompactionMaintenanceJob(this));
-        maintenanceScheduler.register(
-            new com.nousresearch.hermes.harness.maintenance.SessionTitleJob(this));
-    }
-
-    /**
-     * Run maintenance jobs. Called after agent response is sent.
-     */
-    public void runMaintenance() {
-        if (maintenanceScheduler.jobs().isEmpty()) return;
-        if (maintenanceScheduler.isRunning()) return;
-
-        // Run in a virtual thread
-        Thread.startVirtualThread(() -> {
-            try {
-                maintenanceScheduler.runAll();
-            } catch (Exception e) {
-                // Silent - maintenance failures shouldn't affect user
-            }
-        });
-    }
-
-    /**
-     * Signal maintenance to stop (new message arrived).
-     */
-    public void interruptMaintenance() {
-        maintenanceScheduler.interrupt();
-    }
 }

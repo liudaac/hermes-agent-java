@@ -96,6 +96,11 @@ public class TenantAwareAIAgent {
 
     private static final int AUTO_SAVE_INTERVAL = 5;
 
+    // ===== P3-2: Agent-level MaintenanceScheduler (persists across calls) =====
+    private final com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler =
+        new com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler();
+    private volatile com.nousresearch.hermes.harness.AgentContext latestContext;
+
     // ===== 工具级审批挂起状态 =====
     private volatile boolean approvalCheckpointActive = false;
 
@@ -750,9 +755,19 @@ public class TenantAwareAIAgent {
     private String doProcessMessage(String message) {
         // Build context (single interface between agent and loop)
         var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
+        this.latestContext = ctx;
 
-        // P3-2: Interrupt any running maintenance (new message arrived)
-        ctx.interruptMaintenance();
+        // P3-2: Interrupt any running maintenance (agent-level, persists across calls)
+        interruptMaintenance();
+
+        // P3-1: Auto-register run_code tool (lazy, idempotent)
+        if (!ToolRegistry.getInstance().getAllToolNames().contains("run_code")) {
+            try {
+                ToolRegistry.getInstance().register(ctx.codeModeToolEntry());
+            } catch (Exception e) {
+                // Already registered by another thread, ignore
+            }
+        }
 
         // 1. PRE-LOOP
         boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
@@ -768,9 +783,8 @@ public class TenantAwareAIAgent {
         // 3. POST-LOOP
         String result = com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
 
-        // P3-2: Run maintenance jobs (idle time)
-        ctx.registerDefaultMaintenanceJobs();
-        ctx.runMaintenance();
+        // P3-2: Run maintenance jobs (idle time) - agent-level scheduler
+        runMaintenance(ctx);
 
         return result;
     }
@@ -784,9 +798,19 @@ public class TenantAwareAIAgent {
 
         // Build context and delegate to AgentLoop (same path as non-streaming)
         var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
+        this.latestContext = ctx;
 
-        // P3-2: Interrupt any running maintenance (new message arrived)
-        ctx.interruptMaintenance();
+        // P3-2: Interrupt any running maintenance (agent-level, persists across calls)
+        interruptMaintenance();
+
+        // P3-1: Auto-register run_code tool (lazy, idempotent)
+        if (!ToolRegistry.getInstance().getAllToolNames().contains("run_code")) {
+            try {
+                ToolRegistry.getInstance().register(ctx.codeModeToolEntry());
+            } catch (Exception e) {
+                // Already registered by another thread, ignore
+            }
+        }
 
         boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
 
@@ -801,9 +825,8 @@ public class TenantAwareAIAgent {
 
         com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
 
-        // P3-2: Run maintenance jobs (idle time)
-        ctx.registerDefaultMaintenanceJobs();
-        ctx.runMaintenance();
+        // P3-2: Run maintenance jobs (idle time) - agent-level scheduler
+        runMaintenance(ctx);
     }
 
 
@@ -1721,6 +1744,46 @@ public class TenantAwareAIAgent {
     private volatile com.nousresearch.hermes.harness.EventEmitter eventEmitter;
     public com.nousresearch.hermes.harness.EventEmitter getEventEmitter() { return eventEmitter; }
     public void setEventEmitter(com.nousresearch.hermes.harness.EventEmitter emitter) { this.eventEmitter = emitter; }
+
+    // ===== P3-2: Agent-level maintenance =====
+
+    public com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler() {
+        return maintenanceScheduler;
+    }
+
+    /**
+     * Interrupt any running maintenance (new message arrived).
+     */
+    public void interruptMaintenance() {
+        maintenanceScheduler.interrupt();
+    }
+
+    /**
+     * Run maintenance jobs in a virtual thread after response is sent.
+     * Uses the latest AgentContext for job execution.
+     */
+    public void runMaintenance(com.nousresearch.hermes.harness.AgentContext ctx) {
+        this.latestContext = ctx;
+        if (maintenanceScheduler.jobs().isEmpty()) {
+            maintenanceScheduler.register(
+                new com.nousresearch.hermes.harness.maintenance.CompactionMaintenanceJob(ctx));
+            maintenanceScheduler.register(
+                new com.nousresearch.hermes.harness.maintenance.MemoryDecayMaintenanceJob(ctx));
+            maintenanceScheduler.register(
+                new com.nousresearch.hermes.harness.maintenance.SkillIndexRefreshJob(ctx));
+            maintenanceScheduler.register(
+                new com.nousresearch.hermes.harness.maintenance.SessionTitleJob(ctx));
+        }
+        if (maintenanceScheduler.isRunning()) return;
+
+        Thread.startVirtualThread(() -> {
+            try {
+                maintenanceScheduler.runAll();
+            } catch (Exception e) {
+                // Silent - maintenance failures shouldn't affect user
+            }
+        });
+    }
 
     // ======== Accessors for LoopExecutor preLoop/postLoop ========
 
