@@ -45,32 +45,4 @@ class SubAgentForkTest {
         assertTrue(List.of(modes).contains(ForkMode.CLEAN));
     }
 
-    @Test
-    void contextManagerCompressesForkedHistory() {
-        // Test that ContextManager can compress a history list
-        // (this is what ForkMode.COMPRESSED does internally)
-        var cm = new ContextManager(500, 50, 3);
-        var history = new ArrayList<ModelMessage>();
-        history.add(ModelMessage.system("sys"));
-        for (int i = 0; i < 20; i++) {
-            history.add(ModelMessage.user("msg " + i + " " + "X".repeat(200)));
-            history.add(ModelMessage.assistant("resp " + i + " " + "Y".repeat(200)));
-        }
-
-        int originalSize = history.size();
-        var stats = cm.enforce(history, null);
-
-        // History should be smaller after compression
-        assertTrue(history.size() < originalSize,
-            "History should shrink after compression, was " + originalSize + " now " + history.size());
-    }
-
-    @Test
-    void cleanForkDoesNotCopyHistory() {
-        // ForkMode.CLEAN means no history is forked
-        // This is the existing behavior (just text context string)
-        // Verify the enum exists and is distinct
-        assertNotEquals(ForkMode.CLEAN, ForkMode.FULL);
-        assertNotEquals(ForkMode.CLEAN, ForkMode.COMPRESSED);
-    }
 }

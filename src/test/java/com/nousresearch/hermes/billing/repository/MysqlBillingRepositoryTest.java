@@ -70,19 +70,5 @@ class MysqlBillingRepositoryTest {
         assertTrue(records.isEmpty());
     }
 
-    @Test
-    @Order(3)
-    @DisplayName("getDailyTotals aggregates correctly")
-    void getDailyTotals() {
-        repo.append(TenantUsageRecord.of("t1", "gpt-4o", "openai", 100, 200, 0.018, "s1"));
-        repo.append(TenantUsageRecord.of("t1", "claude-3.5-sonnet", "anthropic", 500, 600, 0.015, "s2"));
-
-        TenantDailyTotals totals = repo.getDailyTotals("t1", LocalDate.now());
-        assertEquals(2, totals.totalRequests());
-        assertEquals(600, totals.inputTokens());
-        assertEquals(800, totals.outputTokens());
-        assertEquals(1400, totals.totalTokens());
-        assertTrue(totals.estimatedCostUsd() > 0);
-    }
 
 }

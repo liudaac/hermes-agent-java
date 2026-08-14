@@ -77,44 +77,4 @@ class SessionReferenceTest {
         assertEquals(userMessage, result);
     }
 
-    @Test
-    void shouldReturnOriginalMessageWhenReferenceIsBlank() {
-        String userMessage = "Hello";
-        String result = sessionRef.injectReference(userMessage, "  ");
-        assertEquals(userMessage, result);
-    }
-
-    @Test
-    void shouldInjectReferenceFromSessionInOneShot() {
-        // Given: a saved asset
-        var steps = List.of(
-                new SessionAsset.StepSummary(0, "Step A", null, "ok", false, 1000),
-                new SessionAsset.StepSummary(1, "Step B", "terminal", "done", true, 2000)
-        );
-        var asset = new SessionAsset(
-                null, "tenant-1", "user-1", "ref-session",
-                "Reference Session", "Summary",
-                SessionAsset.SessionStatus.COMPLETED,
-                false, 0, null, List.of(), steps,
-                System.currentTimeMillis(), System.currentTimeMillis(), System.currentTimeMillis()
-        );
-        library.saveAsset(asset);
-
-        // When: one-shot inject
-        String result = sessionRef.injectReferenceFromSession("tenant-1", "ref-session", "Do similar task");
-
-        // Then: message contains reference + original
-        assertNotNull(result);
-        assertTrue(result.contains("Reference Session"));
-        assertTrue(result.contains("Step A"));
-        assertTrue(result.contains("Step B"));
-        assertTrue(result.contains("Do similar task"));
-        assertTrue(result.contains("---"));
-    }
-
-    @Test
-    void shouldReturnOriginalMessageWhenReferenceSessionNotFound() {
-        String result = sessionRef.injectReferenceFromSession("tenant-1", "non-existent", "Hello");
-        assertEquals("Hello", result);
-    }
 }

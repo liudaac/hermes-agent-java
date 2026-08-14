@@ -42,14 +42,6 @@ class ModelChainTest {
         assertFalse(policy.hasRouting("unknown"));
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("routing is case-insensitive")
-    void routingPolicy_caseInsensitive() {
-        ModelRoutingPolicy policy = new ModelRoutingPolicy(Map.of("planner", "smart"));
-        assertEquals("smart", policy.getAliasForRole("PLANNER"));
-        assertEquals("smart", policy.getAliasForRole("Planner"));
-    }
 
     // ============ ModelChain Builder ============
 

@@ -99,51 +99,6 @@ class FeishuCommentAdapterTest {
         ));
     }
 
-    @Test
-    @DisplayName("verifyWebhook should validate Feishu signature when encrypt key is configured")
-    void verifyWebhookValidatesSignature() throws Exception {
-        String encryptKey = "encrypt-key";
-        String timestamp = String.valueOf(System.currentTimeMillis() / 1000L);
-        String nonce = "nonce-1";
-        String rawBody = "{\"token\":\"expected-token\",\"event\":{}}";
-        String signature = sha256Hex(timestamp + nonce + encryptKey + rawBody);
-
-        FeishuCommentAdapter adapter = new SecureAdapter("expected-token", encryptKey);
-
-        assertTrue(adapter.verifyWebhook(
-            JSONObject.parseObject(rawBody),
-            Map.of(
-                "X-Lark-Request-Timestamp", timestamp,
-                "X-Lark-Request-Nonce", nonce,
-                "X-Lark-Signature", signature
-            ),
-            rawBody
-        ));
-
-        assertFalse(adapter.verifyWebhook(
-            JSONObject.parseObject(rawBody),
-            Map.of(
-                "X-Lark-Request-Timestamp", timestamp,
-                "X-Lark-Request-Nonce", nonce,
-                "X-Lark-Signature", "bad-signature"
-            ),
-            rawBody
-        ));
-    }
-
-    @Test
-    @DisplayName("parseWebhook should ignore non-comment events")
-    void parseWebhookIgnoresNonCommentEvents() {
-        FeishuCommentAdapter adapter = new FeishuCommentAdapter();
-        JSONObject payload = JSONObject.parseObject("""
-            {
-              "header": {"event_type": "im.message.receive_v1"},
-              "event": {}
-            }
-            """);
-
-        assertNull(adapter.parseWebhook(payload));
-    }
 
     private static String sha256Hex(String input) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");

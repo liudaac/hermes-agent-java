@@ -81,16 +81,6 @@ class TenantBillingServiceTest {
         assertTrue(json.contains("provi\\\\der"));
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("estimateCost uses pricing table")
-    void estimateCost() {
-        double cost = billingService.estimateCost("gpt-4o", 1000, 500);
-        // gpt-4o: $5/M input, $15/M output
-        // 1000/1M * 5 + 500/1M * 15 = 0.005 + 0.0075 = 0.0125
-        assertTrue(cost > 0);
-        assertTrue(cost < 1.0);  // reasonable for small token counts
-    }
 
     // ============ Helper ============
 

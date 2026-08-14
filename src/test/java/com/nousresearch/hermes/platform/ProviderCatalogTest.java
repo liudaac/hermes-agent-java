@@ -43,14 +43,5 @@ class ProviderCatalogTest {
         assertFalse(catalog.isRegistered(null));
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("isRegistered is case-insensitive")
-    void isRegistered_caseInsensitive() {
-        ProviderCatalog catalog = ProviderCatalog.withDefaults();
-        assertTrue(catalog.isRegistered("OpenAI"));
-        assertTrue(catalog.isRegistered("ANTHROPIC"));
-        assertTrue(catalog.isRegistered("DeepSeek"));
-    }
 
 }

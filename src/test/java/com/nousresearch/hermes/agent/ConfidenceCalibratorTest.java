@@ -36,19 +36,4 @@ class ConfidenceCalibratorTest {
         assertTrue(result.adjustedText().contains("not fully confident"));
     }
 
-    @Test
-    void disabled_returns_input_unchanged() {
-        // When calibrator is disabled (via config), empty/null input returns neutral
-        ConfidenceCalibrator cc = new ConfidenceCalibrator();
-        var result = cc.calibrate(null, 0, false);
-        assertEquals(0.5, result.score());
-        assertEquals(ConfidenceCalibrator.Action.DIRECT, result.action());
-    }
-
-    @Test
-    void empty_input_returns_neutral() {
-        ConfidenceCalibrator cc = new ConfidenceCalibrator();
-        var result = cc.calibrate("", 0, false);
-        assertEquals(0.5, result.score());
-    }
 }

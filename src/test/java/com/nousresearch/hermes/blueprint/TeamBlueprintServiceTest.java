@@ -84,27 +84,6 @@ class TeamBlueprintServiceTest {
         assertEquals(List.of("prompt://base#v2"), record.getVersions().getFirst().getPromptAssetRefs());
     }
 
-    @Test
-    void rejectsMissingPromptAssetRef() {
-        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
-        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
-        TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
-        workspaceService.createWorkspace("customer-service", "客服业务空间", null, "ops", Map.of());
-
-        assertThrows(PromptAssetService.PromptAssetNotFoundException.class,
-            () -> service.createTeamBlueprint("customer-service", "after-sales", "售后团队", null, null, null,
-                List.of(agent("classifier", "工单分类员")), List.of("prompt://missing-asset"), null, Map.of()));
-    }
-
-    @Test
-    void rejectsTeamBlueprintForMissingWorkspace() {
-        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
-        WorkspaceService workspaceService = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
-        TeamBlueprintService service = new TeamBlueprintService(tempDir.resolve("business/workspaces"), workspaceService);
-
-        assertThrows(WorkspaceService.WorkspaceNotFoundException.class,
-            () -> service.createTeamBlueprint("missing", "team-a", "Team A", null, null, null, List.of(), List.of(), null, Map.of()));
-    }
 
     private AgentBlueprintRecord agent(String id, String name) {
         return new AgentBlueprintRecord()

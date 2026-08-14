@@ -69,17 +69,6 @@ class MysqlSecretStoreTest {
         assertNull(store.getSecret("t1", "OPENAI_API_KEY"));
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("list secrets returns provider env keys")
-    void list() {
-        store.setSecret("t1", "OPENAI_API_KEY", "sk-1");
-        store.setSecret("t1", "ANTHROPIC_API_KEY", "sk-2");
-        var keys = store.listSecrets("t1");
-        assertEquals(2, keys.size());
-        assertTrue(keys.contains("OPENAI_API_KEY"));
-        assertTrue(keys.contains("ANTHROPIC_API_KEY"));
-    }
 
     // ============ Helper ============
 

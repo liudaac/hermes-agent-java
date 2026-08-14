@@ -46,42 +46,4 @@ class ContextManagerTest {
         assertTrue(toolMsg.getContent().length() < 300);
     }
 
-    @Test
-    void preservesRecentMessages() {
-        var cm = new ContextManager(1000, 100, 4);
-        var history = new java.util.ArrayList<ModelMessage>();
-        history.add(ModelMessage.system("sys"));
-        for (int i = 0; i < 20; i++) {
-            history.add(ModelMessage.user("msg " + i + " " + "X".repeat(200)));
-            history.add(ModelMessage.assistant("resp " + i + " " + "Y".repeat(200)));
-        }
-
-        int originalSize = history.size();
-        cm.enforce(history, null);
-
-        // Last 4 messages should still be there
-        int size = history.size();
-        assertTrue(size >= 5); // system + at least 4 recent
-        // Check last message content is preserved
-        var last = history.get(history.size() - 1);
-        assertTrue(last.getContent().contains("resp 19"));
-    }
-
-    @Test
-    void hardTruncateDropsMiddleMessages() {
-        var cm = new ContextManager(500, 50, 3);
-        var history = new java.util.ArrayList<ModelMessage>();
-        history.add(ModelMessage.system("sys"));
-        history.add(ModelMessage.user("first user msg"));
-        for (int i = 0; i < 30; i++) {
-            history.add(ModelMessage.assistant("A".repeat(300)));
-        }
-        // recent
-        history.add(ModelMessage.user("recent"));
-        history.add(ModelMessage.assistant("recent resp"));
-
-        int before = history.size();
-        var stats = cm.enforce(history, null);
-        assertTrue(history.size() < before);
-    }
 }

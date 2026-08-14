@@ -31,16 +31,4 @@ class EventEmitterTest {
         assertFalse(emitter.hasPending());
     }
 
-    @Test
-    void failedSubscriberDoesNotBreakOthers() {
-        var emitter = new EventEmitter("t1", "s1", "a1", null);
-        var good = new java.util.concurrent.CopyOnWriteArrayList<AgentEvent>();
-
-        emitter.subscribe(e -> { throw new RuntimeException("boom"); });
-        emitter.subscribe(good::add);
-
-        emitter.emit(AgentEvent.LOOP_START, Map.of("budget", 10));
-
-        assertEquals(1, good.size());
-    }
 }

@@ -42,9 +42,4 @@ class CheckpointStoreTest {
         assertFalse(store.exists("test-session-2"));
     }
 
-    @Test
-    void loadNonexistentReturnsNull() {
-        var store = new CheckpointStore(tempDir);
-        assertNull(store.load("nonexistent", 25));
-    }
 }

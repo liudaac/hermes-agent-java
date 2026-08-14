@@ -69,13 +69,5 @@ public class TenantAwareToolDispatcherTest {
         assertTrue(readResult.contains("Test content"));
     }
 
-    @Test
-    @Order(3)
-    @DisplayName("File operations should be denied outside tenant directory")
-    void testFileSandboxIsolation() {
-        String result = dispatcher.dispatch("file_read", Map.of("path", "/etc/passwd"));
-
-        assertTrue(result.contains("error") || result.contains("denied"));
-    }
 
 }

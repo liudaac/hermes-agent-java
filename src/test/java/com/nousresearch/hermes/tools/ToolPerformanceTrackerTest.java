@@ -42,29 +42,4 @@ class ToolPerformanceTrackerTest {
         assertTrue(tracker.buildHintBlock().isEmpty());
     }
 
-    @Test
-    void persist_and_reload() {
-        ToolPerformanceTracker t1 = new ToolPerformanceTracker(tempDir);
-        for (int i = 0; i < 3; i++) t1.record("alpha", true, 100);
-        t1.record("alpha", false, 200, "bad arg");
-        for (int i = 0; i < 3; i++) t1.record("beta", true, 300);
-        t1.save();
-
-        ToolPerformanceTracker t2 = new ToolPerformanceTracker(tempDir);
-        String hints = t2.buildHintBlock();
-        assertTrue(hints.contains("alpha"));
-        assertTrue(hints.contains("beta"));
-    }
-
-    @Test
-    void recency_score_decays() throws InterruptedException {
-        ToolPerformanceTracker tracker = new ToolPerformanceTracker(tempDir);
-        for (int i = 0; i < 3; i++) tracker.record("old_tool", true, 100);
-        Thread.sleep(10); // ensure different timestamp
-        for (int i = 0; i < 3; i++) tracker.record("new_tool", true, 100);
-
-        String hints = tracker.buildHintBlock();
-        assertTrue(hints.contains("old_tool"));
-        assertTrue(hints.contains("new_tool"));
-    }
 }

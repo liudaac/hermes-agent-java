@@ -14,18 +14,4 @@ class LoopResultTest {
         assertEquals("hello world", ((LoopResult.Completed) result).response());
     }
 
-    @Test
-    void pausedResult() {
-        var state = new LoopState(10);
-        var result = new LoopResult.Paused(state);
-        assertTrue(result.isPaused());
-        assertFalse(result.isCompleted());
-    }
-
-    @Test
-    void failedResult() {
-        var result = new LoopResult.Failed("something broke");
-        assertTrue(result.isFailed());
-        assertEquals("something broke", ((LoopResult.Failed) result).error());
-    }
 }

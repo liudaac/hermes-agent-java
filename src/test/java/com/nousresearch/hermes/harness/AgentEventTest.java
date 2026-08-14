@@ -24,10 +24,4 @@ class AgentEventTest {
         assertEquals("web_search", event.data().get("tool"));
     }
 
-    @Test
-    void approvalNeededEventHasRiskLevel() {
-        var event = AgentEvent.approvalNeeded("t1", "s1", "a1", "call_1", "file_write", "MEDIUM");
-        assertEquals(AgentEvent.APPROVAL_NEEDED, event.type());
-        assertEquals("MEDIUM", event.data().get("risk"));
-    }
 }

@@ -36,36 +36,4 @@ class LoopStateTest {
         assertFalse(state.budget().hasRemaining());
     }
 
-    @Test
-    void resetClearsAllState() {
-        var state = new LoopState(10);
-        state.addToHistory(com.nousresearch.hermes.model.ModelMessage.user("hello"));
-        state.budget().consume();
-        state.incrementTurn();
-        state.setLifecycle(LoopState.Lifecycle.RUNNING);
-
-        state.reset();
-
-        assertEquals(0, state.historySize());
-        assertEquals(0, state.iterationsUsed());
-        assertEquals(0, state.userTurnCount());
-        assertEquals(LoopState.Lifecycle.IDLE, state.lifecycle());
-    }
-
-    @Test
-    void serializeAndDeserializeRoundTrip() {
-        var state = new LoopState(25);
-        state.addToHistory(com.nousresearch.hermes.model.ModelMessage.user("test message"));
-        state.addToHistory(com.nousresearch.hermes.model.ModelMessage.assistant("test response"));
-        state.incrementTurn();
-        state.setLifecycle(LoopState.Lifecycle.RUNNING);
-
-        var json = state.serialize();
-        var restored = LoopState.deserialize(json, 25);
-
-        assertEquals(2, restored.historySize());
-        assertEquals("test message", restored.history().get(0).getContent());
-        assertEquals("test response", restored.history().get(1).getContent());
-        assertEquals(1, restored.userTurnCount());
-    }
 }

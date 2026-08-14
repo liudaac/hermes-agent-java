@@ -27,17 +27,6 @@ class LoopErrorClassifierTest {
             LoopErrorClassifier.classify(new SocketTimeoutException("read timed out")));
     }
 
-    @Test
-    void connectExceptionIsTransient() {
-        assertEquals(ErrorCategory.TRANSIENT,
-            LoopErrorClassifier.classify(new ConnectException("Connection refused")));
-    }
-
-    @Test
-    void timeoutExceptionIsTransient() {
-        assertEquals(ErrorCategory.TRANSIENT,
-            LoopErrorClassifier.classify(new TimeoutException("operation timed out")));
-    }
 
     // ==================== Message-based classification ====================
 

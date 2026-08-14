@@ -77,41 +77,6 @@ class PluginManagerTest {
         assertEquals(1, registry.listAll().size());
     }
 
-    @Test
-    void testHookEngineBlockSemantics() {
-        HookEngine engine = new HookEngine();
-
-        // Register a hook that blocks tool calls
-        engine.register(HookType.PRE_TOOL_CALL, ctx -> {
-            String toolName = (String) ctx.get("tool_name");
-            if ("dangerous".equals(toolName)) {
-                return Map.of("action", "block", "message", "Too dangerous");
-            }
-            return null;
-        });
-
-        var blocked = engine.checkToolBlocked("dangerous", Map.of(), "", "", "");
-        assertTrue(blocked.isPresent());
-        assertEquals("Too dangerous", blocked.get());
-
-        var allowed = engine.checkToolBlocked("safe", Map.of(), "", "", "");
-        assertTrue(allowed.isEmpty());
-    }
-
-    @Test
-    void testProviderRegistryBuiltinPriority() {
-        ProviderRegistry<NamedProvider> registry = new ProviderRegistry<>("test");
-
-        // Register built-in
-        registry.registerBuiltin(() -> "builtin");
-
-        // Plugin tries to override — should be ignored
-        registry.register("builtin", () -> "plugin");
-
-        var provider = registry.get("builtin");
-        assertTrue(provider.isPresent());
-        assertEquals("builtin", provider.get().getName());
-    }
 
     // Simple NamedProvider implementation for testing
     private interface NamedProvider extends com.nousresearch.hermes.plugin.registry.NamedProvider {

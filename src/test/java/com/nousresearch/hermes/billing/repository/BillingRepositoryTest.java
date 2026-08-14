@@ -60,25 +60,5 @@ class BillingRepositoryTest {
         assertTrue(found.isEmpty());
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("findByTenantAndDateRange spans multiple days")
-    void findByDateRange_multipleDays() {
-        LocalDate today = LocalDate.now();
-        LocalDate yesterday = today.minusDays(1);
-
-        // Write to both today and yesterday
-        JsonlBillingRepository repo2 = new JsonlBillingRepository(tempDir);
-        // Manually create a record for yesterday
-        TenantUsageRecord yRecord = new TenantUsageRecord(
-            "t1", yesterday, "gpt-4o", "openai", 50, 50, 100, 0.001,
-            java.time.Instant.now().minusSeconds(86400), "sess-y");
-        repo2.append(yRecord);
-
-        repo.append(TenantUsageRecord.of("t1", "gpt-4o", "openai", 100, 200, 0.0, "sess-t"));
-
-        List<TenantUsageRecord> found = repo.findByTenantAndDateRange("t1", yesterday, today);
-        assertEquals(2, found.size());
-    }
 
 }

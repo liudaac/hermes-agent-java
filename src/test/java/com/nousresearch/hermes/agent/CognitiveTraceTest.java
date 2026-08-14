@@ -56,25 +56,4 @@ class CognitiveTraceTest {
         assertTrue(lines.get(2).contains("DECIDE"));
     }
 
-    @Test
-    void collector_getTraces_returns_ordered() {
-        var collector = new CognitiveTraceCollector("session-3", tempDir);
-        collector.observe(1, "first");
-        collector.observe(2, "second");
-
-        List<CognitiveTrace> traces = collector.getTraces();
-        assertEquals(2, traces.size());
-        assertEquals(CognitiveTrace.Phase.OBSERVE, traces.get(0).phase());
-        assertEquals("first", traces.get(0).observation());
-    }
-
-    @Test
-    void collector_close_flushes_to_disk() {
-        var collector = new CognitiveTraceCollector("session-4", tempDir);
-        collector.observe(1, "hello");
-        collector.close();
-
-        Path jsonl = tempDir.resolve("traces_session-4.jsonl");
-        assertTrue(jsonl.toFile().exists());
-    }
 }

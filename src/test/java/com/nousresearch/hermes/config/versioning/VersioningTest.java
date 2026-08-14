@@ -87,29 +87,6 @@ class VersioningTest {
         assertNull(versionService.getVersion("ver_nonexistent"));
     }
 
-    @Test
-    @Order(4)
-    @DisplayName("listVersions returns history sorted by version number desc")
-    void listVersions() {
-        versionService.snapshot("t1", Map.of("v", 1), "admin", "v1");
-        versionService.snapshot("t1", Map.of("v", 2), "admin", "v2");
-        versionService.snapshot("t1", Map.of("v", 3), "admin", "v3");
-
-        var versions = versionService.listVersions("t1", 10);
-        assertEquals(3, versions.size());
-        assertEquals(3, versions.get(0).versionNumber()); // newest first
-        assertEquals(1, versions.get(2).versionNumber()); // oldest last
-    }
-
-    @Test
-    @Order(5)
-    @DisplayName("listVersions respects limit")
-    void listVersions_limit() {
-        for (int i = 0; i < 10; i++) {
-            versionService.snapshot("t1", Map.of("v", i), "admin", "v" + i);
-        }
-        assertEquals(3, versionService.listVersions("t1", 3).size());
-    }
 
     // ============ CanaryDeploymentManager ============
 

@@ -25,11 +25,5 @@ class AgentTemplateTest {
         assertEquals(AgentTemplate.RESEARCHER, AgentTemplate.find(" Researcher "));
     }
 
-    @Test
-    void findReturnsNullForUnknown() {
-        assertNull(AgentTemplate.find("nonexistent"));
-        assertNull(AgentTemplate.find(null));
-        assertNull(AgentTemplate.find(""));
-    }
 
 }

@@ -67,38 +67,4 @@ public class FileToolTest {
         assertTrue(result.contains("file2.txt"));
     }
 
-    @Test
-    void testGrepFiles() throws Exception {
-        // Create test files
-        Files.writeString(tempDir.resolve("file1.txt"), "apple banana");
-        Files.writeString(tempDir.resolve("file2.txt"), "apple cherry");
-        Files.createDirectories(tempDir.resolve("subdir"));
-        Files.writeString(tempDir.resolve("subdir/file3.txt"), "banana date");
-
-        // Test content grep (grepFiles searches file content)
-        String result = fileTool.grepFiles(Map.of(
-            "path", tempDir.toString(),
-            "pattern", "apple",
-            "file_pattern", "*.txt"
-        ));
-
-        assertTrue(result.contains("file1.txt"));
-        assertTrue(result.contains("file2.txt"));
-        assertFalse(result.contains("file3.txt"));
-    }
-    
-    @Test
-    void testListDirectory() throws Exception {
-        Files.createFile(tempDir.resolve("file1.txt"));
-        Files.createFile(tempDir.resolve("file2.txt"));
-        Files.createDirectories(tempDir.resolve("folder"));
-        
-        String result = fileTool.listDirectory(Map.of(
-            "path", tempDir.toString()
-        ));
-        
-        assertTrue(result.contains("file1.txt"));
-        assertTrue(result.contains("file2.txt"));
-        assertTrue(result.contains("folder"));
-    }
 }

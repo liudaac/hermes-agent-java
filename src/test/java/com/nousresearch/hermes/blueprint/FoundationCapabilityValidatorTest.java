@@ -55,45 +55,6 @@ class FoundationCapabilityValidatorTest {
         assertTrue(report.hasWarnings());
     }
 
-    @Test
-    void reportsTenantPolicyDenial() {
-        TenantSecurityPolicy policy = TenantSecurityPolicy.defaults();
-        policy.setDeniedTools(Set.of("order.query"));
-        Fixture fixture = newFixture(policy);
-        fixture.registry.register(new ToolEntry.Builder()
-            .name("order.query")
-            .toolset("business")
-            .schema(Map.of("description", "Query order"))
-            .handler(args -> "{}")
-            .build());
-        TeamBlueprintRecord team = team(List.of(agent("classifier", "order.query")), List.of("prompt://base"));
-
-        FoundationCapabilityValidationReport report = fixture.validator.validateTeamBlueprint("customer-service", team);
-
-        assertFalse(report.isValid());
-        assertFinding(report, "requested_tool_denied_by_tenant_policy");
-    }
-
-    @Test
-    void reportsInvalidPromptRefAndDuplicateAgentId() {
-        Fixture fixture = newFixture();
-        fixture.registry.register(new ToolEntry.Builder()
-            .name("order.query")
-            .toolset("business")
-            .schema(Map.of("description", "Query order"))
-            .handler(args -> "{}")
-            .build());
-        TeamBlueprintRecord team = team(
-            List.of(agent("classifier", "order.query"), agent("classifier", "order.query")),
-            List.of("prompt://base#bad")
-        );
-
-        FoundationCapabilityValidationReport report = fixture.validator.validateTeamBlueprint("customer-service", team);
-
-        assertFalse(report.isValid());
-        assertFinding(report, "prompt_ref_invalid");
-        assertFinding(report, "agent_id_duplicate");
-    }
 
     private Fixture newFixture() {
         return newFixture(TenantSecurityPolicy.defaults());

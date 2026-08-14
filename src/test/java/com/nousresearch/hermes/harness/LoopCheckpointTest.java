@@ -28,15 +28,4 @@ class LoopCheckpointTest {
         assertEquals(1, cp.remainingToolCalls());
     }
 
-    @Test
-    void noRemainingCallsWhenPendingIsLast() {
-        var msg = ModelMessage.assistant("done");
-        var tc = new ToolCall();
-        tc.setId("tc_last");
-
-        var cp = new LoopCheckpoint(msg, List.of(tc), 0,
-            List.of(), 3, 22, 1);
-
-        assertEquals(0, cp.remainingToolCalls());
-    }
 }

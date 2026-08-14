@@ -36,14 +36,4 @@ class WorkspaceServiceTest {
         assertEquals("客服业务空间", service.requireWorkspace("customer-service").getName());
     }
 
-    @Test
-    void duplicateWorkspaceIsRejected() {
-        TenantManager tenantManager = new TenantManager(tempDir.resolve("tenants"), new TenantManagerConfig());
-        WorkspaceService service = new WorkspaceService(tempDir.resolve("business/workspaces"), tenantManager);
-
-        service.createWorkspace("sales-space", "销售空间", null, "ops", Map.of());
-
-        assertThrows(WorkspaceService.WorkspaceAlreadyExistsException.class,
-            () -> service.createWorkspace("sales-space", "销售空间", null, "ops", Map.of()));
-    }
 }

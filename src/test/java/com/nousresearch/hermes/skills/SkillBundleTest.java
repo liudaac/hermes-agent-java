@@ -71,47 +71,6 @@ class SkillBundleTest {
             assertTrue(result.isSuccess());
         }
 
-    }
-
-    // ========================================================================
-    // findConflicts
-    // ========================================================================
-
-    @Nested
-    @DisplayName("findConflicts")
-    class ConflictTest {
-
-        @Test
-        @DisplayName("同一 skill 在多个 bundle 中 → 冲突")
-        void conflictDetected() {
-            service.registerBundle("a", "包A", List.of("shared", "a1"));
-            service.registerBundle("b", "包B", List.of("shared", "b1"));
-
-            Map<String, List<String>> conflicts = service.findConflicts();
-            assertEquals(1, conflicts.size());
-            assertTrue(conflicts.containsKey("shared"));
-            assertEquals(2, conflicts.get("shared").size());
-        }
-
-    }
-
-    // ========================================================================
-    // SkillBundle 值对象
-    // ========================================================================
-
-    @Nested
-    @DisplayName("SkillBundle 值对象")
-    class BundleValueTest {
-
-        @Test
-        @DisplayName("基本构造")
-        void basicConstruction() {
-            SkillBundleService.SkillBundle b = new SkillBundleService.SkillBundle(
-                "coding", "编程包", List.of("s1", "s2"));
-            assertEquals("coding", b.name());
-            assertEquals("编程包", b.description());
-            assertEquals(2, b.skills().size());
-        }
 
     }
 

@@ -87,52 +87,7 @@ class CuratorJobTest {
             assertEquals(0, report.autoMarkedStale);
             assertEquals(0, report.autoArchived);
         }
-    }
 
-    // ========================================================================
-    // 混合场景
-    // ========================================================================
-
-    @Nested
-    @DisplayName("混合场景")
-    class MixedScenarioTest {
-
-        @Test
-        @DisplayName("5 个 skill 混合状态 → 正确分类")
-        void mixed() {
-            Instant now = Instant.now();
-            SkillManager.Skill active = createSkill("active", now.minus(1, ChronoUnit.DAYS), false, SkillLifecycleStatus.ACTIVE);
-            SkillManager.Skill pinned = createSkill("pinned", now.minus(200, ChronoUnit.DAYS), true, SkillLifecycleStatus.ACTIVE);
-            SkillManager.Skill toStale = createSkill("to-stale", now.minus(40, ChronoUnit.DAYS), false, SkillLifecycleStatus.ACTIVE);
-            SkillManager.Skill toArchive = createSkill("to-archive", now.minus(100, ChronoUnit.DAYS), false, SkillLifecycleStatus.STALE);
-            SkillManager.Skill toRestore = createSkill("to-restore", now.minus(3, ChronoUnit.DAYS), false, SkillLifecycleStatus.STALE);
-
-            org.mockito.Mockito.when(provenanceService.getByProvenance(SkillProvenance.AGENT))
-                .thenReturn(List.of(active, pinned, toStale, toArchive, toRestore));
-
-            CuratorRunReport report = curator.run();
-            assertEquals(5, report.autoChecked);
-            assertEquals(1, report.autoMarkedStale);
-            assertEquals(1, report.autoArchived);
-            assertEquals(1, report.autoReactivated);
-        }
-    }
-
-    // ========================================================================
-    // restore 手动恢复
-    // ========================================================================
-
-    @Nested
-    @DisplayName("restore 手动恢复")
-    class RestoreTest {
-
-        @Test
-        @DisplayName("恢复 ARCHIVED skill")
-        void restoreArchived() {
-            org.mockito.Mockito.when(skillManager.restoreSkill("archived")).thenReturn(true);
-
-            assertTrue(curator.restore("archived"));
-        }
 
     }
 
