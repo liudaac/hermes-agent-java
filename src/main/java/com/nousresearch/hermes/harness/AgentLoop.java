@@ -2,6 +2,8 @@ package com.nousresearch.hermes.harness;
 
 import com.nousresearch.hermes.agent.TenantAwareAIAgent;
 import com.nousresearch.hermes.harness.loop.*;
+import com.nousresearch.hermes.harness.session.RequestHeader;
+import com.nousresearch.hermes.harness.session.SessionEventType;
 import com.nousresearch.hermes.model.ChatCompletionResponse;
 import com.nousresearch.hermes.model.ModelMessage;
 import com.nousresearch.hermes.model.ToolCall;
@@ -120,6 +122,11 @@ public class AgentLoop {
             history.add(entry.message());
         }
 
+        // P2-3: Append TURN_START to session log
+        ctx.sessionLog().appendTrace(
+            SessionEventType.TURN_START,
+            Map.of("turn", ctx.getUserTurnCount()));
+
         while (budget.hasRemaining() && !ctx.isInterrupted()) {
             if (!budget.consume()) {
                 responseBuilder.append("\n[Reached maximum iterations]");
@@ -174,6 +181,22 @@ public class AgentLoop {
                 }
 
                 enforceContextBudget(ctx, history, emitter);
+
+                // P2-3: Record request header
+                RequestHeader header = new RequestHeader(
+                    ctx.config() != null ? ctx.config().getProvider() : "unknown",
+                    ctx.config() != null ? ctx.config().getCurrentModel() : "unknown",
+                    ctx.history().isEmpty() ? "" : ctx.history().get(0).getContent(),
+                    ctx.buildToolDefinitions() != null ? ctx.buildToolDefinitions().size() : 0,
+                    ctx.modelParams(),
+                    ctx.lastRequestHeader() == null ? "initial" : "change"
+                );
+                if (header.differsFrom(ctx.lastRequestHeader())) {
+                    ctx.sessionLog().appendTrace(
+                        SessionEventType.REQUEST_HEADER,
+                        header.toEventData());
+                    ctx.setLastRequestHeader(header);
+                }
 
                 // LLM call with transient retry
                 ChatCompletionResponse response = callModelWithRetry(ctx, history, onDelta, emitter);
@@ -251,6 +274,18 @@ public class AgentLoop {
                         history.add(ModelMessage.tool(tcr.content(), tcr.callId()));
                     }
                     ctx.incrementItersSinceSkill();
+
+                    // P2-4: Check if any tool concluded the turn
+                    boolean shouldConcludeTurn = false;
+                    for (ToolCallResult tcr : toolResults) {
+                        if (ctx.toolConcludesTurn(tcr.toolName())) {
+                            shouldConcludeTurn = true;
+                            break;
+                        }
+                    }
+                    if (shouldConcludeTurn) {
+                        break;  // End the current turn
+                    }
                 } else {
                     String content = assistantMessage.getContent();
                     if (content != null && !content.isEmpty()) {
@@ -303,6 +338,12 @@ public class AgentLoop {
                 "iterations", budget.getUsed(),
                 "messages", history.size()));
         }
+
+        // P2-3: Append TURN_END to session log
+        ctx.sessionLog().appendTrace(
+            SessionEventType.TURN_END,
+            Map.of("turn", ctx.getUserTurnCount(), "iterations", budget.getUsed()));
+
         return responseBuilder.toString();
     }
 

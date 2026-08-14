@@ -27,7 +27,8 @@ public class ToolEntry {
     private final boolean requiresApproval;
     private final String approvalMessageTemplate;
     private final ApprovalSystem.ApprovalType approvalType;
-    
+    private final boolean concludesTurn;
+
     public ToolEntry(
             String name,
             String toolset,
@@ -41,7 +42,8 @@ public class ToolEntry {
             ToolRisk risk,
             boolean requiresApproval,
             String approvalMessageTemplate,
-            ApprovalSystem.ApprovalType approvalType) {
+            ApprovalSystem.ApprovalType approvalType,
+            boolean concludesTurn) {
         this.name = name;
         this.toolset = toolset;
         this.schema = schema;
@@ -55,6 +57,7 @@ public class ToolEntry {
         this.requiresApproval = requiresApproval;
         this.approvalMessageTemplate = approvalMessageTemplate != null ? approvalMessageTemplate : "";
         this.approvalType = approvalType != null ? approvalType : ApprovalSystem.ApprovalType.TERMINAL_COMMAND;
+        this.concludesTurn = concludesTurn;
     }
     
     // Getters
@@ -71,6 +74,7 @@ public class ToolEntry {
     public boolean requiresApproval() { return requiresApproval; }
     public String getApprovalMessageTemplate() { return approvalMessageTemplate; }
     public ApprovalSystem.ApprovalType getApprovalType() { return approvalType; }
+    public boolean concludesTurn() { return concludesTurn; }
     
     /**
      * Builder for ToolEntry.
@@ -89,6 +93,7 @@ public class ToolEntry {
         private boolean requiresApproval = false;
         private String approvalMessageTemplate = "";
         private ApprovalSystem.ApprovalType approvalType = null;
+        private boolean concludesTurn = false;
         
         public Builder name(String name) {
             this.name = name;
@@ -155,13 +160,18 @@ public class ToolEntry {
             return this;
         }
         
+        public Builder concludesTurn(boolean concludesTurn) {
+            this.concludesTurn = concludesTurn;
+            return this;
+        }
+        
         public ToolEntry build() {
             if (name == null || toolset == null || schema == null || handler == null) {
                 throw new IllegalStateException("name, toolset, schema, and handler are required");
             }
             return new ToolEntry(name, toolset, schema, handler, requiresEnv, 
                 async, description, emoji, maxResultSizeChars,
-                risk, requiresApproval, approvalMessageTemplate, approvalType);
+                risk, requiresApproval, approvalMessageTemplate, approvalType, concludesTurn);
         }
     }
 }

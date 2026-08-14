@@ -11,6 +11,8 @@ import com.nousresearch.hermes.config.HermesConfig;
 import com.nousresearch.hermes.harness.loop.AgentInbox;
 import com.nousresearch.hermes.harness.loop.PreStepInterceptorChain;
 import com.nousresearch.hermes.harness.loop.ToolCallScheduler;
+import com.nousresearch.hermes.harness.session.RequestHeader;
+import com.nousresearch.hermes.harness.session.SessionLog;
 import com.nousresearch.hermes.memory.MemoryManager;
 import com.nousresearch.hermes.memory.PromptContextBuilder;
 import com.nousresearch.hermes.model.ModelClient;
@@ -72,6 +74,13 @@ public class AgentContext {
     private final AgentInbox inbox = new AgentInbox();
     private final ToolCallScheduler toolCallScheduler = new ToolCallScheduler();
 
+    // ===== P2: Collaboration intelligence =====
+
+    private final com.nousresearch.hermes.harness.goal.GoalService goalService = new com.nousresearch.hermes.harness.goal.GoalService();
+    private final com.nousresearch.hermes.harness.plan.PlanModeController planModeController = new com.nousresearch.hermes.harness.plan.PlanModeController();
+    private final SessionLog sessionLog = new SessionLog();
+    private RequestHeader lastRequestHeader = null;
+
     // ===== Constructor =====
 
     public AgentContext(TenantAwareAIAgent agent, HermesConfig config) {
@@ -84,6 +93,9 @@ public class AgentContext {
         this.maxIterations = config != null ? config.getMaxTurns() : 25;
         this.memoryNudgeInterval = agent.getMemoryNudgeInterval();
         this.skillNudgeInterval = agent.getSkillNudgeInterval();
+
+        // P2: Register goal interceptor
+        preStepChain().add(new com.nousresearch.hermes.harness.goal.GoalPreStepInterceptor(goalService));
     }
 
     // ===== Identity =====
@@ -166,4 +178,25 @@ public class AgentContext {
     // ===== Wrapped agent (for direct access when needed) =====
 
     public TenantAwareAIAgent agent() { return agent; }
+
+    // ===== P2: Collaboration intelligence accessors =====
+
+    public com.nousresearch.hermes.harness.goal.GoalService goalService() { return goalService; }
+    public com.nousresearch.hermes.harness.plan.PlanModeController planModeController() { return planModeController; }
+    public SessionLog sessionLog() { return sessionLog; }
+    public RequestHeader lastRequestHeader() { return lastRequestHeader; }
+    public void setLastRequestHeader(RequestHeader header) { this.lastRequestHeader = header; }
+
+    public void activatePlanMode() {
+        planModeController.activate();
+    }
+
+    /**
+     * Check if a tool has concludesTurn=true by looking it up in the ToolRegistry.
+     */
+    public boolean toolConcludesTurn(String toolName) {
+        var registry = com.nousresearch.hermes.tools.ToolRegistry.getInstance();
+        var entry = registry.getEntry(toolName);
+        return entry != null && entry.concludesTurn();
+    }
 }

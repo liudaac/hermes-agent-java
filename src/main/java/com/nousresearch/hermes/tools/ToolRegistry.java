@@ -217,6 +217,13 @@ public class ToolRegistry {
     }
 
     /**
+     * Get a tool entry by name.
+     */
+    public ToolEntry getEntry(String name) {
+        return tools.get(name);
+    }
+
+    /**
      * Get all registered tool names.
      */
     public List<String> getAllToolNames() {
