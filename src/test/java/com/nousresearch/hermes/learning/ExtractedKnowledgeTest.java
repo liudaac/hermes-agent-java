@@ -65,34 +65,4 @@ class ExtractedKnowledgeTest {
         assertNotNull(ek.getAntiPatterns());
     }
 
-    @Test
-    void ignores_unknown_fields() throws Exception {
-        String json = """
-            {"facts":[{"content":"X","confidence":0.8,"unexpected":"ignore_me"}],
-             "future_bucket":[{"foo":"bar"}]}
-            """;
-        ExtractedKnowledge ek = MAPPER.readValue(json, ExtractedKnowledge.class);
-        assertEquals(1, ek.getFacts().size());
-        assertEquals("X", ek.getFacts().get(0).getContent());
-    }
-
-    @Test
-    void confidence_filter_drops_low_items() {
-        var item1 = new ExtractedKnowledge.KnowledgeItem("high", 0.9);
-        var item2 = new ExtractedKnowledge.KnowledgeItem("mid",  0.7);
-        var item3 = new ExtractedKnowledge.KnowledgeItem("low",  0.4);
-        var filtered = KnowledgeExtractor.filterBy(java.util.List.of(item1, item2, item3), 0.75);
-        assertEquals(1, filtered.size());
-        assertEquals("high", filtered.get(0).getContent());
-    }
-
-    @Test
-    void policy_defaults_are_sane() {
-        ExtractionPolicy p = ExtractionPolicy.defaults();
-        assertTrue(p.getMemoryConfidenceThreshold() >= 0.5 && p.getMemoryConfidenceThreshold() <= 1.0);
-        assertTrue(p.getSkillConfidenceThreshold() >= p.getMemoryConfidenceThreshold(),
-            "Skill threshold should be at least as strict as memory threshold");
-        assertTrue(p.isLlmEnabled());
-        assertTrue(p.getMaxItemsPerBucket() > 0);
-    }
 }

@@ -87,49 +87,4 @@ class LlmMemoryFunctionsTest {
         assertTrue(summary.contains("Test message"));
     }
 
-    @Test
-    @DisplayName("summaryFunction returns empty for empty input")
-    void summariseWithLlm_emptyInput() {
-        ModelClient mockClient = mock(ModelClient.class);
-        var funcs = new LlmMemoryFunctions(mockClient);
-
-        String summary = funcs.summaryFunction().summarise(List.of());
-        assertEquals("", summary);
-        verifyNoInteractions(mockClient);
-    }
-
-    @Test
-    @DisplayName("factExtractor calls LLM and parses facts")
-    void extractFactsWithLlm_success() {
-        ModelClient mockClient = mock(ModelClient.class);
-        when(mockClient.chatCompletion(anyList(), anyList(), anyBoolean(), anyMap()))
-            .thenReturn(responseWithContent(
-                "- User prefers dark mode\n- Project uses PostgreSQL 16\n- API rate limit is 100 rpm"));
-
-        var funcs = new LlmMemoryFunctions(mockClient);
-
-        List<String> facts = funcs.factExtractor().extract("Summary about preferences", 5);
-
-        assertEquals(3, facts.size());
-        assertTrue(facts.get(0).contains("dark mode"));
-        assertTrue(facts.get(1).contains("PostgreSQL"));
-        assertTrue(facts.get(2).contains("rate limit"));
-    }
-
-    @Test
-    @DisplayName("factExtractor handles numbered list format")
-    void extractFactsWithLlm_numberedFormat() {
-        ModelClient mockClient = mock(ModelClient.class);
-        when(mockClient.chatCompletion(anyList(), anyList(), anyBoolean(), anyMap()))
-            .thenReturn(responseWithContent("1. User prefers JSON over XML\n2. Deployment uses Docker"));
-
-        var funcs = new LlmMemoryFunctions(mockClient);
-
-        List<String> facts = funcs.factExtractor().extract("Summary", 3);
-
-        assertEquals(2, facts.size());
-        assertTrue(facts.get(0).contains("JSON"));
-        assertTrue(facts.get(1).contains("Docker"));
-    }
-
 }

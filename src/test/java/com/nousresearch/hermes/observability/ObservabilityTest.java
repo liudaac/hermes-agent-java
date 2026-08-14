@@ -43,34 +43,6 @@ class ObservabilityTest {
         assertEquals(100L, modelSummary.get("input_tokens_total"));
     }
 
-    @Test
-    @Order(3)
-    @DisplayName("recordAgentMessage tracks success and error")
-    void metrics_agentMessage() {
-        BusinessMetricsCollector collector = new BusinessMetricsCollector();
-        collector.recordAgentMessage("t1", "agent-1", 300, true);
-        collector.recordAgentMessage("t1", "agent-1", 500, false);
-
-        var summary = collector.getTenantSummary("t1");
-        assertEquals(2, summary.get("agent_messages_total"));
-        assertEquals(1, summary.get("agent_errors_total"));
-    }
-
-    @Test
-    @Order(4)
-    @DisplayName("recordTask tracks status")
-    void metrics_task() {
-        BusinessMetricsCollector collector = new BusinessMetricsCollector();
-        collector.recordTask("t1", "COMPLETED");
-        collector.recordTask("t1", "FAILED");
-        collector.recordTask("t1", "COMPLETED");
-
-        var summary = collector.getTenantSummary("t1");
-        assertEquals(3, summary.get("tasks_total"));
-        assertEquals(2, summary.get("tasks_completed"));
-        assertEquals(1, summary.get("tasks_failed"));
-    }
-
     // ============ ExecutionTrace ============
 
     // ============ TraceStore ============

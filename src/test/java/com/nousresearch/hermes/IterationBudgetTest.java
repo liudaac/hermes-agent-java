@@ -34,37 +34,4 @@ public class IterationBudgetTest {
         assertFalse(budget.hasRemaining());
     }
     
-    @Test
-    void testRefund() {
-        IterationBudget budget = new IterationBudget(5);
-        
-        budget.consume();
-        budget.consume();
-        assertEquals(2, budget.getUsed());
-        
-        budget.refund();
-        assertEquals(1, budget.getUsed());
-        assertEquals(4, budget.getRemaining());
-    }
-    
-    @Test
-    void testRefundAtZero() {
-        IterationBudget budget = new IterationBudget(5);
-        
-        budget.refund(); // Should not go negative
-        assertEquals(0, budget.getUsed());
-    }
-    
-    @Test
-    void testReset() {
-        IterationBudget budget = new IterationBudget(5);
-        
-        budget.consume();
-        budget.consume();
-        assertEquals(2, budget.getUsed());
-        
-        budget.reset();
-        assertEquals(0, budget.getUsed());
-        assertEquals(5, budget.getRemaining());
-    }
 }

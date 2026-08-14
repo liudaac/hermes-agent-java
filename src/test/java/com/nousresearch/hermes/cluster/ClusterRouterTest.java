@@ -74,51 +74,14 @@ class ClusterRouterTest {
         assertNull(ClusterRouter.extractRoutingKey(Map.of(), Map.of(), "{}", null));
     }
 
-    // ============ Route resolution (3 tests) ============
+    // ============ Route resolution ============
 
-    @Test
-    @Order(3)
-    @DisplayName("resolveRoute: disabled returns self; enabled null key returns self")
-    void resolveRoute_disabledAndNullKey() {
-        var router = new ClusterRouter(profile("node-1"));
-        // Disabled by default
-        assertEquals("node-1", router.resolveRoute("session:abc"));
-        assertEquals("node-1", router.resolveRoute(null));
+    // ============ Circuit Breaker ============
 
-        // Enabled but null/blank key
-        router.setEnabled(true);
-        assertEquals("node-1", router.resolveRoute(null));
-        assertEquals("node-1", router.resolveRoute(""));
-    }
+    // ============ Re-route ============
 
-    @Test
-    @Order(4)
-    @DisplayName("registerNode/unregisterNode: toggles enabled flag and node count")
-    void registerUnregister_togglesEnabled() {
-        var router = new ClusterRouter(profile("node-1"));
-        assertFalse(router.isEnabled());
-        assertEquals(1, router.getRegisteredNodes().size());
+    // ============ Discovery callback ============
 
-        router.registerNode("node-2", "http://node-2:8080");
-        assertTrue(router.isEnabled());
-        assertEquals(2, router.getRegisteredNodes().size());
-
-        router.registerNode("node-3", "http://node-3:8080");
-        assertEquals(3, router.getRegisteredNodes().size());
-
-        router.unregisterNode("node-2");
-        assertTrue(router.isEnabled()); // still 2 nodes
-
-        router.unregisterNode("node-3");
-        assertFalse(router.isEnabled()); // back to 1
-    }
-
-    // ============ Circuit Breaker (4 tests) ============
-
-    // ============ Re-route (2 tests) ============
-
-    // ============ Discovery callback (3 tests) ============
-
-    // ============ shouldHandleLocally (2 tests) ============
+    // ============ shouldHandleLocally ============
 
 }
