@@ -50,7 +50,7 @@ public class GatewayServerV2 {
     private volatile String sessionToken;
 
     // Three-layer main line
-    private com.nousresearch.hermes.organization.OrgManager orgManager;
+    private com.nousresearch.hermes.org.OrgManager orgManager;
 
     // 用户到租户的映射缓存
     private final ConcurrentHashMap<String, String> userTenantCache = new ConcurrentHashMap<>();
@@ -162,7 +162,7 @@ public class GatewayServerV2 {
      * Inject the three-layer OrgManager. When set, every incoming message
      * goes through the User -> Space -> Org assembly flow before processing.
      */
-    public void setOrgManager(com.nousresearch.hermes.organization.OrgManager orgManager) {
+    public void setOrgManager(com.nousresearch.hermes.org.OrgManager orgManager) {
         this.orgManager = orgManager;
     }
 

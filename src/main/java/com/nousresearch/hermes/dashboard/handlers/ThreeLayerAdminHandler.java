@@ -9,7 +9,7 @@ import com.nousresearch.hermes.improvement.SignalStore;
 import com.nousresearch.hermes.improvement.SignalScope;
 import com.nousresearch.hermes.memory.store.MemoryEntry;
 import com.nousresearch.hermes.memory.store.MemoryStore;
-import com.nousresearch.hermes.organization.OrgManager;
+import com.nousresearch.hermes.org.OrgManager;
 import com.nousresearch.hermes.space.SpaceContext;
 import com.nousresearch.hermes.space.SpaceMember;
 import com.nousresearch.hermes.space.KnowledgeEntry;

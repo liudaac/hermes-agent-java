@@ -5,7 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.workspace.WorkspaceDashboardIntegration;
 import com.nousresearch.hermes.workspace.WorkspaceService;
-import com.nousresearch.hermes.prompt.PromptAssetService;
+import com.nousresearch.hermes.harness.prompt.asset.PromptAssetService;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import org.slf4j.Logger;

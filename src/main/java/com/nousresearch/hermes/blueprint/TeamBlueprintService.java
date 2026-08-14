@@ -2,7 +2,7 @@ package com.nousresearch.hermes.blueprint;
 
 import com.nousresearch.hermes.config.Constants;
 import com.nousresearch.hermes.workspace.WorkspaceService;
-import com.nousresearch.hermes.prompt.PromptAssetService;
+import com.nousresearch.hermes.harness.prompt.asset.PromptAssetService;
 
 import java.nio.file.Path;
 import java.time.Instant;

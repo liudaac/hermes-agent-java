@@ -1,15 +1,15 @@
 package com.nousresearch.hermes.tools;
 
 import com.nousresearch.hermes.tools.impl.AgentDelegateTool;
-import com.nousresearch.hermes.tools.impl.BrowserToolV2;
-import com.nousresearch.hermes.tools.impl.CodeTool;
-import com.nousresearch.hermes.tools.impl.FileTool;
-import com.nousresearch.hermes.tools.impl.GitTool;
 import com.nousresearch.hermes.tools.impl.MemoryTool;
 import com.nousresearch.hermes.tools.impl.SkillTool;
 import com.nousresearch.hermes.tools.impl.SubAgentTool;
-import com.nousresearch.hermes.tools.impl.TerminalTool;
-import com.nousresearch.hermes.tools.impl.WebSearchTool;
+import com.nousresearch.hermes.tools.impl.browser.BrowserToolV2;
+import com.nousresearch.hermes.tools.impl.browser.WebSearchTool;
+import com.nousresearch.hermes.tools.impl.file.CodeTool;
+import com.nousresearch.hermes.tools.impl.file.FileTool;
+import com.nousresearch.hermes.tools.impl.file.GitTool;
+import com.nousresearch.hermes.tools.impl.file.TerminalTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

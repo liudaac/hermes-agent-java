@@ -1,7 +1,7 @@
 package com.nousresearch.hermes.user;
 
 import com.nousresearch.hermes.config.HermesConfig;
-import com.nousresearch.hermes.organization.OrgManager;
+import com.nousresearch.hermes.org.OrgManager;
 import com.nousresearch.hermes.space.SpaceContext;
 import com.nousresearch.hermes.space.SpaceManager;
 import com.nousresearch.hermes.tenant.core.TenantManager;

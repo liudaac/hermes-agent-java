@@ -99,8 +99,8 @@ public class TenantAIAgent {
             // ── SessionRef: 注入参考流程 ──
             if (referenceSessionId != null && !referenceSessionId.isBlank()) {
                 var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
-                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
-                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                var library = new com.nousresearch.hermes.harness.session.library.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.harness.session.library.SessionReference(library);
                 String augmented = sessionRef.injectReferenceFromSession(
                     context.getTenantId(), referenceSessionId, message);
                 if (!augmented.equals(message)) {
@@ -184,8 +184,8 @@ public class TenantAIAgent {
             // ── SessionRef: 注入参考流程 ──
             if (referenceSessionId != null && !referenceSessionId.isBlank()) {
                 var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
-                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
-                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                var library = new com.nousresearch.hermes.harness.session.library.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.harness.session.library.SessionReference(library);
                 String augmented = sessionRef.injectReferenceFromSession(
                     context.getTenantId(), referenceSessionId, message);
                 if (!augmented.equals(message)) {
@@ -301,20 +301,20 @@ public class TenantAIAgent {
             var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(hermesHome);
             var session = sessionMgr.getSession(sessionId);
 
-            var extractor = new com.nousresearch.hermes.session.SessionStepExtractor();
+            var extractor = new com.nousresearch.hermes.harness.session.library.SessionStepExtractor();
             var steps = extractor.extract(session);
             var title = extractor.generateTitle(session);
             var summary = extractor.generateSummary(session);
 
-            var asset = new com.nousresearch.hermes.session.SessionAsset(
+            var asset = new com.nousresearch.hermes.harness.session.library.SessionAsset(
                     null,  // id will be generated
                     context.getTenantId(),
                     delegate.getCurrentUserId(),
                     sessionId,
                     title,
                     summary,
-                    completed ? com.nousresearch.hermes.session.SessionAsset.SessionStatus.COMPLETED
-                              : com.nousresearch.hermes.session.SessionAsset.SessionStatus.ACTIVE,
+                    completed ? com.nousresearch.hermes.harness.session.library.SessionAsset.SessionStatus.COMPLETED
+                              : com.nousresearch.hermes.harness.session.library.SessionAsset.SessionStatus.ACTIVE,
                     false,  // bookmarked
                     0,      // rating
                     null,   // userComment
@@ -325,7 +325,7 @@ public class TenantAIAgent {
                     completed ? System.currentTimeMillis() : null
             );
 
-            var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
+            var library = new com.nousresearch.hermes.harness.session.library.LocalSessionLibrary(hermesHome);
             String assetId = library.saveAsset(asset);
             logger.info("Archived session asset: {} for session: {}", assetId, sessionId);
         } catch (Exception e) {

@@ -84,8 +84,8 @@ public class AgentHarness {
             // ── SessionRef: inject reference flow ──
             if (referenceSessionId != null && !referenceSessionId.isBlank()) {
                 var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
-                var library = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
-                var sessionRef = new com.nousresearch.hermes.session.SessionReference(library);
+                var library = new com.nousresearch.hermes.harness.session.library.LocalSessionLibrary(hermesHome);
+                var sessionRef = new com.nousresearch.hermes.harness.session.library.SessionReference(library);
                 String augmented = sessionRef.injectReferenceFromSession(
                     tenantCtx.getTenantId(), referenceSessionId, message);
                 if (!augmented.equals(message)) {

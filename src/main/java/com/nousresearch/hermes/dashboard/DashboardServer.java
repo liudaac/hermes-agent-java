@@ -4,7 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.nousresearch.hermes.dashboard.handlers.*;
-import com.nousresearch.hermes.organization.OrgManager;
+import com.nousresearch.hermes.org.OrgManager;
 import com.nousresearch.hermes.dashboard.jarvis.ApprovalBridge;
 import com.nousresearch.hermes.dashboard.jarvis.ChatService;
 import com.nousresearch.hermes.dashboard.jarvis.IntentRouter;
@@ -46,11 +46,11 @@ import com.nousresearch.hermes.business.insight.BusinessInsightService;
 import com.nousresearch.hermes.scenario.PlanReflectionService;
 import com.nousresearch.hermes.scenario.ScenarioDashboardIntegration;
 import com.nousresearch.hermes.scenario.ScenarioService;
-import com.nousresearch.hermes.prompt.PromptAssetDashboardIntegration;
-import com.nousresearch.hermes.prompt.PromptAssetService;
-import com.nousresearch.hermes.prompt.PromptAssetResolver;
-import com.nousresearch.hermes.evolution.EvolutionProposalDashboardIntegration;
-import com.nousresearch.hermes.evolution.EvolutionProposalService;
+import com.nousresearch.hermes.harness.prompt.asset.PromptAssetDashboardIntegration;
+import com.nousresearch.hermes.harness.prompt.asset.PromptAssetService;
+import com.nousresearch.hermes.harness.prompt.asset.PromptAssetResolver;
+import com.nousresearch.hermes.org.evolution.EvolutionProposalDashboardIntegration;
+import com.nousresearch.hermes.org.evolution.EvolutionProposalService;
 import com.nousresearch.hermes.memory.BusinessMemoryNoteService;
 import com.nousresearch.hermes.policy.PolicyDashboardIntegration;
 import com.nousresearch.hermes.policy.PolicyService;
@@ -181,7 +181,7 @@ public class DashboardServer {
     private final com.nousresearch.hermes.business.vertical.ecommerce.EcommerceScenarioFactory ecommerceScenarioFactory;
     private final com.nousresearch.hermes.business.event.BusinessEventBus businessEventBus;
     private final com.nousresearch.hermes.tenant.metrics.MetricsCollector metricsCollector;
-    private final com.nousresearch.hermes.evolution.EvolutionScheduler evolutionScheduler;
+    private final com.nousresearch.hermes.org.evolution.EvolutionScheduler evolutionScheduler;
 
     // ---- 外部状态供应 ----
     private final Supplier<GatewayRuntimeStatus> gatewayStatusSupplier;
@@ -866,8 +866,8 @@ public class DashboardServer {
 
         // Session Assets API (user-dimension session library)
         var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
-        var sessionLibrary = new com.nousresearch.hermes.session.LocalSessionLibrary(hermesHome);
-        var stepExtractor = new com.nousresearch.hermes.session.SessionStepExtractor();
+        var sessionLibrary = new com.nousresearch.hermes.harness.session.library.LocalSessionLibrary(hermesHome);
+        var stepExtractor = new com.nousresearch.hermes.harness.session.library.SessionStepExtractor();
 
         app.get("/api/session-assets/{tenantId}", ctx -> {
             String tenantId = ctx.pathParam("tenantId");
@@ -881,7 +881,7 @@ public class DashboardServer {
             int page = ctx.queryParam("page") != null ? Integer.parseInt(ctx.queryParam("page")) : 0;
             int size = ctx.queryParam("size") != null ? Integer.parseInt(ctx.queryParam("size")) : 20;
 
-            var query = new com.nousresearch.hermes.session.SessionLibrary.SessionQuery(
+            var query = new com.nousresearch.hermes.harness.session.library.SessionLibrary.SessionQuery(
                     status, bookmarked, minRating, tag, null, null, "updated");
             var result = sessionLibrary.querySessions(tenantId, userId, query, page, size);
 
@@ -957,12 +957,12 @@ public class DashboardServer {
             String tenantId = ctx.pathParam("tenantId");
             String sessionId = ctx.pathParam("sessionId");
             var body = ctx.bodyAsClass(com.alibaba.fastjson2.JSONObject.class);
-            var update = new com.nousresearch.hermes.session.SessionLibrary.SessionAssetUpdate(
+            var update = new com.nousresearch.hermes.harness.session.library.SessionLibrary.SessionAssetUpdate(
                     body.getString("title"),
                     body.getList("tags", String.class),
                     body.getString("comment"),
                     body.getString("status") != null
-                            ? com.nousresearch.hermes.session.SessionAsset.SessionStatus.valueOf(body.getString("status"))
+                            ? com.nousresearch.hermes.harness.session.library.SessionAsset.SessionStatus.valueOf(body.getString("status"))
                             : null
             );
             sessionLibrary.updateAsset(tenantId, sessionId, update);
@@ -1544,7 +1544,7 @@ public class DashboardServer {
                     "approvalCard", approvalCard,
                     "delegatedTaskEnvelope", delegatedEnvelope.toMap()
                 ));
-            } catch (WorkspaceService.WorkspaceNotFoundException | com.nousresearch.hermes.evolution.EvolutionProposalService.EvolutionProposalNotFoundException e) {
+            } catch (WorkspaceService.WorkspaceNotFoundException | com.nousresearch.hermes.org.evolution.EvolutionProposalService.EvolutionProposalNotFoundException e) {
                 ctx.status(404).json(Map.of(
                     "ok", false,
                     "error", e.getMessage(),
@@ -2042,7 +2042,7 @@ public class DashboardServer {
     }
 
     /** Convert SessionAsset to JSON for API responses. */
-    private static com.alibaba.fastjson2.JSONObject assetToJson(com.nousresearch.hermes.session.SessionAsset asset) {
+    private static com.alibaba.fastjson2.JSONObject assetToJson(com.nousresearch.hermes.harness.session.library.SessionAsset asset) {
         var json = new com.alibaba.fastjson2.JSONObject()
                 .fluentPut("id", asset.id())
                 .fluentPut("tenantId", asset.tenantId())

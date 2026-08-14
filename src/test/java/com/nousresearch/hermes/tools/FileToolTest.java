@@ -1,6 +1,6 @@
 package com.nousresearch.hermes.tools;
 
-import com.nousresearch.hermes.tools.impl.FileTool;
+import com.nousresearch.hermes.tools.impl.file.FileTool;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 

@@ -30,7 +30,7 @@ public class FoundationCapabilityValidator {
     private final WorkspaceService workspaceService;
     private final TenantManager tenantManager;
     private final ToolRegistry toolRegistry;
-    private final com.nousresearch.hermes.prompt.FoundationPromptAssetBridge promptAssetService;
+    private final com.nousresearch.hermes.harness.prompt.asset.FoundationPromptAssetBridge promptAssetService;
 
     public FoundationCapabilityValidator(WorkspaceService workspaceService, TenantManager tenantManager) {
         this(workspaceService, tenantManager, ToolRegistry.getInstance(), null);
@@ -41,7 +41,7 @@ public class FoundationCapabilityValidator {
     }
 
     public FoundationCapabilityValidator(WorkspaceService workspaceService, TenantManager tenantManager,
-                                         ToolRegistry toolRegistry, com.nousresearch.hermes.prompt.FoundationPromptAssetBridge promptAssetService) {
+                                         ToolRegistry toolRegistry, com.nousresearch.hermes.harness.prompt.asset.FoundationPromptAssetBridge promptAssetService) {
         this.workspaceService = Objects.requireNonNull(workspaceService, "workspaceService");
         this.tenantManager = Objects.requireNonNull(tenantManager, "tenantManager");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");

@@ -117,7 +117,7 @@ public class HermesAgentV2 {
             var userMgr = new com.nousresearch.hermes.user.UserManager(
                 com.nousresearch.hermes.auth.UserIdentityResolver.passthrough()
             );
-            var orgMgr = new com.nousresearch.hermes.organization.OrgManager(agentConfig, spaceMgr, userMgr);
+            var orgMgr = new com.nousresearch.hermes.org.OrgManager(agentConfig, spaceMgr, userMgr);
             this.gatewayServerV2.setOrgManager(orgMgr);
             registerAdaptersV2();
         } else {
