@@ -101,48 +101,15 @@ public class TenantAwareAIAgent {
         new com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler();
     private volatile com.nousresearch.hermes.harness.AgentContext latestContext;
 
-    // ===== 工具级审批挂起状态 =====
-    private volatile boolean approvalCheckpointActive = false;
+    // ===== Extracted subsystems =====
+    private ToolExecutionGateway toolGateway;
+    private SessionLifecycle sessionLifecycle;
+
+    // ===== 工具级审批挂起状态 (delegated to ToolExecutionGateway) =====
 
     /** Pending background-review summaries, flushed at the start of the next turn. */
     private final java.util.concurrent.ConcurrentLinkedQueue<String> pendingReviewSummaries =
         new java.util.concurrent.ConcurrentLinkedQueue<>();
-    private ToolApprovalCheckpoint approvalCheckpoint;
-
-    /** Callback invoked when a tool call requires approval. External code should create an approval record. */
-    private java.util.function.Consumer<ToolApprovalRequiredException> toolApprovalCallback;
-
-    private static final String MEMORY_REVIEW_PROMPT =
-        "Review the conversation above and consider saving to memory if appropriate.\n\n" +
-        "Focus on:\n" +
-        "1. Has the user revealed things about themselves - their persona, desires, " +
-        "preferences, or personal details worth remembering?\n" +
-        "2. Has the user expressed expectations about how you should behave, their work " +
-        "style, or ways they want you to operate?\n\n" +
-        "If something stands out, save it using the memory tool. " +
-        "If nothing is worth saving, just say 'Nothing to save.' and stop.";
-
-    private static final String SKILL_REVIEW_PROMPT =
-        "Review the conversation above and consider saving or updating a skill if appropriate.\n\n" +
-        "Focus on: was a non-trivial approach used to complete a task that required trial " +
-        "and error, or changing course due to experiential findings along the way, or did " +
-        "the user expect or desire a different method or outcome?\n\n" +
-        "If a relevant skill already exists, update it with what you learned. " +
-        "Otherwise, create a new skill if the approach is reusable.\n" +
-        "If nothing is worth saving, just say 'Nothing to save.' and stop.";
-
-    private static final String COMBINED_REVIEW_PROMPT =
-        "Review the conversation above and consider two things:\n\n" +
-        "**Memory**: Has the user revealed things about themselves - their persona, " +
-        "desires, preferences, or personal details? Has the user expressed expectations " +
-        "about how you should behave, their work style, or ways they want you to operate? " +
-        "If so, save using the memory tool.\n\n" +
-        "**Skills**: Was a non-trivial approach used to complete a task that required trial " +
-        "and error, or changing course due to experiential findings along the way, or did " +
-        "the user expect or desire a different method or outcome? If a relevant skill " +
-        "already exists, update it. Otherwise, create a new one if the approach is reusable.\n\n" +
-        "Only act if there's something genuinely worth saving. " +
-        "If nothing stands out, just say 'Nothing to save.' and stop.";
 
     // ==================== Factory Methods ====================
 
@@ -293,6 +260,9 @@ public class TenantAwareAIAgent {
 
         initializeLearningComponents();
         initializeTools();
+        // Initialize extracted subsystems (toolGateway needed by initTenantApproval)
+        this.toolGateway = new ToolExecutionGateway(this);
+        this.sessionLifecycle = new SessionLifecycle(this);
         initTenantApproval();
         tenantContext.initCollaboration();
 
@@ -413,6 +383,9 @@ public class TenantAwareAIAgent {
 
         // 初始化工具
         initializeTools();
+        // Initialize extracted subsystems (toolGateway needed by initTenantApproval)
+        this.toolGateway = new ToolExecutionGateway(this);
+        this.sessionLifecycle = new SessionLifecycle(this);
         initTenantApproval();
 
         logger.info("Created TenantAwareAIAgent for tenant: {}, session: {}", tenantId, this.sessionId);
@@ -531,93 +504,7 @@ public class TenantAwareAIAgent {
      * 结束会话
      */
     public void endSession(boolean completed) {
-        logger.info("Ending session: {} (completed={})", sessionId, completed);
-
-        // 保存轨迹
-        if (trajectoryCollector != null) {
-            trajectoryCollector.endSession(sessionId, completed);
-        }
-
-        // 提取知识
-        if (learningPipeline != null && completed) {
-            try {
-                var result = learningPipeline.onSessionEnd(sessionId, conversationHistory);
-                logger.info("Extracted {} insights from session", result.getInsights().size());
-                if (evalMetrics != null) evalMetrics.recordKnowledgeExtraction(result.getInsights().size());
-            } catch (Exception e) {
-                logger.error("Knowledge extraction failed: {}", e.getMessage());
-            }
-        }
-
-        // 反思 / 自我批评
-        if (reflectionEngine != null && completed) {
-            try {
-                var rr = reflectionEngine.reflect(sessionId, conversationHistory, completed);
-                if ("ok".equals(rr.status) && !rr.lessons.isEmpty()) {
-                    logger.info("Reflection: score={}, lessons={}, anti_patterns={}",
-                        rr.taskScore, rr.lessons.size(), rr.antiPatterns.size());
-                if (evalMetrics != null) evalMetrics.recordReflection(rr.taskScore);
-                }
-                lastTaskScore = rr.taskScore;
-            } catch (Exception e) {
-                logger.error("Reflection failed: {}", e.getMessage());
-            }
-        }
-
-        // 主动学习：识别弱话题并补充知识
-        if (learningPipeline != null && completed) {
-            try {
-                int stored = learningPipeline.runCuriosityScan();
-                if (stored > 0) {
-                    logger.info("Curiosity engine stored {} new findings", stored);
-                if (evalMetrics != null) evalMetrics.recordCuriosityRun(stored);
-                }
-            } catch (Exception e) {
-                logger.warn("Curiosity engine failed: {}", e.getMessage());
-            }
-        }
-
-        // ======== AI原生组织：治理状态更新 ========
-        if (completed) {
-            governancePolicy.recordSuccess();
-            if (agentRole != null) {
-                agentRole.updateMetric("sessions_completed",
-                    ((Number) agentRole.getMetrics().getOrDefault("sessions_completed", 0)).intValue() + 1);
-            }
-        }
-        agentRole.updateMetric("last_active", System.currentTimeMillis());
-        agentRole.updateMetric("tokens_used_today", governancePolicy.getTokensUsed());
-
-        // AI原生组织：组织健康检查
-        if (orgHealthChecker != null) {
-            orgHealthChecker.updateHealth(
-                agentId, lastTaskScore,
-                governancePolicy.getConsecutiveFailures(),
-                governancePolicy.getTokensUsed(),
-                governancePolicy.getDailyTokenBudget()
-            );
-        }
-
-        // 持久化会话
-        persistSession();
-
-        // 租户上下文持久化
-        if (tenantContext != null) {
-            tenantContext.getSessionManager().persistAll();
-        }
-
-        if (trajectoryCollector != null) {
-            trajectoryCollector.shutdown();
-        }
-
-        // Flush cognitive traces
-        if (cognitiveTraceCollector != null) {
-            cognitiveTraceCollector.close();
-        }
-
-        if (evalMetrics != null) {
-            evalMetrics.logSnapshot();
-        }
+        sessionLifecycle.endSession(completed);
     }
 
     /**
@@ -625,41 +512,7 @@ public class TenantAwareAIAgent {
      * Called by the dashboard playground after a message round.
      */
     public Map<String, Object> getSessionDebugInfo() {
-        Map<String, Object> info = new LinkedHashMap<>();
-        info.put("sessionId", sessionId);
-        info.put("tenantId", tenantId);
-        try {
-            var session = new com.nousresearch.hermes.gateway.SessionManager(
-                com.nousresearch.hermes.config.Constants.getHermesHome())
-                .getSession(sessionId);
-            if (session != null) {
-                var json = session.toJson();
-                info.put("usage", Map.of(
-                    "promptTokens", json.has("promptTokens") ? json.get("promptTokens").asLong() : 0L,
-                    "completionTokens", json.has("completionTokens") ? json.get("completionTokens").asLong() : 0L,
-                    "cachedPromptTokens", json.has("cachedPromptTokens") ? json.get("cachedPromptTokens").asLong() : 0L,
-                    "reasoningTokens", json.has("reasoningTokens") ? json.get("reasoningTokens").asLong() : 0L,
-                    "totalTokens", json.has("totalTokens") ? json.get("totalTokens").asLong() : 0L,
-                    "lastModel", json.has("lastModel") ? json.get("lastModel").asText() : null
-                ));
-                if (json.has("toolCalls")) {
-                    var tcs = json.get("toolCalls");
-                    List<Map<String, Object>> toolList = new ArrayList<>();
-                    for (var tc : tcs) {
-                        Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("tool", tc.get("tool").asText());
-                        m.put("ok", tc.get("ok").asBoolean());
-                        m.put("durationMs", tc.get("durationMs").asLong());
-                        m.put("timestamp", tc.get("timestamp").asLong());
-                        toolList.add(m);
-                    }
-                    info.put("toolCalls", toolList);
-                }
-            }
-        } catch (Exception e) {
-            logger.debug("Failed to get session debug info: {}", e.getMessage());
-        }
-        return info;
+        return sessionLifecycle.getSessionDebugInfo();
     }
 
     /**
@@ -866,34 +719,15 @@ public class TenantAwareAIAgent {
         }
     }
 
-    private void recordToolCall(ToolCall toolCall, boolean ok, long durationMs) {
-        try {
-            var session = new com.nousresearch.hermes.gateway.SessionManager(
-                com.nousresearch.hermes.config.Constants.getHermesHome())
-                .getSession(sessionId);
-            session.recordToolCall(toolCall.getFunction().getName(), ok, durationMs);
-            if (toolPerformanceTracker != null) {
-                toolPerformanceTracker.record(toolCall.getFunction().getName(), ok, durationMs);
-            }
-            if (evalMetrics != null) {
-                evalMetrics.recordToolCall(ok, durationMs);
-            }
-        } catch (Exception e) {
-            logger.debug("Failed to record tool call: {}", e.getMessage());
-        }
+    void recordToolCall(ToolCall toolCall, boolean ok, long durationMs) {
+        toolGateway.recordToolCall(toolCall, ok, durationMs);
     }
 
     /**
      * Count how many tool-result messages appear after the last user message.
      */
     public int countToolsUsedThisTurn() {
-        int count = 0;
-        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
-            ModelMessage m = conversationHistory.get(i);
-            if ("user".equals(m.getRole())) break;
-            if ("tool".equals(m.getRole())) count++;
-        }
-        return count;
+        return toolGateway.countToolsUsedThisTurn();
     }
 
     // ==================== Approval ====================
@@ -901,19 +735,8 @@ public class TenantAwareAIAgent {
     /**
      * Initialize per-tenant approval system and wire into the tool dispatcher.
      */
-    private void initTenantApproval() {
-        this.approvalSystem = new ApprovalSystem();
-        this.approvalMessageHandler = new ApprovalMessageHandler();
-
-        // Wire to the persistent tool dispatcher
-        if (toolDispatcher != null) {
-            toolDispatcher.setApprovalSystem(approvalSystem);
-            toolDispatcher.setApprovalMessageHandler(approvalMessageHandler);
-        }
-
-        // Wire sub-agent shared memory callback for this tenant
-
-        logger.info("Tenant approval system initialized for: {}", tenantId);
+    void initTenantApproval() {
+        toolGateway.initTenantApproval();
     }
 
     private void enforceContextBudget() {
@@ -939,129 +762,11 @@ public class TenantAwareAIAgent {
      * Execute a tool by name with args map. Used by CodeModeTool.
      */
     public String executeToolByName(String toolName, java.util.Map<String, Object> args) {
-        try {
-            if (toolDispatcher != null) {
-                return toolDispatcher.dispatch(toolName, args);
-            }
-            var entry = ToolRegistry.getInstance().getEntry(toolName);
-            if (entry != null) {
-                return entry.getHandler().apply(args);
-            }
-            return ToolRegistry.toolError("Unknown tool: " + toolName);
-        } catch (Exception e) {
-            return ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
-        }
+        return toolGateway.executeToolByName(toolName, args);
     }
 
     public String executeToolCall(ToolCall toolCall) {
-        String toolName = toolCall.getFunction().getName();
-        String arguments = toolCall.getFunction().getArguments();
-
-        logger.debug("Executing tool: {} for tenant: {}", toolName, tenantId);
-
-        // ======== AI原生组织：第五刀--可观测性记录 ========
-        long toolStartMs = System.currentTimeMillis();
-        if (currentTrace != null) {
-            currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolCall(
-                toolName, arguments, java.util.List.of(), 1.0, 0, 0.0));
-        }
-
-        // ======== AI原生组织：角色权限检查 ========
-        if (agentRole != null && !agentRole.getAllowedTools().isEmpty()
-                && !agentRole.getAllowedTools().contains(toolName)) {
-            String msg = "Access denied: '" + toolName + "' not allowed for role '" + agentRole.getRoleName() + "'";
-            logger.warn("Tenant {} agent {} {}", tenantId, agentId, msg);
-            if (currentTrace != null) {
-                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
-            }
-            return ToolRegistry.toolError(msg);
-        }
-        if (agentRole != null && agentRole.getDeniedTools().contains(toolName)) {
-            String msg = "Access denied: '" + toolName + "' is denied for role '" + agentRole.getRoleName() + "'";
-            logger.warn("Tenant {} agent {} {}", tenantId, agentId, msg);
-            if (currentTrace != null) {
-                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
-            }
-            return ToolRegistry.toolError(msg);
-        }
-
-        // ======== 工具级审批检查 ========
-        if (agentRole != null && !agentRole.getToolApprovalRules().isEmpty()) {
-            var approvalCheck = checkToolApproval(toolName, arguments);
-            if (approvalCheck.approvalNeeded()) {
-                String msg = "Tool approval required: '" + toolName + "' - " + approvalCheck.reason();
-                logger.info("Tenant {} agent {} {}", tenantId, agentId, msg);
-                if (currentTrace != null) {
-                    currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(msg));
-                }
-                throw new ToolApprovalRequiredException(
-                    toolName, arguments, approvalCheck.agentId(), approvalCheck.matchedRule(), approvalCheck.reason());
-            }
-        }
-
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> args = new com.fasterxml.jackson.databind.ObjectMapper()
-                .readValue(arguments, Map.class);
-
-            String result;
-
-            // Use persistent TenantAwareToolDispatcher (approval-aware)
-            if (toolDispatcher != null) {
-                result = toolDispatcher.dispatch(toolName, args);
-            } else {
-                // Fallback to global registry (non-tenant mode)
-                var entry = ToolRegistry.getInstance().getAllTools().stream()
-                    .filter(t -> t.getName().equals(toolName))
-                    .findFirst()
-                    .orElse(null);
-                if (entry != null) {
-                    result = entry.getHandler().apply(args);
-                } else {
-                    result = ToolRegistry.toolError("Unknown tool: " + toolName);
-                }
-            }
-
-            // AI原生组织：第五刀--记录工具结果到追踪
-            if (currentTrace != null) {
-                long duration = System.currentTimeMillis() - toolStartMs;
-                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.toolResult(
-                    toolName, result, duration));
-            }
-
-            // AI原生组织：记录成功模式，强化有效策略
-            if (evolutionEngine != null && !result.contains("\"error\"")) {
-                evolutionEngine.recordSuccess(agentId, toolName,
-                    "Tool '" + toolName + "' executed with args: " + args.keySet());
-            }
-
-            return result;
-
-        } catch (Exception e) {
-            logger.error("Tool execution failed: {}", toolName, e);
-
-            // AI原生组织：第五刀--记录错误到追踪
-            if (currentTrace != null) {
-                currentTrace.step(com.nousresearch.hermes.org.observe.AgentTrace.Step.error(
-                    toolName + ": " + e.getMessage()));
-            }
-
-            // AI原生组织：记录失败，驱动自我进化
-            if (evolutionEngine != null) {
-                var failure = new com.nousresearch.hermes.org.evolution.FailureCase.Builder(
-                        agentId,
-                        "Execute tool: " + toolName,
-                        e.getMessage()
-                    )
-                    .rootCause(determineRootCause(e, toolName))
-                    .severity(com.nousresearch.hermes.org.evolution.FailureCase.Severity.MEDIUM)
-                    .lesson("Tool '" + toolName + "' failed: " + e.getClass().getSimpleName())
-                    .build();
-                evolutionEngine.recordFailure(failure);
-            }
-
-            return ToolRegistry.toolError("Execution failed: " + e.getMessage());
-        }
+        return toolGateway.executeToolCall(toolCall);
     }
 
     // Tool execution is now handled by TenantAwareToolDispatcher
@@ -1070,20 +775,7 @@ public class TenantAwareAIAgent {
     // ======== AI原生组织：失败根因分析 ========
     private static com.nousresearch.hermes.org.evolution.FailureCase.RootCause determineRootCause(
             Exception e, String toolName) {
-        String msg = (e.getMessage() != null ? e.getMessage().toLowerCase() : "");
-        if (msg.contains("permission") || msg.contains("denied") || msg.contains("access")) {
-            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.PERMISSION_DENIED;
-        }
-        if (msg.contains("not found") || msg.contains("unknown") || msg.contains("no such")) {
-            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.WRONG_TOOL;
-        }
-        if (msg.contains("timeout") || msg.contains("timed out")) {
-            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.INSUFFICIENT_CONTEXT;
-        }
-        if (msg.contains("ambiguous") || msg.contains("unclear")) {
-            return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.AMBIGUOUS_PROMPT;
-        }
-        return com.nousresearch.hermes.org.evolution.FailureCase.RootCause.WRONG_TOOL;
+        return ToolExecutionGateway.determineRootCause(e, toolName);
     }
 
     /**
@@ -1283,47 +975,7 @@ public class TenantAwareAIAgent {
     }
 
     public List<com.nousresearch.hermes.model.ToolDefinition> buildToolDefinitions() {
-        var registry = ToolRegistry.getInstance();
-        Set<String> toolNames = new HashSet<>(registry.getAllToolNames());
-
-        // 如果处于租户模式，过滤掉不允许的工具（租户级）
-        if (tenantContext != null) {
-            var allowed = tenantContext.getSecurityPolicy().getAllowedTools();
-            var denied = tenantContext.getSecurityPolicy().getDeniedTools();
-
-            if (!allowed.isEmpty()) {
-                toolNames.retainAll(allowed);
-            }
-            toolNames.removeAll(denied);
-        }
-
-        // Agent 角色级工具权限过滤（蓝图 / 业务策略生效点）
-        if (agentRole != null) {
-            if (!agentRole.getAllowedTools().isEmpty()) {
-                toolNames.retainAll(agentRole.getAllowedTools());
-            }
-            if (!agentRole.getDeniedTools().isEmpty()) {
-                toolNames.removeAll(agentRole.getDeniedTools());
-            }
-        }
-
-        // Convert Map definitions to ToolDefinition objects
-        List<Map<String, Object>> defs = registry.getDefinitions(toolNames, false);
-        List<com.nousresearch.hermes.model.ToolDefinition> result = new ArrayList<>();
-        for (Map<String, Object> def : defs) {
-            Map<String, Object> function = (Map<String, Object>) def.get("function");
-            if (function != null) {
-                String name = (String) function.get("name");
-                String description = (String) function.get("description");
-                Map<String, Object> parameters = (Map<String, Object>) function.get("parameters");
-                result.add(com.nousresearch.hermes.model.ToolDefinition.builder()
-                    .name(name)
-                    .description(description)
-                    .parameters(parameters)
-                    .build());
-            }
-        }
-        return result;
+        return toolGateway.buildToolDefinitions();
     }
 
     public String buildSystemPrompt() {
@@ -1398,37 +1050,11 @@ public class TenantAwareAIAgent {
     }
 
     public void autoSaveSession() {
-        persistSession();
+        sessionLifecycle.autoSaveSession();
     }
 
     public void persistSession() {
-        try {
-            var hermesHome = com.nousresearch.hermes.config.Constants.getHermesHome();
-            logger.debug("Persisting session {} to {}", sessionId, hermesHome);
-
-            var sessionMgr = new com.nousresearch.hermes.gateway.SessionManager(hermesHome);
-            var session = sessionMgr.getSession(sessionId);
-
-            // Clear and rebuild messages to avoid duplicates
-            session.messages.clear();
-            for (ModelMessage msg : conversationHistory) {
-                if (msg.getRole() != null && msg.getContent() != null) {
-                    session.addMessage(msg.getRole(), msg.getContent());
-                }
-            }
-
-            // Set source info for dashboard display
-            if (session.platform == null) {
-                session.platform = "web";
-            }
-            session.lastActivity = System.currentTimeMillis();
-
-            sessionMgr.saveSession(session);
-            logger.info("Session persisted: {} ({} messages)", sessionId, session.messages.size());
-
-        } catch (Exception e) {
-            logger.error("Failed to save session {}: {}", sessionId, e.getMessage(), e);
-        }
+        sessionLifecycle.persistSession();
     }
 
     private void ensureAutoSkillsLoaded(String channelId) {
@@ -1521,193 +1147,7 @@ public class TenantAwareAIAgent {
 
     public void spawnBackgroundReview(List<ModelMessage> messages,
                                         boolean reviewMemory, boolean reviewSkills) {
-        // 选择 prompt
-        String prompt;
-        if (reviewMemory && reviewSkills) {
-            prompt = BackgroundReviewPrompts.COMBINED_REVIEW_PROMPT;
-        } else if (reviewMemory) {
-            prompt = BackgroundReviewPrompts.MEMORY_REVIEW_PROMPT;
-        } else {
-            prompt = BackgroundReviewPrompts.SKILL_REVIEW_PROMPT;
-        }
-
-        Thread.startVirtualThread(() -> {
-            try {
-                logger.debug("Starting background review: memory={}, skills={}", reviewMemory, reviewSkills);
-                runBackgroundReviewLLM(messages, prompt);
-            } catch (Exception e) {
-                logger.error("Background review failed", e);
-                // Fallback to heuristic review if LLM fork fails
-                logger.debug("Falling back to heuristic review");
-                if (reviewMemory) reviewAndSaveMemoryHeuristic(messages);
-            }
-        });
-    }
-
-    /**
-     * Run the background review using an LLM fork (SubAgent).
-     *
-     * <p>Aligned with the original Python Hermes background_review.py:
-     * <ul>
-     *   <li>Forks a SubAgent with the same model/runtime as the parent</li>
-     *   <li>Tool whitelist: only memory + skill tools</li>
-     *   <li>Replays conversation history as context</li>
-     *   <li>Summarizes successful actions back to the user</li>
-     * </ul>
-     */
-    private void runBackgroundReviewLLM(List<ModelMessage> messages, String prompt) {
-        try {
-            String reviewMessage = prompt + "\n\nYou can only call memory and skill "
-                + "management tools. Other tools will be denied at runtime - do not "
-                + "attempt them.";
-
-            // Build a conversation digest for context (last 24 messages to bound cost)
-            StringBuilder contextBuilder = new StringBuilder();
-            int start = Math.max(0, messages.size() - 24);
-            for (int i = start; i < messages.size(); i++) {
-                ModelMessage msg = messages.get(i);
-                String role = msg.getRole();
-                String content = msg.getContent();
-                if (content == null || content.isBlank()) continue;
-                if ("tool".equals(role)) continue; // skip tool results for brevity
-                contextBuilder.append(role).append(": ")
-                    .append(content, 0, Math.min(content.length(), 500))
-                    .append("\n");
-            }
-
-            // Use SubAgent for the forked review with memory+skill tool whitelist
-            SubAgent reviewAgent = new SubAgent(reviewMessage, contextBuilder.toString(), config);
-            reviewAgent.withToolWhitelist(java.util.Set.of(
-                "memory", "skill_create", "skill_update", "skill_patch",
-                "skill_write_file", "skill_remove_file", "skill_get",
-                "skill_search", "skill_list"
-            )).withSystemPrompt(
-                "You are a background self-improvement reviewer. Review the "
-                + "conversation and save valuable learnings to memory or skills. "
-                + "Be concise. Only use memory and skill management tools."
-            ).withMaxIterations(16);
-            SubAgentResult result = reviewAgent.call();
-
-            // Summarize actions for the user - enqueue for next-turn flush
-            if (result != null && result.success) {
-                boolean hasMemory = result.memoriesToSave != null && !result.memoriesToSave.isEmpty();
-                boolean hasInsights = result.insights != null && !result.insights.isEmpty();
-                if (hasMemory || hasInsights) {
-                    StringBuilder summary = new StringBuilder();
-                    if (hasMemory) {
-                        summary.append(result.memoriesToSave.size()).append(" memory update(s)");
-                    }
-                    if (hasInsights) {
-                        if (summary.length() > 0) summary.append(", ");
-                        summary.append(result.insights.size()).append(" insight(s)");
-                    }
-                    String summaryStr = summary.toString();
-                    logger.info("Self-improvement review: {}", summaryStr);
-                    // Enqueue for next-turn flush - the chunkConsumer from the
-                    // originating turn has already completed by the time the
-                    // background review finishes.
-                    pendingReviewSummaries.add("💾 Self-improvement review: " + summaryStr);
-                } else {
-                    logger.debug("Background review completed - nothing to save");
-                }
-            } else {
-                logger.debug("Background review completed - nothing to save");
-            }
-
-        } catch (Exception e) {
-            logger.error("LLM background review failed, falling back to heuristic: {}", e.getMessage(), e);
-            reviewAndSaveMemoryHeuristic(messages);
-        }
-    }
-
-    /**
-     * Heuristic fallback for memory review (used when LLM fork is unavailable).
-     */
-    private void reviewAndSaveMemoryHeuristic(List<ModelMessage> messages) {
-        try {
-            List<String> userMessages = messages.stream()
-                .filter(m -> "user".equals(m.getRole()))
-                .map(ModelMessage::getContent)
-                .filter(Objects::nonNull)
-                .toList();
-
-            if (userMessages.isEmpty()) {
-                return;
-            }
-
-            String lastUserMessage = userMessages.get(userMessages.size() - 1);
-            if (containsValuableInfo(lastUserMessage)) {
-                String memory = extractMemorySummary(messages);
-                if (memory != null && !memory.isEmpty()) {
-                    memoryManager.addUser(memory);
-                    logger.debug("Saved memory from conversation (heuristic): {}",
-                        memory.substring(0, Math.min(50, memory.length())));
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Heuristic memory review failed", e);
-        }
-    }
-
-    /**
-     * 检查消息是否包含有价值的信息
-     */
-    private boolean containsValuableInfo(String message) {
-        if (message == null || message.length() < 10) {
-            return false;
-        }
-        String lower = message.toLowerCase();
-        // 偏好指示器
-        return lower.contains("prefer") || lower.contains("like") ||
-               lower.contains("always") || lower.contains("usually") ||
-               lower.contains("don't") || lower.contains("never") ||
-               lower.contains("my name is") || lower.contains("i am") ||
-               lower.contains("remember") || lower.contains("important");
-    }
-
-    /**
-     * 从对话中提取记忆摘要
-     */
-    private String extractMemorySummary(List<ModelMessage> messages) {
-        // 简化实现：提取最后几条消息作为上下文
-        StringBuilder sb = new StringBuilder();
-        int count = 0;
-        for (int i = messages.size() - 1; i >= 0 && count < 3; i--) {
-            ModelMessage msg = messages.get(i);
-            if ("user".equals(msg.getRole()) && msg.getContent() != null) {
-                if (sb.length() > 0) sb.insert(0, "; ");
-                sb.insert(0, msg.getContent());
-                count++;
-            }
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 统计工具调用次数
-     */
-    private int countToolCalls(List<ModelMessage> messages) {
-        return (int) messages.stream()
-            .filter(m -> m.getToolCalls() != null && !m.getToolCalls().isEmpty())
-            .count();
-    }
-
-    /**
-     * 从对话中提取技能描述
-     */
-    private String extractSkillDescription(List<ModelMessage> messages) {
-        // 简化实现：检查是否有明确的任务完成模式
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            ModelMessage msg = messages.get(i);
-            if ("assistant".equals(msg.getRole()) && msg.getContent() != null) {
-                String content = msg.getContent().toLowerCase();
-                if (content.contains("done") || content.contains("completed") ||
-                    content.contains("finished") || content.contains("here is")) {
-                    return "Workflow completion pattern detected";
-                }
-            }
-        }
-        return null;
+        sessionLifecycle.spawnBackgroundReview(messages, reviewMemory, reviewSkills);
     }
 
     private static String resolveTenantId(String platform, String channelId, String userId) {
@@ -1739,6 +1179,23 @@ public class TenantAwareAIAgent {
     public com.nousresearch.hermes.model.ModelClient getModelClient() { return modelClient; }
     public com.nousresearch.hermes.tools.TenantAwareToolDispatcher getToolDispatcher() { return toolDispatcher; }
     public boolean isInterrupted() { return interrupted.get(); }
+
+    // ======== Package-private accessors for extracted subsystems ========
+
+    HermesConfig getConfig() { return config; }
+    com.nousresearch.hermes.org.observe.AgentTrace getCurrentTrace() { return currentTrace; }
+    com.nousresearch.hermes.tools.ToolPerformanceTracker getToolPerformanceTracker() { return toolPerformanceTracker; }
+    com.nousresearch.hermes.memory.MemoryManager getMemoryManager() { return memoryManager; }
+    com.nousresearch.hermes.learning.LearningPipeline getLearningPipeline() { return learningPipeline; }
+    ReflectionEngine getReflectionEngine() { return reflectionEngine; }
+    com.nousresearch.hermes.trajectory.TrajectoryCollector getTrajectoryCollector() { return trajectoryCollector; }
+    OrgHealthChecker getOrgHealthChecker() { return orgHealthChecker; }
+    double getLastTaskScore() { return lastTaskScore; }
+    void setLastTaskScore(double score) { this.lastTaskScore = score; }
+    void setUserTurnCount(int count) { this.userTurnCount = count; }
+    java.util.concurrent.ConcurrentLinkedQueue<String> getPendingReviewSummaries() { return pendingReviewSummaries; }
+    void setApprovalSystem(ApprovalSystem system) { this.approvalSystem = system; }
+    void setApprovalMessageHandler(ApprovalMessageHandler handler) { this.approvalMessageHandler = handler; }
 
     /** EventEmitter for structured events. Set by AgentHarness when wrapping. */
     private volatile com.nousresearch.hermes.harness.EventEmitter eventEmitter;
@@ -1841,150 +1298,21 @@ public class TenantAwareAIAgent {
         return pm != null ? pm.getHookEngineFacade() : null;
     }
 
-    /**
-     * Check if a tool call requires approval based on the agent role's toolApprovalRules.
-     * Mirrors the rule semantics from PolicyService.checkToolApprovalRequired.
-     */
-    private com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult checkToolApproval(
-            String toolName, String arguments) {
-        if (agentRole == null || agentRole.getToolApprovalRules().isEmpty()) {
-            return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.noApprovalNeeded();
-        }
-
-        String argsStr = arguments != null ? arguments.toLowerCase() : "";
-
-        for (String rule : agentRole.getToolApprovalRules()) {
-            if (rule == null || rule.isBlank()) continue;
-            String normalized = rule.trim().toLowerCase();
-
-            if ("always".equals(normalized)) {
-                return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
-                    agentId, rule, "Every tool call requires approval");
-            }
-
-            if ("high-risk".equals(normalized) || "high-risk-tools".equals(normalized)) {
-                if (isHighRiskTool(toolName)) {
-                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
-                        agentId, rule, "High-risk tool: " + toolName);
-                }
-            }
-
-            if ("external".equals(normalized) || "external-tools".equals(normalized)) {
-                if (isExternalTool(toolName)) {
-                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
-                        agentId, rule, "External tool: " + toolName);
-                }
-            }
-
-            if (normalized.startsWith("tool:")) {
-                String targetTool = normalized.substring("tool:".length()).trim();
-                if (toolName.toLowerCase().equals(targetTool)) {
-                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
-                        agentId, rule, "Tool requires approval: " + toolName);
-                }
-            }
-
-            if (normalized.startsWith("contains:")) {
-                String keyword = normalized.substring("contains:".length()).trim();
-                if (argsStr.contains(keyword)) {
-                    return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.approvalNeeded(
-                        agentId, rule, "Keyword '" + keyword + "' detected in tool arguments");
-                }
-            }
-        }
-        return com.nousresearch.hermes.policy.PolicyService.ApprovalCheckResult.noApprovalNeeded();
-    }
-
-    private static boolean isHighRiskTool(String toolName) {
-        String lower = toolName.toLowerCase();
-        return lower.contains("exec") || lower.contains("delete") || lower.contains("remove")
-            || lower.contains("write") || lower.contains("send_") || lower.contains("post")
-            || lower.contains("email") || lower.contains("payment") || lower.contains("refund")
-            || lower.contains("transfer") || lower.contains("publish");
-    }
-
-    private static boolean isExternalTool(String toolName) {
-        String lower = toolName.toLowerCase();
-        return lower.contains("send") || lower.contains("email") || lower.contains("post")
-            || lower.contains("tweet") || lower.contains("message") || lower.contains("browser")
-            || lower.contains("web_fetch") || lower.contains("http");
-    }
-
-    /**
-     * Checkpoint state saved when a tool call requires approval.
-     * Allows resuming execution from exactly where it left off.
-     */
-    private static class ToolApprovalCheckpoint {
-        /** The assistant message containing all tool calls */
-        final ModelMessage assistantMessage;
-        /** List of all tool calls from this assistant message */
-        final List<ToolCall> toolCalls;
-        /** Index of the tool call that triggered the approval */
-        final int pendingIndex;
-        /** Results of tool calls already executed (before the pending one) */
-        final List<ToolCallResult> completedResults;
-        /** Snapshot of conversation history at the point of the assistant message */
-        final int historySize;
-        /** The iteration budget state (remaining iterations) */
-        final int remainingIterations;
-        /** User turn count */
-        final int userTurnCount;
-        /** Whether we were in the processMessage call from handleIntentSubtask */
-        final boolean fromSubtask;
-        /** The original subtask description (for resuming subtask reply) */
-        final String subtask;
-        /** The original bus message (for replying when subtask completes) */
-        final com.nousresearch.hermes.collaboration.AgentMessage subtaskMessage;
-
-        ToolApprovalCheckpoint(ModelMessage assistantMessage, List<ToolCall> toolCalls,
-                                int pendingIndex, List<ToolCallResult> completedResults,
-                                int historySize, int remainingIterations, int userTurnCount,
-                                boolean fromSubtask, String subtask,
-                                com.nousresearch.hermes.collaboration.AgentMessage subtaskMessage) {
-            this.assistantMessage = assistantMessage;
-            this.toolCalls = toolCalls;
-            this.pendingIndex = pendingIndex;
-            this.completedResults = completedResults;
-            this.historySize = historySize;
-            this.remainingIterations = remainingIterations;
-            this.userTurnCount = userTurnCount;
-            this.fromSubtask = fromSubtask;
-            this.subtask = subtask;
-            this.subtaskMessage = subtaskMessage;
-        }
-    }
-
-    /** Result of a single tool call (stored in checkpoint for completed ones) */
-    private static class ToolCallResult {
-        final String toolCallId;
-        final String result;
-        ToolCallResult(String toolCallId, String result) {
-            this.toolCallId = toolCallId;
-            this.result = result;
-        }
-    }
+    // ======== Tool approval, checkpoint, and resume logic delegated to ToolExecutionGateway ========
 
     /** Set a callback that fires whenever a tool call requires approval. */
     public void setToolApprovalCallback(java.util.function.Consumer<ToolApprovalRequiredException> callback) {
-        this.toolApprovalCallback = callback;
+        toolGateway.setToolApprovalCallback(callback);
     }
 
     /** Check if this agent is currently paused waiting for tool approval. */
     public boolean isAwaitingToolApproval() {
-        return approvalCheckpointActive && approvalCheckpoint != null;
+        return toolGateway.isAwaitingToolApproval();
     }
 
     /** Get info about the pending tool approval (if any). */
     public ToolApprovalRequiredException getPendingToolApproval() {
-        if (!approvalCheckpointActive || approvalCheckpoint == null) return null;
-        ToolCall pending = approvalCheckpoint.toolCalls.get(approvalCheckpoint.pendingIndex);
-        return new ToolApprovalRequiredException(
-            pending.getFunction().getName(),
-            pending.getFunction().getArguments(),
-            agentId,
-            "tool-level approval rule",
-            "Tool '" + pending.getFunction().getName() + "' requires approval"
-        );
+        return toolGateway.getPendingToolApproval();
     }
 
     /**
@@ -2001,134 +1329,7 @@ public class TenantAwareAIAgent {
      * @throws IllegalStateException if no approval is pending
      */
     public String resumeToolApproval(String toolCallId, boolean approved, String reason) {
-        if (!approvalCheckpointActive || approvalCheckpoint == null) {
-            throw new IllegalStateException("No pending tool approval");
-        }
-
-        ToolApprovalCheckpoint cp = approvalCheckpoint;
-        ToolCall pendingTool = cp.toolCalls.get(cp.pendingIndex);
-
-        // Verify the tool call ID matches
-        if (!pendingTool.getId().equals(toolCallId)) {
-            throw new IllegalArgumentException("Tool call ID mismatch: expected "
-                + pendingTool.getId() + " but got " + toolCallId);
-        }
-
-        // Clear the checkpoint (we'll either succeed or fail completely)
-        approvalCheckpointActive = false;
-        approvalCheckpoint = null;
-
-        StringBuilder responseBuilder = new StringBuilder();
-
-        // Execute the pending tool (or inject rejection)
-        String pendingResult;
-        boolean toolOk;
-        long toolStart = System.currentTimeMillis();
-        try {
-            if (approved) {
-                pendingResult = executeToolCall(pendingTool);
-                toolOk = true;
-            } else {
-                pendingResult = ToolRegistry.toolError(
-                    "Tool call rejected by approver: " + (reason != null ? reason : "no reason provided"));
-                toolOk = false;
-            }
-        } catch (Exception e) {
-            pendingResult = ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
-            toolOk = false;
-        }
-        recordToolCall(pendingTool, toolOk, System.currentTimeMillis() - toolStart);
-
-        // Add the pending tool result to conversation
-        conversationHistory.add(ModelMessage.tool(pendingResult, pendingTool.getId()));
-
-        if (cognitiveTraceCollector != null) {
-            cognitiveTraceCollector.evaluate(cp.userTurnCount,
-                "Tool " + pendingTool.getFunction().getName() + " " +
-                    (approved ? "approved and executed" : "rejected") + ": " +
-                    pendingResult.substring(0, Math.min(100, pendingResult.length())));
-        }
-
-        // Process remaining tool calls (after the pending one)
-        for (int i = cp.pendingIndex + 1; i < cp.toolCalls.size(); i++) {
-            ToolCall toolCall = cp.toolCalls.get(i);
-            long tStart = System.currentTimeMillis();
-            boolean tOk = true;
-            String tResult;
-            try {
-                tResult = executeToolCall(toolCall);
-            } catch (ToolApprovalRequiredException ex) {
-                // Another tool needs approval - save new checkpoint
-                approvalCheckpoint = new ToolApprovalCheckpoint(
-                    cp.assistantMessage,
-                    new ArrayList<>(cp.toolCalls),
-                    i,
-                    collectCompletedResults(cp, pendingResult, i),
-                    cp.historySize + i, // already added pending + this will be next
-                    cp.remainingIterations,
-                    cp.userTurnCount,
-                    cp.fromSubtask,
-                    cp.subtask,
-                    cp.subtaskMessage
-                );
-                approvalCheckpointActive = true;
-                if (toolApprovalCallback != null) {
-                    try { toolApprovalCallback.accept(ex); } catch (Exception ignored) {}
-                }
-                throw ex;
-            } catch (RuntimeException ex) {
-                tOk = false;
-                throw ex;
-            } finally {
-                recordToolCall(toolCall, tOk, System.currentTimeMillis() - tStart);
-            }
-            conversationHistory.add(ModelMessage.tool(tResult, toolCall.getId()));
-
-            if (cognitiveTraceCollector != null) {
-                cognitiveTraceCollector.evaluate(cp.userTurnCount,
-                    "Tool " + toolCall.getFunction().getName() + " returned: " +
-                        tResult.substring(0, Math.min(100, tResult.length())));
-            }
-        }
-
-        // Continue the LLM conversation loop
-        return continueConversationLoop(responseBuilder, cp.userTurnCount, cp.remainingIterations);
-    }
-
-    /** Helper: collect all completed tool results up to current index. */
-    private List<ToolCallResult> collectCompletedResults(ToolApprovalCheckpoint cp,
-                                                          String pendingResult, int currentIndex) {
-        List<ToolCallResult> results = new ArrayList<>(cp.completedResults);
-        results.add(new ToolCallResult(cp.toolCalls.get(cp.pendingIndex).getId(), pendingResult));
-        // Results for tools between pending+1 and currentIndex
-        // These haven't been collected yet since we're at currentIndex which is the next approval
-        return results;
-    }
-
-    /**
-     * Continue the LLM conversation loop from the current state.
-     * Delegates to AgentLoop.run() with a fresh budget.
-     */
-    private String continueConversationLoop(StringBuilder responseBuilder,
-                                             int startTurnCount, int remainingIterations) {
-        userTurnCount = startTurnCount;
-
-        // Create a fresh iteration budget with remaining iterations
-        IterationBudget resumeBudget = new IterationBudget(remainingIterations);
-
-        // Temporarily swap in the resume budget so AgentLoop uses it
-        IterationBudget original = iterationBudget;
-        // Use reflection-free approach: AgentLoop reads ctx.budget() which reads agent.getIterationBudget()
-        // We need to make the swap. Since iterationBudget is final, we use a different approach:
-        // just run the loop with the original budget (it has the remaining iterations from before)
-        var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
-        String loopResponse = com.nousresearch.hermes.harness.AgentLoop.run(ctx, getEventEmitter());
-
-        if (responseBuilder.length() > 0 && !loopResponse.isEmpty()) {
-            responseBuilder.append("\n\n");
-        }
-        responseBuilder.append(loopResponse);
-        return responseBuilder.toString();
+        return toolGateway.resumeToolApproval(toolCallId, approved, reason);
     }
 
     /**
