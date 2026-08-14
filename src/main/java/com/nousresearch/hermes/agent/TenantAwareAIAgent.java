@@ -751,6 +751,9 @@ public class TenantAwareAIAgent {
         // Build context (single interface between agent and loop)
         var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
 
+        // P3-2: Interrupt any running maintenance (new message arrived)
+        ctx.interruptMaintenance();
+
         // 1. PRE-LOOP
         boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
 
@@ -763,7 +766,13 @@ public class TenantAwareAIAgent {
         }
 
         // 3. POST-LOOP
-        return com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
+        String result = com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
+
+        // P3-2: Run maintenance jobs (idle time)
+        ctx.registerDefaultMaintenanceJobs();
+        ctx.runMaintenance();
+
+        return result;
     }
 
     private void doProcessMessageStream(String message, java.util.function.Consumer<String> chunkConsumer) {
@@ -775,6 +784,9 @@ public class TenantAwareAIAgent {
 
         // Build context and delegate to AgentLoop (same path as non-streaming)
         var ctx = new com.nousresearch.hermes.harness.AgentContext(this, config);
+
+        // P3-2: Interrupt any running maintenance (new message arrived)
+        ctx.interruptMaintenance();
 
         boolean shouldReviewMemory = com.nousresearch.hermes.harness.AgentLoop.preLoop(ctx, message);
 
@@ -788,6 +800,10 @@ public class TenantAwareAIAgent {
         }
 
         com.nousresearch.hermes.harness.AgentLoop.postLoop(ctx, loopResponse, shouldReviewMemory);
+
+        // P3-2: Run maintenance jobs (idle time)
+        ctx.registerDefaultMaintenanceJobs();
+        ctx.runMaintenance();
     }
 
 
@@ -895,6 +911,24 @@ public class TenantAwareAIAgent {
     }
 
     // ==================== Tool Execution ====================
+
+    /**
+     * Execute a tool by name with args map. Used by CodeModeTool.
+     */
+    public String executeToolByName(String toolName, java.util.Map<String, Object> args) {
+        try {
+            if (toolDispatcher != null) {
+                return toolDispatcher.dispatch(toolName, args);
+            }
+            var entry = ToolRegistry.getInstance().getEntry(toolName);
+            if (entry != null) {
+                return entry.getHandler().apply(args);
+            }
+            return ToolRegistry.toolError("Unknown tool: " + toolName);
+        } catch (Exception e) {
+            return ToolRegistry.toolError("Tool execution failed: " + e.getMessage());
+        }
+    }
 
     public String executeToolCall(ToolCall toolCall) {
         String toolName = toolCall.getFunction().getName();

@@ -199,4 +199,70 @@ public class AgentContext {
         var entry = registry.getEntry(toolName);
         return entry != null && entry.concludesTurn();
     }
+
+    // ===== P3: Advanced intelligence =====
+
+    private final com.nousresearch.hermes.harness.code.CodeRuntime codeRuntime =
+        new com.nousresearch.hermes.harness.code.CodeRuntime(this::executeToolByName);
+
+    public com.nousresearch.hermes.harness.code.CodeRuntime codeRuntime() { return codeRuntime; }
+
+    public com.nousresearch.hermes.tools.ToolEntry codeModeToolEntry() {
+        return new com.nousresearch.hermes.harness.code.CodeModeTool(codeRuntime).toToolEntry();
+    }
+
+    /**
+     * Execute a tool by name with args map. Used by CodeModeTool.
+     */
+    public String executeToolByName(String toolName, java.util.Map<String, Object> args) {
+        try {
+            return agent.executeToolByName(toolName, args);
+        } catch (Exception e) {
+            return com.nousresearch.hermes.tools.ToolRegistry.toolError(
+                "Tool execution failed: " + e.getMessage());
+        }
+    }
+
+    // ===== P3: Maintenance =====
+
+    private final com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler =
+        new com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler();
+
+    public com.nousresearch.hermes.harness.maintenance.MaintenanceScheduler maintenanceScheduler() {
+        return maintenanceScheduler;
+    }
+
+    /**
+     * Register default maintenance jobs.
+     */
+    public void registerDefaultMaintenanceJobs() {
+        maintenanceScheduler.register(
+            new com.nousresearch.hermes.harness.maintenance.CompactionMaintenanceJob(this));
+        maintenanceScheduler.register(
+            new com.nousresearch.hermes.harness.maintenance.SessionTitleJob(this));
+    }
+
+    /**
+     * Run maintenance jobs. Called after agent response is sent.
+     */
+    public void runMaintenance() {
+        if (maintenanceScheduler.jobs().isEmpty()) return;
+        if (maintenanceScheduler.isRunning()) return;
+
+        // Run in a virtual thread
+        Thread.startVirtualThread(() -> {
+            try {
+                maintenanceScheduler.runAll();
+            } catch (Exception e) {
+                // Silent - maintenance failures shouldn't affect user
+            }
+        });
+    }
+
+    /**
+     * Signal maintenance to stop (new message arrived).
+     */
+    public void interruptMaintenance() {
+        maintenanceScheduler.interrupt();
+    }
 }
