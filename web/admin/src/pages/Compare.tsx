@@ -1,4 +1,4 @@
-import { Scale } from "lucide-react";
+import { Shield } from "lucide-react";
 
 export default function Compare() {
   return (
@@ -7,11 +7,22 @@ export default function Compare() {
         <h1 className="text-2xl font-bold tracking-tight">比较分析</h1>
         <p className="mt-1 text-sm text-muted">A/B 对比、模型评测</p>
       </div>
-      <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border bg-surface/50">
-        <div className="flex flex-col items-center gap-2 text-muted">
-          <Scale className="h-8 w-8 opacity-40" />
-          <span className="text-xs">页面建设中</span>
+      <div className="rounded-lg border border-border bg-surface p-6">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-muted" />
+          <div>
+            <div className="text-sm font-medium">模型比较工具</div>
+            <div className="mt-1 text-sm text-muted">
+              详细的 A/B 对比和模型评测工具在 Ops 控制台中。
+            </div>
+          </div>
         </div>
+        <a
+          href="/ops/index.html#/compare"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-foreground"
+        >
+          前往 Ops Compare
+        </a>
       </div>
     </div>
   );
