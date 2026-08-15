@@ -1,14 +1,18 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { BriefcaseBusiness, TerminalSquare, ArrowRight, Sparkles } from "lucide-react";
+import { BriefcaseBusiness, TerminalSquare, Shield, Code2, ArrowRight, Sparkles } from "lucide-react";
 
 const PRODUCT_FORWARDS: Array<{ from: string[]; to: string }> = [
   { from: ["/portal", "/portal/", "/business", "/business-portal", "/business-portal/"], to: "/portal/index.html" },
   { from: ["/ops", "/ops/", "/status", "/playground", "/compare",
-            "/sessions", "/analytics", "/logs", "/cron", "/skills",
-            "/tools", "/tenants", "/config", "/env", "/org",
-            "/org-manage", "/spaces", "/dlq", "/workflows", "/hitl",
+            "/sessions", "/analytics", "/logs", "/cron",
+            "/tools", "/dlq", "/workflows", "/hitl",
             "/traces/"], to: "/ops/index.html" },
+  { from: ["/admin", "/admin/", "/tenants", "/spaces", "/users",
+            "/org", "/org-manage", "/billing", "/audit",
+            "/approvals", "/delegation", "/evolution", "/models"], to: "/admin/index.html" },
+  { from: ["/devportal", "/devportal/", "/webhooks", "/oauth",
+            "/env", "/integration"], to: "/devportal/index.html" },
   { from: ["/noc", "/noc/", "/org-control", "/sla"], to: "/ops/index.html" },
 ];
 
@@ -48,7 +52,7 @@ export default function App() {
   if (location.pathname !== "/") return <ForwardingScreen />;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#170d02] text-white antialiased">
+    <div className="relative min-h-screen overflow-hidden bg-[#0a0a0f] text-white antialiased">
       {/* Aurora background */}
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute -top-[20%] left-[10%] h-[500px] w-[500px] rounded-full bg-[oklch(0.78_0.16_70_/_0.12)] blur-[120px]" />
@@ -65,7 +69,7 @@ export default function App() {
       />
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-6 py-8 sm:py-12">
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-8 sm:py-12">
         {/* Nav */}
         <nav className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -83,7 +87,7 @@ export default function App() {
         </nav>
 
         {/* Hero */}
-        <div className="flex flex-1 flex-col justify-center py-12 sm:py-20">
+        <div className="flex flex-1 flex-col justify-center py-10 sm:py-16">
           <div className="mb-2 inline-flex w-fit items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] tracking-wide text-white/50">
             <Sparkles className="h-3 w-3 text-[oklch(0.88_0.12_70)]" />
             AI Native Agent Platform
@@ -104,80 +108,51 @@ export default function App() {
             让 AI 在你的业务场景中 7×24 小候命。
           </p>
 
-          {/* Product cards */}
-          <div className="mt-12 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Product cards - 2x2 grid */}
+          <div className="mt-10 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Portal */}
-            <a
+            <ProductCard
               href="/portal/index.html"
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-300 hover:border-[oklch(0.78_0.16_70_/_0.3)] hover:bg-white/[0.06]"
-            >
-              {/* Hover glow */}
-              <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[oklch(0.78_0.16_70_/_0.15)] opacity-0 blur-[60px] transition-opacity duration-500 group-hover:opacity-100" />
-
-              <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[oklch(0.78_0.16_70_/_0.2)] to-[oklch(0.68_0.18_50_/_0.1)] ring-1 ring-[oklch(0.78_0.16_70_/_0.2)]">
-                  <BriefcaseBusiness className="h-6 w-6 text-[oklch(0.88_0.12_70)]" />
-                </div>
-
-                <h2 className="mt-4 text-lg font-semibold text-white">
-                  Portal
-                  <span className="ml-2 text-xs font-normal text-white/40">业务前店</span>
-                </h2>
-
-                <p className="mt-2 text-[13px] leading-relaxed text-white/50">
-                  数字员工 · 场景模板 · 运行管理 · 待审批
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {["HR", "Finance", "Logistics", "Customer Service"].map((tag) => (
-                    <span key={tag} className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] tracking-wide text-white/40">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-5 inline-flex items-center gap-1 text-[13px] font-medium text-[oklch(0.88_0.12_70)] transition-transform duration-300 group-hover:gap-2">
-                  进入工作台
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </div>
-              </div>
-            </a>
+              icon={BriefcaseBusiness}
+              title="Portal"
+              subtitle="业务前店"
+              description="数字员工 · 场景模板 · 运行管理 · 待审批"
+              tags={["HR", "Finance", "Logistics", "Customer Service"]}
+              color="oklch(0.78_0.16_70)"
+            />
 
             {/* Ops */}
-            <a
+            <ProductCard
               href="/ops/index.html"
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-300 hover:border-[oklch(0.72_0.14_180_/_0.3)] hover:bg-white/[0.06]"
-            >
-              <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-[oklch(0.72_0.14_180_/_0.15)] opacity-0 blur-[60px] transition-opacity duration-500 group-hover:opacity-100" />
+              icon={TerminalSquare}
+              title="Ops"
+              subtitle="运维控制台"
+              description="系统监控 · 会话管理 · 工具生态 · 日志分析"
+              tags={["Sessions", "Analytics", "Tools", "DLQ"]}
+              color="oklch(0.72_0.14_180)"
+            />
 
-              <div className="relative">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[oklch(0.72_0.14_180_/_0.2)] to-[oklch(0.62_0.16_200_/_0.1)] ring-1 ring-[oklch(0.72_0.14_180_/_0.2)]">
-                  <TerminalSquare className="h-6 w-6 text-[oklch(0.82_0.10_180)]" />
-                </div>
+            {/* Admin */}
+            <ProductCard
+              href="/admin/index.html"
+              icon={Shield}
+              title="Admin"
+              subtitle="组织管理"
+              description="租户管理 · 空间成员 · 模型路由 · 计费审计"
+              tags={["Tenants", "Users", "Billing", "Audit"]}
+              color="oklch(0.70_0.12_280)"
+            />
 
-                <h2 className="mt-4 text-lg font-semibold text-white">
-                  Ops
-                  <span className="ml-2 text-xs font-normal text-white/40">运维后台</span>
-                </h2>
-
-                <p className="mt-2 text-[13px] leading-relaxed text-white/50">
-                  空间管理 · DLQ · 工作流 · 监控 · 配置
-                </p>
-
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {["Spaces", "Sessions", "Analytics", "DLQ"].map((tag) => (
-                    <span key={tag} className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] tracking-wide text-white/40">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-5 inline-flex items-center gap-1 text-[13px] font-medium text-[oklch(0.82_0.10_180)] transition-transform duration-300 group-hover:gap-2">
-                  进入控制台
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </div>
-              </div>
-            </a>
+            {/* DevPortal */}
+            <ProductCard
+              href="/devportal/index.html"
+              icon={Code2}
+              title="DevPortal"
+              subtitle="开发者门户"
+              description="API 文档 · Webhook · OAuth · 集成指南"
+              tags={["REST", "SSE", "OAuth", "SDK"]}
+              color="oklch(0.72_0.14_150)"
+            />
           </div>
         </div>
 
@@ -188,6 +163,10 @@ export default function App() {
             <span>Portal :5175</span>
             <span className="h-1 w-1 rounded-full bg-white/20" />
             <span>Ops :5176</span>
+            <span className="h-1 w-1 rounded-full bg-white/20" />
+            <span>Admin :5177</span>
+            <span className="h-1 w-1 rounded-full bg-white/20" />
+            <span>Dev :5178</span>
           </span>
         </footer>
       </div>
@@ -195,9 +174,70 @@ export default function App() {
   );
 }
 
+interface ProductCardProps {
+  href: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  title: string;
+  subtitle: string;
+  description: string;
+  tags: string[];
+  color: string;
+}
+
+function ProductCard({ href, icon: Icon, title, subtitle, description, tags, color }: ProductCardProps) {
+  return (
+    <a
+      href={href}
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-all duration-300 hover:border-[color-mix(in_oklch,white_15%,transparent)] hover:bg-white/[0.06]"
+      style={{ ["--card-glow" as string]: color }}
+    >
+      {/* Hover glow */}
+      <div
+        className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full opacity-0 blur-[60px] transition-opacity duration-500 group-hover:opacity-100"
+        style={{ background: `color-mix(in oklch, ${color} 15%, transparent)` }}
+      />
+
+      <div className="relative">
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-xl ring-1"
+          style={{
+            background: `linear-gradient(135deg, color-mix(in oklch, ${color} 20%, transparent), color-mix(in oklch, ${color} 10%, transparent))`,
+            ["--tw-ring-color" as string]: `color-mix(in oklch, ${color} 20%, transparent)`,
+          }}
+        >
+          <Icon className="h-6 w-6" style={{ color: `color-mix(in oklch, ${color} 80%, white)` }} />
+        </div>
+
+        <h2 className="mt-4 text-lg font-semibold text-white">
+          {title}
+          <span className="ml-2 text-xs font-normal text-white/40">{subtitle}</span>
+        </h2>
+
+        <p className="mt-2 text-[13px] leading-relaxed text-white/50">{description}</p>
+
+        <div className="mt-4 flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span key={tag} className="rounded-full bg-white/5 px-2.5 py-0.5 text-[10px] tracking-wide text-white/40">
+              {tag}
+            </span>
+          ))}
+        </div>
+
+        <div
+          className="mt-5 inline-flex items-center gap-1 text-[13px] font-medium transition-transform duration-300 group-hover:gap-2"
+          style={{ color: `color-mix(in oklch, ${color} 80%, white)` }}
+        >
+          进入
+          <ArrowRight className="h-3.5 w-3.5" />
+        </div>
+      </div>
+    </a>
+  );
+}
+
 function ForwardingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#170d02] text-white/40">
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0f] text-white/40">
       <div className="flex flex-col items-center gap-3">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-[oklch(0.88_0.12_70)]" />
         <span className="text-[12px] tracking-[0.15em] uppercase">Loading…</span>

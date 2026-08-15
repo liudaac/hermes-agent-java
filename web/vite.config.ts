@@ -88,6 +88,18 @@ export default defineConfig({
         rewrite: (p) => p.replace(/^\/portal/, ""),
         ws: true,
       },
+      "/admin": {
+        target: "http://localhost:5177",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/admin/, ""),
+        ws: true,
+      },
+      "/devportal": {
+        target: "http://localhost:5178",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/devportal/, ""),
+        ws: true,
+      },
     },
   },
 });

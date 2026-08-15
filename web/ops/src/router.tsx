@@ -11,10 +11,6 @@ const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const LogsPage = lazy(() => import("@/pages/LogsPage"));
 const CronPage = lazy(() => import("@/pages/CronPage"));
 const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
-const ConfigPage = lazy(() => import("@/pages/ConfigPage"));
-const EnvPage = lazy(() => import("@/pages/EnvPage"));
-const SpaceAdminPage = lazy(() => import("@/pages/SpaceAdminPage"));
-const OrgAdminPage = lazy(() => import("@/pages/OrgAdminPage"));
 const DLQPage = lazy(() => import("@/pages/DLQPage"));
 const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
 const HumanLoopPage = lazy(() => import("@/pages/HumanLoopPage"));
@@ -28,8 +24,9 @@ function PageLoading() {
 }
 
 /**
- * Ops router. Three-layer admin replaces Tenants/Skills/Org.
- * NOC pages will be added in Step 3.
+ * Ops router - pure operations & observability.
+ * Admin/Config/Env/Spaces/Org pages moved to Admin SPA.
+ * OAuth/Env moved to DevPortal SPA.
  */
 export function OpsRouter() {
   return (
@@ -39,24 +36,24 @@ export function OpsRouter() {
         <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<StatusPage />} />
-            <Route path="/spaces" element={<SpaceAdminPage />} />
-            <Route path="/org" element={<OrgAdminPage />} />
-            <Route path="/playground" element={<PlaygroundPage />} />
-            <Route path="/compare" element={<ComparePage />} />
             <Route path="/sessions" element={<SessionsPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/logs" element={<LogsPage />} />
             <Route path="/cron" element={<CronPage />} />
             <Route path="/tools" element={<ToolsPage />} />
             <Route path="/dlq" element={<DLQPage />} />
             <Route path="/workflows" element={<WorkflowPage />} />
             <Route path="/hitl" element={<HumanLoopPage />} />
-            <Route path="/config" element={<ConfigPage />} />
-            <Route path="/env" element={<EnvPage />} />
+            <Route path="/logs" element={<LogsPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/playground" element={<PlaygroundPage />} />
+            <Route path="/compare" element={<ComparePage />} />
             {/* Legacy redirects */}
-            <Route path="/tenants" element={<SpaceAdminPage />} />
-            <Route path="/skills" element={<SpaceAdminPage />} />
-            <Route path="/sla" element={<AnalyticsPage />} />
+            <Route path="/config" element={<RedirectToAdmin />} />
+            <Route path="/env" element={<RedirectToDevPortal />} />
+            <Route path="/spaces" element={<RedirectToAdmin />} />
+            <Route path="/org" element={<RedirectToAdmin />} />
+            <Route path="/tenants" element={<RedirectToAdmin />} />
+            <Route path="/skills" element={<RedirectToAdmin />} />
+            <Route path="/sla" element={<RedirectToAdmin />} />
             <Route path="*" element={<StatusPage />} />
           </Routes>
         </Suspense>
@@ -64,4 +61,14 @@ export function OpsRouter() {
       <JarvisCore />
     </div>
   );
+}
+
+function RedirectToAdmin() {
+  window.location.href = "/admin/index.html";
+  return null;
+}
+
+function RedirectToDevPortal() {
+  window.location.href = "/devportal/index.html";
+  return null;
 }

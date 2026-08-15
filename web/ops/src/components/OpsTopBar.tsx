@@ -1,19 +1,19 @@
 import { NavLink } from "react-router-dom";
-import { Activity, Wrench, type LucideIcon, ExternalLink, BriefcaseBusiness } from "lucide-react";
+import { Activity, Wrench, Settings, type LucideIcon, ExternalLink, BriefcaseBusiness, Shield, Code2 } from "lucide-react";
 import { cn } from "@hermes/ui";
 import { OPS_NAV, CROSS_PRODUCT_LINKS, type OpsNavItem } from "@/lib/nav";
 
 const GROUPS: Array<{ key: OpsNavItem["group"]; label: string; icon: LucideIcon }> = [
   { key: "operations", label: "Operations", icon: Activity },
   { key: "observability", label: "Observability", icon: Wrench },
-  { key: "configuration", label: "Configuration", icon: Wrench },
+  { key: "tools", label: "Tools", icon: Settings },
 ];
 
 /**
- * OpsTopBar — combined header for the ops console. Three sections:
+ * OpsTopBar - combined header for the ops console. Three sections:
  *   - Brand mark (left)
- *   - Grouped nav (center): Operations / Observability / Configuration
- *   - Cross-product switcher (right): Portal / NOC pills
+ *   - Grouped nav (center): Operations / Observability / Tools
+ *   - Cross-product switcher (right): Portal / Admin / Dev pills
  */
 export function OpsTopBar() {
   return (
@@ -78,7 +78,9 @@ export function OpsTopBar() {
 function CrossProductSwitcher() {
   return (
     <div className="flex shrink-0 items-center gap-1 rounded-full border border-current/20 bg-background-base/40 px-1 py-0.5">
-      <CrossPill href={CROSS_PRODUCT_LINKS.portal} label="Portal" icon={BriefcaseBusiness} title="Open Portal (separate app)" />
+      <CrossPill href={CROSS_PRODUCT_LINKS.portal} label="Portal" icon={BriefcaseBusiness} />
+      <CrossPill href={CROSS_PRODUCT_LINKS.admin} label="Admin" icon={Shield} />
+      <CrossPill href={CROSS_PRODUCT_LINKS.devportal} label="Dev" icon={Code2} />
     </div>
   );
 }
@@ -87,17 +89,15 @@ function CrossPill({
   href,
   label,
   icon: Icon,
-  title,
 }: {
   href: string;
   label: string;
   icon: LucideIcon;
-  title: string;
 }) {
   return (
     <a
       href={href}
-      title={title}
+      title={`Open ${label} (separate app)`}
       className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] tracking-[0.12em] opacity-60 hover:opacity-100 transition-colors"
     >
       <Icon className="h-3 w-3" />

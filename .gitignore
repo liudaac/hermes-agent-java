@@ -46,3 +46,6 @@ frontend/dist/
 legacy/frontend/node_modules/
 legacy/frontend/dist/
 sdk/target/
+web/*/tsconfig*.tsbuildinfo
+web/*/vite.config.d.ts
+web/*/vite.config.js

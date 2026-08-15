@@ -1826,7 +1826,7 @@ public class DashboardServer {
             // So basePath must be the SPA's directory, not the deeper
             // /assets subdirectory — otherwise we'd end up with the
             // double "assets/assets" segment and a 404.
-            for (String spa : new String[]{"portal", "ops", "noc"}) {
+            for (String spa : new String[]{"portal", "ops", "admin", "devportal", "noc"}) {
                 String prefix = "/" + spa;
                 java.nio.file.Path spaDir = webDist.resolve(spa);
                 app.get(prefix + "/assets/*",
@@ -1859,8 +1859,13 @@ public class DashboardServer {
             app.get("/portal/*", ctx -> serveSpaIndexHtml(ctx, webDist, "portal"));
             app.get("/ops", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
             app.get("/ops/*", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
-            app.get("/noc", ctx -> serveSpaIndexHtml(ctx, webDist, "noc"));
-            app.get("/noc/*", ctx -> serveSpaIndexHtml(ctx, webDist, "noc"));
+            app.get("/admin", ctx -> serveSpaIndexHtml(ctx, webDist, "admin"));
+            app.get("/admin/*", ctx -> serveSpaIndexHtml(ctx, webDist, "admin"));
+            app.get("/devportal", ctx -> serveSpaIndexHtml(ctx, webDist, "devportal"));
+            app.get("/devportal/*", ctx -> serveSpaIndexHtml(ctx, webDist, "devportal"));
+            // Legacy: NOC merged into Ops
+            app.get("/noc", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
+            app.get("/noc/*", ctx -> serveSpaIndexHtml(ctx, webDist, "ops"));
 
             // Serve the root hub for `/` and any other non-API path
             // (legacy aliases, accidental 404s, etc.). The hub does
@@ -1880,7 +1885,7 @@ public class DashboardServer {
     }
 
     /**
-     * Serve one of the independent SPAs (portal / ops / noc) by
+     * Serve one of the independent SPAs (portal / ops / admin / devportal) by
      * returning its index.html. The SPA's React Router then takes
      * over client-side. This is what `/portal/teams` should resolve
      * to — not the hub (which would forward to /portal/index.html
