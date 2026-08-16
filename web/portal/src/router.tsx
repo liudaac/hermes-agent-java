@@ -12,7 +12,10 @@ const Templates = lazy(() => import("@/pages/Templates"));
 const Approvals = lazy(() => import("@/pages/Approvals"));
 const Runs = lazy(() => import("@/pages/Runs"));
 const RunDetail = lazy(() => import("@/pages/RunDetail"));
-const UserAdmin = lazy(() => import("@/pages/UserAdmin"));
+const Me = lazy(() => import("@/pages/Me"));
+const Memory = lazy(() => import("@/pages/Memory"));
+const Skills = lazy(() => import("@/pages/Skills"));
+const Sessions = lazy(() => import("@/pages/Sessions"));
 
 function PageFallback() {
   const location = useLocation();
@@ -27,6 +30,8 @@ function PageFallback() {
  * Portal router - 5 tab, pure business. No admin pages.
  *
  * 首页 / 员工 / 运行 / 审批 / 我的
+ *
+ * Sub-pages (memory, skills, sessions) are reachable from the Me hub.
  */
 export function PortalRouter() {
   const location = useLocation();
@@ -45,7 +50,10 @@ export function PortalRouter() {
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/runs" element={<Runs />} />
           <Route path="/runs/:workspaceId/:runId" element={<RunDetail />} />
-          <Route path="/me" element={<UserAdmin />} />
+          <Route path="/me" element={<Me />} />
+          <Route path="/memory" element={<Memory />} />
+          <Route path="/skills" element={<Skills />} />
+          <Route path="/sessions" element={<Sessions />} />
           <Route path="*" element={<Home />} />
         </Routes>
       </Suspense>
@@ -59,8 +67,11 @@ export function PortalRouter() {
 function titleFor(pathname: string): string {
   if (pathname.startsWith("/teams")) return "数字员工";
   if (pathname.startsWith("/templates")) return "场景模板";
-  if (pathname.startsWith("/approvals")) return "待审批";
+  if (pathname.startsWith("/approvals")) return "审批中心";
   if (pathname.startsWith("/runs")) return "我的运行";
+  if (pathname.startsWith("/memory")) return "记忆与技能";
+  if (pathname.startsWith("/skills")) return "技能市场";
+  if (pathname.startsWith("/sessions")) return "会话历史";
   if (pathname.startsWith("/me")) return "我的";
   return "Hermes";
 }

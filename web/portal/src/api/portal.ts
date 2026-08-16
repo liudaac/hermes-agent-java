@@ -33,6 +33,7 @@ import type {
   RequestBusinessApprovalInfoPayload,
   ResolveBusinessApprovalResponse,
   QuickTeamDraft,
+  DelegatedTask,
 } from "./types-portal";
 import type {
   SLATemplatesResponse,
@@ -642,4 +643,26 @@ export const portalApi = {
       hasNext: boolean;
     }>(`/api/session-assets/${encodeURIComponent(tenantId)}${qs.toString() ? "?" + qs : ""}`);
   },
+
+  // ── Delegated Tasks (org-control) ──
+  getDelegatedTasks: () =>
+    fetchJSON<{ ok: boolean; tasks: DelegatedTask[] }>("/api/org/control/delegated-tasks"),
+
+  submitDelegatedTask: (tenantId: string, taskId: string, result: string) =>
+    fetchJSON<{ ok: boolean }>(
+      `/api/org/control/delegated-tasks/${encodeURIComponent(tenantId)}/${encodeURIComponent(taskId)}/submit`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ result }) },
+    ),
+
+  executeDelegatedTask: (tenantId: string, taskId: string) =>
+    fetchJSON<{ ok: boolean }>(
+      `/api/org/control/delegated-tasks/${encodeURIComponent(tenantId)}/${encodeURIComponent(taskId)}/execute`,
+      { method: "POST" },
+    ),
+
+  verifyDelegatedTask: (tenantId: string, taskId: string) =>
+    fetchJSON<{ ok: boolean }>(
+      `/api/org/control/delegated-tasks/${encodeURIComponent(tenantId)}/${encodeURIComponent(taskId)}/verify`,
+      { method: "POST" },
+    ),
 };

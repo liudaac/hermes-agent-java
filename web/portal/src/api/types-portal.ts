@@ -458,3 +458,13 @@ export interface BusinessProgressResponse {
   generatedAt: string;
 }
 
+// ── Delegated Tasks (org-control) ───────────────────────────────
+
+export interface DelegatedTask {
+  taskId: string;
+  tenantId: string;
+  title: string;
+  status: string;
+  description: string;
+}
+
