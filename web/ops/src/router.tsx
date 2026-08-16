@@ -14,6 +14,8 @@ const ToolsPage = lazy(() => import("@/pages/ToolsPage"));
 const DLQPage = lazy(() => import("@/pages/DLQPage"));
 const WorkflowPage = lazy(() => import("@/pages/WorkflowPage"));
 const HumanLoopPage = lazy(() => import("@/pages/HumanLoopPage"));
+const SLAPage = lazy(() => import("@/pages/SLAPage"));
+const TracesPage = lazy(() => import("@/pages/TracesPage"));
 
 function PageLoading() {
   return (
@@ -46,6 +48,8 @@ export function OpsRouter() {
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/playground" element={<PlaygroundPage />} />
             <Route path="/compare" element={<ComparePage />} />
+            <Route path="/sla" element={<SLAPage />} />
+            <Route path="/traces" element={<TracesPage />} />
             {/* Legacy redirects */}
             <Route path="/config" element={<RedirectToAdmin />} />
             <Route path="/env" element={<RedirectToDevPortal />} />
@@ -53,7 +57,6 @@ export function OpsRouter() {
             <Route path="/org" element={<RedirectToAdmin />} />
             <Route path="/tenants" element={<RedirectToAdmin />} />
             <Route path="/skills" element={<RedirectToAdmin />} />
-            <Route path="/sla" element={<RedirectToAdmin />} />
             <Route path="*" element={<StatusPage />} />
           </Routes>
         </Suspense>

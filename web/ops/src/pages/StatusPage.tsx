@@ -17,7 +17,6 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { Cell, Grid } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type {
   ActionStatusResponse,
@@ -282,9 +281,9 @@ export default function StatusPage() {
         </div>
       </div>
 
-      <Grid className="border-b md:!grid-cols-2 lg:!grid-cols-4">
+      <div className="grid grid-cols-1 border-b md:grid-cols-2 lg:grid-cols-4">
         {items.map(({ icon: Icon, label, value, badgeText, badgeVariant }) => (
-          <Cell
+          <div
             key={label}
             className="flex min-w-0 flex-col gap-2 overflow-hidden"
           >
@@ -306,10 +305,10 @@ export default function StatusPage() {
                 {badgeVariant !== "success" && badgeText}
               </Badge>
             )}
-          </Cell>
+          </div>
         ))}
 
-        <Cell className="flex min-w-0 flex-col gap-2 overflow-hidden">
+        <div className="flex min-w-0 flex-col gap-2 overflow-hidden">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">
               {t.status.actions}
@@ -366,8 +365,8 @@ export default function StatusPage() {
                 : t.status.updateHermes}
             </Button>
           </div>
-        </Cell>
-      </Grid>
+        </div>
+      </div>
 
       {activeAction && (
         <div className="border border-border bg-background-base/50">

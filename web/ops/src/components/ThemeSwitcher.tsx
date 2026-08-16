@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Palette, Check } from "lucide-react";
-import { Typography } from "@nous-research/ui";
+import { cn } from "@hermes/ui";
 import { BUILTIN_THEMES, useTheme } from "@/themes";
 import { useI18n } from "@/i18n";
-import { cn } from "@hermes/ui";
 
 /**
  * Compact theme picker mounted next to the language switcher in the header.
@@ -60,12 +59,11 @@ export function ThemeSwitcher() {
         aria-haspopup="listbox"
       >
         <Palette className="h-3.5 w-3.5" />
-        <Typography
-          mondwest
+        <span
           className="hidden sm:inline tracking-wide uppercase text-[0.65rem]"
         >
           {label}
-        </Typography>
+        </span>
       </button>
 
       {open && (
@@ -79,12 +77,11 @@ export function ThemeSwitcher() {
           )}
         >
           <div className="border-b border-current/20 px-3 py-2">
-            <Typography
-              mondwest
+            <span
               className="text-[0.65rem] tracking-[0.15em] uppercase text-midground/70"
             >
               {t.theme?.title ?? "Theme"}
-            </Typography>
+            </span>
           </div>
 
           {availableThemes.map((th) => {
@@ -114,16 +111,15 @@ export function ThemeSwitcher() {
                 )}
 
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <Typography
-                    mondwest
+                  <span
                     className="truncate text-[0.75rem] tracking-wide uppercase"
                   >
                     {th.label}
-                  </Typography>
+                  </span>
                   {th.description && (
-                    <Typography className="truncate text-[0.65rem] normal-case tracking-normal text-midground/50">
+                    <span className="truncate text-[0.65rem] normal-case tracking-normal text-midground/50">
                       {th.description}
-                    </Typography>
+                    </span>
                   )}
                 </div>
 

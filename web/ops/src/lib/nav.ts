@@ -8,6 +8,7 @@
 import {
   Activity, Clock, Settings, AlertOctagon, Workflow, Hand,
   MessageSquare, FileText, BarChart3, Terminal, Globe,
+  GitBranch, ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -29,6 +30,8 @@ export const OPS_NAV: OpsNavItem[] = [
   // Observability
   { path: "/logs", label: "日志", group: "observability", icon: FileText },
   { path: "/analytics", label: "分析", group: "observability", icon: BarChart3 },
+  { path: "/traces", label: "追踪", group: "observability", icon: GitBranch },
+  { path: "/sla", label: "SLA", group: "observability", icon: ShieldCheck },
   // Tools
   { path: "/tools", label: "工具", group: "tools", icon: Settings },
   { path: "/playground", label: "Playground", group: "tools", icon: Terminal },

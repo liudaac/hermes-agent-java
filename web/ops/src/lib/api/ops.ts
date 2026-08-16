@@ -28,6 +28,7 @@ import type {
   SessionSearchResult,
   SessionSearchResponse,
   ModelInfoResponse,
+  TraceDetail,
 } from "./types/ops";
 
 export const opsApi = {
@@ -163,6 +164,10 @@ export const opsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
+
+  // ── Traces ──
+  getTrace: (traceId: string) =>
+    fetchJSON<TraceDetail>(`/api/traces/${encodeURIComponent(traceId)}`),
 };
 
 /** Re-export session search type for callers. */

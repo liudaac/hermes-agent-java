@@ -24,7 +24,7 @@ export interface ThemePalette {
   /** Top-layer highlight. In LENS_0 this is white @ alpha 0 — invisible by
    *  default but still drives `--color-ring`-style accents. */
   foreground: ThemeLayer;
-  /** Warm vignette color for <Backdrop />, as an rgba() string. */
+  /** Warm vignette color, as an rgba() string. */
   warmGlow: string;
   /** Scalar multiplier (0–1.2) on the noise overlay. Lower for softer themes
    *  like Mono and Rosé, higher for grittier themes like Cyberpunk. */

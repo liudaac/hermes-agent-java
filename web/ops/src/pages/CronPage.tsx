@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
-import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import { openCronRunStream } from "@/lib/api/sse";
 import type {
@@ -353,13 +352,12 @@ export default function CronPage() {
 
       {/* Jobs list */}
       <div className="flex flex-col gap-3">
-        <H2
-          variant="sm"
-          className="flex items-center gap-2 text-muted-foreground"
+        <h2
+          className="flex items-center gap-2 text-muted-foreground text-lg font-semibold tracking-wider uppercase"
         >
           <Clock className="h-4 w-4" />
           {t.cron.scheduledJobs} ({jobs.length})
-        </H2>
+        </h2>
 
         {jobs.length === 0 && (
           <Card>

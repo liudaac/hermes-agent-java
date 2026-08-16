@@ -1,43 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Send,
-  Bot,
-  User,
-  AlertCircle,
-  ArrowLeftRight,
-  Play,
-  Square,
-  RotateCcw,
-  Plus,
-  Trash2,
-  RefreshCw,
-  Clock,
-} from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
-import { Button } from "@hermes/ui";
-import { Input } from "@hermes/ui";
-import { Badge } from "@hermes/ui";
-import { Select, SelectOption } from "@hermes/ui";
-import { cn } from "@hermes/ui";
 import { api, type CompareRun } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
-import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { useI18n } from "@/i18n";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "error" | "tool";
-  content: string;
-  streaming?: boolean;
-}
-
-interface ParticipantState {
-  id: string;
-  tenantId: string;
-  sessionId: string;
-  messages: ChatMessage[];
-  loading: boolean;
-}
+import { CompareChat, type ParticipantState, type ChatMessage } from "@/components/compare/CompareChat";
+import { CompareParticipants, ParticipantActions } from "@/components/compare/CompareParticipants";
+import { CompareControls } from "@/components/compare/CompareControls";
 
 function createParticipant(tenantId: string): ParticipantState {
   return {
@@ -102,13 +69,6 @@ export default function ComparePage() {
   const [autoRounds, setAutoRounds] = useState<number>(saved?.autoRounds as number ?? 3);
   const [autoModeOpen, setAutoModeOpen] = useState(false);
   const abortAutoRef = useRef(false);
-  const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  useEffect(() => {
-    participants.forEach((p) => {
-      scrollRefs.current[p.id]?.scrollIntoView({ behavior: "smooth", block: "end" });
-    });
-  }, [participants]);
 
   useEffect(() => {
     api.getTenants()
@@ -476,7 +436,6 @@ export default function ComparePage() {
     setAutoRunning(false);
   }, [activeRunId, showToast]);
 
-
   const formatRunTime = useCallback((value: string) => {
     try {
       return new Intl.DateTimeFormat(undefined, {
@@ -490,346 +449,58 @@ export default function ComparePage() {
     }
   }, []);
 
-  const renderPanel = (state: ParticipantState, index: number) => (
-    <div className="flex flex-col h-full min-h-[22rem]">
-      <div className="flex items-center gap-2 mb-2">
-        <Badge variant="outline" className="text-[10px] h-5 shrink-0">
-          #{index + 1}
-        </Badge>
-        <Select
-          value={state.tenantId}
-          onValueChange={(v) => resetParticipantTenant(state.id, v)}
-          className="h-7 text-xs flex-1"
-          disabled={autoRunning}
-        >
-          {tenants.map((id) => (
-            <SelectOption key={id} value={id}>{id}</SelectOption>
-          ))}
-        </Select>
-        {state.sessionId && (
-          <Badge variant="secondary" className="text-[10px] h-5 shrink-0">
-            {state.sessionId.slice(0, 6)}…
-          </Badge>
-        )}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => removeParticipant(state.id)}
-          disabled={autoRunning || participants.length <= 2}
-          className="h-6 px-1.5"
-          title={t.compare.removeParticipant}
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
-      <div className="flex-1 border border-current/20 rounded-sm overflow-y-auto p-2 space-y-2 bg-black/30 min-h-0">
-        {state.messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-32 opacity-30">
-            <Bot className="h-6 w-6 mb-1" />
-            <p className="text-xs">{t.compare.waiting}</p>
-          </div>
-        )}
-        {state.messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={cn("flex gap-1.5", msg.role === "user" ? "justify-end" : "justify-start")}
-          >
-            {msg.role !== "user" && (
-              <div className="mt-0.5">
-                {msg.role === "error" ? (
-                  <AlertCircle className="h-3 w-3 text-red-400" />
-                ) : (
-                  <Bot className="h-3 w-3 opacity-60" />
-                )}
-              </div>
-            )}
-            <div
-              className={cn(
-                "max-w-[90%] rounded-sm px-2 py-1.5 text-xs",
-                msg.role === "user"
-                  ? "bg-midground/10 text-midground"
-                  : msg.role === "error"
-                    ? "bg-red-900/20 text-red-300 border border-red-900/40"
-                    : msg.role === "tool"
-                      ? "bg-blue-900/20 text-blue-200 border border-blue-900/40 font-mono"
-                      : "bg-current/5 border border-current/10",
-              )}
-            >
-              {msg.role === "assistant" ? (
-                <div className="leading-relaxed">
-                  <MarkdownRenderer content={msg.content} />
-                  {msg.streaming && (
-                    <span className="inline-block w-1 h-3 bg-midground/60 ml-0.5 animate-pulse" />
-                  )}
-                </div>
-              ) : (
-                <pre className="whitespace-pre-wrap font-sans leading-relaxed">
-                  {msg.content}
-                  {msg.streaming && (
-                    <span className="inline-block w-1 h-3 bg-midground/60 ml-0.5 animate-pulse" />
-                  )}
-                </pre>
-              )}
-            </div>
-            {msg.role === "user" && (
-              <div className="mt-0.5">
-                <User className="h-3 w-3 opacity-60" />
-              </div>
-            )}
-          </div>
-        ))}
-        <div ref={(el) => { scrollRefs.current[state.id] = el; }} />
-      </div>
-    </div>
-  );
-
-  const activeLabels = participants.map((p) => p.tenantId).join(" → ");
+  const activeLabels = participants.map((p) => p.tenantId).join(" -> ");
+  const hasMessages = participants.some((p) => p.messages.length > 0);
 
   return (
     <div className="space-y-4 min-h-[calc(100vh-8rem)] flex flex-col">
-      <Card className="flex-1 flex flex-col min-h-0">
-        <CardHeader className="pb-2 shrink-0">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base tracking-wide flex items-center gap-2">
-              <ArrowLeftRight className="h-4 w-4" />
-              {t.compare.title}
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs">
-                {participants.length} {t.compare.participants}
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={addParticipant}
-                disabled={autoRunning}
-                className="h-7 text-xs px-2"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                {t.compare.addParticipant}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearAll}
-                disabled={autoRunning}
-                className="h-6 px-1.5"
-                title={t.compare.clearBoth}
-              >
-                <RotateCcw className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 min-h-0 pb-2">
-          <div className="grid gap-3 min-h-0" style={{ gridTemplateColumns: `repeat(${Math.min(participants.length, 3)}, minmax(0, 1fr))` }}>
-            {participants.map((participant, index) => (
-              <div key={participant.id} className="min-w-0">
-                {renderPanel(participant, index)}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
-        <button
-          onClick={() => setHistoryOpen(!historyOpen)}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
-        >
-          <span>{t.compare.history}</span>
-          <span className="text-[10px] opacity-50">{historyOpen ? t.compare.collapse : t.compare.expand}</span>
-        </button>
-        {historyOpen && (
-          <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] opacity-50">{historyRuns.length} runs</div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={loadHistoryRuns}
-                disabled={historyLoading}
-                className="h-6 px-2 text-[10px]"
-                title={t.compare.refreshHistory}
-              >
-                <RefreshCw className={cn("h-3 w-3 mr-1", historyLoading && "animate-spin")} />
-                {t.compare.refreshHistory}
-              </Button>
-            </div>
-            {historyRuns.length === 0 && (
-              <div className="text-xs opacity-50">{t.compare.noHistory}</div>
-            )}
-            {historyRuns.slice(0, 20).map((run) => (
-              <button
-                key={run.id}
-                onClick={() => loadRunFromHistory(run.id)}
-                className="w-full text-left border border-current/10 hover:border-current/30 rounded-sm px-2 py-1.5 text-xs transition-colors"
-                title={t.compare.openRun}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium">{run.topic}</span>
-                  <Badge variant="outline" className="text-[10px] h-5 shrink-0">{run.status}</Badge>
-                </div>
-                <div className="opacity-50 mt-1 truncate">
-                  {run.participants.map((p) => p.tenant_id).join(" → ")} · {run.event_count} {t.compare.runEvents}
-                </div>
-                <div className="opacity-45 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {t.compare.runCreated}: {formatRunTime(run.created_at)}
-                  </span>
-                  <span>{t.compare.runUpdated}: {formatRunTime(run.updated_at)}</span>
-                </div>
-                {run.error && (
-                  <div className="mt-1 text-red-300 truncate">
-                    {t.compare.runError}: {run.error}
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
-        <button
-          onClick={() => setAutoModeOpen(!autoModeOpen)}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
-        >
-          <span className="flex items-center gap-1.5">
-            {autoRunning ? (
-              <>
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-midground opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-midground" />
-                </span>
-                {t.compare.autoChatRunning}
-              </>
-            ) : (
-              <>
-                <Play className="h-3 w-3" />
-                {t.compare.autoChatMode}
-              </>
-            )}
-          </span>
-          {autoModeOpen ? (
-            <span className="text-[10px] opacity-50">{t.compare.collapse}</span>
-          ) : (
-            <span className="text-[10px] opacity-50">{t.compare.expand}</span>
-          )}
-        </button>
-        {autoModeOpen && (
-          <div className="p-3 space-y-3">
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="text-[10px] opacity-60 block mb-1">
-                  {t.compare.initialTopic}
-                </label>
-                <Input
-                  value={autoTopic}
-                  onChange={(e) => setAutoTopic(e.target.value)}
-                  placeholder={t.compare.initialTopicPlaceholder}
-                  disabled={autoRunning}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <div className="w-24">
-                <label className="text-[10px] opacity-60 block mb-1">
-                  {t.compare.rounds}
-                </label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={autoRounds}
-                  onChange={(e) => setAutoRounds(Number(e.target.value))}
-                  disabled={autoRunning}
-                  className="h-8 text-xs"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] opacity-50">
-              <span>
-                {t.compare.roundsHint
-                  .replace("{participants}", activeLabels)
-                  .replace("{rounds}", String(autoRounds))
-                  .replace("{totalMessages}", String(autoRounds * participants.length))}
-              </span>
-            </div>
-            <div className="flex justify-end gap-2">
-              {autoRunning ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={stopAutoChat}
-                  className="h-7 text-xs px-3"
-                >
-                  <Square className="h-3 w-3 mr-1" />
-                  {t.compare.stop}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={runAutoChat}
-                  disabled={!autoTopic.trim() || participants.length < 2 || new Set(participants.map((p) => p.tenantId)).size < 2}
-                  className="h-7 text-xs px-3"
-                >
-                  <Play className="h-3 w-3 mr-1" />
-                  {t.compare.startAutoChat}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {(conclusion || conclusionLoading || participants.some((p) => p.messages.length > 0)) && (
-        <Card className="shrink-0">
-          <CardHeader className="py-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">{t.compare.conclusion}</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={synthesizeConclusion}
-                disabled={conclusionLoading || autoRunning || !participants.some((p) => p.messages.length > 0)}
-                className="h-7 text-xs px-3"
-              >
-                {conclusionLoading ? t.compare.conclusionLoading : t.compare.generateConclusion}
-              </Button>
-            </div>
-          </CardHeader>
-          {(conclusion || conclusionLoading) && (
-            <CardContent className="pt-0 text-xs max-h-48 overflow-y-auto">
-              <MarkdownRenderer content={conclusion || t.compare.conclusionLoading} />
-            </CardContent>
-          )}
-        </Card>
-      )}
-
-      <div className="flex gap-2 shrink-0">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          placeholder={t.compare.askBoth}
-          disabled={sending || autoRunning}
-          className="flex-1 h-10"
+      <div className="flex items-center justify-between shrink-0">
+        <ParticipantActions
+          participantsCount={participants.length}
+          autoRunning={autoRunning}
+          onAdd={addParticipant}
+          onClearAll={clearAll}
         />
-        <Button
-          onClick={sendMessage}
-          disabled={!input.trim() || sending || autoRunning || participants.length === 0}
-          className="h-10 px-4"
-        >
-          <Send className="h-4 w-4 mr-1.5" />
-          {t.compare.send}
-        </Button>
       </div>
+
+      <CompareChat
+        participants={participants}
+        tenants={tenants}
+        input={input}
+        sending={sending}
+        autoRunning={autoRunning}
+        onInputChange={setInput}
+        onSend={sendMessage}
+        onResetParticipant={resetParticipantTenant}
+        onRemoveParticipant={removeParticipant}
+      />
+
+      <CompareParticipants
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen(!historyOpen)}
+        historyRuns={historyRuns}
+        historyLoading={historyLoading}
+        onRefreshHistory={loadHistoryRuns}
+        onLoadRun={loadRunFromHistory}
+        formatRunTime={formatRunTime}
+      />
+
+      <CompareControls
+        autoRunning={autoRunning}
+        autoModeOpen={autoModeOpen}
+        autoTopic={autoTopic}
+        autoRounds={autoRounds}
+        conclusion={conclusion}
+        conclusionLoading={conclusionLoading}
+        hasMessages={hasMessages}
+        onToggleMode={() => setAutoModeOpen(!autoModeOpen)}
+        onTopicChange={setAutoTopic}
+        onRoundsChange={setAutoRounds}
+        onStart={runAutoChat}
+        onStop={stopAutoChat}
+        onGenerateConclusion={synthesizeConclusion}
+        activeLabels={activeLabels}
+      />
     </div>
   );
 }

@@ -248,64 +248,6 @@ export interface Translations {
     };
   };
 
-  // ── Env / Keys page ──
-  env: {
-    description: string;
-    changesNote: string;
-    hideAdvanced: string;
-    showAdvanced: string;
-    llmProviders: string;
-    providersConfigured: string;
-    getKey: string;
-    notConfigured: string;
-    notSet: string;
-    keysCount: string;
-    enterValue: string;
-    replaceCurrentValue: string;
-    showValue: string;
-    hideValue: string;
-  };
-
-  // ── OAuth ──
-  oauth: {
-    title: string;
-    providerLogins: string;
-    description: string;
-    connected: string;
-    expired: string;
-    notConnected: string;
-    runInTerminal: string;
-    noProviders: string;
-    login: string;
-    disconnect: string;
-    managedExternally: string;
-    copied: string;
-    cli: string;
-    copyCliCommand: string;
-    connect: string;
-    sessionExpires: string;
-    initiatingLogin: string;
-    exchangingCode: string;
-    connectedClosing: string;
-    loginFailed: string;
-    sessionExpired: string;
-    reOpenAuth: string;
-    reOpenVerification: string;
-    submitCode: string;
-    pasteCode: string;
-    waitingAuth: string;
-    enterCodePrompt: string;
-    pkceStep1: string;
-    pkceStep2: string;
-    pkceStep3: string;
-    flowLabels: {
-      pkce: string;
-      device_code: string;
-      external: string;
-    };
-    expiresIn: string;
-  };
-
   // ── Language switcher ──
   language: {
     switchTo: string;
@@ -603,5 +545,57 @@ export interface Translations {
     labels: { noMission: string; members: string; agentRoutingControls: string; expires: string; parent: string; succeededFailedSubtasks: string; scoringExplanation: string; noRole: string; score: string; failedSubtasks: string; chooseTargetAgent: string; suggested: string; provider: string; persisted: string; ready: string; unhealthy: string; protocol: string; actions: string; features: string; probeScore: string; compatible: string; partial: string; recommended: string; candidates: string; contract: string; failed: string; pass: string; fail: string; ok: string; url: string; target: string; blocked: string; session: string; trace: string; expiresLower: string; teams: string; traces: string; resolved: string; rate: string; };
     delegated: { summaryPrompt: string; changedFilesPrompt: string; testsPrompt: string; risksPrompt: string; allowedPrefixesPrompt: string; requireTestsConfirm: string; requireAllTestsPassedConfirm: string; files: string; tests: string; statusFilter: string; verificationHistory: string; latest: string; showHistory: string; hideHistory: string; accepted: string; reason: string; policy: string; testsRequired: string; testsOptional: string; allTestsPassed: string; failedTestsAllowed: string; paths: string; submitFormTitle: string; verifyFormTitle: string; summaryLabel: string; changedFilesLabel: string; testsRunLabel: string; risksLabel: string; requireTestsReportedLabel: string; requireAllTestsPassedLabel: string; allowedPathsLabel: string; summaryPlaceholder: string; changedFilesPlaceholder: string; testsRunPlaceholder: string; risksPlaceholder: string; allowedPathsPlaceholder: string; lastExecution: string; executor: string; executed: string; submitted: string; executeFormTitle: string; deniedPathsLabel: string; capabilitiesLabel: string; deniedPathsPlaceholder: string; capabilitiesPlaceholder: string; allowCommandLabel: string; allowNetworkLabel: string; allowBrowserLabel: string; requirePatchSandboxLabel: string; requireParentVerificationLabel: string; allowAutoMergeLabel: string; safetySummary: string; safetyResult: string; allowedPathsShort: string; deniedPathsShort: string; capabilitiesShort: string; sandboxRequired: string; parentVerificationRequired: string; autoMerge: string; patchLabel: string; patchPlaceholder: string; localPatchHint: string; };
     reasons: { replayFailed: string; rerouteFailed: string; overrideAgent: string; health: string; capabilities: string; contract: string; probe: string; applyProbe: string; resetMock: string; clearConfig: string; setProvider: string; approvalDecision: string; };
+  };
+
+  // ── SLA ──
+  sla: {
+    title: string;
+    subtitle: string;
+    compliant: string;
+    violated: string;
+    atRisk: string;
+    empty: string;
+  };
+
+  // ── Traces ──
+  traces: {
+    title: string;
+    subtitle: string;
+    placeholder: string;
+    search: string;
+    empty: string;
+    notFound: string;
+    duration: string;
+    steps: string;
+  };
+
+  // ── DLQ ──
+  dlq: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    retry: string;
+    resolve: string;
+    filterWorkspace: string;
+  };
+
+  // ── Workflows ──
+  workflows: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    approve: string;
+    reject: string;
+    pending: string;
+  };
+
+  // ── Human-in-the-Loop ──
+  hitl: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    confirm: string;
+    release: string;
+    operator: string;
   };
 }

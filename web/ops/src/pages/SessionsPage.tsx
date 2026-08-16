@@ -14,7 +14,6 @@ import {
   X,
   Wrench,
 } from "lucide-react";
-import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type {
   SessionInfo,
@@ -547,7 +546,7 @@ export default function SessionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-muted-foreground" />
-          <H2 variant="sm">{t.sessions.title}</H2>
+          <h2 className="text-lg font-semibold tracking-tight">{t.sessions.title}</h2>
           <Badge variant="secondary" className="text-xs">
             {total}
           </Badge>

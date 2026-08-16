@@ -1,9 +1,4 @@
 @import 'tailwindcss';
-@import '@nous-research/ui/styles/globals.css';
-
-/* Scan the published design-system bundle so its utility classes survive
-   Tailwind's JIT purge. */
-@source '../node_modules/@nous-research/ui/dist';
 
 /* Tailwind v4 only auto-scans the current SPA's src/ by default. The
    cross-space dialogue shell (@hermes/jarvis) lives in a sibling
@@ -34,7 +29,7 @@
   --background-base: #041c1c;
   --background-alpha: 1;
 
-  /* Consumed by <Backdrop />; also theme-switchable. */
+  /* Theme-switchable warm glow color. */
   --warm-glow: rgba(255, 189, 56, 0.35);
   --noise-opacity-mul: 1;
 }

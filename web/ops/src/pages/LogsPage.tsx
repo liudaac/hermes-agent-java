@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { FileText, RefreshCw, ChevronRight, Layers, Trash2 } from "lucide-react";
-import { H2 } from "@nous-research/ui";
 import { api, type LogFileInfo } from "@/lib/api";
 import { openLogTail } from "@/lib/api/sse";
 import { Card, CardContent, CardHeader, CardTitle } from "@hermes/ui";
@@ -248,7 +247,7 @@ export default function LogsPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-muted-foreground" />
-          <H2 variant="sm">{t.logs.title}</H2>
+          <h2 className="text-lg font-semibold tracking-tight">{t.logs.title}</h2>
           {loading && (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           )}

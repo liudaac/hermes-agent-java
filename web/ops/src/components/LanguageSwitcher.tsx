@@ -1,4 +1,3 @@
-import { Typography } from "@nous-research/ui";
 import { useI18n } from "@/i18n/context";
 
 /**
@@ -22,12 +21,11 @@ export function LanguageSwitcher() {
       <span className="text-base leading-none">
         {locale === "en" ? "🇬🇧" : "🇨🇳"}
       </span>
-      <Typography
-        mondwest
+      <span
         className="hidden sm:inline tracking-wide uppercase text-[0.65rem]"
       >
         {locale === "en" ? "EN" : "中文"}
-      </Typography>
+      </span>
     </button>
   );
 }

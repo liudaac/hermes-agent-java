@@ -362,3 +362,27 @@ export interface TenantConfigPayload {
   provider?: string;
 }
 
+// ── Trace types ──────────────────────────────────────────────────────────
+
+export interface TraceStep {
+  stepId: string;
+  agentId: string;
+  tool?: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  status: string;
+  input?: string;
+  output?: string;
+  children?: TraceStep[];
+}
+
+export interface TraceDetail {
+  traceId: string;
+  tenantId: string;
+  startTime: number;
+  endTime: number;
+  totalDuration: number;
+  steps: TraceStep[];
+}
+

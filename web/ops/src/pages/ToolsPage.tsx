@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Wrench, Search, X, ChevronRight, Loader2 } from "lucide-react";
-import { H2 } from "@nous-research/ui";
 import { api } from "@/lib/api";
 import type { ToolGroup, ToolDetail } from "@/lib/api";
 import { Card, CardContent } from "@hermes/ui";
@@ -74,7 +73,7 @@ export default function ToolsPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Wrench className="h-5 w-5 text-muted-foreground" />
-          <H2 variant="sm">Tools</H2>
+          <h2 className="text-lg font-semibold tracking-tight">Tools</h2>
           <span className="text-xs text-muted-foreground">
             {totalTools} tools / {groups.length} toolsets
           </span>
