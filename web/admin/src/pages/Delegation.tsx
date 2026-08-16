@@ -65,13 +65,13 @@ export default function Delegation() {
                   <div className="flex justify-end gap-1">
                     <button
                       onClick={() => handleExecute(String(t.tenantId), String(t.taskId))}
-                      className="rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50"
+                      className="rounded px-2 py-0.5 text-xs text-info hover:bg-info/10"
                     >
                       执行
                     </button>
                     <button
                       onClick={() => handleVerify(String(t.tenantId), String(t.taskId))}
-                      className="rounded px-2 py-0.5 text-xs text-green-600 hover:bg-green-50"
+                      className="rounded px-2 py-0.5 text-xs text-success hover:bg-success/10"
                     >
                       验证
                     </button>

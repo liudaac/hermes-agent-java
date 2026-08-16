@@ -9,7 +9,7 @@
 
 import {
   Building2, Users, Settings, Shield, DollarSign,
-  FileClock, GitBranch, Scale, Target, Layers,
+  FileClock, GitBranch, Target, Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,7 +30,6 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { path: "/approvals", label: "审批策略", group: "control", icon: Shield },
   { path: "/delegation", label: "委派任务", group: "control", icon: Target },
   { path: "/evolution", label: "进化中心", group: "control", icon: GitBranch },
-  { path: "/compare", label: "比较分析", group: "control", icon: Scale },
   // Billing
   { path: "/billing", label: "计费", group: "billing", icon: DollarSign },
   { path: "/audit", label: "审计日志", group: "billing", icon: FileClock },

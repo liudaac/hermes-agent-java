@@ -27,10 +27,10 @@ export default function ApprovalPolicy() {
   ];
 
   const modes = [
-    { value: "AUTO", label: "自动", color: "bg-green-50 text-green-700" },
-    { value: "PROMPT", label: "询问", color: "bg-blue-50 text-blue-700" },
-    { value: "REQUIRE", label: "必须", color: "bg-amber-50 text-amber-700" },
-    { value: "DENY", label: "禁止", color: "bg-red-50 text-red-700" },
+    { value: "AUTO", label: "自动", color: "bg-success/10 text-success" },
+    { value: "PROMPT", label: "询问", color: "bg-info/10 text-info" },
+    { value: "REQUIRE", label: "必须", color: "bg-warning/10 text-warning" },
+    { value: "DENY", label: "禁止", color: "bg-destructive/10 text-destructive" },
   ];
 
   return (
@@ -52,7 +52,7 @@ export default function ApprovalPolicy() {
                   <div className="mt-0.5 text-xs text-muted">{t.desc}</div>
                 </div>
                 <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                  modes.find((m) => m.value === currentMode)?.color ?? "bg-gray-50 text-gray-600"
+                  modes.find((m) => m.value === currentMode)?.color ?? "bg-surface-hover text-muted"
                 }`}>
                   {modes.find((m) => m.value === currentMode)?.label ?? currentMode}
                 </span>
@@ -68,7 +68,7 @@ export default function ApprovalPolicy() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
             <div className="text-xs text-muted">沙箱隔离</div>
-            <div className={`mt-1 text-sm font-medium ${policy?.sandboxEnforced ? "text-green-600" : "text-muted"}`}>
+            <div className={`mt-1 text-sm font-medium ${policy?.sandboxEnforced ? "text-success" : "text-muted"}`}>
               {policy?.sandboxEnforced ? "启用" : "关闭"}
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function ApprovalPolicy() {
           </div>
           <div>
             <div className="text-xs text-muted">用户覆盖</div>
-            <div className={`mt-1 text-sm font-medium ${policy?.allowUserOverride ? "text-green-600" : "text-muted"}`}>
+            <div className={`mt-1 text-sm font-medium ${policy?.allowUserOverride ? "text-success" : "text-muted"}`}>
               {policy?.allowUserOverride ? "允许" : "禁止"}
             </div>
           </div>

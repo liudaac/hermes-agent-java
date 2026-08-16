@@ -37,10 +37,3 @@ export const OPS_NAV: OpsNavItem[] = [
   { path: "/playground", label: "Playground", group: "tools", icon: Terminal },
   { path: "/compare", label: "比较", group: "tools", icon: Globe },
 ];
-
-/** Cross-product entry points. */
-export const CROSS_PRODUCT_LINKS = {
-  portal: "/portal/index.html",
-  admin: "/admin/index.html",
-  devportal: "/devportal/index.html",
-} as const;

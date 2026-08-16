@@ -10,7 +10,6 @@ const Users = lazy(() => import("@/pages/Users"));
 const ApprovalPolicy = lazy(() => import("@/pages/ApprovalPolicy"));
 const Delegation = lazy(() => import("@/pages/Delegation"));
 const Evolution = lazy(() => import("@/pages/Evolution"));
-const Compare = lazy(() => import("@/pages/Compare"));
 const Billing = lazy(() => import("@/pages/Billing"));
 const Audit = lazy(() => import("@/pages/Audit"));
 const Models = lazy(() => import("@/pages/Models"));
@@ -103,7 +102,6 @@ export function AdminApp() {
               <Route path="/approvals" element={<ApprovalPolicy />} />
               <Route path="/delegation" element={<Delegation />} />
               <Route path="/evolution" element={<Evolution />} />
-              <Route path="/compare" element={<Compare />} />
               <Route path="/billing" element={<Billing />} />
               <Route path="/audit" element={<Audit />} />
               <Route path="/models" element={<Models />} />

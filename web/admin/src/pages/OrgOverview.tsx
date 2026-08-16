@@ -32,7 +32,7 @@ export default function OrgOverview() {
         <StatCard label="空间数" value={overview?.spaces?.length ?? 0} />
         <StatCard label="用户数" value={overview?.users?.length ?? 0} />
         <StatCard label="模型数" value={orgSummary ? Object.keys(orgSummary).length : "-"} />
-        <StatCard label="健康度" value="正常" color="text-green-600" />
+        <StatCard label="健康度" value="正常" color="text-success" />
       </div>
 
       {/* Spaces */}

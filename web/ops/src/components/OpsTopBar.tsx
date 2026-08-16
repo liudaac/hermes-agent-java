@@ -1,7 +1,9 @@
 import { NavLink } from "react-router-dom";
-import { Activity, Wrench, Settings, type LucideIcon, ExternalLink, BriefcaseBusiness, Shield, Code2 } from "lucide-react";
+import { Activity, Wrench, Settings, type LucideIcon } from "lucide-react";
 import { cn } from "@hermes/ui";
-import { OPS_NAV, CROSS_PRODUCT_LINKS, type OpsNavItem } from "@/lib/nav";
+import { OPS_NAV, type OpsNavItem } from "@/lib/nav";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 const GROUPS: Array<{ key: OpsNavItem["group"]; label: string; icon: LucideIcon }> = [
   { key: "operations", label: "Operations", icon: Activity },
@@ -10,10 +12,13 @@ const GROUPS: Array<{ key: OpsNavItem["group"]; label: string; icon: LucideIcon 
 ];
 
 /**
- * OpsTopBar - combined header for the ops console. Three sections:
+ * OpsTopBar - header for the ops console. Three sections:
  *   - Brand mark (left)
  *   - Grouped nav (center): Operations / Observability / Tools
- *   - Cross-product switcher (right): Portal / Admin / Dev pills
+ *   - Utilities (right): theme + language switchers
+ *
+ * Cross-product jumps (Portal/Admin/DevPortal) intentionally live only on the
+ * hub page - each product stays focused.
  */
 export function OpsTopBar() {
   return (
@@ -69,40 +74,11 @@ export function OpsTopBar() {
             })}
           </ul>
         </nav>
-        <CrossProductSwitcher />
+        <div className="flex shrink-0 items-center gap-0.5 pl-1">
+          <ThemeSwitcher />
+          <LanguageSwitcher />
+        </div>
       </div>
     </header>
-  );
-}
-
-function CrossProductSwitcher() {
-  return (
-    <div className="flex shrink-0 items-center gap-1 rounded-full border border-current/20 bg-background-base/40 px-1 py-0.5">
-      <CrossPill href={CROSS_PRODUCT_LINKS.portal} label="Portal" icon={BriefcaseBusiness} />
-      <CrossPill href={CROSS_PRODUCT_LINKS.admin} label="Admin" icon={Shield} />
-      <CrossPill href={CROSS_PRODUCT_LINKS.devportal} label="Dev" icon={Code2} />
-    </div>
-  );
-}
-
-function CrossPill({
-  href,
-  label,
-  icon: Icon,
-}: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <a
-      href={href}
-      title={`Open ${label} (separate app)`}
-      className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] tracking-[0.12em] opacity-60 hover:opacity-100 transition-colors"
-    >
-      <Icon className="h-3 w-3" />
-      <span className="hidden md:inline">{label}</span>
-      <ExternalLink className="h-2.5 w-2.5 opacity-50" />
-    </a>
   );
 }

@@ -37,7 +37,7 @@ export default function Evolution() {
           <div className="text-xs text-muted">进化提案</div>
         </div>
         <div className="rounded-lg border border-border bg-surface p-4">
-          <div className="text-2xl font-bold tabular-nums text-green-600">自动</div>
+          <div className="text-2xl font-bold tabular-nums text-success">自动</div>
           <div className="text-xs text-muted">调度模式</div>
         </div>
       </div>
@@ -58,9 +58,9 @@ export default function Evolution() {
                   <div className="flex items-center justify-between">
                     <span className="font-medium">{String(proposal.title ?? proposal.type ?? `提案 #${i + 1}`)}</span>
                     <span className={`rounded px-2 py-0.5 text-xs ${
-                      proposal.status === "accepted" ? "bg-green-50 text-green-700"
-                      : proposal.status === "rejected" ? "bg-red-50 text-red-700"
-                      : "bg-amber-50 text-amber-700"
+                      proposal.status === "accepted" ? "bg-success/10 text-success"
+                      : proposal.status === "rejected" ? "bg-destructive/10 text-destructive"
+                      : "bg-warning/10 text-warning"
                     }`}>
                       {String(proposal.status ?? "pending")}
                     </span>

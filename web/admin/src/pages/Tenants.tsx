@@ -96,9 +96,9 @@ export default function Tenants() {
                 <td className="px-4 py-2.5 font-mono text-xs font-medium">{t.tenantId}</td>
                 <td className="px-4 py-2.5">
                   <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                    t.status === "active" ? "bg-green-50 text-green-700"
-                    : t.status === "suspended" ? "bg-amber-50 text-amber-700"
-                    : "bg-gray-50 text-gray-600"
+                    t.status === "active" ? "bg-success/10 text-success"
+                    : t.status === "suspended" ? "bg-warning/10 text-warning"
+                    : "bg-surface-hover text-muted"
                   }`}>
                     {t.status}
                   </span>
@@ -111,11 +111,11 @@ export default function Tenants() {
                 <td className="px-4 py-2.5 text-right">
                   <div className="flex justify-end gap-1">
                     {t.status === "active" ? (
-                      <button onClick={() => handleAction(t.tenantId, "suspend")} className="rounded px-2 py-0.5 text-xs text-amber-600 hover:bg-amber-50">暂停</button>
+                      <button onClick={() => handleAction(t.tenantId, "suspend")} className="rounded px-2 py-0.5 text-xs text-warning hover:bg-warning/10">暂停</button>
                     ) : (
-                      <button onClick={() => handleAction(t.tenantId, "resume")} className="rounded px-2 py-0.5 text-xs text-green-600 hover:bg-green-50">恢复</button>
+                      <button onClick={() => handleAction(t.tenantId, "resume")} className="rounded px-2 py-0.5 text-xs text-success hover:bg-success/10">恢复</button>
                     )}
-                    <button onClick={() => handleAction(t.tenantId, "delete")} className="rounded px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">删除</button>
+                    <button onClick={() => handleAction(t.tenantId, "delete")} className="rounded px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10">删除</button>
                   </div>
                 </td>
               </tr>
