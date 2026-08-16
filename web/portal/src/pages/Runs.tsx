@@ -66,10 +66,10 @@ export default function Runs() {
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
         <header className="mb-4">
-          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+          <h1 className="text-[28px] font-medium leading-tight text-foreground">
             {t("nav.runs")}
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             最近的运行记录
           </p>
         </header>
@@ -85,8 +85,8 @@ export default function Runs() {
                 className={cn(
                   "shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium transition",
                   statusFilter === f.key
-                    ? "bg-[var(--color-text-primary)] text-[var(--color-bg-0)]"
-                    : "bg-[oklch(0.30_0.02_50_/_0.4)] text-[var(--color-text-secondary)]",
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-primary/10 text-muted-foreground",
                 )}
               >
                 {f.label}
@@ -104,15 +104,15 @@ export default function Runs() {
             ))}
           </div>
         ) : filtered && filtered.length === 0 ? (
-          <GlassCard tone="accent" grain className="flex flex-col items-center gap-3 py-10 text-center">
-            <Inbox className="h-7 w-7 text-[var(--color-accent)]" />
-            <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+          <GlassCard grain className="flex flex-col items-center gap-3 py-10 text-center">
+            <Inbox className="h-7 w-7 text-primary" />
+            <p className="text-[14px] font-semibold text-foreground">
               {search || statusFilter !== "all" ? "没有匹配的运行" : t("runs.empty")}
             </p>
             {!search && statusFilter === "all" && (
               <Link
                 to="/templates"
-                className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+                className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition"
               >
                 <Play className="h-3.5 w-3.5" />
                 选个场景
@@ -123,22 +123,22 @@ export default function Runs() {
           <div className="space-y-5">
             {grouped.map(({ label, runs }) => (
               <div key={label}>
-                <h2 className="mb-2 px-0.5 text-[12px] font-semibold tracking-[0.15em] uppercase text-[var(--color-text-muted)]">
+                <h2 className="mb-2 px-0.5 text-[12px] font-semibold tracking-[0.15em] uppercase text-muted-foreground">
                   {label}
                 </h2>
-                <GlassCard padding="sm" className="divide-y divide-[oklch(0.30_0.015_50_/_0.4)]">
+                <GlassCard padding="sm" className="divide-y divide-border">
                   {runs.map((r) => (
                     <Link
                       key={r.runId}
                       to={`/runs/${r.workspaceId ?? "_"}/${r.runId}`}
-                      className="flex items-center gap-3 px-2 py-3 active:bg-[oklch(0.30_0.02_50_/_0.2)] rounded-lg"
+                      className="flex items-center gap-3 px-2 py-3 active:bg-primary/10 rounded-lg"
                     >
-                      <ActivityIcon className="h-4 w-4 text-[var(--color-text-muted)]" />
+                      <ActivityIcon className="h-4 w-4 text-muted-foreground" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+                        <p className="truncate text-[13px] font-medium text-foreground">
                           {r.taskTitle ?? r.scenario ?? "运行"}
                         </p>
-                        <p className="text-[11px] text-[var(--color-text-muted)]">
+                        <p className="text-[11px] text-muted-foreground">
                           {formatRelativeTime(r.createdAt)}
                         </p>
                       </div>

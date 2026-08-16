@@ -123,8 +123,8 @@ export default function RunDetail() {
           <div className={[
             "flex items-center gap-3 rounded-2xl px-5 py-3 shadow-lg",
             run.status === "succeeded"
-              ? "bg-[oklch(0.72_0.14_145_/_0.95)] text-[oklch(0.18_0.04_145)]"
-              : "bg-[oklch(0.68_0.20_25_/_0.95)] text-[oklch(0.98_0.05_25)]",
+              ? "bg-primary/10 text-primary"
+              : "bg-primary/10 text-primary",
           ].join(" ")}>
             {run.status === "succeeded"
               ? <CheckCircle2 className="h-5 w-5" />
@@ -143,13 +143,13 @@ export default function RunDetail() {
         ) : (
           <>
             {/* Header card */}
-            <GlassCard tone="strong" grain className="mb-4">
+            <GlassCard grain className="mb-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="font-display text-[22px] font-medium leading-tight">
+                  <h2 className="text-[22px] font-medium leading-tight">
                     {run.taskTitle}
                   </h2>
-                  <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">
+                  <p className="mt-1 text-[12px] text-muted-foreground">
                     {run.runId}
                   </p>
                 </div>
@@ -157,12 +157,12 @@ export default function RunDetail() {
               </div>
 
               {run.resultSummary && (
-                <p className="mt-3 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
                   {run.resultSummary}
                 </p>
               )}
 
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[oklch(0.30_0.015_50_/_0.4)] pt-3">
+              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-3">
                 <Metric icon={Clock} label="开始" value={formatRelativeTime(run.createdAt)} />
                 <Metric icon={Zap} label="代币" value={run.tokensUsed ?? "-"} />
                 <Metric icon={Users} label="团队" value={run.teamId ?? "-"} />
@@ -189,7 +189,7 @@ export default function RunDetail() {
             {/* Real-time execution flow (when active) */}
             {isActive && harness.toolCalls.length > 0 && (
               <section className="mb-4">
-                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                   实时执行
                 </h3>
                 <GlassCard className="space-y-2">
@@ -211,7 +211,7 @@ export default function RunDetail() {
             {/* Steps */}
             {Array.isArray(run.steps) && run.steps.length > 0 && (
               <section>
-                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                   执行步骤
                 </h3>
                 <GlassCard className="space-y-3">
@@ -247,11 +247,11 @@ function StepRow({ idx, step, livePhase, liveIdx }: { idx: number; step: Busines
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium text-[var(--color-text-primary)]">
+        <p className="text-[13px] font-medium text-foreground">
           {step.title ?? step.actor ?? "步骤"}
         </p>
         {step.summary && (
-          <p className="mt-0.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+          <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
             {step.summary}
           </p>
         )}
@@ -263,11 +263,11 @@ function StepRow({ idx, step, livePhase, liveIdx }: { idx: number; step: Busines
 function Metric({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
   return (
     <div className="flex flex-col">
-      <span className="inline-flex items-center gap-1 text-[10px] tracking-wider text-[var(--color-text-muted)] uppercase">
+      <span className="inline-flex items-center gap-1 text-[10px] tracking-wider text-muted-foreground uppercase">
         <Icon className="h-3 w-3" />
         {label}
       </span>
-      <span className="mt-1 text-[13px] font-medium text-[var(--color-text-primary)]">
+      <span className="mt-1 text-[13px] font-medium text-foreground">
         {String(value)}
       </span>
     </div>
@@ -277,8 +277,8 @@ function Metric({ icon: Icon, label, value }: { icon: any; label: string; value:
 function LiveMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] tracking-wider text-[oklch(0.78_0.16_70)] uppercase">{label}</span>
-      <span className="mt-1 text-[13px] font-medium text-[oklch(0.88_0.12_70)]">{value}</span>
+      <span className="text-[10px] tracking-wider text-primary uppercase">{label}</span>
+      <span className="mt-1 text-[13px] font-medium text-primary">{value}</span>
     </div>
   );
 }

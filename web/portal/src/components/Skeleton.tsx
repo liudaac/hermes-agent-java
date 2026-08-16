@@ -1,21 +1,13 @@
-/**
- * Skeleton - reusable skeleton screen components for loading states.
- *
- * Replaces the "..." PageFallback with layout-matching skeletons.
- */
 import { cn } from "@hermes/ui";
 
-/** Base skeleton bar with shimmer animation. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("shimmer rounded-lg", className)} />;
+  return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
 }
 
-/** Card skeleton - for GlassCard-shaped content. */
 export function CardSkeleton({ height = "h-32" }: { height?: string }) {
   return <Skeleton className={cn(height, "rounded-2xl")} />;
 }
 
-/** List item skeleton - for row-based lists. */
 export function ListItemSkeleton() {
   return (
     <div className="flex items-center gap-3 px-2 py-3">
@@ -29,7 +21,6 @@ export function ListItemSkeleton() {
   );
 }
 
-/** Page fallback - matches typical Portal page layout. */
 export function PageSkeleton({ variant = "list" }: { variant?: "list" | "cards" | "detail" }) {
   if (variant === "cards") {
     return (
@@ -53,7 +44,6 @@ export function PageSkeleton({ variant = "list" }: { variant?: "list" | "cards" 
       </div>
     );
   }
-  // list
   return (
     <div className="mx-auto max-w-3xl px-4 pb-24 pt-6 space-y-2">
       <Skeleton className="h-10 w-48 rounded-xl" />

@@ -106,36 +106,36 @@ export default function Home() {
         {/* ── Hero ─────────────────────────────────────────── */}
         <header className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between">
-            <p className="text-[12px] font-medium tracking-[0.18em] text-[var(--color-text-muted)] uppercase">
+            <p className="text-[12px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
               {greeting}
             </p>
             <a
               href="/"
-              className="text-[10px] tracking-[0.15em] uppercase text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition"
+              className="text-[10px] tracking-[0.15em] uppercase text-muted-foreground hover:text-muted-foreground transition"
             >
               ← Hub
             </a>
           </div>
-          <h1 className="mt-1.5 font-display text-[34px] sm:text-[44px] leading-[1.05] font-medium text-[var(--color-text-primary)]">
+          <h1 className="mt-1.5 text-[34px] sm:text-[44px] leading-[1.05] font-medium text-foreground">
             {t("home.heroTitle")}
           </h1>
-          <p className="mt-2 text-[15px] text-[var(--color-text-secondary)]">
+          <p className="mt-2 text-[15px] text-muted-foreground">
             {t("home.heroSubtitle")}
           </p>
         </header>
 
         {/* ── First-use onboarding ──────────────────────────── */}
         {showOnboarding && (
-          <GlassCard tone="accent" grain className="mb-6">
+          <GlassCard grain className="mb-6">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[oklch(0.78_0.16_70_/_0.25)]">
-                <Sparkles className="h-5 w-5 text-[oklch(0.88_0.12_70)]" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+                <p className="text-[14px] font-semibold text-foreground">
                   欢迎使用 Hermes
                 </p>
-                <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
                   这是你的数字员工工作台。选一个场景模板，启动任务，AI 员工就会自动工作。
                   你可以随时审批、查看进度、获取洞察。
                 </p>
@@ -143,14 +143,14 @@ export default function Home() {
                   <Link
                     to="/templates"
                     onClick={dismissOnboarding}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition"
                   >
                     <Rocket className="h-3.5 w-3.5" />
                     选个场景试试
                   </Link>
                   <button
                     onClick={dismissOnboarding}
-                    className="rounded-full px-4 py-2 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[oklch(0.30_0.02_50_/_0.3)] transition"
+                    className="rounded-full px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-primary/10 transition"
                   >
                     以后再说
                   </button>
@@ -161,10 +161,10 @@ export default function Home() {
         )}
 
         {error && (
-          <GlassCard tone="default" className="mb-4 border border-[oklch(0.68_0.20_25_/_0.35)]">
+          <GlassCard className="mb-4 border border-border">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-[oklch(0.75_0.18_25)]" />
-              <div className="text-[13px] text-[var(--color-text-secondary)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 text-primary" />
+              <div className="text-[13px] text-muted-foreground">
                 {t("common.error")}：{error}
               </div>
             </div>
@@ -173,14 +173,14 @@ export default function Home() {
 
         {/* ── Today snapshot ──────────────────────────────── */}
         {summary && (
-          <GlassCard tone="strong" grain className="mb-6">
+          <GlassCard grain className="mb-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-[12px] font-semibold tracking-[0.2em] uppercase text-[var(--color-text-muted)]">
+              <h2 className="text-[12px] font-semibold tracking-[0.2em] uppercase text-muted-foreground">
                 {t("home.sectionToday")}
               </h2>
               <Link
                 to="/runs"
-                className="inline-flex items-center gap-1 text-[11px] tracking-wide text-[var(--color-accent)] hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] tracking-wide text-primary hover:underline"
               >
                 {t("home.seeAll")}
                 <ChevronRight className="h-3 w-3" />
@@ -205,7 +205,7 @@ export default function Home() {
             cta={
               <Link
                 to="/templates"
-                className="inline-flex items-center gap-1.5 rounded-full bg-[oklch(0.78_0.16_70_/_0.2)] border border-[oklch(0.55_0.10_65_/_0.4)] px-3 py-1.5 text-[12px] font-medium text-[oklch(0.88_0.10_70)] hover:bg-[oklch(0.78_0.16_70_/_0.28)] active:scale-95 transition"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-border px-3 py-1.5 text-[12px] font-medium text-primary hover:bg-primary/10 active:scale-95 transition"
               >
                 <Plus className="h-3.5 w-3.5" />
                 {t("home.quickAction")}
@@ -237,27 +237,27 @@ export default function Home() {
               cta={
                 <Link
                   to="/approvals"
-                  className="text-[11px] tracking-wide text-[var(--color-accent)] hover:underline"
+                  className="text-[11px] tracking-wide text-primary hover:underline"
                 >
                   {t("home.seeAll")}
                 </Link>
               }
             />
-            <GlassCard tone="accent" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[oklch(0.68_0.20_25_/_0.2)]">
-                <Inbox className="h-4.5 w-4.5 text-[oklch(0.78_0.18_25)]" />
+            <GlassCard className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <Inbox className="h-4.5 w-4.5 text-primary" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+                <p className="text-[14px] font-semibold text-foreground">
                   {pending} 项需要你处理
                 </p>
-                <p className="text-[12px] text-[var(--color-text-secondary)]">
+                <p className="text-[12px] text-muted-foreground">
                   点开就能批，不用切到控制台
                 </p>
               </div>
               <Link
                 to="/approvals"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-bg-0)] active:scale-95 transition"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground active:scale-95 transition"
                 aria-label="查看待审批"
               >
                 <ArrowRight className="h-4 w-4" />
@@ -270,19 +270,19 @@ export default function Home() {
         {recentRuns.length > 0 && (
           <section className="mb-6">
             <SectionHeader title={t("home.sectionRuns")} />
-            <GlassCard padding="sm" className="divide-y divide-[oklch(0.30_0.015_50_/_0.4)]">
+            <GlassCard padding="sm" className="divide-y divide-border">
               {recentRuns.slice(0, 4).map((run) => (
                 <Link
                   key={run.runId}
                   to={`/runs/${run.workspaceId ?? "_"}/${run.runId}`}
-                  className="flex items-center gap-3 px-2 py-3 active:bg-[oklch(0.30_0.02_50_/_0.2)] rounded-lg"
+                  className="flex items-center gap-3 px-2 py-3 active:bg-primary/10 rounded-lg"
                 >
-                  <ActivityIcon className="h-4 w-4 text-[var(--color-text-muted)]" />
+                  <ActivityIcon className="h-4 w-4 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+                    <p className="truncate text-[13px] font-medium text-foreground">
                       {run.taskTitle ?? run.scenario ?? "运行"}
                     </p>
-                    <p className="text-[11px] text-[var(--color-text-muted)]">
+                    <p className="text-[11px] text-muted-foreground">
                       {formatRelativeTime(run.createdAt ?? run.updatedAt)}
                     </p>
                   </div>
@@ -313,7 +313,7 @@ export default function Home() {
               cta={
                 <Link
                   to="/templates"
-                  className="text-[11px] tracking-wide text-[var(--color-accent)] hover:underline"
+                  className="text-[11px] tracking-wide text-primary hover:underline"
                 >
                   {t("home.seeAll")}
                 </Link>
@@ -323,14 +323,14 @@ export default function Home() {
               {scenarios.slice(0, 4).map((s) => (
                 <Link key={s.scenarioId} to={`/templates`}>
                   <GlassCard interactive className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[oklch(0.70_0.14_210_/_0.3)] to-[oklch(0.70_0.16_280_/_0.2)] text-[15px]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/40 to-primary/20 text-[15px]">
                       ✨
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">
+                      <p className="truncate text-[13px] font-semibold text-foreground">
                         {s.name}
                       </p>
-                      <p className="line-clamp-2 text-[11px] text-[var(--color-text-secondary)]">
+                      <p className="line-clamp-2 text-[11px] text-muted-foreground">
                         {s.description}
                       </p>
                     </div>
@@ -345,7 +345,7 @@ export default function Home() {
       {/* Floating quick-start button */}
       <Link
         to="/templates"
-        className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-text-primary)] text-[var(--color-bg-0)] shadow-xl active:scale-90 transition hover:scale-105"
+        className="fixed bottom-20 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl active:scale-90 transition hover:scale-105"
         aria-label="新建任务"
       >
         <Rocket className="h-6 w-6" />
@@ -357,7 +357,7 @@ export default function Home() {
 function SectionHeader({ title, cta }: { title: string; cta?: React.ReactNode }) {
   return (
     <div className="mb-3 flex items-center justify-between px-0.5">
-      <h2 className="text-[13px] font-semibold tracking-[0.15em] uppercase text-[var(--color-text-secondary)]">
+      <h2 className="text-[13px] font-semibold tracking-[0.15em] uppercase text-muted-foreground">
         {title}
       </h2>
       {cta}
@@ -370,13 +370,13 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
     <div className="flex flex-col">
       <span
         className={cn(
-          "font-display text-[28px] leading-none",
-          accent ? "text-[oklch(0.85_0.16_70)]" : "text-[var(--color-text-primary)]",
+          "text-[28px] leading-none",
+          accent ? "text-primary" : "text-foreground",
         )}
       >
         {value}
       </span>
-      <span className="mt-1 text-[11px] tracking-wide text-[var(--color-text-muted)]">
+      <span className="mt-1 text-[11px] tracking-wide text-muted-foreground">
         {label}
       </span>
     </div>
@@ -386,21 +386,21 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 function EmptyTeamHint() {
   const { t } = useI18n();
   return (
-    <GlassCard tone="accent" grain className="flex flex-col items-start gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[oklch(0.78_0.16_70_/_0.25)]">
-        <Sparkles className="h-5 w-5 text-[oklch(0.88_0.12_70)]" />
+    <GlassCard grain className="flex flex-col items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10">
+        <Sparkles className="h-5 w-5 text-primary" />
       </div>
       <div>
-        <p className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+        <p className="text-[15px] font-semibold text-foreground">
           {t("home.emptyTeams")}
         </p>
-        <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
           {t("home.emptyTeamsHint")}
         </p>
       </div>
       <Link
         to="/templates"
-        className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+        className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition"
       >
         <Wand2 className="h-3.5 w-3.5" />
         选个场景
@@ -413,23 +413,23 @@ function InsightRow({ insight }: { insight: BusinessInsightRecord }) {
   const sev = (insight.severity ?? "low").toLowerCase();
   const tone =
     sev === "high"
-      ? "border-[oklch(0.68_0.20_25_/_0.4)] bg-[oklch(0.68_0.20_25_/_0.08)]"
+      ? "border-border bg-primary/10"
       : sev === "medium"
-        ? "border-[oklch(0.78_0.16_85_/_0.4)] bg-[oklch(0.78_0.16_85_/_0.08)]"
-        : "border-[oklch(0.30_0.015_50_/_0.4)]";
+        ? "border-border bg-primary/10"
+        : "border-border";
 
   return (
     <GlassCard padding="md" className={cn("border", tone)}>
-      <p className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+      <p className="text-[13px] font-semibold text-foreground">
         {insight.title}
       </p>
       {insight.finding && (
-        <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+        <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
           {insight.finding}
         </p>
       )}
       {insight.suggestedAction && (
-        <p className="mt-2 text-[11px] text-[var(--color-accent)]">
+        <p className="mt-2 text-[11px] text-primary">
           建议：{insight.suggestedAction}
         </p>
       )}

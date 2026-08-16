@@ -46,14 +46,14 @@ function pickEmoji(name: string): string {
 }
 
 export function EmployeeCard({ team, to = `/teams/${team.teamId}`, harness }: EmployeeCardProps) {
-  const initials = (team.name ?? "·").trim().slice(0, 2);
   const sc = statusClass(team.status, harness);
   const sl = statusLabel(team.status, harness);
+
+  const dotColor = sc === "online" ? "bg-success" : sc === "busy" ? "bg-warning" : sc === "error" ? "bg-destructive" : "bg-muted-foreground";
 
   return (
     <Link to={to} className="block">
       <GlassCard
-        tone="default"
         interactive
         padding="md"
         className="flex flex-col gap-3"
@@ -62,31 +62,30 @@ export function EmployeeCard({ team, to = `/teams/${team.teamId}`, harness }: Em
           <div
             className={cn(
               "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
-              "bg-gradient-to-br from-[oklch(0.78_0.16_70_/_0.3)] to-[oklch(0.55_0.10_60_/_0.2)]",
-              "border border-[oklch(0.55_0.10_65_/_0.35)]",
-              "text-base font-semibold tracking-wide text-[var(--color-text-primary)]",
+              "bg-primary/10 border border-primary/20",
+              "text-base font-semibold tracking-wide text-foreground",
             )}
           >
-            {pickEmoji(team.name ?? "") || initials}
+            {pickEmoji(team.name ?? "")}
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="truncate text-[15px] font-semibold text-[var(--color-text-primary)]">
+              <h3 className="truncate text-[15px] font-semibold text-foreground">
                 {team.name}
               </h3>
               <span
-                className={cn("status-dot shrink-0", sc)}
+                className={cn("h-2 w-2 rounded-full shrink-0", dotColor)}
                 aria-label={sl}
               />
             </div>
-            <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[var(--color-text-secondary)]">
+            <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground">
               {team.scenario ?? "数字员工"}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Users className="h-3 w-3" />
             {sl}

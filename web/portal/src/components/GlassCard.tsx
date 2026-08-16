@@ -1,53 +1,42 @@
-import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@hermes/ui";
+import type { ReactNode } from "react";
 
-interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
+interface GlassCardProps {
   children: ReactNode;
-  /** Visual weight — `strong` for top-of-page, default for body cards, `accent` for hero/CTA. */
-  tone?: "default" | "strong" | "accent";
-  /** Add the grain texture overlay. */
-  grain?: boolean;
-  /** Add card-lift hover/press micro-interaction. */
+  className?: string;
+  padding?: "sm" | "md" | "default" | "none" | "lg";
+  onClick?: () => void;
   interactive?: boolean;
-  padding?: "none" | "sm" | "md" | "lg";
+  /** @deprecated ignored - kept for backward compatibility */
+  tone?: string;
+  /** @deprecated ignored - kept for backward compatibility */
+  grain?: boolean;
 }
 
-const TONE = {
-  default: "glass",
-  strong: "glass-strong",
-  accent: "glass-accent",
-} as const;
-
-const PADDING = {
+const PADDING: Record<string, string> = {
   none: "",
   sm: "p-3",
   md: "p-4 sm:p-5",
+  default: "p-5",
   lg: "p-5 sm:p-7",
-} as const;
+};
 
-/**
- * GlassCard — the atomic surface for portal. Always rounded, always translucent,
- * always with a subtle border. H5-friendly: generous radius, comfortable padding,
- * and a card-lift press feedback on tap.
- */
 export function GlassCard({
   children,
-  tone = "default",
-  grain = false,
-  interactive = false,
-  padding = "md",
   className,
-  ...rest
+  padding = "md",
+  onClick,
+  interactive,
+  tone: _tone,
+  grain: _grain,
 }: GlassCardProps) {
   return (
     <div
-      {...rest}
+      onClick={onClick}
       className={cn(
-        "relative rounded-2xl",
-        TONE[tone],
-        PADDING[padding],
-        interactive && "card-lift cursor-pointer select-none",
-        grain && "grain",
+        "relative rounded-2xl border border-border bg-card",
+        PADDING[padding] ?? "p-4",
+        interactive && "transition-all hover:shadow-md hover:border-primary/30 cursor-pointer",
         className,
       )}
     >

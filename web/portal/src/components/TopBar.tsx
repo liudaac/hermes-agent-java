@@ -6,32 +6,21 @@ import { cn } from "@hermes/ui";
 interface TopBarProps {
   title: string;
   subtitle?: string;
-  /** Show a back button - uses history.back() by default. */
   back?: boolean | string;
   right?: ReactNode;
-  /** Make the bar transparent until scrolled (hero overlay style). */
   transparent?: boolean;
-  /** Show a link back to the root hub. Default: true. */
   showHub?: boolean;
   className?: string;
 }
 
-/**
- * TopBar - H5-style sticky header. Two flavors:
- *   - default: solid glass-strong, used for content pages
- *   - transparent: floats over hero, transitions to glass-strong on scroll
- *
- * Always includes a Hub link (top-right) for cross-product navigation.
- */
-export function TopBar({ title, subtitle, back, right, transparent = false, showHub = true, className }: TopBarProps) {
+export function TopBar({ title, subtitle, back, right, transparent: _transparent = false, showHub = true, className }: TopBarProps) {
   const navigate = useNavigate();
 
   return (
     <header
       className={cn(
         "sticky top-0 z-30",
-        "border-b border-[oklch(0.35_0.02_50_/_0.4)]",
-        transparent ? "glass" : "glass-strong",
+        "border-b border-border bg-card",
         "pt-[env(safe-area-inset-top)]",
         className,
       )}
@@ -45,18 +34,18 @@ export function TopBar({ title, subtitle, back, right, transparent = false, show
               else if (window.history.length > 1) navigate(-1);
               else navigate("/");
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--color-text-secondary)] hover:bg-[oklch(0.30_0.02_50_/_0.4)] active:scale-95 transition"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted active:scale-95 transition"
             aria-label="Back"
           >
             <ArrowLeft className="h-4.5 w-4.5" />
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-semibold tracking-tight text-[var(--color-text-primary)]">
+          <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
             {title}
           </h1>
           {subtitle && (
-            <p className="truncate text-[11px] text-[var(--color-text-muted)]">
+            <p className="truncate text-[11px] text-muted-foreground">
               {subtitle}
             </p>
           )}
@@ -65,7 +54,7 @@ export function TopBar({ title, subtitle, back, right, transparent = false, show
         {showHub && (
           <a
             href="/"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[oklch(0.30_0.02_50_/_0.4)] hover:text-[var(--color-text-secondary)] active:scale-95 transition"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95 transition"
             aria-label="返回 Hub"
             title="返回 Hub"
           >

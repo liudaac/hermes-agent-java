@@ -80,8 +80,8 @@ export default function TeamDetail() {
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
         {error && (
-          <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
-            <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+          <GlassCard className="mb-3 border border-border">
+            <p className="text-[12px] text-muted-foreground">{error}</p>
           </GlassCard>
         )}
 
@@ -90,27 +90,27 @@ export default function TeamDetail() {
         ) : (
           <>
             {/* Header card */}
-            <GlassCard tone="strong" grain className="mb-4">
+            <GlassCard grain className="mb-4">
               <div className="flex items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.78_0.16_70_/_0.4)] to-[oklch(0.55_0.10_60_/_0.25)] text-[22px] font-semibold">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/40 to-primary/20 text-[22px] font-semibold">
                   {(team.name ?? "·").slice(0, 2)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-display text-[24px] font-medium leading-tight">
+                  <h2 className="text-[24px] font-medium leading-tight">
                     {team.name}
                   </h2>
-                  <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+                  <p className="mt-1 text-[13px] text-muted-foreground">
                     {team.scenario ?? "数字员工"}
                   </p>
                   <div className="mt-2 flex items-center gap-2">
                     <span className="status-dot online" />
-                    <span className="text-[12px] text-[var(--color-text-secondary)]">就绪</span>
+                    <span className="text-[12px] text-muted-foreground">就绪</span>
                     <StatusPill status={harness?.status ?? team.status} />
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[oklch(0.30_0.015_50_/_0.4)] pt-3">
+              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-3">
                 <Stat label="活跃版本" value={`v${team.activeVersion}`} />
                 <Stat label="版本数" value={team.versionCount ?? 0} />
                 <Stat label="状态" value={harness?.status ?? team.status ?? "-"} />
@@ -121,7 +121,7 @@ export default function TeamDetail() {
                 type="button"
                 onClick={launchTask}
                 disabled={launching}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-text-primary)] py-3 text-[14px] font-semibold text-[var(--color-bg-0)] active:scale-[0.98] transition disabled:opacity-60"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-semibold text-primary-foreground active:scale-[0.98] transition disabled:opacity-60"
               >
                 {launching ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -135,18 +135,18 @@ export default function TeamDetail() {
             {/* Team members */}
             {Array.isArray(blueprint?.agents) && blueprint.agents.length > 0 && (
               <section className="mb-4">
-                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                   成员
                 </h3>
                 <div className="space-y-2">
                   {blueprint.agents.map((m: any) => (
                     <GlassCard key={m.agentId ?? m.name} padding="sm" className="flex items-center gap-3">
-                      <Users className="h-4 w-4 text-[var(--color-text-muted)]" />
+                      <Users className="h-4 w-4 text-muted-foreground" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-[var(--color-text-primary)]">
+                        <p className="truncate text-[13px] font-medium text-foreground">
                           {m.name}
                         </p>
-                        <p className="text-[11px] text-[var(--color-text-muted)]">
+                        <p className="text-[11px] text-muted-foreground">
                           {m.role ?? m.description}
                         </p>
                       </div>
@@ -159,22 +159,22 @@ export default function TeamDetail() {
             {/* Recent runs - now clickable */}
             {Array.isArray(recentRuns) && recentRuns.length > 0 && (
               <section>
-                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-[var(--color-text-muted)]">
+                <h3 className="mb-2 text-[12px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
                   最近运行
                 </h3>
-                <GlassCard padding="sm" className="divide-y divide-[oklch(0.30_0.015_50_/_0.4)]">
+                <GlassCard padding="sm" className="divide-y divide-border">
                   {recentRuns.map((r) => (
                     <Link
                       key={r.runId}
                       to={`/runs/${r.workspaceId ?? workspaceId ?? "_"}/${r.runId}`}
-                      className="flex items-center gap-3 px-2 py-2.5 active:bg-[oklch(0.30_0.02_50_/_0.2)] rounded-lg"
+                      className="flex items-center gap-3 px-2 py-2.5 active:bg-primary/10 rounded-lg"
                     >
-                      <ActivityIcon className="h-4 w-4 text-[var(--color-text-muted)]" />
+                      <ActivityIcon className="h-4 w-4 text-muted-foreground" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">
+                        <p className="truncate text-[12px] font-medium text-foreground">
                           {r.taskTitle ?? r.scenario ?? "运行"}
                         </p>
-                        <p className="text-[10px] text-[var(--color-text-muted)]">
+                        <p className="text-[10px] text-muted-foreground">
                           {formatRelativeTime(r.createdAt)}
                         </p>
                       </div>
@@ -197,10 +197,10 @@ import { useParams } from "react-router-dom";
 function Stat({ label, value }: { label: string; value: any }) {
   return (
     <div className="flex flex-col">
-      <span className="font-display text-[22px] leading-none text-[var(--color-text-primary)]">
+      <span className="text-[22px] leading-none text-foreground">
         {String(value)}
       </span>
-      <span className="mt-0.5 text-[10px] tracking-wider text-[var(--color-text-muted)]">
+      <span className="mt-0.5 text-[10px] tracking-wider text-muted-foreground">
         {label}
       </span>
     </div>

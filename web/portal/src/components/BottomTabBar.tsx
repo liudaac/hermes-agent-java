@@ -21,19 +21,12 @@ const TABS: TabItem[] = [
   { to: "/me", labelKey: "nav.profile", icon: User },
 ];
 
-/**
- * BottomTabBar - H5-style 6-item bottom navigation. Sticky, glass-strong,
- * with a soft top edge. On wide screens collapses to a horizontal rail.
- *
- * Approvals tab shows a badge with pending count.
- */
 export function BottomTabBar() {
   const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Poll pending approvals count (shared, single request)
   useEffect(() => {
     let alive = true;
     const poll = () => {
@@ -47,7 +40,7 @@ export function BottomTabBar() {
         .catch(() => {});
     };
     poll();
-    const timer = setInterval(poll, 30_000); // 30s poll (not 5s - less aggressive)
+    const timer = setInterval(poll, 30_000);
     return () => {
       alive = false;
       clearInterval(timer);
@@ -58,7 +51,7 @@ export function BottomTabBar() {
     <nav
       className={cn(
         "fixed bottom-0 inset-x-0 z-40",
-        "glass-strong border-t border-[oklch(0.35_0.02_50_/_0.5)]",
+        "bg-card border-t border-border",
         "pb-[env(safe-area-inset-bottom)]",
       )}
       aria-label="Primary"
@@ -78,8 +71,8 @@ export function BottomTabBar() {
                   "relative flex h-14 w-full flex-col items-center justify-center gap-0.5",
                   "transition-colors",
                   active
-                    ? "text-[var(--color-accent)]"
-                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]",
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <div className="relative">
@@ -94,7 +87,7 @@ export function BottomTabBar() {
                     <span
                       className={cn(
                         "absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center",
-                        "rounded-full bg-[oklch(0.68_0.20_25)] px-1 text-[9px] font-bold text-white",
+                        "rounded-full bg-destructive px-1 text-[9px] font-bold text-white",
                       )}
                     >
                       {badge > 99 ? "99+" : badge}

@@ -114,10 +114,10 @@ export default function Approvals() {
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
         <header className="mb-5">
-          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+          <h1 className="text-[28px] font-medium leading-tight text-foreground">
             {t("me.approvals")}
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             {t("me.approvalsHint")}
           </p>
         </header>
@@ -131,8 +131,8 @@ export default function Approvals() {
               className={cn(
                 "flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-medium transition active:scale-95",
                 tab === key
-                  ? "bg-[oklch(0.78_0.16_70_/_0.2)] text-[oklch(0.88_0.12_70)]"
-                  : "bg-white/5 text-[var(--color-text-muted)]",
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted/60 text-muted-foreground",
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -152,10 +152,10 @@ export default function Approvals() {
               ))}
             </div>
           ) : data.length === 0 ? (
-            <GlassCard tone="default" className="flex flex-col items-center gap-3 py-10 text-center">
-              <Inbox className="h-7 w-7 text-[var(--color-text-muted)]" />
-              <p className="text-[14px] text-[var(--color-text-secondary)]">{t("approvals.empty")}</p>
-              <p className="text-[12px] text-[var(--color-text-muted)]">
+            <GlassCard className="flex flex-col items-center gap-3 py-10 text-center">
+              <Inbox className="h-7 w-7 text-muted-foreground" />
+              <p className="text-[14px] text-muted-foreground">{t("approvals.empty")}</p>
+              <p className="text-[12px] text-muted-foreground">
                 没有待处理审批，喝杯咖啡 ☕
               </p>
             </GlassCard>
@@ -164,18 +164,18 @@ export default function Approvals() {
               {data.map((a) => (
                 <GlassCard key={a.approvalId} className="flex flex-col gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[oklch(0.70_0.16_280_/_0.18)] text-[oklch(0.78_0.14_280)]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       ⚖
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+                      <h3 className="text-[14px] font-semibold text-foreground">
                         {a.title}
                       </h3>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">
+                      <p className="text-[11px] text-muted-foreground">
                         {a.riskLevel} · {formatRelativeTime(a.createdAt)}
                       </p>
                       {a.summary && (
-                        <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                        <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
                           {a.summary}
                         </p>
                       )}
@@ -188,7 +188,7 @@ export default function Approvals() {
                       onClick={() => decide(a, "approve")}
                       className={cn(
                         "flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold",
-                        "bg-[oklch(0.72_0.14_145_/_0.85)] text-[oklch(0.18_0.04_145)] active:scale-95 transition",
+                        "bg-primary/10 text-primary active:scale-95 transition",
                         busyId === a.approvalId && "opacity-60",
                       )}
                     >
@@ -201,7 +201,7 @@ export default function Approvals() {
                       onClick={() => decide(a, "reject")}
                       className={cn(
                         "flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold",
-                        "bg-[oklch(0.30_0.02_50_/_0.6)] text-[var(--color-text-secondary)] active:scale-95 transition",
+                        "bg-primary/10 text-muted-foreground active:scale-95 transition",
                         busyId === a.approvalId && "opacity-60",
                       )}
                     >
@@ -219,26 +219,26 @@ export default function Approvals() {
         {tab === "delegated" && (
           tasks.length === 0 ? (
             <GlassCard className="flex flex-col items-center gap-3 py-10 text-center">
-              <ClipboardList className="h-7 w-7 text-[var(--color-text-muted)]" />
-              <p className="text-[14px] text-[var(--color-text-secondary)]">{t("delegated.empty")}</p>
+              <ClipboardList className="h-7 w-7 text-muted-foreground" />
+              <p className="text-[14px] text-muted-foreground">{t("delegated.empty")}</p>
             </GlassCard>
           ) : (
             <div className="space-y-3">
               {tasks.map((task) => (
                 <GlassCard key={task.taskId} className="flex flex-col gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[oklch(0.78_0.16_85_/_0.18)] text-[oklch(0.85_0.14_85)]">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <ClipboardList className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+                      <h3 className="text-[14px] font-semibold text-foreground">
                         {task.title}
                       </h3>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">
+                      <p className="text-[11px] text-muted-foreground">
                         {task.tenantId} · {task.status}
                       </p>
                       {task.description && (
-                        <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                        <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
                           {task.description}
                         </p>
                       )}
@@ -251,7 +251,7 @@ export default function Approvals() {
                       onClick={() => handleTaskAction(task, "submit")}
                       className={cn(
                         "flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold",
-                        "bg-[oklch(0.72_0.14_145_/_0.85)] text-[oklch(0.18_0.04_145)] active:scale-95 transition",
+                        "bg-primary/10 text-primary active:scale-95 transition",
                         busyId === task.taskId && "opacity-60",
                       )}
                     >
@@ -264,7 +264,7 @@ export default function Approvals() {
                       onClick={() => handleTaskAction(task, "verify")}
                       className={cn(
                         "flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold",
-                        "bg-[oklch(0.70_0.16_280_/_0.6)] text-[oklch(0.78_0.14_280)] active:scale-95 transition",
+                        "bg-primary/10 text-primary active:scale-95 transition",
                         busyId === task.taskId && "opacity-60",
                       )}
                     >
@@ -277,7 +277,7 @@ export default function Approvals() {
                       onClick={() => handleTaskAction(task, "execute")}
                       className={cn(
                         "flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[13px] font-semibold",
-                        "bg-[oklch(0.30_0.02_50_/_0.6)] text-[var(--color-text-secondary)] active:scale-95 transition",
+                        "bg-primary/10 text-muted-foreground active:scale-95 transition",
                         busyId === task.taskId && "opacity-60",
                       )}
                     >

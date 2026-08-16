@@ -65,17 +65,17 @@ export default function Templates() {
     return (
       <AuroraBackground>
         <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
-          <GlassCard tone="strong" grain className="mb-4">
+          <GlassCard grain className="mb-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.70_0.14_210_/_0.3)] to-[oklch(0.70_0.16_280_/_0.2)] text-[18px]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/40 to-primary/20 text-[18px]">
                 ✨
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="font-display text-[22px] font-medium leading-tight">
+                <h2 className="text-[22px] font-medium leading-tight">
                   {selectedScenario.name}
                 </h2>
                 {selectedScenario.description && (
-                  <p className="mt-1 text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                  <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
                     {selectedScenario.description}
                   </p>
                 )}
@@ -84,10 +84,10 @@ export default function Templates() {
           </GlassCard>
 
           <GlassCard className="mb-4">
-            <label className="mb-2 block text-[13px] font-semibold text-[var(--color-text-primary)]">
+            <label className="mb-2 block text-[13px] font-semibold text-foreground">
               描述你的任务
             </label>
-            <p className="mb-3 text-[12px] text-[var(--color-text-muted)]">
+            <p className="mb-3 text-[12px] text-muted-foreground">
               告诉数字员工你具体需要做什么，越详细越好
             </p>
             <textarea
@@ -95,18 +95,18 @@ export default function Templates() {
               onChange={(e) => setUserInput(e.target.value)}
               placeholder="例如：帮我分析上周的销售数据，找出下滑的原因..."
               rows={4}
-              className="w-full resize-none rounded-xl border border-[oklch(0.35_0.02_50_/_0.5)] bg-[oklch(0.20_0.01_50_/_0.5)] px-4 py-3 text-[14px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[oklch(0.78_0.16_70)]"
+              className="w-full resize-none rounded-xl border border-border bg-primary/10 px-4 py-3 text-[14px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               autoFocus
             />
           </GlassCard>
 
           {error && (
-            <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
+            <GlassCard className="mb-3 border border-border">
               <div className="flex items-center justify-between">
-                <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+                <p className="text-[12px] text-muted-foreground">{error}</p>
                 <button
                   onClick={() => { setError(null); launchScenario(); }}
-                  className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+                  className="text-[12px] font-medium text-primary hover:underline"
                 >
                   重试
                 </button>
@@ -118,7 +118,7 @@ export default function Templates() {
             <button
               type="button"
               onClick={() => { setSelectedScenario(null); setUserInput(""); setLaunchingId(null); }}
-              className="rounded-xl px-5 py-3 text-[14px] font-medium text-[var(--color-text-secondary)] hover:bg-[oklch(0.30_0.02_50_/_0.3)] transition"
+              className="rounded-xl px-5 py-3 text-[14px] font-medium text-muted-foreground hover:bg-primary/10 transition"
             >
               取消
             </button>
@@ -126,7 +126,7 @@ export default function Templates() {
               type="button"
               onClick={launchScenario}
               disabled={launchingId === selectedScenario.scenarioId}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--color-text-primary)] py-3 text-[14px] font-semibold text-[var(--color-bg-0)] active:scale-[0.98] transition disabled:opacity-60"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-semibold text-primary-foreground active:scale-[0.98] transition disabled:opacity-60"
             >
               {launchingId === selectedScenario.scenarioId ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -146,10 +146,10 @@ export default function Templates() {
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
         <header className="mb-4">
-          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+          <h1 className="text-[28px] font-medium leading-tight text-foreground">
             {t("templates.title")}
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             {t("templates.subtitle")}
           </p>
         </header>
@@ -161,12 +161,12 @@ export default function Templates() {
         )}
 
         {error && (
-          <GlassCard className="mb-3 border border-[oklch(0.68_0.20_25_/_0.35)]">
+          <GlassCard className="mb-3 border border-border">
             <div className="flex items-center justify-between">
-              <p className="text-[12px] text-[var(--color-text-secondary)]">{error}</p>
+              <p className="text-[12px] text-muted-foreground">{error}</p>
               <button
                 onClick={loadData}
-                className="text-[12px] font-medium text-[var(--color-accent)] hover:underline"
+                className="text-[12px] font-medium text-primary hover:underline"
               >
                 重试
               </button>
@@ -181,12 +181,12 @@ export default function Templates() {
             ))}
           </div>
         ) : data.length === 0 ? (
-          <GlassCard tone="accent" grain className="flex flex-col items-center gap-3 py-10 text-center">
-            <Sparkles className="h-7 w-7 text-[var(--color-accent)]" />
-            <p className="text-[14px] font-semibold text-[var(--color-text-primary)]">
+          <GlassCard grain className="flex flex-col items-center gap-3 py-10 text-center">
+            <Sparkles className="h-7 w-7 text-primary" />
+            <p className="text-[14px] font-semibold text-foreground">
               暂无场景模板
             </p>
-            <p className="text-[12px] text-[var(--color-text-secondary)]">
+            <p className="text-[12px] text-muted-foreground">
               场景模板会在工作区创建后自动生成
             </p>
           </GlassCard>
@@ -207,28 +207,28 @@ export default function Templates() {
                 className="flex flex-col gap-3"
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[oklch(0.70_0.14_210_/_0.3)] to-[oklch(0.70_0.16_280_/_0.2)] text-[15px]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/40 to-primary/20 text-[15px]">
                     ✨
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-[var(--color-text-primary)]">
+                    <p className="truncate text-[14px] font-semibold text-foreground">
                       {s.name}
                     </p>
-                    <p className="line-clamp-2 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+                    <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
                       {s.description}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
                   {s.metadata?.category ? (
-                    <span className="rounded-full bg-[oklch(0.30_0.02_50_/_0.5)] px-2.5 py-0.5 text-[10px] tracking-wide text-[var(--color-text-muted)]">
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] tracking-wide text-muted-foreground">
                       {String(s.metadata.category)}
                     </span>
                   ) : null}
                   <button
                     type="button"
                     onClick={() => { setSelectedScenario(s); setError(null); }}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--color-text-primary)] px-4 py-2 text-[12px] font-semibold text-[var(--color-bg-0)] active:scale-95 transition"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition"
                   >
                     <Play className="h-3.5 w-3.5" />
                     启动

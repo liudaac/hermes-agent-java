@@ -21,10 +21,10 @@ interface Skill {
 }
 
 const SCOPE_COLORS: Record<string, string> = {
-  private: "bg-[oklch(0.70_0.16_280_/_0.18)] text-[oklch(0.78_0.14_280)]",
-  installed: "bg-[oklch(0.72_0.14_145_/_0.18)] text-[oklch(0.78_0.12_145)]",
-  shared: "bg-[oklch(0.78_0.16_85_/_0.18)] text-[oklch(0.85_0.14_85)]",
-  system: "bg-[oklch(0.30_0.02_50_/_0.6)] text-[var(--color-text-secondary)]",
+  private: "bg-primary/10 text-primary",
+  installed: "bg-primary/10 text-primary",
+  shared: "bg-primary/10 text-primary",
+  system: "bg-primary/10 text-muted-foreground",
 };
 
 const CATEGORIES = ["all", "private", "installed", "shared", "system"];
@@ -94,10 +94,10 @@ export default function Skills() {
     <AuroraBackground>
       <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
         <header className="mb-5">
-          <h1 className="font-display text-[28px] font-medium leading-tight text-[var(--color-text-primary)]">
+          <h1 className="text-[28px] font-medium leading-tight text-foreground">
             {t("skills.title")}
           </h1>
-          <p className="mt-1 text-[13px] text-[var(--color-text-secondary)]">
+          <p className="mt-1 text-[13px] text-muted-foreground">
             {t("skills.subtitle")}
           </p>
         </header>
@@ -105,13 +105,13 @@ export default function Skills() {
         {/* Search */}
         <div className="mb-3 flex gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t("skills.search")}
-              className="w-full rounded-xl bg-white/10 py-2.5 pl-9 pr-4 text-[13px] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+              className="w-full rounded-xl bg-muted py-2.5 pl-9 pr-4 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
         </div>
@@ -125,8 +125,8 @@ export default function Skills() {
               className={cn(
                 "rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap transition active:scale-95",
                 category === cat
-                  ? "bg-[oklch(0.78_0.16_70_/_0.2)] text-[oklch(0.88_0.12_70)]"
-                  : "bg-white/5 text-[var(--color-text-muted)]",
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted/60 text-muted-foreground",
               )}
             >
               {cat === "all" ? t("sessions.all") : t(`skills.scope.${cat}`)}
@@ -144,8 +144,8 @@ export default function Skills() {
           </div>
         ) : filtered.length === 0 ? (
           <GlassCard className="flex flex-col items-center gap-2 py-10 text-center">
-            <Wrench className="h-6 w-6 text-[var(--color-text-muted)]" />
-            <p className="text-[13px] text-[var(--color-text-secondary)]">{t("skills.empty")}</p>
+            <Wrench className="h-6 w-6 text-muted-foreground" />
+            <p className="text-[13px] text-muted-foreground">{t("skills.empty")}</p>
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -154,7 +154,7 @@ export default function Skills() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate text-[14px] font-semibold text-[var(--color-text-primary)]">
+                      <h3 className="truncate text-[14px] font-semibold text-foreground">
                         {skill.name}
                       </h3>
                       <span
@@ -166,10 +166,10 @@ export default function Skills() {
                         {t(`skills.scope.${skill.scope}`) ?? skill.scope}
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
                       {skill.description}
                     </p>
-                    <div className="mt-2 flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
                       <span>{skill.type}</span>
                       <span>·</span>
                       <span>v{skill.currentVersion}</span>
@@ -188,8 +188,8 @@ export default function Skills() {
                     className={cn(
                       "flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition active:scale-95",
                       skill.enabled
-                        ? "bg-[oklch(0.72_0.14_145_/_0.6)]"
-                        : "bg-[oklch(0.30_0.02_50_/_0.6)]",
+                        ? "bg-primary/10"
+                        : "bg-primary/10",
                       togglingId === skill.id && "opacity-60",
                     )}
                     aria-label={skill.enabled ? t("memory.enabled") : t("memory.disabled")}
@@ -201,9 +201,9 @@ export default function Skills() {
                       )}
                     >
                       {skill.enabled ? (
-                        <Check className="h-3 w-3 text-[oklch(0.72_0.14_145)]" />
+                        <Check className="h-3 w-3 text-primary" />
                       ) : (
-                        <X className="h-3 w-3 text-[var(--color-text-muted)]" />
+                        <X className="h-3 w-3 text-muted-foreground" />
                       )}
                     </span>
                   </button>
