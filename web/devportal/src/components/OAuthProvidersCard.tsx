@@ -63,7 +63,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
       onSuccess?.(`Copied: ${provider.cli_command}`);
       setTimeout(() => setCopiedId((v) => (v === provider.id ? null : v)), 1500);
     } catch {
-      onError?.("Clipboard write failed — copy the command manually");
+      onError?.("Clipboard write failed - copy the command manually");
     }
   };
 
@@ -157,7 +157,7 @@ export function OAuthProvidersCard({ onError, onSuccess }: Props) {
                       )}
                     </div>
                     {p.status.logged_in && p.status.token_preview && (
-                      <code className="text-xs font-mono-ui truncate">
+                      <code className="text-xs font-mono truncate">
                         <span className="opacity-50">token{" "}</span>
                         {p.status.token_preview}
                         {p.status.source_label && (

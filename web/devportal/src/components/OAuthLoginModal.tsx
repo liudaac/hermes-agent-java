@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Copy, X, Check, Loader2 } from "lucide-react";
-import { H2 } from "@nous-research/ui";
 import { api, type OAuthProvider, type OAuthStartResponse } from "@/lib/api";
 import { Button } from "@hermes/ui";
 import { Input } from "@hermes/ui";
@@ -194,14 +193,12 @@ export function OAuthLoginModal({
         </button>
         <div className="p-6 flex flex-col gap-4">
           <div>
-            <H2
+            <h2
               id="oauth-modal-title"
-              variant="sm"
-              mondwest
-              className="tracking-wider uppercase"
+              className="text-lg font-bold tracking-wider uppercase"
             >
               {t.oauth.connect} {provider.name}
-            </H2>
+            </h2>
             {secondsLeft !== null &&
               phase !== "approved" &&
               phase !== "error" && (
@@ -278,7 +275,7 @@ export function OAuthLoginModal({
                 {t.oauth.enterCodePrompt}
               </p>
               <div className="flex items-center justify-between gap-2 border border-border bg-secondary/30 p-4">
-                <code className="font-mono-ui text-2xl tracking-widest text-foreground">
+                <code className="font-mono text-2xl tracking-widest text-foreground">
                   {
                     (
                       start as Extract<
