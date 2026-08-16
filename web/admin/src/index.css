@@ -1,54 +1,36 @@
 @import "tailwindcss";
 
-/* Tailwind v4 only auto-scans the current SPA's src/ by default. The shared
-   packages (@hermes/ui, @hermes/jarvis) live in sibling directories - without
-   these @source directives, classes used only there (e.g. the Jarvis orb's
-   `fixed bottom-5 right-5 z-50`) get purged and components lose styling. */
 @source '../../packages/ui/src/**/*.{ts,tsx,html}';
 @source '../../packages/jarvis/src/**/*.{ts,tsx,html}';
 
-:root {
-  --foreground-base: #e2e8f0;
-  --midground-base: #7dd3fc;
-  --background-base: #0f172a;
-}
-
 @theme inline {
-  /* Dark slate palette - admin console.
-     Matches the Hermes look: dark canvas, sky-blue accent. Also exposes the
-     full shadcn token set so @hermes/ui components (Card, Button, Badge,
-     Input, Select, Switch...) resolve correctly in the Admin SPA. */
-  --color-background: #0f172a;
-  --color-foreground: #e2e8f0;
-  --color-card: #1e293b;
-  --color-card-foreground: #e2e8f0;
-  --color-popover: #1e293b;
-  --color-popover-foreground: #e2e8f0;
-  --color-primary: #38bdf8;
-  --color-primary-foreground: #0f172a;
-  --color-secondary: #334155;
-  --color-secondary-foreground: #e2e8f0;
-  /* `text-muted` is used across Admin pages for secondary text - keep it a
-     readable slate-400 instead of a dark muted background. */
-  --color-muted: #94a3b8;
-  --color-muted-foreground: #94a3b8;
-  /* accent-foreground stays bright: it pairs with `bg-accent/10` tints for
-     active nav items / tabs / chips, not with solid accent backgrounds. */
-  --color-accent: #38bdf8;
-  --color-accent-foreground: #38bdf8;
-  --color-destructive: #fb2c36;
+  /* Apple-style light palette */
+  --color-background: #f5f5f7;
+  --color-foreground: #1d1d1f;
+  --color-card: #ffffff;
+  --color-card-foreground: #1d1d1f;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1d1d1f;
+  --color-primary: #0071e3;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e8e8ed;
+  --color-secondary-foreground: #1d1d1f;
+  --color-muted: #f0f0f3;
+  --color-muted-foreground: #6e6e73;
+  --color-accent: #0071e3;
+  --color-accent-foreground: #0071e3;
+  --color-destructive: #ff3b30;
   --color-destructive-foreground: #ffffff;
-  --color-success: #4ade80;
-  --color-warning: #ffbd38;
-  --color-info: #60a5fa;
-  --color-border: #334155;
-  --color-input: #334155;
-  --color-ring: #38bdf8;
-  /* Admin layout uses bg-surface / bg-surface-hover / text-muted directly. */
-  --color-surface: #1e293b;
-  --color-surface-hover: #334155;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", monospace;
+  --color-success: #34c759;
+  --color-warning: #ff9500;
+  --color-info: #5ac8fa;
+  --color-border: #d2d2d7;
+  --color-input: #d2d2d7;
+  --color-ring: #0071e3;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f0f3;
+  --font-sans: -apple-system, "SF Pro Display", "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", monospace;
 }
 
 body {
@@ -56,10 +38,10 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+::-webkit-scrollbar-thumb { background: #d2d2d7; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #a1a1a6; }

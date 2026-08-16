@@ -265,7 +265,7 @@ export default function StatusPage() {
             </div>
 
             <div
-              className="truncate text-2xl font-bold font-mondwest"
+              className="truncate text-2xl font-bold"
               title={value}
             >
               {value}
@@ -341,7 +341,7 @@ export default function StatusPage() {
       </div>
 
       {activeAction && (
-        <div className="border border-border bg-background-base/50">
+        <div className="border border-border bg-card/50">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="flex items-center gap-2 min-w-0">
               {actionStatus?.running ? (
@@ -354,7 +354,7 @@ export default function StatusPage() {
                 <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
               )}
 
-              <span className="text-xs font-mondwest tracking-[0.12em] truncate">
+              <span className="text-xs tracking-[0.12em] truncate">
                 {activeAction === "restart"
                   ? t.status.restartGateway
                   : t.status.updateHermes}
@@ -385,7 +385,7 @@ export default function StatusPage() {
             <button
               type="button"
               onClick={dismissLog}
-              className="shrink-0 opacity-60 hover:opacity-100 cursor-pointer"
+              className="shrink-0 text-muted-foreground hover:text-foreground cursor-pointer"
               aria-label={t.common.close}
             >
               <X className="h-3.5 w-3.5" />

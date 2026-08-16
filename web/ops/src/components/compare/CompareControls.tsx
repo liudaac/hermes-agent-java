@@ -42,7 +42,7 @@ export function CompareControls({
   return (
     <>
       {/* Auto chat mode */}
-      <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
+      <div className="border border-border rounded-sm overflow-hidden shrink-0">
         <button
           onClick={onToggleMode}
           className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
@@ -51,8 +51,8 @@ export function CompareControls({
             {autoRunning ? (
               <>
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-midground opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-midground" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                 </span>
                 {t.compare.autoChatRunning}
               </>

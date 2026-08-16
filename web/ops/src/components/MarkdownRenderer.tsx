@@ -105,7 +105,7 @@ export default function MarkdownRenderer({ content, className }: MarkdownRendere
       elements.push(
         <blockquote
           key={key++}
-          className="border-l-2 border-midground/30 pl-3 my-2 opacity-80 italic"
+          className="border-l-2 border-primary/30 pl-3 my-2 opacity-80 italic"
         >
           {renderInline(quoteLines.join(" "))}
         </blockquote>,

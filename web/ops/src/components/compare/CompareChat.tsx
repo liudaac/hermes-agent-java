@@ -86,7 +86,7 @@ export function CompareChat({
           <span className="text-xs">×</span>
         </Button>
       </div>
-      <div className="flex-1 border border-current/20 rounded-sm overflow-y-auto p-2 space-y-2 bg-black/30 min-h-0">
+      <div className="flex-1 border border-border rounded-sm overflow-y-auto p-2 space-y-2 bg-black/30 min-h-0">
         {state.messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 opacity-30">
             <Bot className="h-6 w-6 mb-1" />
@@ -111,7 +111,7 @@ export function CompareChat({
               className={cn(
                 "max-w-[90%] rounded-sm px-2 py-1.5 text-xs",
                 msg.role === "user"
-                  ? "bg-midground/10 text-midground"
+                  ? "bg-primary/10 text-primary"
                   : msg.role === "error"
                     ? "bg-red-900/20 text-red-300 border border-red-900/40"
                     : msg.role === "tool"
@@ -123,14 +123,14 @@ export function CompareChat({
                 <div className="leading-relaxed">
                   <MarkdownRenderer content={msg.content} />
                   {msg.streaming && (
-                    <span className="inline-block w-1 h-3 bg-midground/60 ml-0.5 animate-pulse" />
+                    <span className="inline-block w-1 h-3 bg-primary/60 ml-0.5 animate-pulse" />
                   )}
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap font-sans leading-relaxed">
                   {msg.content}
                   {msg.streaming && (
-                    <span className="inline-block w-1 h-3 bg-midground/60 ml-0.5 animate-pulse" />
+                    <span className="inline-block w-1 h-3 bg-primary/60 ml-0.5 animate-pulse" />
                   )}
                 </pre>
               )}

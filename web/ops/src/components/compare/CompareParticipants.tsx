@@ -29,7 +29,7 @@ export function CompareParticipants({
   return (
     <>
       {/* History section */}
-      <div className="border border-current/20 rounded-sm overflow-hidden shrink-0">
+      <div className="border border-border rounded-sm overflow-hidden shrink-0">
         <button
           onClick={onToggleHistory}
           className="w-full flex items-center justify-between px-3 py-2 text-xs tracking-wider opacity-70 hover:opacity-100 transition-opacity bg-current/5"
