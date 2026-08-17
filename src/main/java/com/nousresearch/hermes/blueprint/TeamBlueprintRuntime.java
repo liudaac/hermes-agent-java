@@ -32,7 +32,7 @@ public class TeamBlueprintRuntime {
 
     private final WorkspaceService workspaceService;
     private final TeamBlueprintService blueprintService;
-    private final HermesConfig baseConfig;
+    private HermesConfig baseConfig;
     private PolicyService policyService;
     private com.nousresearch.hermes.business.approval.ToolApprovalCoordinator toolApprovalCoordinator;
     private com.nousresearch.hermes.canary.CanaryReleaseService canaryReleaseService;
@@ -53,6 +53,11 @@ public class TeamBlueprintRuntime {
     /** Wire in PolicyService for workspace+agent-level tool/skill policy enforcement. Optional. */
     public void setPolicyService(PolicyService policyService) {
         this.policyService = policyService;
+    }
+
+    /** Update the base HermesConfig (used for creating agents with correct API key/model). */
+    public void setBaseConfig(HermesConfig config) {
+        this.baseConfig = config;
     }
 
     /** Wire in ToolApprovalCoordinator for tool-level approval. Optional. */

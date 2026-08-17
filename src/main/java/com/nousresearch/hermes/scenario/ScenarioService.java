@@ -52,6 +52,8 @@ public class ScenarioService {
     private final TeamBlueprintService teamBlueprintService;
     /** 团队蓝图运行时 — 管理 Agent 实例生命周期 */
     private final TeamBlueprintRuntime teamBlueprintRuntime;
+    /** Hermes 全局配置 — 用于预检 API key 等 */
+    private HermesConfig hermesConfig;
 
     // ---- 可选 wiring（打破循环依赖） ----
     /** 场景意图适配器 — 将场景映射为 IntentRun */
@@ -105,6 +107,12 @@ public class ScenarioService {
     /** Wire the intent adapter after construction (breaks circular dependency with TenantManager). */
     public void setScenarioIntentAdapter(ScenarioIntentAdapter adapter) {
         this.scenarioIntentAdapter = adapter;
+    }
+
+    /** Wire HermesConfig for pre-flight checks (API key, model settings). */
+    public void setHermesConfig(HermesConfig config) {
+        this.hermesConfig = config;
+        this.teamBlueprintRuntime.setBaseConfig(config);
     }
 
     /** Wire policy and approval services for automatic approval gating. */
@@ -226,7 +234,7 @@ public class ScenarioService {
         ScenarioRecord scenario = requireScenario(workspaceId, scenarioId);
 
         // Pre-flight: verify LLM API key is configured
-        HermesConfig cfg = new HermesConfig();
+        HermesConfig cfg = hermesConfig != null ? hermesConfig : new HermesConfig();
         String apiKey = cfg.getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(

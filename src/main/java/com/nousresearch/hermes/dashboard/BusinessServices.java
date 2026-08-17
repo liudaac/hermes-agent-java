@@ -143,6 +143,7 @@ final class BusinessServices {
         b.teamBlueprintService = new TeamBlueprintService(b.workspaceService);
         b.scenarioService = new ScenarioService(b.workspaceService, b.teamBlueprintService);
         b.scenarioService.setScenarioIntentAdapter(new ScenarioIntentAdapter(b.workspaceService, tenantManager));
+        b.scenarioService.setHermesConfig(config);
         b.businessApprovalService = new BusinessApprovalService(b.workspaceService);
         b.businessRunService = new BusinessRunService(b.workspaceService, b.teamBlueprintService, b.scenarioService);
         b.businessInsightService = new BusinessInsightService(b.workspaceService, b.teamBlueprintService, b.businessRunService, b.businessApprovalService);
