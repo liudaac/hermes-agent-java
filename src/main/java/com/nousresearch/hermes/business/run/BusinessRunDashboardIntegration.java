@@ -38,7 +38,7 @@ public final class BusinessRunDashboardIntegration {
         String workspaceId = ctx.pathParam("workspaceId");
         try {
             var runs = service.listRuns(workspaceId, ctx.queryParam("teamId"), ctx.queryParam("scenarioId"), ctx.queryParam("status"), parseInt(ctx.queryParam("limit"), 50));
-            ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "runs", runs, "total", runs.size()));
+            ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "runs", runs.stream().map(BusinessRunRecord::toMap).toList(), "total", runs.size()));
         } catch (WorkspaceService.WorkspaceNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId));
         }
@@ -68,7 +68,7 @@ public final class BusinessRunDashboardIntegration {
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metrics")),
                 WorkspaceDashboardIntegration.objectMap(body.getJSONObject("metadata"))
             );
-            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "runId", record.getRunId(), "run", record, "message", "Business run created"));
+            ctx.status(201).json(Map.of("ok", true, "workspaceId", workspaceId, "runId", record.getRunId(), "run", record.toMap(), "message", "Business run created"));
         } catch (WorkspaceService.WorkspaceNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId));
         } catch (Exception e) {
@@ -82,7 +82,7 @@ public final class BusinessRunDashboardIntegration {
         String runId = ctx.pathParam("runId");
         try {
             BusinessRunRecord record = service.requireRun(workspaceId, runId);
-            ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "runId", runId, "run", record));
+            ctx.status(200).json(Map.of("ok", true, "workspaceId", workspaceId, "runId", runId, "run", record.toMap()));
         } catch (WorkspaceService.WorkspaceNotFoundException | BusinessRunService.BusinessRunNotFoundException e) {
             ctx.status(404).json(Map.of("ok", false, "error", e.getMessage(), "workspaceId", workspaceId, "runId", runId));
         }

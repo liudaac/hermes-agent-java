@@ -127,4 +127,35 @@ public class BusinessRunRecord {
     /** 获取UpdatedAt。 */
     public Instant getUpdatedAt() { return updatedAt; }
     public BusinessRunRecord setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
+
+    /** Serialize to Map for JSON-safe output (Instant → ISO string). */
+    public Map<String, Object> toMap() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("runId", runId);
+        m.put("workspaceId", workspaceId);
+        m.put("teamId", teamId);
+        m.put("teamVersion", teamVersion);
+        m.put("scenario", scenario);
+        m.put("scenarioId", scenarioId);
+        m.put("collaborationPattern", collaborationPattern);
+        m.put("slaName", slaName);
+        m.put("slaStatus", slaStatus);
+        m.put("taskTitle", taskTitle);
+        m.put("taskInput", taskInput);
+        m.put("resultSummary", resultSummary);
+        m.put("conclusionReason", conclusionReason);
+        m.put("systemAction", systemAction);
+        m.put("riskJudgement", riskJudgement);
+        m.put("nextSuggestion", nextSuggestion);
+        m.put("status", status);
+        m.put("technicalTraceRef", technicalTraceRef);
+        m.put("steps", steps != null ? steps.stream().map(BusinessRunStep::toMap).toList() : List.of());
+        m.put("tokensUsed", tokensUsed);
+        m.put("estimatedCost", estimatedCost);
+        m.put("metrics", metrics);
+        m.put("metadata", metadata);
+        m.put("createdAt", createdAt != null ? createdAt.toString() : null);
+        m.put("updatedAt", updatedAt != null ? updatedAt.toString() : null);
+        return m;
+    }
 }
