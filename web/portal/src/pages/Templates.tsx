@@ -94,20 +94,47 @@ export default function Templates() {
     else loadMyScenarios();
   }, [mode, loadTemplates, loadMyScenarios]);
 
-  // ── Clone a template into the workspace ──
+  // ── Clone a template into the workspace, then execute it ──
   const cloneAndLaunch = async (tmpl: ScenarioTemplateRecord) => {
     setLaunchingId(tmpl.templateId);
     setError(null);
     try {
-      const res = await portalApi.cloneScenarioTemplate(tmpl.templateId, {
+      // Step 1: Clone the template -> creates workspace + team + scenario
+      const cloneRes = await portalApi.cloneScenarioTemplate(tmpl.templateId, {
         workspaceId: workspaceId ?? undefined,
       });
-      if (res.scenarioId && res.workspaceId) {
-        navigate(`/runs/${res.workspaceId}/${res.scenarioId}`);
-      } else if (res.workspaceId) {
-        navigate(`/runs/${res.workspaceId}`);
-      } else {
-        setMode("mine");
+
+      if (!cloneRes.scenarioId || !cloneRes.workspaceId) {
+        // No scenario created - just go to runs list
+        navigate(cloneRes.workspaceId ? `/runs/${cloneRes.workspaceId}` : "/runs");
+        return;
+      }
+
+      // Step 2: Execute the scenario to create a run
+      try {
+        const execRes = await portalApi.executeBusinessScenario(
+          cloneRes.workspaceId,
+          cloneRes.scenarioId,
+          tmpl.summary ?? tmpl.description ?? "",
+        );
+        // Navigate to the run detail
+        const runId = (execRes as { runId?: string; run?: { runId?: string } }).runId
+          ?? (execRes as { run?: { runId?: string } }).run?.runId;
+        if (runId) {
+          navigate(`/runs/${cloneRes.workspaceId}/${runId}`);
+        } else {
+          navigate(`/runs/${cloneRes.workspaceId}`);
+        }
+      } catch (e: any) {
+        // Clone succeeded but execution failed - show the scenario in "mine" tab
+        const msg = e?.message ?? String(e);
+        if (msg.includes("NEEDS_APPROVAL") || msg.includes("approval")) {
+          // Needs approval - go to approvals page
+          navigate("/approvals");
+        } else {
+          setError(`场景已创建但启动失败: ${msg}`);
+          setMode("mine");
+        }
       }
     } catch (e: any) {
       setError(String(e?.message ?? e));
