@@ -794,6 +794,27 @@ public class DashboardServer {
                 }
                 ctx.json(arr);
             });
+            // Tenant-scoped skill toggle (enable/disable)
+            app.put("/api/skills/{tenantId}/toggle", ctx -> {
+                String tenantId = ctx.pathParam("tenantId");
+                var body = JSON.parseObject(ctx.body());
+                String skillId = body.getString("id");
+                if (skillId == null || skillId.isBlank()) {
+                    skillId = body.getString("name");
+                }
+                boolean enabled = body.getBooleanValue("enabled");
+                if (skillId == null || skillId.isBlank()) {
+                    ctx.status(400).json(Map.of("error", "Missing skill id"));
+                    return;
+                }
+                var store = com.nousresearch.hermes.skills.store.SkillStoreFactory.get();
+                if (enabled) {
+                    store.enable(tenantId, skillId);
+                } else {
+                    store.disable(tenantId, skillId);
+                }
+                ctx.json(Map.of("ok", true, "id", skillId, "enabled", enabled));
+            });
             // Admin: register business system
             app.post("/api/v1/systems", ctx -> {
                 var reg = com.nousresearch.hermes.gateway.integration.IntegrationBootstrap.getRegistry();

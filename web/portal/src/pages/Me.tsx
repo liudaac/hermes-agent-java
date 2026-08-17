@@ -11,6 +11,28 @@ import {
 
 const DEFAULT_USER = "default-user";
 
+const FALLBACK_PROFILE: UserProfile = {
+  userId: "default-user",
+  displayName: "用户",
+  email: null,
+  channelBindings: {},
+  spaces: [],
+  capabilities: {
+    personalSkills: [],
+    frequentTools: [],
+    shortcuts: {},
+    hiddenCapabilities: [],
+  },
+  preferences: {
+    language: "zh-CN",
+    responseStyle: "concise",
+    tone: "casual",
+    autoApproveSafe: false,
+    maxContextChars: 32000,
+    extra: {},
+  },
+};
+
 interface NavCard {
   to: string;
   icon: typeof Brain;
@@ -41,16 +63,27 @@ export default function Me() {
         setProfile(res.profile);
         setDraft(res.profile.preferences);
       })
-      .catch(() => null)
+      .catch(() => {
+        // Backend may not have this user yet — use fallback so the page still renders
+        setProfile(FALLBACK_PROFILE);
+        setDraft(FALLBACK_PROFILE.preferences);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const savePrefs = () => {
     if (!profile || !draft) return;
-    threeLayerApi.updateUserPreferences(profile.userId, draft).then((res) => {
-      setProfile({ ...profile, preferences: res.preferences });
-      setEditingPrefs(false);
-    });
+    threeLayerApi
+      .updateUserPreferences(profile.userId, draft)
+      .then((res) => {
+        setProfile({ ...profile, preferences: res.preferences });
+        setEditingPrefs(false);
+      })
+      .catch(() => {
+        // Save failed (e.g. backend has no user store) - still update locally
+        setProfile({ ...profile, preferences: draft });
+        setEditingPrefs(false);
+      });
   };
 
   return (

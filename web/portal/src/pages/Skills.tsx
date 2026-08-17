@@ -21,10 +21,11 @@ interface Skill {
 }
 
 const SCOPE_COLORS: Record<string, string> = {
-  private: "bg-primary/10 text-primary",
-  installed: "bg-primary/10 text-primary",
-  shared: "bg-primary/10 text-primary",
-  system: "bg-primary/10 text-muted-foreground",
+  private: "bg-blue-500/15 text-blue-500",
+  installed: "bg-emerald-500/15 text-emerald-500",
+  shared: "bg-amber-500/15 text-amber-500",
+  system: "bg-purple-500/15 text-purple-500",
+  global: "bg-cyan-500/15 text-cyan-500",
 };
 
 const CATEGORIES = ["all", "private", "installed", "shared", "system"];
@@ -58,16 +59,18 @@ export default function Skills() {
   const handleToggle = async (skill: Skill) => {
     setTogglingId(skill.id);
     try {
-      // Use the portal API to toggle - we'll use fetchJSON directly via portalApi pattern
-      const res = await fetch(`/api/skills/${encodeURIComponent(tenantId)}/${encodeURIComponent(skill.id)}/toggle`, {
-        method: "POST",
+      const res = await fetch(`/api/skills/${encodeURIComponent(tenantId)}/toggle`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !skill.enabled }),
+        body: JSON.stringify({ id: skill.id, enabled: !skill.enabled }),
       });
       if (res.ok) {
         setSkills((cur) =>
           cur.map((s) => (s.id === skill.id ? { ...s, enabled: !s.enabled } : s)),
         );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(String(err?.error ?? `Toggle failed (${res.status})`));
       }
     } catch (e: any) {
       setError(String(e?.message ?? e));
@@ -188,8 +191,8 @@ export default function Skills() {
                     className={cn(
                       "flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition active:scale-95",
                       skill.enabled
-                        ? "bg-primary/10"
-                        : "bg-primary/10",
+                        ? "bg-emerald-500"
+                        : "bg-muted-foreground/20",
                       togglingId === skill.id && "opacity-60",
                     )}
                     aria-label={skill.enabled ? t("memory.enabled") : t("memory.disabled")}
@@ -201,7 +204,7 @@ export default function Skills() {
                       )}
                     >
                       {skill.enabled ? (
-                        <Check className="h-3 w-3 text-primary" />
+                        <Check className="h-3 w-3 text-emerald-500" />
                       ) : (
                         <X className="h-3 w-3 text-muted-foreground" />
                       )}
