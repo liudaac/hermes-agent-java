@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import {
   Sparkles, ArrowRight, AlertTriangle, Inbox, Wand2, Plus, Activity as ActivityIcon,
   ChevronRight, Rocket,
+  Package, ScanLine, Layers, Zap, GraduationCap, UserPlus, MapPin,
+  type LucideIcon,
 } from "lucide-react";
 import { portalApi } from "@/api/portal";
 import type {
@@ -26,6 +28,27 @@ import { cn } from "@hermes/ui";
 
 const ONBOARDED_KEY = "hermes:portal:onboarded";
 import { formatNumber, formatRelativeTime } from "@hermes/ui";
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  "package": Package,
+  "scan-line": ScanLine,
+  "layers": Layers,
+  "zap": Zap,
+  "graduation-cap": GraduationCap,
+  "user-plus": UserPlus,
+  "map-pin": MapPin,
+};
+
+const COLOR_MAP: Record<string, string> = {
+  blue: "#0071e3",
+  green: "#34c759",
+  orange: "#ff9500",
+  yellow: "#ffcc00",
+  red: "#ff3b30",
+  purple: "#af52de",
+  cyan: "#5ac8fa",
+  pink: "#ff2d55",
+};
 
 export default function Home() {
   const { t } = useI18n();
@@ -342,19 +365,29 @@ export default function Home() {
                     key: s.scenarioId,
                     name: s.name,
                     desc: s.description,
+                    iconName: undefined as string | undefined,
+                    colorName: undefined as string | undefined,
                     to: "/templates",
                   }))
                 : templates.slice(0, 4).map((tmpl) => ({
                     key: tmpl.templateId,
                     name: tmpl.name,
                     desc: tmpl.summary ?? tmpl.description ?? "",
+                    iconName: tmpl.icon,
+                    colorName: tmpl.color,
                     to: "/templates",
                   }))
-              ).map((item) => (
+              ).map((item) => {
+                const Icon = item.iconName && ICON_MAP[item.iconName] ? ICON_MAP[item.iconName] : Sparkles;
+                const color = item.colorName && COLOR_MAP[item.colorName] ? COLOR_MAP[item.colorName] : "#0071e3";
+                return (
                 <Link key={item.key} to={item.to}>
                   <GlassCard interactive className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/40 to-primary/20 text-[15px]">
-                      ✨
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: `${color}1a`, color }}
+                    >
+                      <Icon className="h-4.5 w-4.5" />
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-semibold text-foreground">
@@ -366,7 +399,8 @@ export default function Home() {
                     </div>
                   </GlassCard>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           </section>
         ) : null}

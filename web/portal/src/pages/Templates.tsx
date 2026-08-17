@@ -1,6 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles, Play, Loader2, Search, Rocket } from "lucide-react";
+import {
+  Sparkles, Play, Loader2, Search, Rocket,
+  Package, ScanLine, Layers, Zap, GraduationCap, UserPlus,
+  MapPin, type LucideIcon,
+} from "lucide-react";
 import { portalApi } from "@/api/portal";
 import type { BusinessScenariosResponse, BusinessScenarioRecord } from "@/api/types-portal";
 import type { ScenarioTemplateRecord } from "@/api/types-templates";
@@ -9,6 +13,39 @@ import { AuroraBackground } from "@/components/AuroraBackground";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useI18n } from "@/i18n";
 import { cn } from "@hermes/ui";
+
+/** Map YAML icon names to Lucide components. */
+const ICON_MAP: Record<string, LucideIcon> = {
+  "package": Package,
+  "scan-line": ScanLine,
+  "layers": Layers,
+  "zap": Zap,
+  "graduation-cap": GraduationCap,
+  "user-plus": UserPlus,
+  "map-pin": MapPin,
+};
+
+/** Map YAML color names to hex values. */
+const COLOR_MAP: Record<string, string> = {
+  blue: "#0071e3",
+  green: "#34c759",
+  orange: "#ff9500",
+  yellow: "#ffcc00",
+  red: "#ff3b30",
+  purple: "#af52de",
+  cyan: "#5ac8fa",
+  pink: "#ff2d55",
+};
+
+function resolveIcon(name?: string): { Icon: LucideIcon; fallback: string } {
+  if (name && ICON_MAP[name]) return { Icon: ICON_MAP[name], fallback: "" };
+  return { Icon: Sparkles, fallback: "✨" };
+}
+
+function resolveColor(name?: string): string {
+  if (name && COLOR_MAP[name]) return COLOR_MAP[name];
+  return "#0071e3";
+}
 
 type Mode = "templates" | "mine";
 
@@ -65,13 +102,11 @@ export default function Templates() {
       const res = await portalApi.cloneScenarioTemplate(tmpl.templateId, {
         workspaceId: workspaceId ?? undefined,
       });
-      // After clone, the scenario is in the workspace - execute it
       if (res.scenarioId && res.workspaceId) {
         navigate(`/runs/${res.workspaceId}/${res.scenarioId}`);
       } else if (res.workspaceId) {
         navigate(`/runs/${res.workspaceId}`);
       } else {
-        // Refresh my scenarios
         setMode("mine");
       }
     } catch (e: any) {
@@ -111,8 +146,8 @@ export default function Templates() {
         <div className="page-in mx-auto max-w-3xl px-4 pb-24 pt-6">
           <GlassCard className="mb-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/40 to-primary/20 text-[18px]">
-                ✨
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Sparkles className="h-6 w-6" />
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-[22px] font-medium leading-tight text-foreground">
@@ -283,58 +318,60 @@ export default function Templates() {
                   const q = search.toLowerCase();
                   return `${s.name ?? ""} ${s.summary ?? ""} ${s.description ?? ""} ${s.category ?? ""}`.toLowerCase().includes(q);
                 })
-                .map((tmpl) => (
-                <GlassCard key={tmpl.templateId} interactive padding="md" className="flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <div
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[15px]"
-                      style={{
-                        background: tmpl.color
-                          ? `${tmpl.color}20`
-                          : "linear-gradient(135deg, rgba(0,113,227,0.4), rgba(0,113,227,0.2))",
-                        color: tmpl.color ?? "inherit",
-                      }}
-                    >
-                      {tmpl.icon ?? "✨"}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-[14px] font-semibold text-foreground">
-                          {tmpl.name}
-                        </p>
-                        {tmpl.status && tmpl.status !== "STABLE" && (
-                          <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-500">
-                            {tmpl.status}
-                          </span>
-                        )}
+                .map((tmpl) => {
+                  const { Icon } = resolveIcon(tmpl.icon);
+                  const color = resolveColor(tmpl.color);
+                  return (
+                  <GlassCard key={tmpl.templateId} interactive padding="md" className="flex flex-col gap-3">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                        style={{
+                          backgroundColor: `${color}1a`,
+                          color: color,
+                        }}
+                      >
+                        <Icon className="h-5 w-5" />
                       </div>
-                      <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
-                        {tmpl.summary ?? tmpl.description ?? "—"}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[14px] font-semibold text-foreground">
+                            {tmpl.name}
+                          </p>
+                          {tmpl.status && tmpl.status !== "STABLE" && (
+                            <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-500">
+                              {tmpl.status}
+                            </span>
+                          )}
+                        </div>
+                        <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {tmpl.summary ?? tmpl.description ?? "-"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    {tmpl.category && (
-                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] tracking-wide text-primary">
-                        {tmpl.category}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => cloneAndLaunch(tmpl)}
-                      disabled={launchingId === tmpl.templateId}
-                      className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition disabled:opacity-60"
-                    >
-                      {launchingId === tmpl.templateId ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Rocket className="h-3.5 w-3.5" />
+                    <div className="flex items-center justify-between">
+                      {tmpl.industryTag && (
+                        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] tracking-wide text-muted-foreground">
+                          {tmpl.industryTag}
+                        </span>
                       )}
-                      {launchingId === tmpl.templateId ? "创建中..." : "创建并启动"}
-                    </button>
-                  </div>
-                </GlassCard>
-              ))}
+                      <button
+                        type="button"
+                        onClick={() => cloneAndLaunch(tmpl)}
+                        disabled={launchingId === tmpl.templateId}
+                        className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground active:scale-95 transition disabled:opacity-60"
+                      >
+                        {launchingId === tmpl.templateId ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Rocket className="h-3.5 w-3.5" />
+                        )}
+                        {launchingId === tmpl.templateId ? "创建中..." : "创建并启动"}
+                      </button>
+                    </div>
+                  </GlassCard>
+                  );
+                })}
             </div>
           )
         ) : (
@@ -367,8 +404,8 @@ export default function Templates() {
                 .map((s) => (
                 <GlassCard key={s.scenarioId} interactive padding="md" className="flex flex-col gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/40 to-primary/20 text-[15px]">
-                      ✨
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Sparkles className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-semibold text-foreground">
