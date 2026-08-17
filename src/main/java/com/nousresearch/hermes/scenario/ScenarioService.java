@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import com.nousresearch.hermes.config.HermesConfig;
 
 /**
  * 场景服务 — 管理业务场景的完整生命周期，包括创建、查询、执行和运行时监控。
@@ -225,12 +226,12 @@ public class ScenarioService {
         ScenarioRecord scenario = requireScenario(workspaceId, scenarioId);
 
         // Pre-flight: verify LLM API key is configured
-        String apiKey = System.getenv("VOLC_API_KEY");
-        if (apiKey == null || apiKey.isBlank()) apiKey = System.getenv("OPENROUTER_API_KEY");
+        HermesConfig cfg = new HermesConfig();
+        String apiKey = cfg.getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException(
                 "LLM API key not configured. Set VOLC_API_KEY or OPENROUTER_API_KEY environment variable, "
-                + "or configure model.api_key in ~/.hermes/config.yaml");
+                + "or configure model.api_key in ~/.harness/config.yaml");
         }
 
         // Ensure the team blueprint has running agent instances on the tenant bus
