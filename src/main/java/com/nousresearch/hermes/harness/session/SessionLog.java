@@ -67,11 +67,24 @@ public class SessionLog {
      * Append a non-surface (trace/boundary/audit) event.
      */
     public SessionEvent appendTrace(SessionEventType type, Map<String, Object> data) {
+        // Guard against null values in the map (Map.copyOf rejects them)
+        Map<String, Object> safeData;
+        if (data == null || data.isEmpty()) {
+            safeData = Map.of();
+        } else {
+            safeData = new java.util.HashMap<>();
+            for (var entry : data.entrySet()) {
+                if (entry.getValue() != null) {
+                    safeData.put(entry.getKey(), entry.getValue());
+                }
+            }
+            safeData = Map.copyOf(safeData);
+        }
         SessionEvent event = SessionEvent.trace(
             seqCounter.incrementAndGet(),
             System.currentTimeMillis(),
             type,
-            data != null ? Map.copyOf(data) : Map.of()
+            safeData
         );
         events.add(event);
         return event;

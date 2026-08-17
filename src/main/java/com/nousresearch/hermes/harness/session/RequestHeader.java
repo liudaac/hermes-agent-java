@@ -34,7 +34,9 @@ public record RequestHeader(
             data.put("systemPromptLength", systemPrompt.length());
         }
         data.put("toolCount", toolCount);
-        data.put("params", params);
+        if (params != null) {
+            data.put("params", params);
+        }
         data.put("reason", reason);
         return data;
     }
