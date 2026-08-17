@@ -873,10 +873,20 @@ public class TenantAwareAIAgent {
         logger.info("Agent {} processing intent subtask: {}", agentId, subtask);
 
         try {
+            // Guard: verify model client is ready
+            if (modelClient == null) {
+                sendBusReply(msg, "subtask_failed", Map.of(
+                    "error", "ModelClient not initialized for agent " + agentId,
+                    "subtask", subtask, "status", "failed"));
+                return;
+            }
+
             // Build the task prompt including role context
             StringBuilder taskBuilder = new StringBuilder();
-            taskBuilder.append("Role: ").append(agentRole.getRoleName()).append("\n");
-            taskBuilder.append("Responsibilities: ").append(String.join(", ", agentRole.getResponsibilities())).append("\n");
+            taskBuilder.append("Role: ").append(agentRole != null ? agentRole.getRoleName() : agentId).append("\n");
+            taskBuilder.append("Responsibilities: ")
+                .append(agentRole != null && agentRole.getResponsibilities() != null
+                    ? String.join(", ", agentRole.getResponsibilities()) : "general").append("\n");
             taskBuilder.append("Task: ").append(subtask).append("\n\n");
             if (payload != null && payload.get("matched_skills") != null) {
                 taskBuilder.append("Relevant skills: ").append(payload.get("matched_skills")).append("\n");

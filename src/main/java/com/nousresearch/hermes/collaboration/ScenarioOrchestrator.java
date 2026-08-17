@@ -576,7 +576,7 @@ public class ScenarioOrchestrator {
         var msg = AgentMessage.builder(tenantContext.getTenantId(), a.agentId(), AgentMessage.Type.REQUEST)
             .action("intent_subtask")
             .payload(payload)
-            .timeoutMs(60_000L)
+            .timeoutMs(300_000L)
             .build();
 
         trace.step(AgentTrace.Step.decision(
@@ -586,7 +586,7 @@ public class ScenarioOrchestrator {
         ));
 
         try {
-            var reply = bus.sendAndWait(msg, 60_000L);
+            var reply = bus.sendAndWait(msg, 300_000L);
             String result = reply.getResultText() != null ? reply.getResultText() : "";
             trace.step(AgentTrace.Step.toolResult("tenant_bus", result, System.currentTimeMillis() - started));
             trace.end(AgentTrace.Status.SUCCESS);

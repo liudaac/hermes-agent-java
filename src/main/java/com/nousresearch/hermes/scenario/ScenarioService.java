@@ -224,6 +224,15 @@ public class ScenarioService {
         }
         ScenarioRecord scenario = requireScenario(workspaceId, scenarioId);
 
+        // Pre-flight: verify LLM API key is configured
+        String apiKey = System.getenv("VOLC_API_KEY");
+        if (apiKey == null || apiKey.isBlank()) apiKey = System.getenv("OPENROUTER_API_KEY");
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                "LLM API key not configured. Set VOLC_API_KEY or OPENROUTER_API_KEY environment variable, "
+                + "or configure model.api_key in ~/.hermes/config.yaml");
+        }
+
         // Ensure the team blueprint has running agent instances on the tenant bus
         String entryTeamId = scenario.getEntryTeamId();
         if (entryTeamId != null && !entryTeamId.isBlank()) {
