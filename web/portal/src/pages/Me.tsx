@@ -238,7 +238,7 @@ export default function Me() {
             {/* Admin links */}
             <div className="mt-4 flex gap-2">
               <a
-                href="/ops/index.html/spaces"
+                href="/admin/spaces"
                 className="flex flex-1 items-center gap-2 rounded-2xl bg-muted/60 p-3 text-[13px] transition hover:bg-muted active:scale-95"
               >
                 <Building2 className="h-4 w-4 text-primary" />
@@ -246,7 +246,7 @@ export default function Me() {
                 <ExternalLink className="ml-auto h-3 w-3 opacity-50" />
               </a>
               <a
-                href="/ops/index.html/org"
+                href="/admin/users"
                 className="flex flex-1 items-center gap-2 rounded-2xl bg-muted/60 p-3 text-[13px] transition hover:bg-muted active:scale-95"
               >
                 <Layers className="h-4 w-4 text-primary" />

@@ -14,6 +14,7 @@ import type {
   BusinessScenariosResponse,
   BusinessApprovalsResponse,
 } from "@/api/types-portal";
+import type { ScenarioTemplateRecord } from "@/api/types-templates";
 import { GlassCard } from "@/components/GlassCard";
 import { EmployeeCard } from "@/components/EmployeeCard";
 import { AuroraBackground } from "@/components/AuroraBackground";
@@ -33,6 +34,7 @@ export default function Home() {
   const [home, setHome] = useState<BusinessHomeResponse | null>(null);
   const [teams, setTeams] = useState<BusinessTeamCard[] | null>(null);
   const [scenarios, setScenarios] = useState<BusinessScenarioRecord[] | null>(null);
+  const [templates, setTemplates] = useState<ScenarioTemplateRecord[]>([]);
   const [pending, setPending] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -77,7 +79,21 @@ export default function Home() {
     };
   }, []);
 
-  // Once we know the workspaceId, load scenarios.
+  // Load scenario templates for the "recommended scenarios" section.
+  useEffect(() => {
+    let alive = true;
+    portalApi
+      .listScenarioTemplates()
+      .then((res) => {
+        if (alive) setTemplates(res.items ?? []);
+      })
+      .catch(() => {
+        if (alive) setTemplates([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   useEffect(() => {
     const ws = workspaceId ?? home?.workspaceId ?? home?.workspaces?.[0]?.workspaceId;
     if (!ws) return;
@@ -306,7 +322,7 @@ export default function Home() {
         )}
 
         {/* ── Recommended scenarios ───────────────────────── */}
-        {scenarios && scenarios.length > 0 && (
+        {(scenarios && scenarios.length > 0) || templates.length > 0 ? (
           <section>
             <SectionHeader
               title={t("home.sectionTemplates")}
@@ -320,18 +336,32 @@ export default function Home() {
               }
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {scenarios.slice(0, 4).map((s) => (
-                <Link key={s.scenarioId} to={`/templates`}>
+              {/* Show workspace scenarios first, then fall back to templates */}
+              {(scenarios && scenarios.length > 0
+                ? scenarios.slice(0, 4).map((s) => ({
+                    key: s.scenarioId,
+                    name: s.name,
+                    desc: s.description,
+                    to: "/templates",
+                  }))
+                : templates.slice(0, 4).map((tmpl) => ({
+                    key: tmpl.templateId,
+                    name: tmpl.name,
+                    desc: tmpl.summary ?? tmpl.description ?? "",
+                    to: "/templates",
+                  }))
+              ).map((item) => (
+                <Link key={item.key} to={item.to}>
                   <GlassCard interactive className="flex items-start gap-3">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/40 to-primary/20 text-[15px]">
                       ✨
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-[13px] font-semibold text-foreground">
-                        {s.name}
+                        {item.name}
                       </p>
                       <p className="line-clamp-2 text-[11px] text-muted-foreground">
-                        {s.description}
+                        {item.desc}
                       </p>
                     </div>
                   </GlassCard>
@@ -339,7 +369,7 @@ export default function Home() {
               ))}
             </div>
           </section>
-        )}
+        ) : null}
       </div>
 
       {/* Floating quick-start button */}
